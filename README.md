@@ -1,0 +1,186 @@
+# SilentTalk
+
+Windows 本機文字輸入 → EdgeTTS → Discord Bot 語音頻道。程式不讀寫 Discord 文字頻道，也不保存輸入全文或音訊歷史。
+
+## 最快使用方式
+
+1. 雙擊 `啟動 SilentTalk.cmd`。啟動後不會出現大型主視窗。
+2. 用 `.env` 內 `OWNER_USER_ID` 對應的 Discord 帳號加入一般語音頻道。
+3. Bot 會自動加入；跨 Server 時，目標 Server 也必須先安裝 Bot。
+4. 按 F8 開啟置頂輸入框，輸入文字後按 Enter。
+5. 播放途中按 F9，可停止目前語音並清空尚未播放的句子。
+6. 要關閉程式時，按 F8，再點「退出 SilentTalk」。
+
+快捷鍵：
+
+- F8：開啟輸入框。
+- Enter：送出文字。
+- Shift+Enter：在輸入框中換行。
+- Esc：關閉輸入框並清空尚未送出的文字。
+- F9：停止目前播放並清空 queue；Bot 不會因此退出頻道。
+
+## 如何輸入抑揚頓挫
+
+SilentTalk 會把輸入文字交給 EdgeTTS。標點會影響斷句與語氣，但效果由 Microsoft 語音模型決定，並不是精確的音樂節拍控制。
+
+| 輸入方式 | 通常產生的效果 | 範例 |
+|---|---|---|
+| `，` | 短停頓，適合一句內換氣 | `等一下，我馬上回來。` |
+| `。` | 明確結句，停頓通常比逗號長 | `我知道了。等等再說。` |
+| `；` | 介於逗號和句號之間的分段 | `我可以處理；但需要一點時間。` |
+| `：` | 引出後面的內容 | `重點是：先不要離開。` |
+| `？` | 疑問語氣；是否明顯上揚取決於 voice | `你確定嗎？` |
+| `！` | 較有力的結句；不保證一定提高音量 | `快跑！` |
+| `……` | 猶豫、留白或較長停頓 | `我想想……應該可以。` |
+| `——` | 突然停住、轉折或拉開兩段話 | `等等——先別按。` |
+| 換行 | 把內容分成較明確的語意段落 | `第一件事。` 換行後輸入 `第二件事。` |
+
+推薦寫法：
+
+```text
+平靜敘述：我知道了，等一下就過去。
+驚訝語氣：真的假的？你確定嗎！
+猶豫語氣：這個嘛……讓我想一下。
+強烈轉折：等等——先不要動！
+分段說明：第一件事，先存檔；第二件事，重新啟動。
+```
+
+### 拖長音怎麼寫
+
+EdgeTTS 沒有可靠的「把某個中文字母精確拉長 N 秒」輸入符號。以下只能做近似效果：
+
+```text
+好——喔……
+不要——
+等、等一下！
+真的嗎……？
+```
+
+- `——` 通常是拉開語句或增加停頓，不保證延長前一個母音。
+- `……` 通常是留白或猶豫，不等於固定秒數的休止。
+- 重複文字，例如 `好好好`，通常會被當成三個字念出，不是真正的長音。
+- `~~~`、`～～～`、大量重複標點可能被忽略、念成符號或產生不自然結果，不建議依賴。
+- `<break>`、`<prosody>` 等 SSML 標籤不要輸入；目前 edge-tts 不接受自訂 SSML，可能直接把它當文字或拒絕請求。
+
+若要整段更慢、更低沉，可調整 `config.toml`：
+
+```toml
+[tts]
+voice = "zh-TW-YunJheNeural"
+rate = "-10%"
+pitch = "-20Hz"
+volume = "+0%"
+```
+
+- `rate`：整段語速；負值較慢，正值較快。
+- `pitch`：整段音高；負值更低沉，正值更高。
+- `volume`：整段音量。
+- 修改後要退出並重新啟動 SilentTalk 才會生效。
+- 這些設定作用於整句，無法只套用到句子中的某幾個字。
+
+edge-tts 官方說明：可調整 rate、volume、pitch，但不再支援自訂 SSML：[edge-tts README](https://github.com/rany2/edge-tts#custom-ssml)。
+
+## 目前範圍
+
+- EdgeTTS、單一 FIFO queue、F8 輸入框、F9 停止與清空。
+- Bot 只追蹤 `.env` 內的 `OWNER_USER_ID`，Owner 換台時跟隨、離開時斷線。
+- Bot 加入後會保持同一條 Voice 連線；每句播放不會重新加入或離開頻道。
+- 一般斷線交由 discord.py 事件驅動重連；另有每 60 秒一次的低頻 watchdog 處理漏事件與 stale cache。
+- Gateway 只啟用 `guilds` 與 `voice_states` intents；不啟用 Message Content。
+- `--voice-smoke` 會播放固定 440 Hz 測試音，作為 Gate 1 實機 runner。
+- CosyVoice / CUDA 不在 MVP 依賴內。
+
+## Bot 何時加入或退出
+
+- SilentTalk 正在運行，而且 Owner 加入語音頻道：Bot 自動加入。
+- Owner 在同一 Server 換頻道：Bot 直接移動。
+- Owner 跨 Server：Bot 先退出舊 Server，再加入新 Server。
+- 播放完一句或暫時沒有輸入：Bot 保持連線，不會反覆進出。
+- Owner 離開語音、退出 SilentTalk、電腦關機或權限被撤銷：Bot 退出。
+- 網路短暫中斷：先由 discord.py 自動恢復；漏事件或 stale cache 由低頻 watchdog 修復。
+
+每個需要使用的 Server 都要加入 Bot，最低權限只有 View Channel、Connect、Speak：
+
+[邀請 SilentTalk Bot](https://discord.com/oauth2/authorize?client_id=1552128066719981608&scope=bot&permissions=3146752&integration_type=0)
+
+## 準備 Discord Bot
+
+1. 在 Discord Developer Portal 建立 Application 與 Bot。
+2. Bot 邀請到測試伺服器，只授予 View Channel、Connect、Speak。
+3. Developer Mode 下複製你自己的 Discord User ID，作為 `.env` 的 `OWNER_USER_ID`。
+4. Bot 頁面 Reset Token 後取得 Bot Token。Application ID 與 Public Key 都不能用來登入 Bot。
+
+真正的 `.env` 已由 `.gitignore` 排除，不能提交。若 token 曾公開，請在 Portal 立刻 Reset Token，並同步更新本機 `.env`。
+
+## 安裝
+
+下載或 clone repository 後，直接雙擊 `啟動 SilentTalk.cmd`。啟動檔會：
+
+- 檢查並以 winget 安裝 Python 3.12 與 FFmpeg（缺少時才安裝）。
+- 建立 `.venv`。
+- 安裝 `requirements.txt` 內的套件。
+- 若 `.env` 不存在，由 `.env.example` 建立並開啟記事本讓你填入憑證。
+- 驗證 `.env` 與 `config.toml`，然後啟動 SilentTalk。
+
+設定的責任刻意分開：一般可調參數只放 `config.toml`；只有 Discord Bot Token 與個人 User ID 放在不進版控的 `.env`。新主機第一次啟動時，在自動開啟的 `.env` 填入：
+
+```dotenv
+DISCORD_BOT_TOKEN=你的 Discord Bot Token
+OWNER_USER_ID=你的 Discord User ID
+```
+
+## 驗證與執行
+
+先加入一個 Discord 語音頻道，再跑 Gate 1：
+
+```powershell
+.\.venv\Scripts\python app.py --voice-smoke
+```
+
+聽到固定測試音後啟動完整應用：
+
+```powershell
+.\.venv\Scripts\python app.py --tts-smoke
+```
+
+聽到「等一下，我馬上回來。」後啟動完整應用：
+
+```powershell
+.\.venv\Scripts\python app.py
+```
+
+平常直接雙擊 `啟動 SilentTalk.cmd`。程式不會顯示大型主視窗；按 F8 會開啟輸入框，視窗內的「退出 SilentTalk」可以正常關閉程式。
+
+- F8：開啟置頂輸入框
+- Enter：送出；Shift+Enter：換行
+- Esc：關閉並清空輸入框
+- F9：停止播放並清空 queue
+
+執行自動測試：
+
+```powershell
+.\.venv\Scripts\python -m pytest -q
+```
+
+`silenttalk.log` 只記錄事件、job id、字數、延遲與錯誤類型；不記錄輸入全文、token 或音訊。
+
+## 常見問題
+
+### 按 F8 沒反應
+
+- 確認已雙擊 `啟動 SilentTalk.cmd`。
+- 若啟動了兩個實例，後啟動的實例可能無法註冊 F8/F9；先退出所有 SilentTalk 再重開。
+- 檢查其他程式是否占用了 F8 或 F9。
+
+### Bot 沒有加入語音頻道
+
+- 確認 Owner User ID 正確。
+- 確認 Bot 已加入目前的 Server。
+- 確認 Bot 在該頻道有 View Channel、Connect、Speak。
+- Stage Channel 不在目前支援範圍；請使用一般 Voice Channel。
+
+### 播放中途斷線
+
+- 已開始播放的句子不會自動重播，避免產生回音。
+- 下一句開始前會重新同步 Voice 連線。
+- 自我修復正常以事件驅動處理，另有每 60 秒一次的低頻保險檢查。
