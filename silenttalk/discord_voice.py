@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from collections.abc import Callable
 from pathlib import Path
 
@@ -25,6 +26,10 @@ class DiscordVoiceClient(discord.Client):
         self._status = status
         self._voice_lock = asyncio.Lock()
         self._voice_monitor_task: asyncio.Task[None] | None = None
+        self._voice_reconcile_task: asyncio.Task[None] | None = None
+        self._owner_missing_since: float | None = None
+        self._next_reconnect_at = 0.0
+        self._reconnect_delay = config.voice_reconnect_cooldown_seconds
 
     async def on_ready(self) -> None:
         _LOG.info(
@@ -34,10 +39,7 @@ class DiscordVoiceClient(discord.Client):
             self._voice_monitor_task = asyncio.create_task(
                 self._voice_monitor(), name="voice-self-heal"
             )
-        try:
-            await self.sync_owner_voice()
-        except Exception as exc:  # noqa: BLE001 - monitor will retry after gateway ready.
-            _LOG.warning("initial_voice_sync_failed error_type=%s", type(exc).__name__)
+        self._schedule_voice_reconcile(delay=0.0)
 
     async def on_voice_state_update(
         self,
@@ -49,46 +51,51 @@ class DiscordVoiceClient(discord.Client):
         is_bot = self.user is not None and member.id == self.user.id
         if before.channel == after.channel or not (is_owner or is_bot):
             return
-        # Cross-guild switches arrive as separate leave/join events. Give the cache a
-        # brief moment to settle, then route from the owner's global end state.
-        await asyncio.sleep(0.25)
-        await self.sync_owner_voice()
+        # Discord can emit a leave then a join while changing channels or while
+        # the gateway/voice transport is recovering. Collapse that burst into
+        # one reconciliation against the final cached state.
+        self._schedule_voice_reconcile()
+
+    def _schedule_voice_reconcile(self, delay: float | None = None) -> None:
+        if self.is_closed():
+            return
+        if self._voice_reconcile_task is not None:
+            self._voice_reconcile_task.cancel()
+        settle = (
+            self._config.voice_state_settle_seconds if delay is None else max(0.0, delay)
+        )
+        self._voice_reconcile_task = asyncio.create_task(
+            self._delayed_reconcile(settle), name="voice-reconcile"
+        )
+
+    async def _delayed_reconcile(self, delay: float) -> None:
+        try:
+            if delay:
+                await asyncio.sleep(delay)
+            await self.sync_owner_voice()
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - a later event/watchdog will retry.
+            _LOG.warning("voice_reconcile_failed error_type=%s", type(exc).__name__)
 
     async def _voice_monitor(self) -> None:
-        delay = self._config.voice_reconnect_interval_seconds
         while not self.is_closed():
             try:
-                await asyncio.sleep(delay)
-                channel = self._find_owner_channel()
-                voices = list(self.voice_clients)
-                healthy = next(
-                    (voice for voice in voices if voice.is_connected()), None
-                )
-                stale = any(not voice.is_connected() for voice in voices)
-                needs_sync = channel is None and bool(voices)
-                if channel is not None:
-                    needs_sync = (
-                        healthy is None
-                        or stale
-                        or healthy.guild.id != channel.guild.id
-                        or healthy.channel.id != channel.id
-                    )
-                if needs_sync:
-                    await self.sync_owner_voice()
-                delay = self._config.voice_reconnect_interval_seconds
+                await asyncio.sleep(self._config.voice_reconnect_interval_seconds)
+                await self.sync_owner_voice()
             except asyncio.CancelledError:
                 raise
             except Exception as exc:  # noqa: BLE001 - monitor must survive transient faults.
                 _LOG.warning("voice_self_heal_failed error_type=%s", type(exc).__name__)
-                delay = min(
-                    delay * 2, self._config.voice_reconnect_max_interval_seconds
-                )
 
     async def close(self) -> None:
-        if self._voice_monitor_task is not None:
-            self._voice_monitor_task.cancel()
-            await asyncio.gather(self._voice_monitor_task, return_exceptions=True)
-            self._voice_monitor_task = None
+        tasks = [self._voice_monitor_task, self._voice_reconcile_task]
+        for task in tasks:
+            if task is not None:
+                task.cancel()
+        await asyncio.gather(*(task for task in tasks if task is not None), return_exceptions=True)
+        self._voice_monitor_task = None
+        self._voice_reconcile_task = None
         await super().close()
 
     def _find_owner_channel(self) -> discord.abc.Connectable | None:
@@ -109,7 +116,23 @@ class DiscordVoiceClient(discord.Client):
         return len(self.guilds), len(channels), owner_visible
 
     async def sync_owner_voice(self) -> None:
-        await self._follow(self._find_owner_channel())
+        channel = self._find_owner_channel()
+        now = time.monotonic()
+
+        if channel is None:
+            if self._owner_missing_since is None:
+                self._owner_missing_since = now
+            elapsed = now - self._owner_missing_since
+            grace = self._config.owner_leave_grace_seconds
+            if self.voice_clients and elapsed < grace:
+                remaining = grace - elapsed
+                _LOG.info("owner_voice_missing_grace remaining_seconds=%.2f", remaining)
+                self._schedule_voice_reconcile(delay=remaining)
+                return
+        else:
+            self._owner_missing_since = None
+
+        await self._follow(channel)
 
     async def _follow(self, channel: discord.abc.Connectable | None) -> None:
         async with self._voice_lock:
@@ -131,18 +154,56 @@ class DiscordVoiceClient(discord.Client):
                 None,
             )
 
-            # A transport drop can leave a dead VoiceClient in discord.py's
-            # cache. Clean every stale/other-guild client before connect(), or
-            # Discord rejects the new connection as already connected.
-            for voice in voices:
-                if voice is not target_voice:
-                    await self._close_voice(voice)
+            if target_voice is not None and target_voice.channel.id == channel.id:
+                self._mark_voice_healthy()
+                self._status(AppState.VOICE_CONNECTED, f"已連線：{channel.name}")
+                return
 
-            if target_voice is None:
-                await channel.connect(timeout=20.0, reconnect=True)
-            elif target_voice.channel.id != channel.id:
+            if target_voice is not None:
                 await target_voice.move_to(channel)
+                self._mark_voice_healthy()
+                self._status(AppState.VOICE_CONNECTED, f"已連線：{channel.name}")
+                return
+
+            now = time.monotonic()
+            if now < self._next_reconnect_at:
+                wait_seconds = max(0.0, self._next_reconnect_at - now)
+                _LOG.info("voice_reconnect_cooldown remaining_seconds=%.2f", wait_seconds)
+                self._schedule_voice_reconcile(delay=wait_seconds)
+                return
+
+            # Only clean stale/other-guild clients when we are actually about to
+            # make a new connection. This avoids disconnect/reconnect churn during
+            # transient cache inconsistencies.
+            for voice in voices:
+                await self._close_voice(voice)
+
+            try:
+                await channel.connect(timeout=20.0, reconnect=True)
+            except Exception:
+                self._record_reconnect_failure()
+                raise
+
+            self._mark_voice_healthy()
             self._status(AppState.VOICE_CONNECTED, f"已連線：{channel.name}")
+
+    def _mark_voice_healthy(self) -> None:
+        self._reconnect_delay = self._config.voice_reconnect_cooldown_seconds
+        self._next_reconnect_at = 0.0
+
+    def _record_reconnect_failure(self) -> None:
+        now = time.monotonic()
+        self._next_reconnect_at = now + self._reconnect_delay
+        _LOG.warning(
+            "voice_reconnect_backoff delay_seconds=%.2f", self._reconnect_delay
+        )
+        self._reconnect_delay = min(
+            self._reconnect_delay * 2,
+            self._config.voice_reconnect_max_interval_seconds,
+        )
+        self._schedule_voice_reconcile(
+            delay=max(0.0, self._next_reconnect_at - time.monotonic())
+        )
 
     @staticmethod
     async def _close_voice(voice: discord.VoiceClient) -> None:
@@ -161,8 +222,8 @@ class DiscordAudioPlayer:
         self._audio = audio
 
     async def play(self, audio: AudioResult) -> None:
-        # This is a no-op while healthy; it reconnects only before a new sentence
-        # when the previous voice transport has actually disappeared.
+        # This is a no-op while healthy. During a reconnect cooldown it deliberately
+        # does not hammer Discord; the sentence fails instead of causing join spam.
         await self._client.sync_owner_voice()
         try:
             await self._play_once(audio)
@@ -182,7 +243,7 @@ class DiscordAudioPlayer:
     async def _play_once(self, audio: AudioResult) -> None:
         voice = self._client.active_voice()
         if voice is None:
-            raise RuntimeError("Owner 尚未加入語音頻道。")
+            raise RuntimeError("Discord Voice 正在恢復連線，請稍後再送一次。")
         loop = asyncio.get_running_loop()
         finished: asyncio.Future[None] = loop.create_future()
 

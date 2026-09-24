@@ -37,6 +37,9 @@ class DiscordConfig:
     disconnect_when_owner_leaves: bool = True
     voice_reconnect_interval_seconds: float = 60.0
     voice_reconnect_max_interval_seconds: float = 300.0
+    voice_state_settle_seconds: float = 1.5
+    owner_leave_grace_seconds: float = 8.0
+    voice_reconnect_cooldown_seconds: float = 5.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,6 +103,14 @@ def load_settings(project_dir: Path) -> Settings:
     if app_config.max_text_length <= 0:
         raise ConfigError("max_text_length 必須大於 0。")
 
+    reconnect_interval = max(
+        15.0, float(discord.get("voice_reconnect_interval_seconds", 60.0))
+    )
+    reconnect_max = max(
+        reconnect_interval,
+        float(discord.get("voice_reconnect_max_interval_seconds", 300.0)),
+    )
+
     return Settings(
         app=app_config,
         tts=TTSConfig(
@@ -116,12 +127,16 @@ def load_settings(project_dir: Path) -> Settings:
             disconnect_when_owner_leaves=bool(
                 discord.get("disconnect_when_owner_leaves", True)
             ),
-            voice_reconnect_interval_seconds=max(
-                15.0, float(discord.get("voice_reconnect_interval_seconds", 60.0))
+            voice_reconnect_interval_seconds=reconnect_interval,
+            voice_reconnect_max_interval_seconds=reconnect_max,
+            voice_state_settle_seconds=max(
+                0.25, float(discord.get("voice_state_settle_seconds", 1.5))
             ),
-            voice_reconnect_max_interval_seconds=max(
-                60.0,
-                float(discord.get("voice_reconnect_max_interval_seconds", 300.0)),
+            owner_leave_grace_seconds=max(
+                0.0, float(discord.get("owner_leave_grace_seconds", 8.0))
+            ),
+            voice_reconnect_cooldown_seconds=max(
+                1.0, float(discord.get("voice_reconnect_cooldown_seconds", 5.0))
             ),
         ),
         audio=AudioConfig(

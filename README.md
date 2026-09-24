@@ -13,7 +13,7 @@ Windows 本機文字輸入 → EdgeTTS → Discord Bot 語音頻道。程式不�
 3. Bot 會自動加入；跨 Server 時，目標 Server 也必須先安裝 Bot。
 4. 按 F8 開啟置頂輸入框，輸入文字後按 Enter。
 5. 播放途中按 F9，可停止目前語音並清空尚未播放的句子。
-6. 要關閉程式時，按 F8，再點「退出 SilentTalk」。
+6. 要關閉程式時，按 F8，再點「退出 SilentTalk」。\n\n### 單句趣味聲線\n\n在句首先加指令，只影響這一句，不會修改 `config.toml`：\n\n- `/slow 文字`：慢速、略低沉。\n- `/fast 文字`：快速。\n- `/deep 文字`：低沉聲線。\n- `/cute 文字`：較快、較高音。\n\n例如：`/deep 我有一個很重要的消息。`。未知的 `/xxx` 不會被吃掉，仍會當普通文字朗讀。
 
 快捷鍵：
 
@@ -104,7 +104,7 @@ edge-tts 官方說明：可調整 rate、volume、pitch，但不再支援自訂 
 - EdgeTTS、單一 FIFO queue、F8 輸入框、可編輯快捷句、F9 停止與清空。
 - Bot 只追蹤 `.env` 內的 `OWNER_USER_ID`，Owner 換台時跟隨、離開時斷線。
 - Bot 加入後會保持同一條 Voice 連線；每句播放不會重新加入或離開頻道。
-- 一般斷線交由 discord.py 事件驅動重連；另有每 60 秒一次的低頻 watchdog 處理漏事件與 stale cache。
+- Voice state 事件先做防抖，Owner 暫時從 cache 消失時有離線寬限期；手動重連失敗採指數退避，避免網路不穩時 Bot 瘋狂進出頻道。另有每 60 秒一次的低頻 watchdog 處理漏事件與 stale cache。
 - Gateway 只啟用 `guilds` 與 `voice_states` intents；不啟用 Message Content。
 - `--voice-smoke` 會播放固定 440 Hz 測試音，作為 Gate 1 實機 runner。
 - CosyVoice / CUDA 不在 MVP 依賴內。
@@ -116,7 +116,7 @@ edge-tts 官方說明：可調整 rate、volume、pitch，但不再支援自訂 
 - Owner 跨 Server：Bot 先退出舊 Server，再加入新 Server。
 - 播放完一句或暫時沒有輸入：Bot 保持連線，不會反覆進出。
 - Owner 離開語音、退出 SilentTalk、電腦關機或權限被撤銷：Bot 退出。
-- 網路短暫中斷：先由 discord.py 自動恢復；漏事件或 stale cache 由低頻 watchdog 修復。
+- 網路短暫中斷：先由 discord.py 自動恢復；SilentTalk 會合併短時間內的 voice-state 事件，Owner 暫時消失不會立刻退出；若真的需要重新 connect，失敗會逐次拉長等待時間，避免加入/退出洗頻。
 
 每個需要使用的 Server 都要加入 Bot，最低權限只有 View Channel、Connect、Speak：
 
@@ -202,5 +202,5 @@ OWNER_USER_ID=你的 Discord User ID
 ### 播放中途斷線
 
 - 已開始播放的句子不會自動重播，避免產生回音。
-- 下一句開始前會重新同步 Voice 連線。
+- 下一句開始前會重新同步 Voice 連線；若正處於重連 cooldown，該句會直接失敗而不是反覆撞 Discord。
 - 自我修復正常以事件驅動處理，另有每 60 秒一次的低頻保險檢查。
