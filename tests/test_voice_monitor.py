@@ -66,3 +66,20 @@ async def test_owner_missing_grace_does_not_disconnect_immediately(
 
     assert follow_calls == []
     assert client._owner_missing_since is not None
+
+
+@pytest.mark.asyncio
+async def test_gateway_resume_schedules_immediate_reconcile(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = DiscordVoiceClient(DiscordConfig("unused", 123), lambda *_: None)
+    delays: list[float | None] = []
+    monkeypatch.setattr(
+        client,
+        "_schedule_voice_reconcile",
+        lambda delay=None: delays.append(delay),
+    )
+
+    await client.on_resumed()
+
+    assert delays == [0.0]
