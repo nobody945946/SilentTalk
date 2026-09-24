@@ -10,6 +10,8 @@ from pathlib import Path
 import discord
 
 from silenttalk.config import Settings
+from silenttalk.copilot.runtime import CopilotRuntime
+from silenttalk.copilot.types import ReplySuggestions
 from silenttalk.discord_voice import DiscordAudioPlayer, DiscordVoiceClient
 from silenttalk.speech_queue import SpeechQueue
 from silenttalk.speech_settings import validate_rate_multiplier
@@ -20,10 +22,17 @@ from silenttalk.voice_styles import VOICE_STYLES
 
 _LOG = logging.getLogger(__name__)
 StatusCallback = Callable[[AppState, str], None]
+SuggestionCallback = Callable[[ReplySuggestions], None]
 
 
 class AppController:
-    def __init__(self, settings: Settings, status: StatusCallback) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        status: StatusCallback,
+        project_dir: Path,
+        suggestions: SuggestionCallback | None = None,
+    ) -> None:
         self._settings = settings
         self._status = status
         self._loop = asyncio.new_event_loop()
@@ -31,7 +40,20 @@ class AppController:
             target=self._run_loop, name="silenttalk-async", daemon=True
         )
         self._temp = tempfile.TemporaryDirectory(prefix="silenttalk-")
-        self._discord = DiscordVoiceClient(settings.discord, status)
+        self._copilot: CopilotRuntime | None = None
+        if settings.copilot.enabled and suggestions is not None:
+            self._copilot = CopilotRuntime(
+                project_dir,
+                settings.copilot,
+                settings.discord.owner_user_id,
+                on_suggestions=suggestions,
+                on_error=lambda message: status(AppState.ERROR, message),
+            )
+        self._discord = DiscordVoiceClient(
+            settings.discord,
+            status,
+            pcm_callback=self._copilot.accept_pcm if self._copilot else None,
+        )
         self._tts = EdgeTTSEngine(settings.tts, Path(self._temp.name))
         self._queue = SpeechQueue(
             self._tts, DiscordAudioPlayer(self._discord, settings.audio), status
@@ -52,6 +74,8 @@ class AppController:
         if voice_style not in VOICE_STYLES:
             raise ValueError(f"未知聲線：{voice_style}")
         rate = validate_rate_multiplier(rate_multiplier)
+        if self._copilot is not None:
+            self._copilot.record_self(text)
         self._schedule(
             self._queue.enqueue(
                 text,
@@ -114,6 +138,20 @@ class AppController:
                 "tts_initialization_deferred error_type=%s", type(exc).__name__
             )
             self._status(AppState.ERROR, f"TTS 暫時不可用：{exc}")
+
+        if self._copilot is not None:
+            try:
+                await self._copilot.start()
+            except Exception as exc:  # noqa: BLE001 - TTS-only mode must remain usable.
+                _LOG.exception("copilot_startup_failed")
+                self._status(AppState.ERROR, f"Copilot 啟動失敗：{exc}")
+                self._discord.set_pcm_callback(None)
+                try:
+                    await self._copilot.stop()
+                except Exception:
+                    _LOG.debug("copilot_partial_shutdown_failed", exc_info=True)
+                self._copilot = None
+
         try:
             await self._discord.start(self._settings.discord.token, reconnect=True)
         except discord.LoginFailure:
@@ -128,3 +166,5 @@ class AppController:
         await self._queue.shutdown()
         if not self._discord.is_closed():
             await self._discord.close()
+        if self._copilot is not None:
+            await self._copilot.stop()
