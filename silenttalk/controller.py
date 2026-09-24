@@ -56,7 +56,10 @@ class AppController:
         )
         self._tts = EdgeTTSEngine(settings.tts, Path(self._temp.name))
         self._queue = SpeechQueue(
-            self._tts, DiscordAudioPlayer(self._discord, settings.audio), status
+            self._tts,
+            DiscordAudioPlayer(self._discord, settings.audio),
+            status,
+            on_done=self._on_speech_done,
         )
         self._closing = False
 
@@ -74,8 +77,6 @@ class AppController:
         if voice_style not in VOICE_STYLES:
             raise ValueError(f"未知聲線：{voice_style}")
         rate = validate_rate_multiplier(rate_multiplier)
-        if self._copilot is not None:
-            self._copilot.record_self(text)
         self._schedule(
             self._queue.enqueue(
                 text,
@@ -83,6 +84,13 @@ class AppController:
                 rate_multiplier=rate,
             )
         )
+
+    def _on_speech_done(self, job: object) -> None:
+        if self._copilot is None:
+            return
+        text = getattr(job, "text", "")
+        if isinstance(text, str) and text.strip():
+            self._copilot.record_self(text)
 
     def stop_playback(self) -> None:
         self._schedule(self._queue.cancel_all())
