@@ -6,7 +6,7 @@ from silenttalk.tts.edge import resolve_speech_settings
 from silenttalk.voice_styles import voice_style_choices
 
 
-def test_space_marine_uses_deeper_base_voice_without_extreme_pitch_shift() -> None:
+def test_space_marine_preserves_user_approved_v1_preset() -> None:
     config = TTSConfig(voice="zh-TW-YunJheNeural")
     text, voice, rate, pitch, volume, audio_filter = resolve_speech_settings(
         "For the Emperor!",
@@ -14,17 +14,20 @@ def test_space_marine_uses_deeper_base_voice_without_extreme_pitch_shift() -> No
         voice_style="space_marine",
     )
     assert text == "For the Emperor!"
-    assert voice == "en-US-AndrewNeural"
-    assert rate == "-6%"
-    assert pitch == "-14Hz"
-    assert volume == "+8%"
-    assert audio_filter is not None and "bass=" in audio_filter
+    assert voice == "en-US-ChristopherNeural"
+    assert rate == "-12%"
+    assert pitch == "-45Hz"
+    assert volume == "+12%"
+    assert audio_filter == (
+        "bass=g=10:f=100,"
+        "acompressor=threshold=-18dB:ratio=4:attack=5:release=80"
+    )
 
 
 def test_major_roles_use_distinct_base_voices() -> None:
     config = TTSConfig(voice="zh-TW-YunJheNeural")
     role_to_expected_voice = {
-        "space_marine": "en-US-AndrewNeural",
+        "space_marine": "en-US-ChristopherNeural",
         "space_marine_commander": "en-US-ChristopherNeural",
         "mechanicus": "en-US-EricNeural",
         "inquisitor": "en-US-RogerNeural",
@@ -39,20 +42,23 @@ def test_major_roles_use_distinct_base_voices() -> None:
     assert actual == role_to_expected_voice
 
 
-def test_mechanicus_is_narrow_band_and_electronic() -> None:
+def test_mechanicus_keeps_approved_voice_with_thicker_electronic_body() -> None:
     config = TTSConfig(voice="zh-TW-YunJheNeural")
-    text, voice, _, pitch, _, audio_filter = resolve_speech_settings(
+    text, voice, rate, pitch, volume, audio_filter = resolve_speech_settings(
         "For the Omnissiah!",
         config,
         voice_style="mechanicus",
     )
     assert text == "For the Omnissiah!"
     assert voice == "en-US-EricNeural"
+    assert rate == "-4%"
     assert pitch == "-6Hz"
+    assert volume == "+4%"
     assert audio_filter is not None
-    assert "highpass=" in audio_filter
-    assert "lowpass=" in audio_filter
-    assert "aecho=" in audio_filter
+    assert "bass=g=7:f=120" in audio_filter
+    assert "highpass=f=95" in audio_filter
+    assert "lowpass=f=3000" in audio_filter
+    assert "aecho=0.8:0.68:24:0.22" in audio_filter
 
 
 def test_speed_only_legacy_styles_are_hidden_from_dropdown() -> None:
@@ -74,7 +80,7 @@ def test_ui_rate_multiplies_style_rate() -> None:
         voice_style="space_marine",
         rate_multiplier=0.80,
     )
-    assert rate == "-25%"
+    assert rate == "-30%"
 
 
 def test_legacy_style_prefix_still_works() -> None:
