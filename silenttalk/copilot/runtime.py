@@ -37,7 +37,7 @@ class CopilotRuntime:
 
         runtime_dir = project_dir / ".runtime"
         asr_dir = runtime_dir / "models" / "asr"
-        llm_model = runtime_dir / "models" / "llm" / "Qwen3-0.6B.Q4_K_M.gguf"
+        llm_model = runtime_dir / "models" / "llm" / "Qwen3-0.6B-Q4_K_M.gguf"
 
         self._context = ConversationStore(
             recent_turns=config.recent_turns,
