@@ -17,7 +17,8 @@ voice_reconnect_interval_seconds = 20.0
 voice_reconnect_max_interval_seconds = 60.0
 voice_state_settle_seconds = 1.5
 owner_leave_grace_seconds = 8.0
-voice_reconnect_cooldown_seconds = 2.0\nvoice_ready_timeout_seconds = 12.0
+voice_reconnect_cooldown_seconds = 2.0
+voice_ready_timeout_seconds = 12.0
 
 [audio]
 ffmpeg_path = "ffmpeg"
