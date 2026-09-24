@@ -41,6 +41,9 @@ class DiscordVoiceClient(discord.Client):
         self._reconnect_delay = config.voice_reconnect_cooldown_seconds
         self._voice_ready = asyncio.Event()
 
+    def set_pcm_callback(self, callback: PCMCallback | None) -> None:
+        self._pcm_callback = callback
+
     async def on_ready(self) -> None:
         self._event_loop = asyncio.get_running_loop()
         _LOG.info(
