@@ -101,6 +101,14 @@ if errorlevel 1 (
     exit /b 2
 )
 
+echo Checking SilentTalk source...
+".venv\Scripts\python.exe" -m compileall -q app.py silenttalk scripts\setup_copilot.py
+if errorlevel 1 (
+    echo ERROR: SilentTalk source check failed after update.
+    pause
+    exit /b 2
+)
+
 if /i "%~1"=="--check" (
     echo SilentTalk startup check passed.
     exit /b 0
