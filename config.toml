@@ -27,10 +27,10 @@ playback_timeout_seconds = 90.0
 [copilot]
 enabled = true
 endpoint_silence_ms = 650
-llm_context_size = 2048
-recent_turns = 12
-max_session_turns = 80
-context_char_budget = 2200
+llm_context_size = 4096
+recent_turns = 16
+max_session_turns = 100
+context_char_budget = 2400
 max_reply_chars = 72
 llama_port = 18088
 auto_popup = true
