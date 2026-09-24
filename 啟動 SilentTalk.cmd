@@ -72,7 +72,23 @@ if /i "%~1"=="--check" (
     exit /b 0
 )
 
+call :stop_existing_silenttalk
+if errorlevel 1 (
+    echo ERROR: Could not stop the previous SilentTalk instance.
+    pause
+    exit /b 1
+)
+
 start "SilentTalk" ".venv\Scripts\pythonw.exe" app.py
+exit /b 0
+
+:stop_existing_silenttalk
+set "SILENTTALK_PYTHONW=%CD%\.venv\Scripts\pythonw.exe"
+set "SILENTTALK_APP=%CD%\app.py"
+
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
+  "$pythonw=[IO.Path]::GetFullPath($env:SILENTTALK_PYTHONW); $app=[IO.Path]::GetFullPath($env:SILENTTALK_APP); $procs=Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and ([IO.Path]::GetFullPath($_.ExecutablePath) -ieq $pythonw) -and $_.CommandLine -and (($_.CommandLine -match '(^|[\\"''])(app\.py)([\\"'']|$|\s)') -or ($_.CommandLine -like ('*' + $app + '*'))) }; if($procs){ Write-Host ('Stopping existing SilentTalk instance(s): ' + (($procs.ProcessId -join ', '))); $procs | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop }; $deadline=(Get-Date).AddSeconds(5); do { Start-Sleep -Milliseconds 100; $alive=@($procs | Where-Object { Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue }) } while($alive.Count -gt 0 -and (Get-Date) -lt $deadline); if($alive.Count -gt 0){ exit 1 } }"
+if errorlevel 1 exit /b 1
 exit /b 0
 
 :find_python
