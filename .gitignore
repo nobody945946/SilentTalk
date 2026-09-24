@@ -6,3 +6,5 @@ __pycache__/
 .test-tmp/
 *.py[cod]
 *.log
+quick_phrases.json
+quick_phrases.json.tmp
