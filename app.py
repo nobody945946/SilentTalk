@@ -61,7 +61,16 @@ def main() -> int:
         if ui is not None:
             ui.set_status(state, message)
 
-    controller = AppController(settings, status)
+    def suggestions(payload: object) -> None:
+        if ui is not None:
+            ui.set_suggestions(payload)  # type: ignore[arg-type]
+
+    controller = AppController(
+        settings,
+        status,
+        project_dir,
+        suggestions,
+    )
     quick_phrases = QuickPhraseStore(project_dir / "quick_phrases.json")
     preferences = PreferenceStore(project_dir / "ui_preferences.json")
     ui = SilentTalkUI(
@@ -72,6 +81,7 @@ def main() -> int:
         controller.shutdown,
         quick_phrases,
         preferences,
+        auto_popup_suggestions=settings.copilot.auto_popup,
     )
 
     runtime_issues = settings.validate_runtime()
