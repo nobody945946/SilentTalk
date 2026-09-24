@@ -83,11 +83,57 @@ start "SilentTalk" ".venv\Scripts\pythonw.exe" app.py
 exit /b 0
 
 :stop_existing_silenttalk
-set "SILENTTALK_PYTHONW=%CD%\.venv\Scripts\pythonw.exe"
-set "SILENTTALK_APP=%CD%\app.py"
+set "SILENTTALK_PID_FILE=%LOCALAPPDATA%\SilentTalk\silenttalk.pid"
 
 powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
-  "$pythonw=[IO.Path]::GetFullPath($env:SILENTTALK_PYTHONW); $app=[IO.Path]::GetFullPath($env:SILENTTALK_APP); $procs=Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and ([IO.Path]::GetFullPath($_.ExecutablePath) -ieq $pythonw) -and $_.CommandLine -and (($_.CommandLine -match '(^|[\\"''])(app\.py)([\\"'']|$|\s)') -or ($_.CommandLine -like ('*' + $app + '*'))) }; if($procs){ Write-Host ('Stopping existing SilentTalk instance(s): ' + (($procs.ProcessId -join ', '))); $procs | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop }; $deadline=(Get-Date).AddSeconds(5); do { Start-Sleep -Milliseconds 100; $alive=@($procs | Where-Object { Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue }) } while($alive.Count -gt 0 -and (Get-Date) -lt $deadline); if($alive.Count -gt 0){ exit 1 } }"
+  "$ErrorActionPreference='Stop'; $targets=@(); $pidFile=$env:SILENTTALK_PID_FILE; if(Test-Path $pidFile){ $raw=(Get-Content $pidFile -Raw -ErrorAction SilentlyContinue).Trim(); if($raw -match '^\d+
+:find_python
+set "PYTHON_EXE="
+set "PYTHON_ARGS="
+where py.exe >nul 2>nul
+if not errorlevel 1 (
+    py -3.12 -c "import sys" >nul 2>nul
+    if not errorlevel 1 (
+        set "PYTHON_EXE=py.exe"
+        set "PYTHON_ARGS=-3.12"
+        exit /b 0
+    )
+)
+
+where python.exe >nul 2>nul
+if not errorlevel 1 (
+    python -c "import sys; raise SystemExit(sys.version_info[:2] != (3, 12))" >nul 2>nul
+    if not errorlevel 1 (
+        set "PYTHON_EXE=python.exe"
+        exit /b 0
+    )
+)
+
+where winget.exe >nul 2>nul
+if errorlevel 1 (
+    echo ERROR: Python 3.12 is required and winget is unavailable.
+    pause
+    exit /b 1
+)
+
+echo Installing Python 3.12...
+winget install --id Python.Python.3.12 -e --accept-source-agreements --accept-package-agreements
+if errorlevel 1 (
+    echo ERROR: Python 3.12 installation failed.
+    pause
+    exit /b 1
+)
+
+if exist "%LOCALAPPDATA%\Programs\Python\Python312\python.exe" (
+    set "PYTHON_EXE=%LOCALAPPDATA%\Programs\Python\Python312\python.exe"
+    exit /b 0
+)
+
+echo ERROR: Python 3.12 was installed but could not be located.
+echo Close this window and run the launcher again.
+pause
+exit /b 1
+){ $p=Get-CimInstance Win32_Process -Filter ('ProcessId=' + $raw) -ErrorAction SilentlyContinue; if($p){ $targets += $p } } }; $legacy=Get-CimInstance Win32_Process | Where-Object { $_.Name -ieq 'pythonw.exe' -and $_.ExecutablePath -and $_.CommandLine -and $_.CommandLine -match '(^|\s|["''])app\.py($|\s|["''])' }; foreach($p in $legacy){ try { $exe=[IO.Path]::GetFullPath($p.ExecutablePath); $scripts=Split-Path $exe -Parent; $venv=Split-Path $scripts -Parent; $root=Split-Path $venv -Parent; if((Test-Path (Join-Path $root 'silenttalk\__init__.py')) -and (Test-Path (Join-Path $root 'config.toml'))){ $targets += $p } } catch {} }; $targets=@($targets | Sort-Object ProcessId -Unique); if($targets.Count -gt 0){ Write-Host ('Stopping existing SilentTalk instance(s): ' + (($targets.ProcessId -join ', '))); foreach($p in $targets){ Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue }; $deadline=(Get-Date).AddSeconds(5); do { Start-Sleep -Milliseconds 100; $alive=@($targets | Where-Object { Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue }) } while($alive.Count -gt 0 -and (Get-Date) -lt $deadline); if($alive.Count -gt 0){ exit 1 } }; if(Test-Path $pidFile){ Remove-Item $pidFile -Force -ErrorAction SilentlyContinue }"
 if errorlevel 1 exit /b 1
 exit /b 0
 
