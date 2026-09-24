@@ -15,6 +15,8 @@ engine = "edge"
 [discord]
 voice_reconnect_interval_seconds = 20.0
 voice_reconnect_max_interval_seconds = 90.0
+voice_reconnect_cooldown_seconds = 1.5
+voice_ready_timeout_seconds = 7.0
 """,
         encoding="utf-8",
     )
@@ -23,3 +25,5 @@ voice_reconnect_max_interval_seconds = 90.0
     settings = load_settings(tmp_path)
     assert settings.discord.voice_reconnect_interval_seconds == 20.0
     assert settings.discord.voice_reconnect_max_interval_seconds == 90.0
+    assert settings.discord.voice_reconnect_cooldown_seconds == 1.5
+    assert settings.discord.voice_ready_timeout_seconds == 7.0
