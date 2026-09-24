@@ -2,6 +2,10 @@
 
 Windows 本機文字輸入 → EdgeTTS → Discord Bot 語音頻道。程式不讀寫 Discord 文字頻道，也不保存輸入全文或音訊歷史。
 
+## 開發者導覽
+
+如果你要修改程式而不是只使用它，先看 [ARCHITECTURE.md](ARCHITECTURE.md)。裡面有「想改什麼 → 去哪個檔案」、核心資料流、執行緒模型與測試對照表。
+
 ## 最快使用方式
 
 1. 雙擊 `啟動 SilentTalk.cmd`。啟動後不會出現大型主視窗。
