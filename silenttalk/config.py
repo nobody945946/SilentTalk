@@ -53,10 +53,10 @@ class AudioConfig:
 class CopilotConfig:
     enabled: bool = True
     endpoint_silence_ms: int = 650
-    llm_context_size: int = 2048
-    recent_turns: int = 12
-    max_session_turns: int = 80
-    context_char_budget: int = 2200
+    llm_context_size: int = 4096
+    recent_turns: int = 16
+    max_session_turns: int = 100
+    context_char_budget: int = 2400
     max_reply_chars: int = 72
     llama_port: int = 18088
     auto_popup: bool = True
@@ -170,14 +170,14 @@ def load_settings(project_dir: Path) -> Settings:
                 350, min(2000, int(copilot.get("endpoint_silence_ms", 650)))
             ),
             llm_context_size=max(
-                1024, min(4096, int(copilot.get("llm_context_size", 2048)))
+                1024, min(4096, int(copilot.get("llm_context_size", 4096)))
             ),
-            recent_turns=max(4, min(24, int(copilot.get("recent_turns", 12)))),
+            recent_turns=max(4, min(24, int(copilot.get("recent_turns", 16)))),
             max_session_turns=max(
-                20, min(200, int(copilot.get("max_session_turns", 80)))
+                20, min(200, int(copilot.get("max_session_turns", 100)))
             ),
             context_char_budget=max(
-                600, min(5000, int(copilot.get("context_char_budget", 2200)))
+                600, min(5000, int(copilot.get("context_char_budget", 2400)))
             ),
             max_reply_chars=max(
                 24, min(160, int(copilot.get("max_reply_chars", 72)))
