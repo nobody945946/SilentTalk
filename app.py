@@ -7,6 +7,7 @@ from pathlib import Path
 
 from silenttalk.config import ConfigError, load_settings
 from silenttalk.controller import AppController
+from silenttalk.copilot.types import ReplySuggestions
 from silenttalk.logging_setup import configure_logging
 from silenttalk.phrases import QuickPhraseStore
 from silenttalk.preferences import PreferenceStore
@@ -61,9 +62,9 @@ def main() -> int:
         if ui is not None:
             ui.set_status(state, message)
 
-    def suggestions(payload: object) -> None:
+    def suggestions(payload: ReplySuggestions) -> None:
         if ui is not None:
-            ui.set_suggestions(payload)  # type: ignore[arg-type]
+            ui.set_suggestions(payload)
 
     controller = AppController(
         settings,
