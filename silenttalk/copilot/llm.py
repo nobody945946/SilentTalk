@@ -4,7 +4,6 @@ import asyncio
 import json
 import logging
 import os
-import re
 import shutil
 import subprocess
 import urllib.error
@@ -15,11 +14,8 @@ from silenttalk.copilot.types import ReplySuggestions
 
 _LOG = logging.getLogger(__name__)
 
-_LINE_PATTERN = re.compile(
-    r"^\\s*(AGREE|DISAGREE|HUMOR)\\s*[|｜:：]\\s*(.*?)\\s*$",
-    re.IGNORECASE,
-)
-_THINK_PATTERN = re.compile(r"<think>.*?</think>", re.IGNORECASE | re.DOTALL)
+_THINK_OPEN = "<think>"
+_THINK_CLOSE = "</think>"
 
 
 class LocalLLMError(RuntimeError):
@@ -148,7 +144,7 @@ class LocalReplyModel:
                         "必須根據提供的真實對話，不得杜撰對方身分、經歷、情緒或事實。"
                     ),
                 },
-                {"role": "user", "content": "/no_think\\n" + prompt},
+                {"role": "user", "content": "/no_think\n" + prompt},
             ],
             "temperature": 0.65,
             "top_p": 0.85,
@@ -203,17 +199,28 @@ HUMOR|..."""
         trigger_speaker: str,
         trigger_text: str,
     ) -> ReplySuggestions:
-        cleaned = _THINK_PATTERN.sub("", raw).strip()
+        cleaned = raw.strip()
+        lower = cleaned.lower()
+        open_index = lower.find(_THINK_OPEN)
+        close_index = lower.rfind(_THINK_CLOSE)
+        if open_index >= 0 and close_index >= open_index:
+            cleaned = (
+                cleaned[:open_index] + cleaned[close_index + len(_THINK_CLOSE) :]
+            ).strip()
+
         values: dict[str, str] = {"AGREE": "", "DISAGREE": "", "HUMOR": ""}
         for line in cleaned.splitlines():
-            match = _LINE_PATTERN.match(line)
-            if not match:
-                continue
-            key = match.group(1).upper()
-            value = self._clean_reply(match.group(2))
-            if value.upper() == "SKIP":
-                value = ""
-            values[key] = value
+            stripped = line.strip()
+            upper = stripped.upper()
+            for key in values:
+                if not upper.startswith(key):
+                    continue
+                remainder = stripped[len(key) :].lstrip(" |｜:：").strip()
+                value = self._clean_reply(remainder)
+                if value.upper() == "SKIP":
+                    value = ""
+                values[key] = value
+                break
 
         return ReplySuggestions(
             trigger_speaker=trigger_speaker,
