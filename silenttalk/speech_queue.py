@@ -27,6 +27,8 @@ class JobState(StrEnum):
 @dataclass(slots=True)
 class SpeechJob:
     text: str = field(repr=False)
+    voice_style: str = "default"
+    rate_multiplier: float = 1.0
     id: str = field(default_factory=lambda: uuid.uuid4().hex)
     created_at: float = field(default_factory=time.time)
     state: JobState = JobState.QUEUED
@@ -65,13 +67,28 @@ class SpeechQueue:
         if self._worker is None or self._worker.done():
             self._worker = asyncio.create_task(self._run(), name="speech-queue")
 
-    async def enqueue(self, text: str) -> SpeechJob:
+    async def enqueue(
+        self,
+        text: str,
+        voice_style: str = "default",
+        rate_multiplier: float = 1.0,
+    ) -> SpeechJob:
         if self._worker is None or self._worker.done():
             self.start()
-        job = SpeechJob(text=text)
+        job = SpeechJob(
+            text=text,
+            voice_style=voice_style,
+            rate_multiplier=rate_multiplier,
+        )
         self._idle.clear()
         await self._queue.put(job)
-        _LOG.info("job_queued job_id=%s char_count=%d", job.id, len(text))
+        _LOG.info(
+            "job_queued job_id=%s char_count=%d voice_style=%s rate_multiplier=%.2f",
+            job.id,
+            len(text),
+            voice_style,
+            rate_multiplier,
+        )
         return job
 
     async def cancel_all(self) -> None:
@@ -111,7 +128,11 @@ class SpeechQueue:
             try:
                 job.state = JobState.SYNTHESIZING
                 self._status(AppState.SYNTHESIZING, "語音合成中…")
-                audio = await self._tts.synthesize(job.text)
+                audio = await self._tts.synthesize(
+                    job.text,
+                    voice_style=job.voice_style,
+                    rate_multiplier=job.rate_multiplier,
+                )
                 synth_ms = round((time.perf_counter() - started) * 1000)
                 if generation != self._generation:
                     job.state = JobState.CANCELLED

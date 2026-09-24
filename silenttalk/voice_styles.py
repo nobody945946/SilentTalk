@@ -75,11 +75,3 @@ def voice_style_choices() -> list[tuple[str, str]]:
 def voice_style_label(key: str) -> str:
     style = VOICE_STYLES.get(key)
     return style.label if style else key
-
-
-def apply_style_directive(text: str, style_key: str) -> str:
-    if style_key == "default":
-        return text
-    if style_key not in VOICE_STYLES:
-        raise ValueError(f"未知聲線：{style_key}")
-    return f"/{style_key} {text}"

@@ -12,10 +12,11 @@ import discord
 from silenttalk.config import Settings
 from silenttalk.discord_voice import DiscordAudioPlayer, DiscordVoiceClient
 from silenttalk.speech_queue import SpeechQueue
+from silenttalk.speech_settings import validate_rate_multiplier
 from silenttalk.state import AppState
 from silenttalk.text import normalize_text
 from silenttalk.tts.edge import EdgeTTSEngine
-from silenttalk.voice_styles import apply_style_directive
+from silenttalk.voice_styles import VOICE_STYLES
 
 _LOG = logging.getLogger(__name__)
 StatusCallback = Callable[[AppState, str], None]
@@ -41,10 +42,23 @@ class AppController:
         self._thread.start()
         self._schedule(self._bootstrap())
 
-    def submit(self, raw_text: str, voice_style: str = "default") -> None:
+    def submit(
+        self,
+        raw_text: str,
+        voice_style: str = "default",
+        rate_multiplier: float = 1.0,
+    ) -> None:
         text = normalize_text(raw_text, self._settings.app.max_text_length)
-        text = apply_style_directive(text, voice_style)
-        self._schedule(self._queue.enqueue(text))
+        if voice_style not in VOICE_STYLES:
+            raise ValueError(f"未知聲線：{voice_style}")
+        rate = validate_rate_multiplier(rate_multiplier)
+        self._schedule(
+            self._queue.enqueue(
+                text,
+                voice_style=voice_style,
+                rate_multiplier=rate,
+            )
+        )
 
     def stop_playback(self) -> None:
         self._schedule(self._queue.cancel_all())

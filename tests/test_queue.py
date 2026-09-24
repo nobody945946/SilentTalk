@@ -13,13 +13,18 @@ class FakeTTS:
     def __init__(self, directory: Path, delay: float = 0) -> None:
         self.directory = directory
         self.delay = delay
-        self.calls: list[str] = []
+        self.calls: list[tuple[str, str, float]] = []
 
     async def initialize(self) -> None:
         return None
 
-    async def synthesize(self, text: str) -> AudioResult:
-        self.calls.append(text)
+    async def synthesize(
+        self,
+        text: str,
+        voice_style: str = "default",
+        rate_multiplier: float = 1.0,
+    ) -> AudioResult:
+        self.calls.append((text, voice_style, rate_multiplier))
         await asyncio.sleep(self.delay)
         path = self.directory / f"audio-{len(self.calls)}.mp3"
         path.write_bytes(b"audio")
@@ -50,10 +55,27 @@ async def test_thirty_jobs_are_fifo_and_finish(tmp_path: Path) -> None:
     queue = SpeechQueue(tts, player, lambda *_: None)
     jobs = [await queue.enqueue(f"第 {index} 句") for index in range(30)]
     await asyncio.wait_for(queue.wait_idle(), timeout=3)
-    assert tts.calls == [f"第 {index} 句" for index in range(30)]
+    assert tts.calls == [
+        (f"第 {index} 句", "default", 1.0) for index in range(30)
+    ]
     assert len(player.played) == 30
     assert all(job.state is JobState.DONE for job in jobs)
     assert not list(tmp_path.glob("*.mp3"))
+    await queue.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_job_carries_voice_style_and_rate(tmp_path: Path) -> None:
+    tts = FakeTTS(tmp_path)
+    player = FakePlayer()
+    queue = SpeechQueue(tts, player, lambda *_: None)
+    await queue.enqueue(
+        "For the Emperor!",
+        voice_style="space_marine",
+        rate_multiplier=0.80,
+    )
+    await asyncio.wait_for(queue.wait_idle(), timeout=1)
+    assert tts.calls == [("For the Emperor!", "space_marine", 0.80)]
     await queue.shutdown()
 
 

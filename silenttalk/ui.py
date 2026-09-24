@@ -8,6 +8,16 @@ from tkinter import ttk
 
 from silenttalk.hotkeys import GlobalHotkeys
 from silenttalk.phrases import QuickPhrase, QuickPhraseError, QuickPhraseStore
+from silenttalk.preferences import (
+    PreferenceError,
+    PreferenceStore,
+    UserPreferences,
+)
+from silenttalk.speech_settings import (
+    DEFAULT_RATE_MULTIPLIER,
+    MAX_RATE_MULTIPLIER,
+    MIN_RATE_MULTIPLIER,
+)
 from silenttalk.state import AppState
 from silenttalk.text import TextValidationError
 from silenttalk.voice_styles import voice_style_choices, voice_style_label
@@ -25,20 +35,31 @@ class SilentTalkUI:
         self,
         speak_hotkey: str,
         stop_hotkey: str,
-        submit: Callable[[str, str], None],
+        submit: Callable[[str, str, float], None],
         stop_playback: Callable[[], None],
         shutdown: Callable[[], None],
         quick_phrases: QuickPhraseStore | None = None,
+        preferences: PreferenceStore | None = None,
     ) -> None:
         self._submit_callback = submit
         self._stop_callback = stop_playback
         self._shutdown_callback = shutdown
         self._phrase_store = quick_phrases
+        self._preference_store = preferences
         self._phrases: list[QuickPhrase] = []
         self._actions: queue.SimpleQueue[UIAction] = queue.SimpleQueue()
         self._style_choices = voice_style_choices()
         self._style_by_label = {label: key for key, label in self._style_choices}
         self._label_by_style = {key: label for key, label in self._style_choices}
+
+        preference_error = ""
+        try:
+            initial_preferences = (
+                preferences.load() if preferences is not None else UserPreferences()
+            )
+        except PreferenceError as exc:
+            initial_preferences = UserPreferences()
+            preference_error = str(exc)
 
         self.root = tk.Tk()
         self.root.withdraw()
@@ -69,7 +90,7 @@ class SilentTalkUI:
         self.input.pack(padx=12, pady=(12, 6))
 
         voice_row = tk.Frame(self.popup)
-        voice_row.pack(fill="x", padx=12, pady=(0, 8))
+        voice_row.pack(fill="x", padx=12, pady=(0, 4))
         tk.Label(voice_row, text="聲線：").pack(side="left")
         self.voice_style_var = tk.StringVar(value=self._label_by_style["default"])
         self.voice_style_combo = ttk.Combobox(
@@ -82,8 +103,40 @@ class SilentTalkUI:
         self.voice_style_combo.pack(side="left")
         tk.Label(
             voice_row,
-            text="（只影響這一句；快捷句會記住自己的聲線）",
+            text="（快捷句會記住自己的聲線）",
         ).pack(side="left", padx=(8, 0))
+
+        speed_row = tk.Frame(self.popup)
+        speed_row.pack(fill="x", padx=12, pady=(0, 8))
+        tk.Label(speed_row, text="語速：").pack(side="left")
+        initial_percent = round(initial_preferences.speech_rate_multiplier * 100)
+        self.rate_var = tk.DoubleVar(value=initial_percent)
+        self.rate_text_var = tk.StringVar(value=f"{initial_percent}%")
+        self.rate_scale = tk.Scale(
+            speed_row,
+            from_=MIN_RATE_MULTIPLIER * 100,
+            to=MAX_RATE_MULTIPLIER * 100,
+            resolution=5,
+            orient="horizontal",
+            showvalue=False,
+            variable=self.rate_var,
+            length=220,
+            command=self._on_rate_changed,
+        )
+        self.rate_scale.pack(side="left")
+        tk.Label(speed_row, textvariable=self.rate_text_var, width=5).pack(side="left")
+        tk.Button(
+            speed_row,
+            text="100%",
+            width=6,
+            command=self._reset_rate,
+        ).pack(side="left", padx=(6, 0))
+        tk.Label(
+            speed_row,
+            text="（套用到手打與所有快捷句）",
+        ).pack(side="left", padx=(8, 0))
+        self.rate_scale.bind("<ButtonRelease-1>", self._persist_rate)
+        self.rate_scale.bind("<KeyRelease>", self._persist_rate)
 
         phrase_frame = tk.LabelFrame(self.popup, text="快捷句")
         phrase_frame.pack(fill="x", padx=12, pady=(0, 6))
@@ -121,7 +174,7 @@ class SilentTalkUI:
             command=self._delete_quick_phrase,
         ).pack(side="right")
 
-        self.status_var = tk.StringVar(value="啟動中…")
+        self.status_var = tk.StringVar(value=preference_error or "啟動中…")
         tk.Label(self.popup, textvariable=self.status_var, anchor="w").pack(
             fill="x", padx=12, pady=(0, 6)
         )
@@ -171,6 +224,7 @@ class SilentTalkUI:
         self.popup.withdraw()
 
     def close(self) -> None:
+        self._persist_rate()
         self._hotkeys.stop()
         self._shutdown_callback()
         self.root.destroy()
@@ -179,7 +233,31 @@ class SilentTalkUI:
         return self._style_by_label.get(self.voice_style_var.get(), "default")
 
     def _set_style(self, key: str) -> None:
-        self.voice_style_var.set(self._label_by_style.get(key, self._label_by_style["default"]))
+        self.voice_style_var.set(
+            self._label_by_style.get(key, self._label_by_style["default"])
+        )
+
+    def _rate_multiplier(self) -> float:
+        return float(self.rate_var.get()) / 100.0
+
+    def _on_rate_changed(self, value: str) -> None:
+        self.rate_text_var.set(f"{float(value):.0f}%")
+
+    def _reset_rate(self) -> None:
+        self.rate_var.set(DEFAULT_RATE_MULTIPLIER * 100)
+        self._on_rate_changed(str(DEFAULT_RATE_MULTIPLIER * 100))
+        self._persist_rate()
+
+    def _persist_rate(self, _: tk.Event | None = None) -> None:
+        if self._preference_store is None:
+            return
+        try:
+            self._preference_store.save(
+                UserPreferences(speech_rate_multiplier=self._rate_multiplier())
+            )
+        except PreferenceError as exc:
+            if hasattr(self, "status_var"):
+                self.status_var.set(str(exc))
 
     def _stop_from_button(self) -> None:
         self._stop_callback()
@@ -196,7 +274,11 @@ class SilentTalkUI:
 
     def _submit_text(self, raw: str, voice_style: str | None = None) -> bool:
         try:
-            self._submit_callback(raw, voice_style or self._selected_style_key())
+            self._submit_callback(
+                raw,
+                voice_style or self._selected_style_key(),
+                self._rate_multiplier(),
+            )
         except (TextValidationError, ValueError) as exc:
             self.status_var.set(str(exc))
             return False
