@@ -6,6 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from silenttalk.hotkeys import GlobalHotkeys
+from silenttalk.phrases import QuickPhraseError, QuickPhraseStore
 from silenttalk.state import AppState
 from silenttalk.text import TextValidationError
 
@@ -25,11 +26,15 @@ class SilentTalkUI:
         submit: Callable[[str], None],
         stop_playback: Callable[[], None],
         shutdown: Callable[[], None],
+        quick_phrases: QuickPhraseStore | None = None,
     ) -> None:
         self._submit_callback = submit
         self._stop_callback = stop_playback
         self._shutdown_callback = shutdown
+        self._phrase_store = quick_phrases
+        self._phrases: list[str] = []
         self._actions: queue.SimpleQueue[UIAction] = queue.SimpleQueue()
+
         self.root = tk.Tk()
         self.root.withdraw()
         self.root.protocol("WM_DELETE_WINDOW", self.close)
@@ -41,6 +46,13 @@ class SilentTalkUI:
         self.popup.protocol("WM_DELETE_WINDOW", self.hide)
         self.popup.bind("<Escape>", lambda _: self.hide())
         self.popup.bind("<Return>", self._on_enter)
+        for index in range(9):
+            self.popup.bind(
+                f"<Control-Key-{index + 1}>",
+                lambda event, phrase_index=index: self._send_quick_phrase(
+                    phrase_index
+                ),
+            )
 
         self.input = tk.Text(
             self.popup,
@@ -50,18 +62,60 @@ class SilentTalkUI:
             font=("Microsoft JhengHei UI", 12),
         )
         self.input.pack(padx=12, pady=(12, 6))
+
+        phrase_frame = tk.LabelFrame(self.popup, text="快捷句")
+        phrase_frame.pack(fill="x", padx=12, pady=(0, 6))
+
+        self.phrase_list = tk.Listbox(
+            phrase_frame,
+            width=58,
+            height=5,
+            exportselection=False,
+            font=("Microsoft JhengHei UI", 10),
+        )
+        self.phrase_list.pack(fill="x", padx=8, pady=(8, 4))
+        self.phrase_list.bind("<Double-Button-1>", self._on_phrase_double_click)
+
+        phrase_controls = tk.Frame(phrase_frame)
+        phrase_controls.pack(fill="x", padx=8, pady=(0, 8))
+        tk.Button(
+            phrase_controls,
+            text="新增目前文字",
+            command=self._add_quick_phrase,
+        ).pack(side="left")
+        tk.Button(
+            phrase_controls,
+            text="載入選取",
+            command=self._load_selected_phrase,
+        ).pack(side="left", padx=(6, 0))
+        tk.Button(
+            phrase_controls,
+            text="更新選取",
+            command=self._update_quick_phrase,
+        ).pack(side="left", padx=(6, 0))
+        tk.Button(
+            phrase_controls,
+            text="刪除選取",
+            command=self._delete_quick_phrase,
+        ).pack(side="right")
+
         self.status_var = tk.StringVar(value="啟動中…")
         tk.Label(self.popup, textvariable=self.status_var, anchor="w").pack(
             fill="x", padx=12, pady=(0, 6)
         )
+
         controls = tk.Frame(self.popup)
         controls.pack(fill="x", padx=12, pady=(0, 10))
-        tk.Button(controls, text="停止播放 (F9)", command=self._stop_from_button).pack(
-            side="left"
-        )
-        tk.Button(controls, text="退出 SilentTalk", command=self.close).pack(
-            side="right"
-        )
+        tk.Button(
+            controls,
+            text="停止播放 (F9)",
+            command=self._stop_from_button,
+        ).pack(side="left")
+        tk.Button(
+            controls,
+            text="退出 SilentTalk",
+            command=self.close,
+        ).pack(side="right")
         self.popup.withdraw()
 
         self._hotkeys = GlobalHotkeys(
@@ -70,6 +124,7 @@ class SilentTalkUI:
                 stop_hotkey: lambda: self._actions.put(UIAction("stop")),
             }
         )
+        self._refresh_phrases()
         self.root.after(50, self._poll_actions)
 
     def run(self) -> None:
@@ -83,6 +138,7 @@ class SilentTalkUI:
         self._actions.put(UIAction("status", state, message))
 
     def show(self) -> None:
+        self._refresh_phrases()
         self.popup.deiconify()
         self.popup.lift()
         self.popup.focus_force()
@@ -106,13 +162,111 @@ class SilentTalkUI:
             self.input.insert("insert", "\n")
             return "break"
         raw = self.input.get("1.0", "end-1c")
+        if self._submit_text(raw):
+            self.hide()
+        return "break"
+
+    def _submit_text(self, raw: str) -> bool:
         try:
             self._submit_callback(raw)
         except TextValidationError as exc:
             self.status_var.set(str(exc))
+            return False
+        return True
+
+    def _send_quick_phrase(self, index: int) -> str:
+        if index >= len(self._phrases):
+            self.status_var.set(f"Ctrl+{index + 1} 尚未設定快捷句")
             return "break"
-        self.hide()
+        if self._submit_text(self._phrases[index]):
+            self.hide()
         return "break"
+
+    def _on_phrase_double_click(self, _: tk.Event) -> str:
+        index = self._selected_phrase_index()
+        if index is not None:
+            self._send_quick_phrase(index)
+        return "break"
+
+    def _add_quick_phrase(self) -> None:
+        store = self._require_phrase_store()
+        if store is None:
+            return
+        try:
+            store.add(self.input.get("1.0", "end-1c"))
+        except QuickPhraseError as exc:
+            self.status_var.set(str(exc))
+            return
+        self._refresh_phrases()
+        self.input.delete("1.0", "end")
+        self.status_var.set("已新增快捷句")
+
+    def _load_selected_phrase(self) -> None:
+        index = self._selected_phrase_index()
+        if index is None:
+            return
+        self.input.delete("1.0", "end")
+        self.input.insert("1.0", self._phrases[index])
+        self.input.focus_set()
+
+    def _update_quick_phrase(self) -> None:
+        store = self._require_phrase_store()
+        index = self._selected_phrase_index()
+        if store is None or index is None:
+            return
+        try:
+            store.update(index, self.input.get("1.0", "end-1c"))
+        except QuickPhraseError as exc:
+            self.status_var.set(str(exc))
+            return
+        self._refresh_phrases(select=index)
+        self.status_var.set("已更新快捷句")
+
+    def _delete_quick_phrase(self) -> None:
+        store = self._require_phrase_store()
+        index = self._selected_phrase_index()
+        if store is None or index is None:
+            return
+        try:
+            store.delete(index)
+        except QuickPhraseError as exc:
+            self.status_var.set(str(exc))
+            return
+        self._refresh_phrases()
+        self.status_var.set("已刪除快捷句")
+
+    def _selected_phrase_index(self) -> int | None:
+        selected = self.phrase_list.curselection()
+        if not selected:
+            self.status_var.set("請先選擇一個快捷句")
+            return None
+        return int(selected[0])
+
+    def _require_phrase_store(self) -> QuickPhraseStore | None:
+        if self._phrase_store is None:
+            self.status_var.set("快捷句儲存尚未設定")
+            return None
+        return self._phrase_store
+
+    def _refresh_phrases(self, select: int | None = None) -> None:
+        if self._phrase_store is None:
+            self._phrases = []
+        else:
+            try:
+                self._phrases = self._phrase_store.load()
+            except QuickPhraseError as exc:
+                self._phrases = []
+                if hasattr(self, "status_var"):
+                    self.status_var.set(str(exc))
+
+        self.phrase_list.delete(0, "end")
+        for index, phrase in enumerate(self._phrases):
+            shortcut = f"Ctrl+{index + 1}" if index < 9 else "      "
+            self.phrase_list.insert("end", f"{shortcut:<7} {phrase}")
+
+        if select is not None and 0 <= select < len(self._phrases):
+            self.phrase_list.selection_set(select)
+            self.phrase_list.see(select)
 
     def _poll_actions(self) -> None:
         while True:
