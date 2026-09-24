@@ -41,17 +41,23 @@ class AudioPlayer(Protocol):
 
 
 StatusCallback = Callable[[AppState, str], None]
+DoneCallback = Callable[[SpeechJob], None]
 
 
 class SpeechQueue:
     """One synthesis and one playback at a time, with generation-based cancel."""
 
     def __init__(
-        self, tts: TTSEngine, player: AudioPlayer, status: StatusCallback
+        self,
+        tts: TTSEngine,
+        player: AudioPlayer,
+        status: StatusCallback,
+        on_done: DoneCallback | None = None,
     ) -> None:
         self._tts = tts
         self._player = player
         self._status = status
+        self._on_done = on_done
         self._queue: asyncio.Queue[SpeechJob] = asyncio.Queue()
         self._worker: asyncio.Task[None] | None = None
         self._current: SpeechJob | None = None
@@ -148,6 +154,11 @@ class SpeechQueue:
                         len(job.text),
                         synth_ms,
                     )
+                    if self._on_done is not None:
+                        try:
+                            self._on_done(job)
+                        except Exception:
+                            _LOG.exception("job_done_callback_failed")
             except asyncio.CancelledError:
                 job.state = JobState.CANCELLED
                 raise
