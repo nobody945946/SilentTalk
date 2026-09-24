@@ -25,20 +25,18 @@ class FakeVoice:
 class FakeClient:
     def __init__(self, voice: FakeVoice) -> None:
         self.voice = voice
-        self.connect_attempts = 0
-        self.disconnect_attempts = 0
+        self.recovery_calls = 0
+        self.ready_waits = 0
 
     def active_voice(self) -> FakeVoice:
         return self.voice
 
-    async def sync_owner_voice(self) -> None:
-        return None
+    async def wait_until_voice_ready(self) -> None:
+        self.ready_waits += 1
 
-    async def connect(self) -> None:
-        self.connect_attempts += 1
-
-    async def disconnect(self) -> None:
-        self.disconnect_attempts += 1
+    async def recover_voice_transport(self, reason: str) -> bool:
+        self.recovery_calls += 1
+        return True
 
 
 @pytest.mark.asyncio
@@ -60,8 +58,8 @@ async def test_multiple_messages_reuse_existing_voice_connection(
     await player.play(result)
 
     assert voice.play_calls == 2
-    assert client.connect_attempts == 0
-    assert client.disconnect_attempts == 0
+    assert client.ready_waits == 2
+    assert client.recovery_calls == 0
 
 
 @pytest.mark.asyncio
@@ -98,7 +96,7 @@ async def test_ffmpeg_filter_is_forwarded(
 
 
 @pytest.mark.asyncio
-async def test_voice_drop_does_not_replay_sentence(
+async def test_voice_drop_recovers_transport_without_replaying_sentence(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(
@@ -108,12 +106,12 @@ async def test_voice_drop_does_not_replay_sentence(
     audio_path = tmp_path / "speech.mp3"
     audio_path.write_bytes(b"audio")
     voice = FakeVoice()
-    voice.errors = [RuntimeError("voice transport dropped"), None]
+    voice.errors = [RuntimeError("voice transport dropped")]
     client = FakeClient(voice)
     player = DiscordAudioPlayer(client, AudioConfig(playback_timeout_seconds=10))
 
-    with pytest.raises(RuntimeError, match="未重播"):
+    with pytest.raises(RuntimeError, match="已自動恢復"):
         await player.play(AudioResult(audio_path, None, None, "mp3"))
 
     assert voice.play_calls == 1
-    assert client.connect_attempts == 0
+    assert client.recovery_calls == 1
