@@ -1,6 +1,6 @@
 # SilentTalk
 
-Windows 本機文字輸入 → EdgeTTS → Discord Bot 語音頻道。程式不讀寫 Discord 文字頻道，也不保存輸入全文或音訊歷史。
+Windows 本機 SilentTalk：可手動輸入文字，也可在 Discord 語音中即時聽取其他真人發言，使用本機 STT + 本機小模型產生三種回覆建議，再由 EdgeTTS 透過 Bot 說進語音頻道。程式不讀寫 Discord 文字頻道；收到的語音與轉錄內容只用於當次執行的 Copilot，不寫入歷史檔。
 
 ## 開發者導覽
 
@@ -14,6 +14,39 @@ Windows 本機文字輸入 → EdgeTTS → Discord Bot 語音頻道。程式不�
 4. 按 F8 開啟置頂輸入框，輸入文字後按 Enter。
 5. 播放途中按 F9，可停止目前語音並清空尚未播放的句子。
 6. 要關閉程式時，按 F8，再點「退出 SilentTalk」。
+
+### Copilot：聽 Discord 後自動給三種回覆
+
+Copilot 預設開啟。你進入 Discord 一般語音頻道後，Bot 除了能播放 TTS，也會接收同頻道其他真人的語音。它不需要麥克風，也不使用 OpenAI API 或其他付費 LLM API。
+
+流程：
+
+```text
+Discord 其他真人語音
+→ 本機 Streaming Paraformer zh-en INT8（CPU）
+→ 每位說話者獨立轉錄
+→ 當約 650 ms 沒有新語音時視為一句完成
+→ Session Context
+→ 本機 Qwen3-0.6B Q4_K_M / llama.cpp
+→ 三個固定方向的回覆建議
+```
+
+三個位置不是同義改寫，而是固定意圖：
+
+1. **同意**：接受對方核心觀點，順勢延伸。
+2. **反對**：提出不同看法或疑問，但不主動升高衝突。
+3. **玩笑／打圓場**：只使用當下對話已有的梗、情境反差或低風險自嘲。若小模型找不到自然且安全的笑點，這格直接顯示「沒有安全的建議」，不硬編笑話。
+
+建議產生後會自動浮出 SilentTalk 視窗，但不強制搶走目前程式的輸入焦點。按 F8 後可以用：
+
+- `↑ / ↓`：在三個方向間選擇。
+- `Tab`：把選中的建議填入文字框，可再手改。
+- `Enter`：當焦點在建議清單時直接說出選中建議；在文字框時送出目前文字。
+- `Esc`：關閉視窗，不採用建議。
+
+**Context 規則：**模型不會吃整場無限 transcript。Session RAM 只保留有限歷史；每次生成主要取最近 16 個 turn，加上少量較早「你自己實際說過」的句子，prompt 約束在固定字元預算內，LLM context 設為 4096。未被選中的候選永遠不寫入 context；你選了但 Discord 播放失敗的句子也不算你說過，只有真正播放完成後才 commit。
+
+這個 Copilot 的 STT 與 LLM 都在本機。EdgeTTS 仍是外部語音服務，但 SilentTalk 不需要額外的付費 API key / API 帳單。
 
 ### UI 聲線選單與預設語音包
 
@@ -117,7 +150,7 @@ edge-tts 官方說明：可調整 rate、volume、pitch，但不再支援自訂 
 - EdgeTTS、單一 FIFO queue、F8 輸入框、可編輯快捷句、F9 停止與清空。
 - Bot 只追蹤 `.env` 內的 `OWNER_USER_ID`，Owner 換台時跟隨、離開時斷線。
 - Bot 加入後會保持同一條 Voice 連線；每句播放不會重新加入或離開頻道。
-- Voice state 事件先做防抖，Owner 暫時從 cache 消失時有離線寬限期；手動重連失敗採指數退避，避免網路不穩時 Bot 瘋狂進出頻道。另有每 60 秒一次的低頻 watchdog 處理漏事件與 stale cache。
+- Voice state 事件先做防抖，Owner 暫時從 cache 消失時有離線寬限期；手動重連失敗採指數退避，避免網路不穩時 Bot 瘋狂進出頻道。另有每 20 秒一次的 watchdog 處理漏事件與 stale cache。
 - Gateway 只啟用 `guilds` 與 `voice_states` intents；不啟用 Message Content。
 - `--voice-smoke` 會播放固定 440 Hz 測試音，作為 Gate 1 實機 runner。
 - CosyVoice / CUDA 不在 MVP 依賴內。
@@ -148,12 +181,13 @@ edge-tts 官方說明：可調整 rate、volume、pitch，但不再支援自訂 
 
 下載或 clone repository 後，直接雙擊 `啟動 SilentTalk.cmd`。啟動檔會：
 
-- 檢查並以 winget 安裝 Python 3.12 與 FFmpeg（缺少時才安裝）。
-- 建立 `.venv`。
-- 安裝 `requirements.txt` 內的套件。
+- 檢查並以 winget 安裝 Python 3.12、FFmpeg 與 llama.cpp（缺少時才安裝）。
+- 建立 `.venv`，安裝 `requirements.txt` 內的套件。
+- Copilot 開啟時，自動下載本機 ASR INT8 encoder/decoder/tokens 與官方 Qwen3-0.6B Q4_K_M；第一次約 650 MB，之後從 `.runtime/` 直接沿用。
+- 模型檔使用 SHA256 / 最低大小檢查，下載中斷只留下 `.part`，不把半份模型當成功。
 - 若 `.env` 不存在，由 `.env.example` 建立並開啟記事本讓你填入憑證。
-- 驗證 `.env` 與 `config.toml`。
-- 呼叫 `scripts/restart_silenttalk.ps1`；它會先關閉任何正在執行的 SilentTalk，再從目前這份 repo 啟動唯一的新實例。
+- 驗證 `.env`、`config.toml` 與 Python source 可編譯。
+- 呼叫 `scripts/restart_silenttalk.ps1`；它會先關閉舊 SilentTalk 與該實例遺留的本機 Copilot server，再從目前這份 repo 啟動唯一的新實例。
 
 設定的責任刻意分開：一般可調參數只放 `config.toml`；只有 Discord Bot Token 與個人 User ID 放在不進版控的 `.env`。新主機第一次啟動時，在自動開啟的 `.env` 填入：
 
