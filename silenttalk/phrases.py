@@ -19,7 +19,7 @@ class QuickPhrase:
 
 DEFAULT_QUICK_PHRASES: tuple[QuickPhrase, ...] = (
     QuickPhrase("For the Emperor!", "space_marine"),
-    QuickPhrase("The Emperor protects!", "space_marine"),
+    QuickPhrase("The Emperor protects!", "space_marine_commander"),
     QuickPhrase("For the Omnissiah!", "mechanicus"),
     QuickPhrase("No pity! No remorse! No fear!", "chaplain"),
     QuickPhrase("Blood for the Blood God!", "chaos"),
