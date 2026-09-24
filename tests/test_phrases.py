@@ -11,12 +11,15 @@ from silenttalk.phrases import (
 )
 
 
-def test_missing_file_loads_default_warhammer_pack(tmp_path: Path) -> None:
+def test_missing_file_loads_compact_default_pack(tmp_path: Path) -> None:
     store = QuickPhraseStore(tmp_path / "quick_phrases.json")
     assert store.load() == list(DEFAULT_QUICK_PHRASES)
-    assert len(store.load()) == 6
-    assert store.load()[0] == QuickPhrase("For the Emperor!", "space_marine")
-    assert store.load()[2] == QuickPhrase("For the Omnissiah!", "mechanicus")
+    assert store.load() == [
+        QuickPhrase("For the Emperor!", "space_marine"),
+        QuickPhrase("The Emperor protects!", "space_marine"),
+        QuickPhrase("For the Omnissiah!", "mechanicus"),
+        QuickPhrase("Faith is my shield!", "battle_sister"),
+    ]
 
 
 def test_add_update_delete_round_trip(tmp_path: Path) -> None:
@@ -45,6 +48,19 @@ def test_old_string_array_is_backward_compatible(tmp_path: Path) -> None:
         QuickPhrase("收到。", "default"),
         QuickPhrase("等等。", "default"),
     ]
+
+
+def test_removed_saved_style_falls_back_to_default(tmp_path: Path) -> None:
+    path = tmp_path / "quick_phrases.json"
+    path.write_text(
+        json.dumps(
+            [{"text": "WAAAGH!", "voice_style": "ork"}],
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    store = QuickPhraseStore(path)
+    assert store.load() == [QuickPhrase("WAAAGH!", "default")]
 
 
 def test_rejects_blank_duplicate_and_unknown_style(tmp_path: Path) -> None:

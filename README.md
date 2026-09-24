@@ -19,18 +19,14 @@ Windows 本機文字輸入 → EdgeTTS → Discord Bot 語音頻道。程式不�
 
 F8 視窗現在有「聲線」下拉選單與獨立「語速」滑桿。下拉選單只放真正的聲線 / 角色 preset，不再混入「快速、慢速」這類速度選項；語速統一由 60%～140% 滑桿控制。選定語速會套用到手打文字與 Ctrl+1～Ctrl+9，並保存在本機 `ui_preferences.json`。快捷句仍各自記住自己的聲線。
 
-第一次使用、且本機尚未建立 `quick_phrases.json` 時，會自帶六句 grimdark / Warhammer 風格快捷句：
+第一次使用、且本機尚未建立 `quick_phrases.json` 時，會自帶四句快捷句：
 
-1. `For the Emperor!` — 星際戰士：粗獷低沉。
-2. `The Emperor protects!` — 星際戰士：粗獷低沉。
-3. `For the Omnissiah!` — 機械神甫：低沉電子回響。
-4. `No pity! No remorse! No fear!` — 牧師：威嚴低吼。
-5. `Blood for the Blood God!` — 混沌：深沉回響。
-6. `WAAAGH!` — 獸人：粗暴咆哮。
+1. `For the Emperor!` — 星際戰士。
+2. `The Emperor protects!` — 星際戰士。
+3. `For the Omnissiah!` — 機械神甫。
+4. `Faith is my shield!` — 戰鬥修女。
 
-Ctrl+1～Ctrl+6 直接播放這六句。角色 preset 現在優先用不同 EdgeTTS 底層 voice 區分人格，再用較輕量的 pitch / EQ / compression / radio filtering 做角色化；避免上一版靠極端降 pitch 硬做角色。它們不含遊戲原音或聲紋複製，因此目標是「角色類型對稱」而不是 1:1 複製原作聲紋。使用者可在 UI 載入任一句，改文字、改聲線後按「更新選取」。
-
-目前可選聲線包含重甲老兵、星際戰士指揮官、帝國牧師、機械神甫、機械侍從、審判官、Vox 通訊、混沌冠軍、獸人、深沉敘事者、冷靜戰術官、英倫軍官與清晰女聲。舊的 `/slow`、`/fast`、`/deep`、`/cute` 文字前綴仍保留相容性，但不再顯示於聲線下拉選單。
+目前聲線下拉選單只保留「一般、星際戰士、機械神甫、戰鬥修女」。星際戰士與機械神甫是已經過實際聽感驗收的基準；戰鬥修女採成熟、冷峻、堅定的女聲取向，不做甜美或高音角色化。舊的 `/slow`、`/fast`、`/deep`、`/cute` 文字前綴仍保留相容性，但不顯示於聲線下拉選單。
 
 快捷鍵：
 

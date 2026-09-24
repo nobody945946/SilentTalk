@@ -24,24 +24,6 @@ def test_space_marine_preserves_user_approved_v1_preset() -> None:
     )
 
 
-def test_major_roles_use_distinct_base_voices() -> None:
-    config = TTSConfig(voice="zh-TW-YunJheNeural")
-    role_to_expected_voice = {
-        "space_marine": "en-US-ChristopherNeural",
-        "space_marine_commander": "en-US-ChristopherNeural",
-        "mechanicus": "en-US-EricNeural",
-        "inquisitor": "en-US-RogerNeural",
-        "chaos": "en-US-GuyNeural",
-        "british_officer": "en-GB-ThomasNeural",
-        "battle_sister": "en-US-AriaNeural",
-    }
-    actual = {
-        role: resolve_speech_settings("Test", config, voice_style=role)[1]
-        for role in role_to_expected_voice
-    }
-    assert actual == role_to_expected_voice
-
-
 def test_mechanicus_keeps_approved_voice_with_thicker_electronic_body() -> None:
     config = TTSConfig(voice="zh-TW-YunJheNeural")
     text, voice, rate, pitch, volume, audio_filter = resolve_speech_settings(
@@ -61,15 +43,26 @@ def test_mechanicus_keeps_approved_voice_with_thicker_electronic_body() -> None:
     assert "aecho=0.8:0.68:24:0.22" in audio_filter
 
 
-def test_speed_only_legacy_styles_are_hidden_from_dropdown() -> None:
-    keys = {key for key, _ in voice_style_choices()}
-    assert "slow" not in keys
-    assert "fast" not in keys
-    assert "deep" not in keys
-    assert "cute" not in keys
-    assert "space_marine" in keys
-    assert "mechanicus" in keys
-    assert "narrator" in keys
+def test_battle_sister_is_stern_mature_female_preset() -> None:
+    config = TTSConfig(voice="zh-TW-YunJheNeural")
+    text, voice, rate, pitch, volume, audio_filter = resolve_speech_settings(
+        "Faith is my shield!",
+        config,
+        voice_style="battle_sister",
+    )
+    assert text == "Faith is my shield!"
+    assert voice == "en-GB-SoniaNeural"
+    assert rate == "-4%"
+    assert pitch == "-8Hz"
+    assert volume == "+6%"
+    assert audio_filter is not None
+    assert "bass=g=3:f=150" in audio_filter
+    assert "acompressor=" in audio_filter
+
+
+def test_dropdown_contains_only_current_voice_presets() -> None:
+    keys = [key for key, _ in voice_style_choices()]
+    assert keys == ["default", "space_marine", "mechanicus", "battle_sister"]
 
 
 def test_ui_rate_multiplies_style_rate() -> None:
@@ -86,14 +79,14 @@ def test_ui_rate_multiplies_style_rate() -> None:
 def test_legacy_style_prefix_still_works() -> None:
     config = TTSConfig(voice="zh-TW-YunJheNeural")
     text, voice, rate, pitch, _, audio_filter = resolve_speech_settings(
-        "/mechanicus For the Omnissiah!",
+        "/deep Testing",
         config,
     )
-    assert text == "For the Omnissiah!"
-    assert voice == "en-US-EricNeural"
-    assert rate == "-4%"
-    assert pitch == "-6Hz"
-    assert audio_filter is not None and "aecho=" in audio_filter
+    assert text == "Testing"
+    assert voice == "zh-TW-YunJheNeural"
+    assert rate == "-8%"
+    assert pitch == "-35Hz"
+    assert audio_filter is None
 
 
 def test_unknown_prefix_is_spoken_normally() -> None:

@@ -19,11 +19,9 @@ class QuickPhrase:
 
 DEFAULT_QUICK_PHRASES: tuple[QuickPhrase, ...] = (
     QuickPhrase("For the Emperor!", "space_marine"),
-    QuickPhrase("The Emperor protects!", "space_marine_commander"),
+    QuickPhrase("The Emperor protects!", "space_marine"),
     QuickPhrase("For the Omnissiah!", "mechanicus"),
-    QuickPhrase("No pity! No remorse! No fear!", "chaplain"),
-    QuickPhrase("Blood for the Blood God!", "chaos"),
-    QuickPhrase("WAAAGH!", "ork"),
+    QuickPhrase("Faith is my shield!", "battle_sister"),
 )
 
 
@@ -55,6 +53,10 @@ class QuickPhraseStore:
                 style = item.get("voice_style", "default")
                 if not isinstance(text, str) or not isinstance(style, str):
                     raise QuickPhraseError("快捷句物件格式錯誤。")
+                # Saved presets can outlive a release. Unknown styles degrade
+                # safely to the normal voice instead of breaking the whole UI.
+                if style not in VOICE_STYLES:
+                    style = "default"
                 phrase = QuickPhrase(text.strip(), style)
             else:
                 raise QuickPhraseError("快捷句格式錯誤：項目必須是字串或物件。")
