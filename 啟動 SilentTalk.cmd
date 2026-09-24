@@ -41,6 +41,40 @@ if errorlevel 1 (
     exit /b 1
 )
 
+where llama-server.exe >nul 2>nul
+if errorlevel 1 (
+    where winget.exe >nul 2>nul
+    if errorlevel 1 (
+        echo ERROR: llama.cpp is missing and winget is unavailable.
+        echo Install llama.cpp, then run this launcher again.
+        pause
+        exit /b 1
+    )
+    echo Installing lightweight local Copilot runtime ^(llama.cpp^)...
+    winget install --id ggml.llamacpp -e --accept-source-agreements --accept-package-agreements
+    if errorlevel 1 (
+        echo ERROR: llama.cpp installation failed.
+        pause
+        exit /b 1
+    )
+    set "PATH=%LOCALAPPDATA%\Microsoft\WinGet\Links;%PATH%"
+)
+
+if not exist "scripts\setup_copilot.py" (
+    echo ERROR: scripts\setup_copilot.py is missing.
+    pause
+    exit /b 1
+)
+
+echo Checking Copilot models ^(first run downloads about 750 MB^)...
+".venv\Scripts\python.exe" "scripts\setup_copilot.py"
+if errorlevel 1 (
+    echo ERROR: Copilot model deployment failed.
+    echo Check your network connection, then run this launcher again.
+    pause
+    exit /b 1
+)
+
 where ffmpeg.exe >nul 2>nul
 if errorlevel 1 (
     where winget.exe >nul 2>nul
