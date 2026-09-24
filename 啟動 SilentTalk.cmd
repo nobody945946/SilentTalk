@@ -66,7 +66,7 @@ if not exist "scripts\setup_copilot.py" (
     exit /b 1
 )
 
-echo Checking Copilot models ^(first run downloads about 750 MB^)...
+echo Checking Copilot models ^(first run downloads about 650 MB^)...
 ".venv\Scripts\python.exe" "scripts\setup_copilot.py"
 if errorlevel 1 (
     echo ERROR: Copilot model deployment failed.
