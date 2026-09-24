@@ -50,11 +50,25 @@ class AudioConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class CopilotConfig:
+    enabled: bool = True
+    endpoint_silence_ms: int = 650
+    llm_context_size: int = 2048
+    recent_turns: int = 12
+    max_session_turns: int = 80
+    context_char_budget: int = 2200
+    max_reply_chars: int = 72
+    llama_port: int = 18088
+    auto_popup: bool = True
+
+
+@dataclass(frozen=True, slots=True)
 class Settings:
     app: AppConfig
     tts: TTSConfig
     discord: DiscordConfig
     audio: AudioConfig
+    copilot: CopilotConfig
 
     def validate_runtime(self) -> list[str]:
         issues: list[str] = []
@@ -90,6 +104,7 @@ def load_settings(project_dir: Path) -> Settings:
     tts = _section(raw, "tts")
     discord = _section(raw, "discord")
     audio = _section(raw, "audio")
+    copilot = _section(raw, "copilot")
     engine = str(tts.get("engine", "edge")).lower()
     if engine != "edge":
         raise ConfigError('MVP 目前只支援 tts.engine = "edge"。')
@@ -148,5 +163,26 @@ def load_settings(project_dir: Path) -> Settings:
             playback_timeout_seconds=max(
                 10.0, float(audio.get("playback_timeout_seconds", 90.0))
             ),
+        ),
+        copilot=CopilotConfig(
+            enabled=bool(copilot.get("enabled", True)),
+            endpoint_silence_ms=max(
+                350, min(2000, int(copilot.get("endpoint_silence_ms", 650)))
+            ),
+            llm_context_size=max(
+                1024, min(4096, int(copilot.get("llm_context_size", 2048)))
+            ),
+            recent_turns=max(4, min(24, int(copilot.get("recent_turns", 12)))),
+            max_session_turns=max(
+                20, min(200, int(copilot.get("max_session_turns", 80)))
+            ),
+            context_char_budget=max(
+                600, min(5000, int(copilot.get("context_char_budget", 2200)))
+            ),
+            max_reply_chars=max(
+                24, min(160, int(copilot.get("max_reply_chars", 72)))
+            ),
+            llama_port=max(1024, min(65535, int(copilot.get("llama_port", 18088)))),
+            auto_popup=bool(copilot.get("auto_popup", True)),
         ),
     )
