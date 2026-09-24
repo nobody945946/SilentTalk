@@ -7,6 +7,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 import discord
+from discord.ext import voice_recv
 
 from silenttalk.config import AudioConfig, DiscordConfig
 from silenttalk.state import AppState
@@ -14,16 +15,24 @@ from silenttalk.tts.base import AudioResult
 
 _LOG = logging.getLogger(__name__)
 StatusCallback = Callable[[AppState, str], None]
+PCMCallback = Callable[[int, str, bytes], None]
 
 
 class DiscordVoiceClient(discord.Client):
-    def __init__(self, config: DiscordConfig, status: StatusCallback) -> None:
+    def __init__(
+        self,
+        config: DiscordConfig,
+        status: StatusCallback,
+        pcm_callback: PCMCallback | None = None,
+    ) -> None:
         intents = discord.Intents.none()
         intents.guilds = True
         intents.voice_states = True
         super().__init__(intents=intents)
         self._config = config
         self._status = status
+        self._pcm_callback = pcm_callback
+        self._event_loop: asyncio.AbstractEventLoop | None = None
         self._voice_lock = asyncio.Lock()
         self._voice_monitor_task: asyncio.Task[None] | None = None
         self._voice_reconcile_task: asyncio.Task[None] | None = None
@@ -33,6 +42,7 @@ class DiscordVoiceClient(discord.Client):
         self._voice_ready = asyncio.Event()
 
     async def on_ready(self) -> None:
+        self._event_loop = asyncio.get_running_loop()
         _LOG.info(
             "discord_ready bot_user_id=%s", self.user.id if self.user else "unknown"
         )
@@ -98,6 +108,7 @@ class DiscordVoiceClient(discord.Client):
 
     async def close(self) -> None:
         self._voice_ready.clear()
+        self._event_loop = None
         tasks = [self._voice_monitor_task, self._voice_reconcile_task]
         for task in tasks:
             if task is not None:
@@ -167,6 +178,7 @@ class DiscordVoiceClient(discord.Client):
             )
 
             if target_voice is not None and target_voice.channel.id == channel.id:
+                self._ensure_listening(target_voice)
                 self._mark_voice_healthy()
                 self._status(AppState.VOICE_CONNECTED, f"已連線：{channel.name}")
                 return
@@ -179,6 +191,7 @@ class DiscordVoiceClient(discord.Client):
                     _LOG.warning("voice_move_failed_reconnect")
                     await self._connect_fresh_locked(channel, voices)
                 else:
+                    self._ensure_listening(target_voice)
                     self._mark_voice_healthy()
                 self._status(AppState.VOICE_CONNECTED, f"已連線：{channel.name}")
                 return
@@ -207,11 +220,19 @@ class DiscordVoiceClient(discord.Client):
             await self._close_voice(voice)
 
         try:
-            await channel.connect(timeout=20.0, reconnect=True)
+            if self._pcm_callback is None:
+                new_voice = await channel.connect(timeout=20.0, reconnect=True)
+            else:
+                new_voice = await channel.connect(
+                    timeout=20.0,
+                    reconnect=True,
+                    cls=voice_recv.VoiceRecvClient,
+                )
         except Exception:
             self._record_reconnect_failure()
             raise
 
+        self._ensure_listening(new_voice)
         self._mark_voice_healthy()
 
     async def wait_until_voice_ready(self, timeout_seconds: float | None = None) -> None:
@@ -270,6 +291,61 @@ class DiscordVoiceClient(discord.Client):
 
             self._status(AppState.VOICE_CONNECTED, f"已恢復：{channel.name}")
             return True
+
+    def _ensure_listening(self, voice: discord.VoiceClient | None) -> None:
+        if self._pcm_callback is None or voice is None:
+            return
+        if not isinstance(voice, voice_recv.VoiceRecvClient):
+            _LOG.warning("voice_receive_unavailable wrong_voice_client=true")
+            return
+        if voice.is_listening():
+            return
+        voice.listen(
+            voice_recv.BasicSink(self._on_voice_pcm),
+            after=self._on_listen_stopped,
+        )
+        _LOG.info("voice_receive_started")
+
+    def _on_voice_pcm(
+        self,
+        user: discord.Member | discord.User | None,
+        data: voice_recv.VoiceData,
+    ) -> None:
+        callback = self._pcm_callback
+        if callback is None or user is None or not data.pcm:
+            return
+        if user.id == self._config.owner_user_id:
+            return
+        if self.user is not None and user.id == self.user.id:
+            return
+        if bool(getattr(user, "bot", False)):
+            return
+
+        name = str(
+            getattr(user, "display_name", None)
+            or getattr(user, "name", None)
+            or user.id
+        )
+        callback(user.id, name, data.pcm)
+
+    def _on_listen_stopped(self, error: Exception | None) -> None:
+        if error is None or self.is_closed():
+            return
+        _LOG.warning(
+            "voice_receive_stopped error_type=%s",
+            type(error).__name__,
+        )
+        loop = self._event_loop
+        if loop is None or loop.is_closed():
+            return
+
+        def recover() -> None:
+            asyncio.create_task(
+                self.recover_voice_transport("voice_receive"),
+                name="voice-receive-recovery",
+            )
+
+        loop.call_soon_threadsafe(recover)
 
     def _mark_voice_healthy(self) -> None:
         self._reconnect_delay = self._config.voice_reconnect_cooldown_seconds
@@ -370,7 +446,11 @@ class DiscordAudioPlayer:
     async def stop(self) -> None:
         voice = self._client.active_voice()
         if voice is not None and voice.is_playing():
-            voice.stop()
+            stop_playing = getattr(voice, "stop_playing", None)
+            if callable(stop_playing):
+                stop_playing()
+            else:
+                voice.stop()
 
 
 async def play_smoke_tone(
