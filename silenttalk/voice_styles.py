@@ -22,12 +22,12 @@ VOICE_STYLES: dict[str, VoiceStyle] = {
     # DSP is intentionally moderate so speech stays intelligible.
     "space_marine": VoiceStyle(
         "space_marine",
-        "星際戰士｜重甲老兵",
-        "en-US-AndrewNeural",
-        "-6%",
-        "-14Hz",
-        "+8%",
-        "bass=g=6:f=110,acompressor=threshold=-20dB:ratio=3:attack=5:release=90",
+        "星際戰士｜粗獷低沉",
+        "en-US-ChristopherNeural",
+        "-12%",
+        "-45Hz",
+        "+12%",
+        "bass=g=10:f=100,acompressor=threshold=-18dB:ratio=4:attack=5:release=80",
     ),
     "space_marine_commander": VoiceStyle(
         "space_marine_commander",
@@ -54,7 +54,7 @@ VOICE_STYLES: dict[str, VoiceStyle] = {
         "-4%",
         "-6Hz",
         "+4%",
-        "highpass=f=180,lowpass=f=2700,aecho=0.8:0.60:22:0.16,acompressor=threshold=-21dB:ratio=3:attack=4:release=70",
+        "bass=g=7:f=120,highpass=f=95,lowpass=f=3000,aecho=0.8:0.68:24:0.22,acompressor=threshold=-20dB:ratio=4:attack=4:release=85",
     ),
     "servitor": VoiceStyle(
         "servitor",
