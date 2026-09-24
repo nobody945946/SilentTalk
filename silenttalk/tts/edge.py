@@ -3,41 +3,40 @@ from __future__ import annotations
 import asyncio
 import logging
 import tempfile
-from dataclasses import dataclass
 from pathlib import Path
 
 import edge_tts
 
 from silenttalk.config import TTSConfig
 from silenttalk.tts.base import AudioResult
+from silenttalk.voice_styles import VOICE_STYLES, VoiceStyle
 
 _LOG = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True, slots=True)
-class SpeechStyle:
-    rate: str
-    pitch: str
-
-
-_STYLE_PRESETS: dict[str, SpeechStyle] = {
-    "/slow": SpeechStyle("-25%", "-5Hz"),
-    "/fast": SpeechStyle("+30%", "+0Hz"),
-    "/deep": SpeechStyle("-8%", "-35Hz"),
-    "/cute": SpeechStyle("+12%", "+35Hz"),
-}
-
-
 def resolve_speech_style(
-    text: str, default_rate: str, default_pitch: str
-) -> tuple[str, str, str]:
-    """Return (spoken_text, rate, pitch) for an optional one-shot style prefix."""
+    text: str, config: TTSConfig
+) -> tuple[str, str, str, str, str | None]:
+    """Resolve optional /style prefix into text, voice, rate, pitch and filter."""
     stripped = text.lstrip()
     prefix, separator, remainder = stripped.partition(" ")
-    style = _STYLE_PRESETS.get(prefix.lower())
+    key = prefix[1:].lower() if prefix.startswith("/") else ""
+    style = VOICE_STYLES.get(key)
     if style is None or not separator or not remainder.strip():
-        return text, default_rate, default_pitch
-    return remainder.strip(), style.rate, style.pitch
+        return text, config.voice, config.rate, config.pitch, None
+    voice = style.voice or config.voice
+    volume = style.volume if style.key != "default" else config.volume
+    return remainder.strip(), voice, style.rate, style.pitch, style.ffmpeg_filter
+
+
+def resolve_speech_volume(text: str, config: TTSConfig) -> str:
+    stripped = text.lstrip()
+    prefix, separator, remainder = stripped.partition(" ")
+    key = prefix[1:].lower() if prefix.startswith("/") else ""
+    style = VOICE_STYLES.get(key)
+    if style is None or not separator or not remainder.strip():
+        return config.volume
+    return style.volume
 
 
 class EdgeTTSEngine:
@@ -68,9 +67,18 @@ class EdgeTTSEngine:
     async def synthesize(self, text: str) -> AudioResult:
         if not self._voice:
             await self.initialize()
-        spoken_text, rate, pitch = resolve_speech_style(
-            text, self._config.rate, self._config.pitch
+        effective_config = TTSConfig(
+            engine=self._config.engine,
+            voice=self._voice,
+            rate=self._config.rate,
+            pitch=self._config.pitch,
+            volume=self._config.volume,
+            timeout_seconds=self._config.timeout_seconds,
         )
+        spoken_text, voice, rate, pitch, audio_filter = resolve_speech_style(
+            text, effective_config
+        )
+        volume = resolve_speech_volume(text, effective_config)
         fd, raw_path = tempfile.mkstemp(
             prefix="silenttalk-", suffix=".mp3", dir=self._temp_dir
         )
@@ -81,9 +89,9 @@ class EdgeTTSEngine:
         try:
             communicate = edge_tts.Communicate(
                 spoken_text,
-                self._voice,
+                voice,
                 rate=rate,
-                volume=self._config.volume,
+                volume=volume,
                 pitch=pitch,
             )
             await asyncio.wait_for(
@@ -91,7 +99,9 @@ class EdgeTTSEngine:
             )
             if path.stat().st_size == 0:
                 raise RuntimeError("EdgeTTS 產生空白音訊。")
-            return AudioResult(path, None, None, "mp3")
+            return AudioResult(
+                path, None, None, "mp3", ffmpeg_filter=audio_filter
+            )
         except BaseException:
             path.unlink(missing_ok=True)
             raise

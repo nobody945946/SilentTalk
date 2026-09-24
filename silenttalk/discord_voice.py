@@ -262,8 +262,11 @@ class DiscordAudioPlayer:
 
             loop.call_soon_threadsafe(complete)
 
+        options = "-vn"
+        if audio.ffmpeg_filter:
+            options += f' -af "{audio.ffmpeg_filter}"'
         source = discord.FFmpegOpusAudio(
-            str(audio.path), executable=self._audio.ffmpeg_path, options="-vn"
+            str(audio.path), executable=self._audio.ffmpeg_path, options=options
         )
         voice.play(source, after=after)
         await asyncio.wait_for(finished, timeout=self._audio.playback_timeout_seconds)

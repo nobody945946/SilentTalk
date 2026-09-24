@@ -15,16 +15,22 @@ Windows 本機文字輸入 → EdgeTTS → Discord Bot 語音頻道。程式不�
 5. 播放途中按 F9，可停止目前語音並清空尚未播放的句子。
 6. 要關閉程式時，按 F8，再點「退出 SilentTalk」。
 
-### 單句趣味聲線
+### UI 聲線選單與預設語音包
 
-在句首先加指令，只影響這一句，不會修改 `config.toml`：
+F8 視窗現在有「聲線」下拉選單，不必為了換聲音反覆修改 `config.toml`。聲線只影響這一句；快捷句會把自己的聲線一起記住。
 
-- `/slow 文字`：慢速、略低沉。
-- `/fast 文字`：快速。
-- `/deep 文字`：低沉聲線。
-- `/cute 文字`：較快、較高音。
+第一次使用、且本機尚未建立 `quick_phrases.json` 時，會自帶六句 grimdark / Warhammer 風格快捷句：
 
-例如：`/deep 我有一個很重要的消息。`。未知的 `/xxx` 不會被吃掉，仍會當普通文字朗讀。
+1. `For the Emperor!` — 星際戰士：粗獷低沉。
+2. `The Emperor protects!` — 星際戰士：粗獷低沉。
+3. `For the Omnissiah!` — 機械神甫：低沉電子回響。
+4. `No pity! No remorse! No fear!` — 牧師：威嚴低吼。
+5. `Blood for the Blood God!` — 混沌：深沉回響。
+6. `WAAAGH!` — 獸人：粗暴咆哮。
+
+Ctrl+1～Ctrl+6 直接播放這六句。它們是用 EdgeTTS 聲線、rate/pitch 與 FFmpeg 後製合成的風格 preset，不含遊戲原音或聲紋複製。使用者可在 UI 載入任一句，改文字、改聲線後按「更新選取」。
+
+舊的 `/slow`、`/fast`、`/deep`、`/cute` 文字前綴仍保留相容性。
 
 快捷鍵：
 
@@ -47,7 +53,7 @@ F8 視窗內有一個可編輯的快捷句清單。快捷句仍走原本的「�
 3. 選取快捷句後可「載入選取」、「更新選取」或「刪除選取」。
 4. 前九句會自動對應 Ctrl+1～Ctrl+9；也可以直接雙擊任一句播放。
 
-快捷句保存在本機 `quick_phrases.json`，此檔案已加入 `.gitignore`，不會跟著 Git commit。
+快捷句保存在本機 `quick_phrases.json`，每筆包含 `text` 與 `voice_style`。舊版純字串陣列仍可直接讀取。此檔案已加入 `.gitignore`，不會跟著 Git commit。
 
 ## 如何輸入抑揚頓挫
 

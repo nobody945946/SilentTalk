@@ -4,11 +4,13 @@ import queue
 import tkinter as tk
 from collections.abc import Callable
 from dataclasses import dataclass
+from tkinter import ttk
 
 from silenttalk.hotkeys import GlobalHotkeys
-from silenttalk.phrases import QuickPhraseError, QuickPhraseStore
+from silenttalk.phrases import QuickPhrase, QuickPhraseError, QuickPhraseStore
 from silenttalk.state import AppState
 from silenttalk.text import TextValidationError
+from silenttalk.voice_styles import voice_style_choices, voice_style_label
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,7 +25,7 @@ class SilentTalkUI:
         self,
         speak_hotkey: str,
         stop_hotkey: str,
-        submit: Callable[[str], None],
+        submit: Callable[[str, str], None],
         stop_playback: Callable[[], None],
         shutdown: Callable[[], None],
         quick_phrases: QuickPhraseStore | None = None,
@@ -32,8 +34,11 @@ class SilentTalkUI:
         self._stop_callback = stop_playback
         self._shutdown_callback = shutdown
         self._phrase_store = quick_phrases
-        self._phrases: list[str] = []
+        self._phrases: list[QuickPhrase] = []
         self._actions: queue.SimpleQueue[UIAction] = queue.SimpleQueue()
+        self._style_choices = voice_style_choices()
+        self._style_by_label = {label: key for key, label in self._style_choices}
+        self._label_by_style = {key: label for key, label in self._style_choices}
 
         self.root = tk.Tk()
         self.root.withdraw()
@@ -63,13 +68,30 @@ class SilentTalkUI:
         )
         self.input.pack(padx=12, pady=(12, 6))
 
+        voice_row = tk.Frame(self.popup)
+        voice_row.pack(fill="x", padx=12, pady=(0, 8))
+        tk.Label(voice_row, text="聲線：").pack(side="left")
+        self.voice_style_var = tk.StringVar(value=self._label_by_style["default"])
+        self.voice_style_combo = ttk.Combobox(
+            voice_row,
+            textvariable=self.voice_style_var,
+            values=[label for _, label in self._style_choices],
+            state="readonly",
+            width=28,
+        )
+        self.voice_style_combo.pack(side="left")
+        tk.Label(
+            voice_row,
+            text="（只影響這一句；快捷句會記住自己的聲線）",
+        ).pack(side="left", padx=(8, 0))
+
         phrase_frame = tk.LabelFrame(self.popup, text="快捷句")
         phrase_frame.pack(fill="x", padx=12, pady=(0, 6))
 
         self.phrase_list = tk.Listbox(
             phrase_frame,
-            width=58,
-            height=5,
+            width=72,
+            height=6,
             exportselection=False,
             font=("Microsoft JhengHei UI", 10),
         )
@@ -153,6 +175,12 @@ class SilentTalkUI:
         self._shutdown_callback()
         self.root.destroy()
 
+    def _selected_style_key(self) -> str:
+        return self._style_by_label.get(self.voice_style_var.get(), "default")
+
+    def _set_style(self, key: str) -> None:
+        self.voice_style_var.set(self._label_by_style.get(key, self._label_by_style["default"]))
+
     def _stop_from_button(self) -> None:
         self._stop_callback()
         self.status_var.set("已停止並清空佇列")
@@ -166,10 +194,10 @@ class SilentTalkUI:
             self.hide()
         return "break"
 
-    def _submit_text(self, raw: str) -> bool:
+    def _submit_text(self, raw: str, voice_style: str | None = None) -> bool:
         try:
-            self._submit_callback(raw)
-        except TextValidationError as exc:
+            self._submit_callback(raw, voice_style or self._selected_style_key())
+        except (TextValidationError, ValueError) as exc:
             self.status_var.set(str(exc))
             return False
         return True
@@ -178,7 +206,8 @@ class SilentTalkUI:
         if index >= len(self._phrases):
             self.status_var.set(f"Ctrl+{index + 1} 尚未設定快捷句")
             return "break"
-        if self._submit_text(self._phrases[index]):
+        phrase = self._phrases[index]
+        if self._submit_text(phrase.text, phrase.voice_style):
             self.hide()
         return "break"
 
@@ -193,7 +222,10 @@ class SilentTalkUI:
         if store is None:
             return
         try:
-            store.add(self.input.get("1.0", "end-1c"))
+            store.add(
+                self.input.get("1.0", "end-1c"),
+                self._selected_style_key(),
+            )
         except QuickPhraseError as exc:
             self.status_var.set(str(exc))
             return
@@ -205,8 +237,10 @@ class SilentTalkUI:
         index = self._selected_phrase_index()
         if index is None:
             return
+        phrase = self._phrases[index]
         self.input.delete("1.0", "end")
-        self.input.insert("1.0", self._phrases[index])
+        self.input.insert("1.0", phrase.text)
+        self._set_style(phrase.voice_style)
         self.input.focus_set()
 
     def _update_quick_phrase(self) -> None:
@@ -215,12 +249,16 @@ class SilentTalkUI:
         if store is None or index is None:
             return
         try:
-            store.update(index, self.input.get("1.0", "end-1c"))
+            store.update(
+                index,
+                self.input.get("1.0", "end-1c"),
+                self._selected_style_key(),
+            )
         except QuickPhraseError as exc:
             self.status_var.set(str(exc))
             return
         self._refresh_phrases(select=index)
-        self.status_var.set("已更新快捷句")
+        self.status_var.set("已更新快捷句與聲線")
 
     def _delete_quick_phrase(self) -> None:
         store = self._require_phrase_store()
@@ -262,7 +300,10 @@ class SilentTalkUI:
         self.phrase_list.delete(0, "end")
         for index, phrase in enumerate(self._phrases):
             shortcut = f"Ctrl+{index + 1}" if index < 9 else "      "
-            self.phrase_list.insert("end", f"{shortcut:<7} {phrase}")
+            style = voice_style_label(phrase.voice_style)
+            self.phrase_list.insert(
+                "end", f"{shortcut:<7} [{style}] {phrase.text}"
+            )
 
         if select is not None and 0 <= select < len(self._phrases):
             self.phrase_list.selection_set(select)

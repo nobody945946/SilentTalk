@@ -12,6 +12,7 @@ class AudioResult:
     channel_count: int | None
     sample_format: str
     duration_seconds: float | None = None
+    ffmpeg_filter: str | None = None
 
 
 class TTSEngine(Protocol):

@@ -65,6 +65,39 @@ async def test_multiple_messages_reuse_existing_voice_connection(
 
 
 @pytest.mark.asyncio
+async def test_ffmpeg_filter_is_forwarded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[dict[str, object]] = []
+
+    def fake_source(*args: object, **kwargs: object) -> object:
+        calls.append(kwargs)
+        return object()
+
+    monkeypatch.setattr(
+        "silenttalk.discord_voice.discord.FFmpegOpusAudio",
+        fake_source,
+    )
+    audio_path = tmp_path / "speech.mp3"
+    audio_path.write_bytes(b"audio")
+    voice = FakeVoice()
+    player = DiscordAudioPlayer(FakeClient(voice), AudioConfig())  # type: ignore[arg-type]
+
+    await player.play(
+        AudioResult(
+            audio_path,
+            None,
+            None,
+            "mp3",
+            ffmpeg_filter="highpass=f=110,aecho=0.8:0.65:28:0.22",
+        )
+    )
+
+    assert "-af" in str(calls[0]["options"])
+    assert "aecho=" in str(calls[0]["options"])
+
+
+@pytest.mark.asyncio
 async def test_voice_drop_does_not_replay_sentence(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
