@@ -36,10 +36,10 @@ ASSETS = (
     ),
     (
         "Qwen3-0.6B Q4_K_M",
-        "https://huggingface.co/QuantFactory/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B.Q4_K_M.gguf?download=true",
-        LLM_DIR / "Qwen3-0.6B.Q4_K_M.gguf",
-        "7af3fdf842f87b24672f8a7f1dd50404043f0bfb71093ff91c31d2b49df4631d",
-        450_000_000,
+        "https://huggingface.co/Qwen/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_K_M.gguf?download=true",
+        LLM_DIR / "Qwen3-0.6B-Q4_K_M.gguf",
+        "b0638f08417a2d3c8652760462eb5407c6e30173cf9608ad0820757a281eea0e",
+        370_000_000,
     ),
 )
 
