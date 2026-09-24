@@ -81,6 +81,12 @@ SilentTalk/
 │  ├─ hotkeys.py                # Win32 global hotkeys
 │  ├─ logging_setup.py          # JSON file logging
 │  ├─ phrases.py                # 快捷句 persistence / CRUD
+│  ├─ copilot/                  # Discord receive → STT → context → local LLM
+│  │  ├─ context.py
+│  │  ├─ llm.py
+│  │  ├─ runtime.py
+│  │  ├─ stt.py
+│  │  └─ types.py
 │  ├─ smoke.py                  # Voice / TTS 實機 smoke gates
 │  ├─ speech_queue.py           # FIFO jobs + cancel lifecycle
 │  ├─ state.py                  # AppState
@@ -205,6 +211,48 @@ AppController.submit(raw_text)
 Controller 也是目前真正選擇「使用 EdgeTTS」的地方。雖然 TTS 已有 Protocol 抽象，但目前仍由 Controller 直接建構 `EdgeTTSEngine`，因此若要讓 TTS engine 可插拔，還需要把建構策略抽出來。
 
 ---
+
+### `silenttalk/copilot/` — 本機 Discord 對話 Copilot
+
+Copilot 與原本 TTS pipeline 是旁路關係，不把 STT / LLM 邏輯塞進 `discord_voice.py` 或 `speech_queue.py`：
+
+```text
+Discord VoiceRecvClient
+        │ per-user PCM
+        ▼
+copilot/stt.py
+Streaming Paraformer INT8 / CPU
+        │ final transcript
+        ▼
+copilot/context.py
+bounded session context
+        │
+        ▼
+copilot/llm.py
+Qwen3-0.6B Q4_K_M / persistent llama-server
+        │
+        ▼
+ReplySuggestions
+  ├─ 同意
+  ├─ 反對
+  └─ 玩笑／打圓場（可 SKIP）
+        │
+        ▼
+ui.py
+Tab 填入 / Enter 送出
+        │
+        ▼
+原本 Controller → SpeechQueue → EdgeTTS → Discord
+```
+
+重要邊界：
+
+- Discord receive callback 只複製 PCM 丟給 STT queue，不能在 voice receive thread 做推理。
+- 每位 Discord speaker 有獨立的 streaming STT stream，不需要額外 diarization。
+- 未採用的 AI 候選不進 context。
+- 使用者按送出後也不立刻寫成 self turn；只有 SpeechQueue 完成 Discord playback 後，`on_done` 才記錄「你真的說過這句」。
+- session transcript / PCM 不落地；context 只存在 RAM。
+- Copilot 啟動失敗時 Controller 會停掉部分 Copilot 並把 PCM callback 清掉，原有手動 TTS 仍可使用。
 
 ### `silenttalk/text.py` — 純文字規則
 
@@ -546,7 +594,9 @@ Launcher 目前負責：
 5. 安裝 `requirements.txt`。
 6. 尋找 FFmpeg；必要時用 winget 安裝。
 7. 用 `load_settings()` 驗證設定。
-8. 以 `pythonw.exe app.py` 啟動 GUI。
+8. Copilot 啟用時安裝/找到 llama.cpp，並以 `scripts/setup_copilot.py` 準備本機 STT/LLM 模型。
+9. 以 `compileall` 做輕量 source gate。
+10. `restart_silenttalk.ps1` 清掉舊 SilentTalk 與遺留的專用 llama-server，再以 `pythonw.exe app.py` 啟動 GUI。
 
 `--check` 可只驗證 launcher 前置條件而不開 GUI。
 
@@ -555,10 +605,16 @@ Launcher 目前負責：
 Runtime dependencies：
 
 ```text
-discord.py[voice] 2.7.1
-edge-tts          7.2.8
-python-dotenv     1.1.1
+discord.py[voice]        2.7.1
+edge-tts                 7.2.8
+python-dotenv            1.1.1
+sherpa-onnx              1.13.8
+numpy                    >=1.26,<3
+discord-ext-voice-recv   pinned DAVE-compatible commit
+llama.cpp                WinGet portable runtime
 ```
+
+Copilot models are not committed to Git. The launcher downloads them into `.runtime/models/` and validates the pinned hashes/sizes.
 
 外部系統：
 
@@ -591,6 +647,9 @@ Token 應只存在本機 `.env`，且 `.env` 必須維持在 Git ignore 範圍�
 | `test_text.py` | 文字 normalization / validation |
 | `test_voice_config.py` | voice reconnect 參數 |
 | `test_voice_monitor.py` | monitor task shutdown |
+| `test_voice_receive.py` | Discord receive 過濾 Owner / bot，只轉真人 PCM |
+| `test_copilot_context.py` | bounded context 與較早 self turns |
+| `test_copilot_llm.py` | 固定三槽 parser、HUMOR SKIP、長度限制 |
 
 執行：
 
