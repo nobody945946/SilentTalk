@@ -6,6 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from tkinter import ttk
 
+from silenttalk.copilot.types import ReplySuggestions
 from silenttalk.hotkeys import GlobalHotkeys
 from silenttalk.phrases import QuickPhrase, QuickPhraseError, QuickPhraseStore
 from silenttalk.preferences import (
@@ -28,6 +29,7 @@ class UIAction:
     kind: str
     state: AppState | None = None
     message: str = ""
+    suggestions: ReplySuggestions | None = None
 
 
 class SilentTalkUI:
@@ -40,6 +42,8 @@ class SilentTalkUI:
         shutdown: Callable[[], None],
         quick_phrases: QuickPhraseStore | None = None,
         preferences: PreferenceStore | None = None,
+        *,
+        auto_popup_suggestions: bool = True,
     ) -> None:
         self._submit_callback = submit
         self._stop_callback = stop_playback
@@ -51,6 +55,9 @@ class SilentTalkUI:
         self._style_choices = voice_style_choices()
         self._style_by_label = {label: key for key, label in self._style_choices}
         self._label_by_style = {key: label for key, label in self._style_choices}
+        self._auto_popup_suggestions = auto_popup_suggestions
+        self._latest_suggestions: ReplySuggestions | None = None
+        self._suggestion_values: list[str] = ["", "", ""]
 
         preference_error = ""
         try:
@@ -88,6 +95,35 @@ class SilentTalkUI:
             font=("Microsoft JhengHei UI", 12),
         )
         self.input.pack(padx=12, pady=(12, 6))
+        self.input.bind("<Tab>", self._on_suggestion_tab)
+
+        suggestion_frame = tk.LabelFrame(
+            self.popup,
+            text="Copilot 回覆建議｜↑↓ 選擇・Tab 填入・Enter 直接說",
+        )
+        suggestion_frame.pack(fill="x", padx=12, pady=(0, 8))
+
+        self.suggestion_context_var = tk.StringVar(value="等待 Discord 對話…")
+        tk.Label(
+            suggestion_frame,
+            textvariable=self.suggestion_context_var,
+            anchor="w",
+            justify="left",
+            wraplength=560,
+        ).pack(fill="x", padx=8, pady=(6, 3))
+
+        self.suggestion_list = tk.Listbox(
+            suggestion_frame,
+            width=72,
+            height=3,
+            exportselection=False,
+            font=("Microsoft JhengHei UI", 10),
+        )
+        self.suggestion_list.pack(fill="x", padx=8, pady=(0, 7))
+        self.suggestion_list.bind("<Tab>", self._on_suggestion_tab)
+        self.suggestion_list.bind("<Return>", self._on_suggestion_enter)
+        self.suggestion_list.bind("<Double-Button-1>", self._on_suggestion_enter)
+        self._render_empty_suggestions()
 
         voice_row = tk.Frame(self.popup)
         voice_row.pack(fill="x", padx=12, pady=(0, 4))
@@ -205,19 +241,26 @@ class SilentTalkUI:
     def run(self) -> None:
         try:
             self._hotkeys.start()
-        except Exception as exc:  # noqa: BLE001 - UI remains usable when OS hotkeys fail.
+        except Exception as exc:
             self.set_status(AppState.ERROR, f"快捷鍵失敗：{exc}")
         self.root.mainloop()
 
     def set_status(self, state: AppState, message: str) -> None:
         self._actions.put(UIAction("status", state, message))
 
+    def set_suggestions(self, suggestions: ReplySuggestions) -> None:
+        self._actions.put(UIAction("suggestions", suggestions=suggestions))
+
     def show(self) -> None:
         self._refresh_phrases()
         self.popup.deiconify()
         self.popup.lift()
         self.popup.focus_force()
-        self.input.focus_set()
+        if self._latest_suggestions is not None:
+            self._select_first_available_suggestion()
+            self.suggestion_list.focus_set()
+        else:
+            self.input.focus_set()
 
     def hide(self) -> None:
         self.input.delete("1.0", "end")
@@ -269,6 +312,7 @@ class SilentTalkUI:
             return "break"
         raw = self.input.get("1.0", "end-1c")
         if self._submit_text(raw):
+            self._clear_suggestions()
             self.hide()
         return "break"
 
@@ -284,12 +328,90 @@ class SilentTalkUI:
             return False
         return True
 
+    def _apply_suggestions(self, suggestions: ReplySuggestions) -> None:
+        self._latest_suggestions = suggestions
+        self._suggestion_values = [
+            suggestions.agree,
+            suggestions.disagree,
+            suggestions.humor,
+        ]
+        trigger = " ".join(suggestions.trigger_text.split())
+        if len(trigger) > 100:
+            trigger = trigger[:99].rstrip() + "…"
+        self.suggestion_context_var.set(
+            f"{suggestions.trigger_speaker}：{trigger}"
+        )
+        self.suggestion_list.delete(0, "end")
+        labels = ("同意", "反對", "玩笑／打圓場")
+        for label, value in zip(labels, self._suggestion_values, strict=True):
+            shown = value or "— 沒有安全的建議 —"
+            self.suggestion_list.insert("end", f"{label}｜{shown}")
+        self._select_first_available_suggestion()
+
+        if self._auto_popup_suggestions and not self.popup.winfo_viewable():
+            self.popup.deiconify()
+            self.popup.lift()
+
+    def _render_empty_suggestions(self) -> None:
+        self.suggestion_list.delete(0, "end")
+        self.suggestion_list.insert("end", "同意｜等待對話…")
+        self.suggestion_list.insert("end", "反對｜等待對話…")
+        self.suggestion_list.insert("end", "玩笑／打圓場｜等待對話…")
+
+    def _clear_suggestions(self) -> None:
+        self._latest_suggestions = None
+        self._suggestion_values = ["", "", ""]
+        self.suggestion_context_var.set("等待 Discord 對話…")
+        self._render_empty_suggestions()
+
+    def _select_first_available_suggestion(self) -> None:
+        self.suggestion_list.selection_clear(0, "end")
+        for index, value in enumerate(self._suggestion_values):
+            if value:
+                self.suggestion_list.selection_set(index)
+                self.suggestion_list.activate(index)
+                self.suggestion_list.see(index)
+                return
+
+    def _selected_suggestion_text(self) -> str:
+        selected = self.suggestion_list.curselection()
+        if selected:
+            index = int(selected[0])
+            if 0 <= index < len(self._suggestion_values):
+                return self._suggestion_values[index]
+        for value in self._suggestion_values:
+            if value:
+                return value
+        return ""
+
+    def _on_suggestion_tab(self, _: tk.Event) -> str:
+        text = self._selected_suggestion_text()
+        if not text:
+            self.status_var.set("目前沒有可填入的 Copilot 建議")
+            return "break"
+        self.input.delete("1.0", "end")
+        self.input.insert("1.0", text)
+        self.input.mark_set("insert", "end-1c")
+        self.input.focus_set()
+        return "break"
+
+    def _on_suggestion_enter(self, _: tk.Event) -> str:
+        text = self._selected_suggestion_text()
+        if not text:
+            self.status_var.set("這格沒有安全的建議")
+            return "break"
+        if self._submit_text(text):
+            self._clear_suggestions()
+            self.hide()
+        return "break"
+
     def _send_quick_phrase(self, index: int) -> str:
         if index >= len(self._phrases):
             self.status_var.set(f"Ctrl+{index + 1} 尚未設定快捷句")
             return "break"
         phrase = self._phrases[index]
         if self._submit_text(phrase.text, phrase.voice_style):
+            self._clear_suggestions()
             self.hide()
         return "break"
 
@@ -403,5 +525,10 @@ class SilentTalkUI:
                 self._stop_callback()
                 self.status_var.set("已停止並清空佇列")
             elif action.kind == "status":
-                self.status_var.set(f"{action.state.value}: {action.message}")
+                if action.state is not None:
+                    self.status_var.set(f"{action.state.value}: {action.message}")
+                else:
+                    self.status_var.set(action.message)
+            elif action.kind == "suggestions" and action.suggestions is not None:
+                self._apply_suggestions(action.suggestions)
         self.root.after(50, self._poll_actions)
