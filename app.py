@@ -8,6 +8,7 @@ from pathlib import Path
 from silenttalk.config import ConfigError, load_settings
 from silenttalk.controller import AppController
 from silenttalk.logging_setup import configure_logging
+from silenttalk.phrases import QuickPhraseStore
 from silenttalk.smoke import run_voice_smoke
 from silenttalk.state import AppState
 from silenttalk.ui import SilentTalkUI
@@ -54,12 +55,14 @@ def main() -> int:
             ui.set_status(state, message)
 
     controller = AppController(settings, status)
+    quick_phrases = QuickPhraseStore(project_dir / "quick_phrases.json")
     ui = SilentTalkUI(
         settings.app.speak_hotkey,
         settings.app.stop_hotkey,
         controller.submit,
         controller.stop_playback,
         controller.shutdown,
+        quick_phrases,
     )
     runtime_issues = settings.validate_runtime()
     if runtime_issues:
