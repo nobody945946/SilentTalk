@@ -33,7 +33,7 @@ def test_loads_env_and_toml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     assert settings.tts.engine == "edge"
     assert settings.copilot.enabled is True
     assert settings.copilot.endpoint_silence_ms == 650
-    assert settings.copilot.llm_context_size == 2048
+    assert settings.copilot.llm_context_size == 4096
     assert settings.validate_runtime() == ["找不到 FFmpeg：missing-ffmpeg-for-test"]
 
 
