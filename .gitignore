@@ -1,5 +1,6 @@
 .env
 .venv/
+.runtime/
 __pycache__/
 .pytest_cache/
 .ruff_cache/
@@ -8,4 +9,5 @@ __pycache__/
 *.log
 quick_phrases.json
 quick_phrases.json.tmp
-ui_preferences.json\nui_preferences.json.tmp\n
+ui_preferences.json
+ui_preferences.json.tmp
