@@ -23,3 +23,14 @@ voice_ready_timeout_seconds = 12.0
 [audio]
 ffmpeg_path = "ffmpeg"
 playback_timeout_seconds = 90.0
+
+[copilot]
+enabled = true
+endpoint_silence_ms = 650
+llm_context_size = 2048
+recent_turns = 12
+max_session_turns = 80
+context_char_budget = 2200
+max_reply_chars = 72
+llama_port = 18088
+auto_popup = true
