@@ -156,7 +156,8 @@ edge-tts 官方說明：可調整 rate、volume、pitch，但不再支援自訂 
 - 建立 `.venv`。
 - 安裝 `requirements.txt` 內的套件。
 - 若 `.env` 不存在，由 `.env.example` 建立並開啟記事本讓你填入憑證。
-- 驗證 `.env` 與 `config.toml`，然後啟動 SilentTalk。
+- 驗證 `.env` 與 `config.toml`。
+- 呼叫 `scripts/restart_silenttalk.ps1`；它會先關閉任何正在執行的 SilentTalk，再從目前這份 repo 啟動唯一的新實例。
 
 設定的責任刻意分開：一般可調參數只放 `config.toml`；只有 Discord Bot Token 與個人 User ID 放在不進版控的 `.env`。新主機第一次啟動時，在自動開啟的 `.env` 填入：
 
@@ -185,7 +186,7 @@ OWNER_USER_ID=你的 Discord User ID
 .\.venv\Scripts\python app.py
 ```
 
-平常直接雙擊 `啟動 SilentTalk.cmd`。程式不會顯示大型主視窗；按 F8 會開啟輸入框，視窗內的「退出 SilentTalk」可以正常關閉程式。
+平常直接雙擊 `啟動 SilentTalk.cmd`。若舊版 SilentTalk 還在執行，啟動器會先結束舊實例再啟動目前 pull 下來的版本，因此不需要先手動退出。程式不會顯示大型主視窗；按 F8 會開啟輸入框，視窗內的「退出 SilentTalk」可以正常關閉程式。
 
 - F8：開啟置頂輸入框
 - Enter：送出；Shift+Enter：換行
@@ -206,7 +207,7 @@ OWNER_USER_ID=你的 Discord User ID
 ### 按 F8 沒反應
 
 - 確認已雙擊 `啟動 SilentTalk.cmd`。
-- 若啟動了兩個實例，後啟動的實例可能無法註冊 F8/F9；先退出所有 SilentTalk 再重開。
+- 正常透過 `啟動 SilentTalk.cmd` 啟動時會維持單一實例；若 F8/F9 仍被占用，檢查是否有其他程式使用相同快捷鍵。
 - 檢查其他程式是否占用了 F8 或 F9。
 
 ### Bot 沒有加入語音頻道

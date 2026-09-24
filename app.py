@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import atexit
-import os
 import sys
 from pathlib import Path
 
@@ -28,23 +26,15 @@ def main() -> int:
         action="store_true",
         help="Gate 2: synthesize a fixed zh-TW sentence and play it in Discord voice",
     )
+    parser.add_argument(
+        "--silenttalk-desktop",
+        action="store_true",
+        help=argparse.SUPPRESS,
+    )
     args = parser.parse_args()
+
     project_dir = Path(__file__).resolve().parent
     configure_logging(project_dir)
-
-    pid_dir = Path(os.getenv("LOCALAPPDATA", project_dir)) / "SilentTalk"
-    pid_file = pid_dir / "silenttalk.pid"
-    pid_dir.mkdir(parents=True, exist_ok=True)
-    pid_file.write_text(str(os.getpid()), encoding="ascii")
-
-    def _remove_pid_file() -> None:
-        try:
-            if pid_file.exists() and pid_file.read_text(encoding="ascii").strip() == str(os.getpid()):
-                pid_file.unlink()
-        except OSError:
-            pass
-
-    atexit.register(_remove_pid_file)
     try:
         settings = load_settings(project_dir)
     except (ConfigError, OSError, ValueError) as exc:
@@ -59,7 +49,7 @@ def main() -> int:
         try:
             text = "等一下，我馬上回來。" if args.tts_smoke else None
             asyncio.run(run_voice_smoke(settings, text))
-        except Exception as exc:  # noqa: BLE001 - CLI boundary must report every Gate 1 failure.
+        except Exception as exc:  # noqa: BLE001 - CLI boundary reports smoke failures.
             print(f"Gate 1 失敗：{exc}", file=sys.stderr)
             return 4
         return 0
@@ -80,9 +70,11 @@ def main() -> int:
         controller.shutdown,
         quick_phrases,
     )
+
     runtime_issues = settings.validate_runtime()
     if runtime_issues:
         ui.set_status(AppState.ERROR, "；".join(runtime_issues))
+
     controller.start()
     ui.run()
     return 0
