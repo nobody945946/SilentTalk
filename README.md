@@ -129,7 +129,7 @@ edge-tts 官方說明：可調整 rate、volume、pitch，但不再支援自訂 
 - Owner 跨 Server：Bot 先退出舊 Server，再加入新 Server。
 - 播放完一句或暫時沒有輸入：Bot 保持連線，不會反覆進出。
 - Owner 離開語音、退出 SilentTalk、電腦關機或權限被撤銷：Bot 退出。
-- 網路短暫中斷：先由 discord.py 自動恢復；SilentTalk 會合併短時間內的 voice-state 事件，Owner 暫時消失不會立刻退出；若真的需要重新 connect，失敗會逐次拉長等待時間，避免加入/退出洗頻。
+- 網路短暫中斷：先由 discord.py 自動恢復；SilentTalk 會合併短時間內的 voice-state 事件，Owner 暫時消失不會立刻退出。播放前會等待 Voice 恢復；如果播放確認 transport 已斷，該句不重播，但會立即丟棄半死 VoiceClient 並重建連線，讓下一句接續。Gateway resume 時也會立即重新核對語音狀態。
 
 每個需要使用的 Server 都要加入 Bot，最低權限只有 View Channel、Connect、Speak：
 
@@ -216,5 +216,6 @@ OWNER_USER_ID=你的 Discord User ID
 ### 播放中途斷線
 
 - 已開始播放的句子不會自動重播，避免產生回音。
-- 下一句開始前會重新同步 Voice 連線；若正處於重連 cooldown，該句會直接失敗而不是反覆撞 Discord。
-- 自我修復正常以事件驅動處理，另有每 60 秒一次的低頻保險檢查。
+- 下一句開始前會等待 Voice 恢復，預設最多 12 秒；短暫重連不需要手動重送。
+- 播放中若 transport 真的掉線，該句不自動重播以避免回音，但 SilentTalk 會立即重建 VoiceClient。
+- 自我修復正常以事件驅動處理，另有每 20 秒一次的保險檢查；重連失敗採指數退避，預設從 2 秒開始、最長 60 秒。
