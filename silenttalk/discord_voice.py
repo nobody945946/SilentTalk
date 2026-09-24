@@ -59,7 +59,11 @@ class DiscordVoiceClient(discord.Client):
     def _schedule_voice_reconcile(self, delay: float | None = None) -> None:
         if self.is_closed():
             return
-        if self._voice_reconcile_task is not None:
+        current = asyncio.current_task()
+        if (
+            self._voice_reconcile_task is not None
+            and self._voice_reconcile_task is not current
+        ):
             self._voice_reconcile_task.cancel()
         settle = (
             self._config.voice_state_settle_seconds if delay is None else max(0.0, delay)
