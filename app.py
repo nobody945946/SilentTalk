@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import atexit
+import os
 import sys
 from pathlib import Path
 
@@ -29,6 +31,20 @@ def main() -> int:
     args = parser.parse_args()
     project_dir = Path(__file__).resolve().parent
     configure_logging(project_dir)
+
+    pid_dir = Path(os.getenv("LOCALAPPDATA", project_dir)) / "SilentTalk"
+    pid_file = pid_dir / "silenttalk.pid"
+    pid_dir.mkdir(parents=True, exist_ok=True)
+    pid_file.write_text(str(os.getpid()), encoding="ascii")
+
+    def _remove_pid_file() -> None:
+        try:
+            if pid_file.exists() and pid_file.read_text(encoding="ascii").strip() == str(os.getpid()):
+                pid_file.unlink()
+        except OSError:
+            pass
+
+    atexit.register(_remove_pid_file)
     try:
         settings = load_settings(project_dir)
     except (ConfigError, OSError, ValueError) as exc:
