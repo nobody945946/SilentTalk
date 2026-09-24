@@ -20,8 +20,23 @@ Windows 本機文字輸入 → EdgeTTS → Discord Bot 語音頻道。程式不�
 - F8：開啟輸入框。
 - Enter：送出文字。
 - Shift+Enter：在輸入框中換行。
+- Ctrl+1～Ctrl+9：直接播放前九個快捷句。
+- 雙擊快捷句：直接播放該句。
 - Esc：關閉輸入框並清空尚未送出的文字。
 - F9：停止目前播放並清空 queue；Bot 不會因此退出頻道。
+
+### 快捷句
+
+F8 視窗內有一個可編輯的快捷句清單。快捷句仍走原本的「文字驗證 → queue → EdgeTTS → Discord Voice」流程，不會繞過既有播放邏輯。
+
+使用方式：
+
+1. 在上方文字框輸入一句常用文字。
+2. 點「新增目前文字」保存。
+3. 選取快捷句後可「載入選取」、「更新選取」或「刪除選取」。
+4. 前九句會自動對應 Ctrl+1～Ctrl+9；也可以直接雙擊任一句播放。
+
+快捷句保存在本機 `quick_phrases.json`，此檔案已加入 `.gitignore`，不會跟著 Git commit。
 
 ## 如何輸入抑揚頓挫
 
@@ -86,7 +101,7 @@ edge-tts 官方說明：可調整 rate、volume、pitch，但不再支援自訂 
 
 ## 目前範圍
 
-- EdgeTTS、單一 FIFO queue、F8 輸入框、F9 停止與清空。
+- EdgeTTS、單一 FIFO queue、F8 輸入框、可編輯快捷句、F9 停止與清空。
 - Bot 只追蹤 `.env` 內的 `OWNER_USER_ID`，Owner 換台時跟隨、離開時斷線。
 - Bot 加入後會保持同一條 Voice 連線；每句播放不會重新加入或離開頻道。
 - 一般斷線交由 discord.py 事件驅動重連；另有每 60 秒一次的低頻 watchdog 處理漏事件與 stale cache。
@@ -157,6 +172,7 @@ OWNER_USER_ID=你的 Discord User ID
 
 - F8：開啟置頂輸入框
 - Enter：送出；Shift+Enter：換行
+- Ctrl+1～Ctrl+9：播放前九個快捷句
 - Esc：關閉並清空輸入框
 - F9：停止播放並清空 queue
 
