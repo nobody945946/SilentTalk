@@ -46,7 +46,7 @@ speech_queue.py            FIFO / cancel / job lifecycle
 |---|---|---|
 | F8 輸入框、按鈕、視窗行為 | `silenttalk/ui.py` | `app.py` |
 | F8 / F9 全域快捷鍵實作 | `silenttalk/hotkeys.py` | `config.toml`, `silenttalk/config.py` |
-| 新增快捷句、UI 內操作 | `silenttalk/ui.py` | 若要持久化，建議新增獨立資料模組 |
+| 新增快捷句、UI 內操作 | `silenttalk/ui.py` | `silenttalk/phrases.py` |
 | 文字長度、空白、換行規則 | `silenttalk/text.py` | `silenttalk/config.py` |
 | TTS 聲音、速度、音高、音量 | `config.toml` | `silenttalk/tts/edge.py` |
 | 換另一個 TTS 引擎 | `silenttalk/tts/base.py` | `silenttalk/tts/edge.py`, `controller.py`, `config.py` |
@@ -80,6 +80,7 @@ SilentTalk/
 │  ├─ discord_voice.py          # Discord Voice routing + playback
 │  ├─ hotkeys.py                # Win32 global hotkeys
 │  ├─ logging_setup.py          # JSON file logging
+│  ├─ phrases.py                # 快捷句 persistence / CRUD
 │  ├─ smoke.py                  # Voice / TTS 實機 smoke gates
 │  ├─ speech_queue.py           # FIFO jobs + cancel lifecycle
 │  ├─ state.py                  # AppState
@@ -350,6 +351,23 @@ Settings
 
 ---
 
+### `silenttalk/phrases.py` — 快捷句資料層
+
+`QuickPhraseStore` 負責本機快捷句的 persistence 與 CRUD：
+
+- `load()`
+- `add(text)`
+- `update(index, text)`
+- `delete(index)`
+
+資料存在 repo 根目錄的 `quick_phrases.json`，使用 UTF-8 JSON 字串陣列。寫入時先寫 `.tmp` 再 replace，避免一般寫入途中留下半份 JSON。
+
+`ui.py` 只負責「怎麼顯示、怎麼操作」，不自己處理 JSON。快捷句送出時仍呼叫原有 submit callback，因此 Controller / Queue / TTS / Discord 不需要知道文字來源。
+
+前九句在 F8 popup 中對應 `Ctrl+1`～`Ctrl+9`；雙擊列表項目也可直接送出。
+
+---
+
 ### `silenttalk/state.py` — UI / Runtime 狀態契約
 
 `AppState` 是跨模組共用的狀態名稱：
@@ -567,6 +585,7 @@ Token 應只存在本機 `.env`，且 `.env` 必須維持在 Git ignore 範圍�
 | `test_edge_integration.py` | 真實 EdgeTTS synthesis |
 | `test_owner_routing.py` | 同 Server / 跨 Server / stale voice routing |
 | `test_player.py` | Voice connection reuse、播放失敗不重播 |
+| `test_phrases.py` | 快捷句 JSON persistence、CRUD、驗證 |
 | `test_queue.py` | FIFO、cancel、暫存音訊清理 |
 | `test_smoke.py` | 固定測試 WAV |
 | `test_text.py` | 文字 normalization / validation |
@@ -596,29 +615,30 @@ Token 應只存在本機 `.env`，且 `.env` 必須維持在 Git ignore 範圍�
 
 ### 可編輯快捷句
 
-推薦：
+目前已實作：
 
 ```text
-ui.py
-  │
-  ├─ 顯示 / 選擇快捷句
-  │
-  └─ submit(selected_text)
-       │
-       └─ 原本完整 pipeline
-```
-
-若需要永久保存，不建議把 JSON 讀寫全部塞進 `ui.py`。可新增例如：
-
-```text
-silenttalk/phrases.py
 quick_phrases.json
+       │
+       ▼
+silenttalk/phrases.py
+       │ load / add / update / delete
+       ▼
+silenttalk/ui.py
+       │
+       ├─ 列表 / 新增 / 載入 / 更新 / 刪除
+       ├─ Ctrl+1～Ctrl+9
+       └─ submit(selected_text)
+              │
+              ▼
+        原本完整 pipeline
 ```
 
-其中：
+邊界保持不變：
 
-- `ui.py`：呈現、操作。
-- `phrases.py`：load / add / update / delete / save。
+- `ui.py`：呈現與使用者操作。
+- `phrases.py`：本機資料 persistence。
+- `app.py`：建立 `QuickPhraseStore` 並注入 UI。
 - Controller / queue / TTS / Discord：不用知道文字來自手打還是快捷句。
 
 ### 新 TTS Engine
