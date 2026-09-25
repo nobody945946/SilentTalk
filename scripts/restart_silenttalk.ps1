@@ -87,7 +87,7 @@ function Test-SilentTalkCopilotProcess {
         return $false
     }
     return (
-        $commandLine.Contains("Qwen3-0.6B-Q4_K_M.gguf") -and
+        $commandLine -match '(?i)\.runtime[\\/]models[\\/]llm[\\/][^"\s]+\.gguf' -and
         $commandLine -match '(?i)(--port|-p)\s+18088'
     )
 }

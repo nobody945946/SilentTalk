@@ -10,7 +10,7 @@ from pathlib import Path
 import discord
 
 from silenttalk.config import Settings
-from silenttalk.copilot.runtime import CopilotRuntime
+from silenttalk.copilot.runtime import CopilotRuntime, ThinkingCallback, TurnCallback
 from silenttalk.copilot.types import ReplySuggestions
 from silenttalk.discord_voice import DiscordAudioPlayer, DiscordVoiceClient
 from silenttalk.speech_queue import SpeechQueue
@@ -32,6 +32,9 @@ class AppController:
         status: StatusCallback,
         project_dir: Path,
         suggestions: SuggestionCallback | None = None,
+        *,
+        on_turn: TurnCallback | None = None,
+        on_thinking: ThinkingCallback | None = None,
     ) -> None:
         self._settings = settings
         self._status = status
@@ -48,6 +51,8 @@ class AppController:
                 settings.discord.owner_user_id,
                 on_suggestions=suggestions,
                 on_error=lambda message: status(AppState.ERROR, message),
+                on_turn=on_turn,
+                on_thinking=on_thinking,
             )
         self._discord = DiscordVoiceClient(
             settings.discord,
@@ -91,6 +96,12 @@ class AppController:
         text = getattr(job, "text", "")
         if isinstance(text, str) and text.strip():
             self._copilot.record_self(text)
+
+    def regenerate_suggestions(self) -> None:
+        copilot = self._copilot
+        if copilot is None:
+            raise RuntimeError("Copilot 未啟用或啟動失敗。")
+        self._loop.call_soon_threadsafe(copilot.regenerate)
 
     def stop_playback(self) -> None:
         self._schedule(self._queue.cancel_all())

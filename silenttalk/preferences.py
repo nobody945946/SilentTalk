@@ -9,6 +9,8 @@ from silenttalk.speech_settings import (
     validate_rate_multiplier,
 )
 
+UI_MODES = ("manual", "story")
+
 
 class PreferenceError(ValueError):
     pass
@@ -17,6 +19,7 @@ class PreferenceError(ValueError):
 @dataclass(frozen=True, slots=True)
 class UserPreferences:
     speech_rate_multiplier: float = DEFAULT_RATE_MULTIPLIER
+    ui_mode: str = "manual"
 
 
 class PreferenceStore:
@@ -44,13 +47,18 @@ class PreferenceStore:
         except (TypeError, ValueError) as exc:
             raise PreferenceError(f"UI 語速設定無效：{exc}") from exc
 
-        return UserPreferences(speech_rate_multiplier=rate)
+        mode = str(raw.get("ui_mode", "manual"))
+        if mode not in UI_MODES:
+            mode = "manual"
+        return UserPreferences(speech_rate_multiplier=rate, ui_mode=mode)
 
     def save(self, preferences: UserPreferences) -> None:
         try:
             validate_rate_multiplier(preferences.speech_rate_multiplier)
         except ValueError as exc:
             raise PreferenceError(str(exc)) from exc
+        if preferences.ui_mode not in UI_MODES:
+            raise PreferenceError(f"未知 UI 模式：{preferences.ui_mode}")
 
         self.path.parent.mkdir(parents=True, exist_ok=True)
         temp_path = self.path.with_suffix(self.path.suffix + ".tmp")

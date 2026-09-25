@@ -40,6 +40,7 @@ class DiscordVoiceClient(discord.Client):
         self._next_reconnect_at = 0.0
         self._reconnect_delay = config.voice_reconnect_cooldown_seconds
         self._voice_ready = asyncio.Event()
+        self._listen_retries = 0
 
     def set_pcm_callback(self, callback: PCMCallback | None) -> None:
         self._pcm_callback = callback
@@ -235,6 +236,7 @@ class DiscordVoiceClient(discord.Client):
             self._record_reconnect_failure()
             raise
 
+        self._listen_retries = 0
         self._ensure_listening(new_voice)
         self._mark_voice_healthy()
 
@@ -303,19 +305,44 @@ class DiscordVoiceClient(discord.Client):
             return
         if voice.is_listening():
             return
+        connection = getattr(voice, "_connection", None)
+        dave_version = int(getattr(connection, "dave_protocol_version", 0) or 0)
+        if isinstance(voice.channel, discord.StageChannel):
+            _LOG.warning("voice_receive_skipped reason=stage_channel")
+            return
+        if getattr(connection, "dave_session", None) is None:
+            # The pinned voice_recv fork dereferences dave_session when building
+            # its decoder; without one, listen() dies and triggers reconnect loops.
+            # connect() can return just before the session is created, so retry.
+            self._listen_retries += 1
+            _LOG.warning(
+                "voice_receive_waiting reason=no_dave_session attempt=%d",
+                self._listen_retries,
+            )
+            if self._listen_retries <= 10:
+                self._schedule_voice_reconcile(delay=1.0)
+            return
+        self._listen_retries = 0
         voice.listen(
-            voice_recv.BasicSink(self._on_voice_pcm),
+            voice_recv.BasicSink(
+                lambda user, data: self._on_voice_pcm(user, data, voice)
+            ),
             after=self._on_listen_stopped,
         )
-        _LOG.info("voice_receive_started")
+        _LOG.info("voice_receive_started dave_version=%d", dave_version)
 
     def _on_voice_pcm(
         self,
         user: discord.Member | discord.User | None,
         data: voice_recv.VoiceData,
+        voice: discord.VoiceClient | None = None,
     ) -> None:
         callback = self._pcm_callback
         if callback is None or user is None or not data.pcm:
+            return
+        if voice is not None and not _dave_receive_ready(voice):
+            # Before the DAVE handshake settles, frames are still E2E-encrypted
+            # and decode to noise; STT would turn that into invented words.
             return
         if user.id == self._config.owner_user_id:
             return
@@ -383,6 +410,13 @@ class DiscordVoiceClient(discord.Client):
             (vc for vc in self.voice_clients if vc.is_connected()),
             None,
         )
+
+
+def _dave_receive_ready(voice: discord.VoiceClient) -> bool:
+    connection = getattr(voice, "_connection", None)
+    if int(getattr(connection, "dave_protocol_version", 0) or 0) == 0:
+        return True
+    return bool(getattr(connection, "can_encrypt", False))
 
 
 class DiscordAudioPlayer:

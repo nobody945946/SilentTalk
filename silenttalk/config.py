@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import os
 import shutil
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
-import tomllib
 from dotenv import load_dotenv
+
+DEFAULT_LLM_MODEL = "Qwen3-1.7B-Q4_K_M.gguf"
 
 
 class ConfigError(ValueError):
@@ -60,6 +62,8 @@ class CopilotConfig:
     max_reply_chars: int = 72
     llama_port: int = 18088
     auto_popup: bool = True
+    llm_model: str = DEFAULT_LLM_MODEL
+    llm_gpu_layers: int = 99
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,6 +87,13 @@ def _section(data: dict, name: str) -> dict:
     if not isinstance(value, dict):
         raise ConfigError(f"config.toml 的 [{name}] 必須是 table。")
     return value
+
+
+def _model_filename(value: object) -> str:
+    name = str(value).strip()
+    if not name.lower().endswith(".gguf") or Path(name).name != name:
+        raise ConfigError("copilot.llm_model 必須是 .runtime/models/llm/ 內的 .gguf 檔名。")
+    return name
 
 
 def load_settings(project_dir: Path) -> Settings:
@@ -184,5 +195,9 @@ def load_settings(project_dir: Path) -> Settings:
             ),
             llama_port=max(1024, min(65535, int(copilot.get("llama_port", 18088)))),
             auto_popup=bool(copilot.get("auto_popup", True)),
+            llm_model=_model_filename(
+                copilot.get("llm_model", DEFAULT_LLM_MODEL)
+            ),
+            llm_gpu_layers=max(0, min(999, int(copilot.get("llm_gpu_layers", 99)))),
         ),
     )

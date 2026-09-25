@@ -47,6 +47,9 @@ speech_queue.py            FIFO / cancel / job lifecycle
 | F8 輸入框、按鈕、視窗行為 | `silenttalk/ui.py` | `app.py` |
 | F8 / F9 全域快捷鍵實作 | `silenttalk/hotkeys.py` | `config.toml`, `silenttalk/config.py` |
 | 新增快捷句、UI 內操作 | `silenttalk/ui.py` | `silenttalk/phrases.py` |
+| AI 劇情模式畫面、WASD 操作 | `silenttalk/story_ui.py` | `silenttalk/ui.py`, `silenttalk/ime.py` |
+| 回覆方向（同意／追問／反對／玩笑）與按鍵對應 | `silenttalk/copilot/types.py` 的 `REPLY_LANES` | `silenttalk/copilot/llm.py` prompt |
+| Copilot 模型檔、GPU layers | `config.toml` `[copilot]` | `scripts/setup_copilot.py` |
 | 文字長度、空白、換行規則 | `silenttalk/text.py` | `silenttalk/config.py` |
 | TTS 聲音、速度、音高、音量 | `config.toml` | `silenttalk/tts/edge.py` |
 | 換另一個 TTS 引擎 | `silenttalk/tts/base.py` | `silenttalk/tts/edge.py`, `controller.py`, `config.py` |
@@ -79,17 +82,21 @@ SilentTalk/
 │  ├─ controller.py             # UI 與 async backend 的協調層
 │  ├─ discord_voice.py          # Discord Voice routing + playback
 │  ├─ hotkeys.py                # Win32 global hotkeys
+│  ├─ ime.py                    # 劇情模式時暫停 Windows IME
 │  ├─ logging_setup.py          # JSON file logging
 │  ├─ phrases.py                # 快捷句 persistence / CRUD
 │  ├─ copilot/                  # Discord receive → STT → context → local LLM
 │  │  ├─ context.py
 │  │  ├─ llm.py
 │  │  ├─ runtime.py
+│  │  ├─ script.py              # 簡體 → 台灣繁體（OpenCC s2twp）
+│  │  ├─ smoke.py               # app.py --copilot-smoke；scripts/dev/ 共用
 │  │  ├─ stt.py
 │  │  └─ types.py
 │  ├─ smoke.py                  # Voice / TTS 實機 smoke gates
 │  ├─ speech_queue.py           # FIFO jobs + cancel lifecycle
 │  ├─ state.py                  # AppState
+│  ├─ story_ui.py               # AI 劇情模式分頁（WASD 選項）
 │  ├─ text.py                   # 文字 normalization / validation
 │  ├─ ui.py                     # Tkinter UI
 │  └─ tts/
@@ -155,6 +162,8 @@ SilentTalkUI.shutdown
 - 顯示狀態。
 - 提供停止播放與退出按鈕。
 - 接收 GlobalHotkeys 產生的 UI action。
+- 用 `ttk.Notebook` 分成「手動輸入」與「AI 劇情模式」兩個分頁；上次使用的分頁記在 `ui_preferences.json` 的 `ui_mode`。
+- 劇情模式時，popup 層級的 `<KeyPress>` 轉交 `StoryPanel.handle_key()`；手動模式完全不攔截按鍵，所以打字不受 WASD 影響。
 
 UI 透過 callback 與 backend 溝通：
 
@@ -222,6 +231,7 @@ Discord VoiceRecvClient
         ▼
 copilot/stt.py
 Streaming Paraformer INT8 / CPU
+（0.66 s tail padding；endpoint rule2 0.8 s 處理開放式麥克風；s2twp 轉台灣繁體）
         │ final transcript
         ▼
 copilot/context.py
@@ -229,17 +239,19 @@ bounded session context
         │
         ▼
 copilot/llm.py
-Qwen3-0.6B Q4_K_M / persistent llama-server
+Qwen3-1.7B Q4_K_M（config 可換）/ persistent llama-server
         │
         ▼
-ReplySuggestions
-  ├─ 同意
-  ├─ 反對
-  └─ 玩笑／打圓場（可 SKIP）
+ReplySuggestions（欄位與按鍵由 REPLY_LANES 定義）
+  ├─ W 同意
+  ├─ A 追問
+  ├─ D 反對
+  └─ S 玩笑／打圓場（可 SKIP）
         │
         ▼
-ui.py
-Tab 填入 / Enter 送出
+ui.py / story_ui.py
+手動分頁：Tab 填入 / Enter 送出
+劇情分頁：WASD 選擇，同鍵再按或 Enter 說出
         │
         ▼
 原本 Controller → SpeechQueue → EdgeTTS → Discord
@@ -250,6 +262,11 @@ Tab 填入 / Enter 送出
 - Discord receive callback 只複製 PCM 丟給 STT queue，不能在 voice receive thread 做推理。
 - 每位 Discord speaker 有獨立的 streaming STT stream，不需要額外 diarization。
 - 未採用的 AI 候選不進 context。
+- 同一時間只有一個 LLM 生成（`_suggestion_worker`）；生成期間新進的句子只保留最新一句作為下一個 trigger。llama-server 以 `--parallel 1` 啟動，不讓多個 slot 分掉 4 GB GPU 的 context。
+- 少於 2 個字的句子（「嗯」「好」）只進 context，不觸發生成。
+- 啟動前先跑 `llama-server --list-devices`，把看到的 GPU 記成 `copilot_llm_devices`（沒有裝置＝CPU 模式）。llama-server 的 stderr 只留在記憶體尾端 40 行，只有含 error／failed／out of memory 的行寫入 `silenttalk.log`；不提高 verbosity，避免 prompt 內容落地。
+- Streaming Paraformer 每約 0.6 s 才吐一次字；句尾若只補 0.2 s 靜音，最後 1–3 字會掉（實測 CER 14.7% → 補 0.66 s 後 7.1%）。
+- DAVE（Discord 語音 E2EE）握手完成前收到的封包仍是密文，解出來是雜訊，`discord_voice.py` 會直接丟掉；沒有 `dave_session` 的連線（例如 Stage 頻道）不啟動接收，避免 voice_recv fork 的 decoder 崩潰後觸發重連迴圈。
 - 使用者按送出後也不立刻寫成 self turn；只有 SpeechQueue 完成 Discord playback 後，`on_done` 才記錄「你真的說過這句」。
 - session transcript / PCM 不落地；context 只存在 RAM。
 - Copilot 啟動失敗時 Controller 會停掉部分 Copilot 並把 PCM callback 清掉，原有手動 TTS 仍可使用。

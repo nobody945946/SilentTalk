@@ -11,7 +11,13 @@ from pathlib import Path
 import numpy as np
 import sherpa_onnx
 
+from silenttalk.copilot.script import to_taiwan_traditional
+
 _LOG = logging.getLogger(__name__)
+
+# Streaming Paraformer emits tokens once per ~0.6 s chunk; a shorter zero tail
+# never flushes the last chunk and drops the final 1-3 characters.
+_TAIL_PADDING_SECONDS = 0.66
 
 TurnCallback = Callable[[int, str, str], None]
 ErrorCallback = Callable[[str], None]
@@ -121,6 +127,11 @@ class StreamingTranscriber:
                         state.last_packet_at = received_at
 
                     self._accept_pcm(recognizer, state.stream, pcm)
+                    if recognizer.is_endpoint(state.stream):
+                        text = str(recognizer.get_result(state.stream))
+                        recognizer.reset(state.stream)
+                        state.started_at = received_at
+                        self._emit(speaker_id, state.speaker_name, text)
 
                 now = time.monotonic()
                 due = [
@@ -161,7 +172,13 @@ class StreamingTranscriber:
             num_threads=1,
             sample_rate=16000,
             feature_dim=80,
-            enable_endpoint_detection=False,
+            # Open-mic users keep sending packets through background noise, so
+            # packet gaps alone never end their turn. These rules count time
+            # since the last decoded token (noise does not reset them).
+            enable_endpoint_detection=True,
+            rule1_min_trailing_silence=2.4,
+            rule2_min_trailing_silence=0.8,
+            rule3_min_utterance_length=20.0,
             decoding_method="greedy_search",
             provider="cpu",
         )
@@ -188,14 +205,16 @@ class StreamingTranscriber:
         speaker_id: int,
         state: _SpeakerStream,
     ) -> None:
-        tail = np.zeros(int(0.20 * 48000), dtype=np.float32)
+        tail = np.zeros(int(_TAIL_PADDING_SECONDS * 48000), dtype=np.float32)
         state.stream.accept_waveform(48000, tail)
         state.stream.input_finished()
         while recognizer.is_ready(state.stream):
             recognizer.decode_stream(state.stream)
 
-        text = str(recognizer.get_result(state.stream)).strip()
-        text = " ".join(text.split())
+        self._emit(speaker_id, state.speaker_name, str(recognizer.get_result(state.stream)))
+
+    def _emit(self, speaker_id: int, speaker_name: str, raw_text: str) -> None:
+        text = to_taiwan_traditional(" ".join(raw_text.split()))
         if not text:
             return
 
@@ -204,4 +223,4 @@ class StreamingTranscriber:
             speaker_id,
             len(text),
         )
-        self._on_turn(speaker_id, state.speaker_name, text)
+        self._on_turn(speaker_id, speaker_name, text)

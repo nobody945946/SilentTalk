@@ -4,3 +4,4 @@ python-dotenv==1.1.1
 discord-ext-voice-recv @ https://github.com/rdphillips7/discord-ext-voice-recv/archive/ddd28601fe556f585b869e215f29c8236b95f88f.zip
 sherpa-onnx==1.13.8
 numpy>=1.26,<3
+opencc-python-reimplemented==0.1.7

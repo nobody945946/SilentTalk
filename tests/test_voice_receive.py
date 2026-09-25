@@ -35,3 +35,31 @@ def test_voice_receive_ignores_owner_and_bots_but_keeps_other_people() -> None:
     client._on_voice_pcm(FakeUser(789, "Alice"), FakeVoiceData(b"human"))  # type: ignore[arg-type]
 
     assert heard == [(789, "Alice", b"human")]
+
+
+@dataclass
+class FakeConnection:
+    dave_protocol_version: int
+    can_encrypt: bool
+
+
+@dataclass
+class FakeVoice:
+    _connection: FakeConnection
+
+
+def test_voice_receive_drops_audio_until_dave_session_is_ready() -> None:
+    heard: list[bytes] = []
+    client = DiscordVoiceClient(
+        DiscordConfig("unused", 123),
+        lambda *_: None,
+        pcm_callback=lambda _user_id, _name, pcm: heard.append(pcm),
+    )
+    alice = FakeUser(789, "Alice")
+    pending = FakeVoice(FakeConnection(dave_protocol_version=1, can_encrypt=False))
+    ready = FakeVoice(FakeConnection(dave_protocol_version=1, can_encrypt=True))
+
+    client._on_voice_pcm(alice, FakeVoiceData(b"ciphertext-noise"), pending)  # type: ignore[arg-type]
+    client._on_voice_pcm(alice, FakeVoiceData(b"speech"), ready)  # type: ignore[arg-type]
+
+    assert heard == [b"speech"]

@@ -7,7 +7,8 @@ from pathlib import Path
 
 from silenttalk.config import ConfigError, load_settings
 from silenttalk.controller import AppController
-from silenttalk.copilot.types import ReplySuggestions
+from silenttalk.copilot.smoke import run_copilot_smoke
+from silenttalk.copilot.types import ConversationTurn, ReplySuggestions
 from silenttalk.logging_setup import configure_logging
 from silenttalk.phrases import QuickPhraseStore
 from silenttalk.preferences import PreferenceStore
@@ -29,6 +30,11 @@ def main() -> int:
         help="Gate 2: synthesize a fixed zh-TW sentence and play it in Discord voice",
     )
     parser.add_argument(
+        "--copilot-smoke",
+        action="store_true",
+        help="Check local STT + LLM on this machine (no Discord needed)",
+    )
+    parser.add_argument(
         "--silenttalk-desktop",
         action="store_true",
         help=argparse.SUPPRESS,
@@ -42,6 +48,14 @@ def main() -> int:
     except (ConfigError, OSError, ValueError) as exc:
         print(f"SilentTalk 設定錯誤：{exc}", file=sys.stderr)
         return 2
+
+    if args.copilot_smoke:
+        try:
+            passed = asyncio.run(run_copilot_smoke(settings, project_dir))
+        except Exception as exc:  # noqa: BLE001 - CLI boundary reports smoke failures.
+            print(f"Copilot smoke 失敗：{exc}", file=sys.stderr)
+            return 4
+        return 0 if passed else 5
 
     if args.voice_smoke or args.tts_smoke:
         issues = settings.validate_runtime()
@@ -66,11 +80,21 @@ def main() -> int:
         if ui is not None:
             ui.set_suggestions(payload)
 
+    def conversation_turn(turn: ConversationTurn) -> None:
+        if ui is not None:
+            ui.add_conversation_turn(turn)
+
+    def thinking(speaker: str, text: str) -> None:
+        if ui is not None:
+            ui.set_suggestions_thinking(speaker, text)
+
     controller = AppController(
         settings,
         status,
         project_dir,
         suggestions,
+        on_turn=conversation_turn,
+        on_thinking=thinking,
     )
     quick_phrases = QuickPhraseStore(project_dir / "quick_phrases.json")
     preferences = PreferenceStore(project_dir / "ui_preferences.json")
@@ -83,6 +107,9 @@ def main() -> int:
         quick_phrases,
         preferences,
         auto_popup_suggestions=settings.copilot.auto_popup,
+        regenerate_suggestions=(
+            controller.regenerate_suggestions if settings.copilot.enabled else None
+        ),
     )
 
     runtime_issues = settings.validate_runtime()

@@ -34,22 +34,44 @@ ASSETS = (
         None,
         50_000,
     ),
-    (
-        "Qwen3-0.6B Q4_K_M",
-        "https://huggingface.co/Qwen/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_K_M.gguf?download=true",
-        LLM_DIR / "Qwen3-0.6B-Q4_K_M.gguf",
-        "b0638f08417a2d3c8652760462eb5407c6e30173cf9608ad0820757a281eea0e",
-        370_000_000,
-    ),
 )
 
 
-def _copilot_enabled() -> bool:
+# Known reply models, keyed by the file name used in config.toml copilot.llm_model.
+# Qwen's official repos only publish Q8_0 for 0.6B/1.7B, so Q4_K_M comes from unsloth.
+# Qwen3-0.6B is deliberately absent: in benchmarks it ignored the four-line
+# format on 29 of 32 lanes and mostly parroted the transcript back.
+LLM_MODELS = {
+    "Qwen3-1.7B-Q4_K_M.gguf": (
+        "Qwen3-1.7B Q4_K_M",
+        "https://huggingface.co/unsloth/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q4_K_M.gguf?download=true",
+        "b139949c5bd74937ad8ed8c8cf3d9ffb1e99c866c823204dc42c0d91fa181897",
+        1_100_000_000,
+    ),
+    "Qwen3-4B-Q4_K_M.gguf": (
+        "Qwen3-4B Q4_K_M",
+        "https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf?download=true",
+        "7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5",
+        2_490_000_000,
+    ),
+}
+DEFAULT_LLM_MODEL = "Qwen3-1.7B-Q4_K_M.gguf"
+
+
+def _copilot_section() -> dict:
     config_path = PROJECT_DIR / "config.toml"
     with config_path.open("rb") as handle:
         raw = tomllib.load(handle)
     section = raw.get("copilot", {})
-    return bool(section.get("enabled", True)) if isinstance(section, dict) else True
+    return section if isinstance(section, dict) else {}
+
+
+def _llm_asset(model_name: str) -> tuple[str, str, Path, str | None, int] | None:
+    known = LLM_MODELS.get(model_name)
+    if known is None:
+        return None
+    label, url, sha256, min_size = known
+    return label, url, LLM_DIR / model_name, sha256, min_size
 
 
 def _sha256(path: Path) -> str:
@@ -145,13 +167,25 @@ def _download(
 
 
 def main() -> int:
-    if not _copilot_enabled():
+    section = _copilot_section()
+    if not bool(section.get("enabled", True)):
         print("Copilot is disabled in config.toml; model deployment skipped.")
         return 0
 
+    model_name = str(section.get("llm_model", DEFAULT_LLM_MODEL)).strip()
+    llm_asset = _llm_asset(model_name)
+    if llm_asset is None and not (LLM_DIR / model_name).is_file():
+        print(
+            f"ERROR: copilot.llm_model = {model_name!r} is not a known download; "
+            f"place it at {LLM_DIR / model_name} or use one of: "
+            + ", ".join(LLM_MODELS),
+            file=sys.stderr,
+        )
+        return 1
+
     print("Checking SilentTalk Copilot models...")
     try:
-        for asset in ASSETS:
+        for asset in (*ASSETS, *([llm_asset] if llm_asset else [])):
             _download(*asset)
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)

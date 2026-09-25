@@ -6,8 +6,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from tkinter import ttk
 
-from silenttalk.copilot.types import ReplySuggestions
+from silenttalk.copilot.types import REPLY_LANES, ConversationTurn, ReplySuggestions
 from silenttalk.hotkeys import GlobalHotkeys
+from silenttalk.ime import set_ime_enabled
 from silenttalk.phrases import QuickPhrase, QuickPhraseError, QuickPhraseStore
 from silenttalk.preferences import (
     PreferenceError,
@@ -20,6 +21,7 @@ from silenttalk.speech_settings import (
     MIN_RATE_MULTIPLIER,
 )
 from silenttalk.state import AppState
+from silenttalk.story_ui import StoryPanel
 from silenttalk.text import TextValidationError
 from silenttalk.voice_styles import voice_style_choices, voice_style_label
 
@@ -30,6 +32,8 @@ class UIAction:
     state: AppState | None = None
     message: str = ""
     suggestions: ReplySuggestions | None = None
+    turn: ConversationTurn | None = None
+    speaker: str = ""
 
 
 class SilentTalkUI:
@@ -44,6 +48,7 @@ class SilentTalkUI:
         preferences: PreferenceStore | None = None,
         *,
         auto_popup_suggestions: bool = True,
+        regenerate_suggestions: Callable[[], None] | None = None,
     ) -> None:
         self._submit_callback = submit
         self._stop_callback = stop_playback
@@ -57,7 +62,7 @@ class SilentTalkUI:
         self._label_by_style = {key: label for key, label in self._style_choices}
         self._auto_popup_suggestions = auto_popup_suggestions
         self._latest_suggestions: ReplySuggestions | None = None
-        self._suggestion_values: list[str] = ["", "", ""]
+        self._suggestion_values: list[str] = [""] * len(REPLY_LANES)
 
         preference_error = ""
         try:
@@ -67,6 +72,7 @@ class SilentTalkUI:
         except PreferenceError as exc:
             initial_preferences = UserPreferences()
             preference_error = str(exc)
+        self._mode = initial_preferences.ui_mode
 
         self.root = tk.Tk()
         self.root.withdraw()
@@ -87,8 +93,22 @@ class SilentTalkUI:
                 ),
             )
 
+        self.notebook = ttk.Notebook(self.popup)
+        self.notebook.pack(fill="both", expand=True, padx=6, pady=(6, 0))
+        manual_tab = tk.Frame(self.notebook)
+        self.story = StoryPanel(
+            self.notebook,
+            on_confirm=self._submit_story_choice,
+            on_edit=self._edit_story_choice,
+            on_regenerate=regenerate_suggestions,
+        )
+        self.notebook.add(manual_tab, text="  ✍ 手動輸入  ")
+        self.notebook.add(self.story, text="  🎮 AI 劇情模式  ")
+        self.notebook.enable_traversal()
+        self.popup.bind("<KeyPress>", self._on_popup_key)
+
         self.input = tk.Text(
-            self.popup,
+            manual_tab,
             width=54,
             height=4,
             wrap="word",
@@ -98,7 +118,7 @@ class SilentTalkUI:
         self.input.bind("<Tab>", self._on_suggestion_tab)
 
         suggestion_frame = tk.LabelFrame(
-            self.popup,
+            manual_tab,
             text="Copilot 回覆建議｜↑↓ 選擇・Tab 填入・Enter 直接說",
         )
         suggestion_frame.pack(fill="x", padx=12, pady=(0, 8))
@@ -115,7 +135,7 @@ class SilentTalkUI:
         self.suggestion_list = tk.Listbox(
             suggestion_frame,
             width=72,
-            height=3,
+            height=len(REPLY_LANES),
             exportselection=False,
             font=("Microsoft JhengHei UI", 10),
         )
@@ -125,7 +145,7 @@ class SilentTalkUI:
         self.suggestion_list.bind("<Double-Button-1>", self._on_suggestion_enter)
         self._render_empty_suggestions()
 
-        voice_row = tk.Frame(self.popup)
+        voice_row = tk.Frame(manual_tab)
         voice_row.pack(fill="x", padx=12, pady=(0, 4))
         tk.Label(voice_row, text="聲線：").pack(side="left")
         self.voice_style_var = tk.StringVar(value=self._label_by_style["default"])
@@ -142,7 +162,7 @@ class SilentTalkUI:
             text="（快捷句會記住自己的聲線）",
         ).pack(side="left", padx=(8, 0))
 
-        speed_row = tk.Frame(self.popup)
+        speed_row = tk.Frame(manual_tab)
         speed_row.pack(fill="x", padx=12, pady=(0, 8))
         tk.Label(speed_row, text="語速：").pack(side="left")
         initial_percent = round(initial_preferences.speech_rate_multiplier * 100)
@@ -174,7 +194,7 @@ class SilentTalkUI:
         self.rate_scale.bind("<ButtonRelease-1>", self._persist_rate)
         self.rate_scale.bind("<KeyRelease>", self._persist_rate)
 
-        phrase_frame = tk.LabelFrame(self.popup, text="快捷句")
+        phrase_frame = tk.LabelFrame(manual_tab, text="快捷句")
         phrase_frame.pack(fill="x", padx=12, pady=(0, 6))
 
         self.phrase_list = tk.Listbox(
@@ -227,6 +247,9 @@ class SilentTalkUI:
             text="退出 SilentTalk",
             command=self.close,
         ).pack(side="right")
+        self.notebook.select(self.story if self._mode == "story" else manual_tab)
+        self._manual_tab = manual_tab
+        self.notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
         self.popup.withdraw()
 
         self._hotkeys = GlobalHotkeys(
@@ -251,12 +274,20 @@ class SilentTalkUI:
     def set_suggestions(self, suggestions: ReplySuggestions) -> None:
         self._actions.put(UIAction("suggestions", suggestions=suggestions))
 
+    def set_suggestions_thinking(self, speaker: str, text: str) -> None:
+        self._actions.put(UIAction("thinking", message=text, speaker=speaker))
+
+    def add_conversation_turn(self, turn: ConversationTurn) -> None:
+        self._actions.put(UIAction("turn", turn=turn))
+
     def show(self) -> None:
         self._refresh_phrases()
         self.popup.deiconify()
         self.popup.lift()
         self.popup.focus_force()
-        if self._latest_suggestions is not None:
+        if self._mode == "story":
+            self._enter_story_focus()
+        elif self._latest_suggestions is not None:
             self._select_first_available_suggestion()
             self.suggestion_list.focus_set()
         else:
@@ -267,7 +298,7 @@ class SilentTalkUI:
         self.popup.withdraw()
 
     def close(self) -> None:
-        self._persist_rate()
+        self._persist_preferences()
         self._hotkeys.stop()
         self._shutdown_callback()
         self.root.destroy()
@@ -289,14 +320,20 @@ class SilentTalkUI:
     def _reset_rate(self) -> None:
         self.rate_var.set(DEFAULT_RATE_MULTIPLIER * 100)
         self._on_rate_changed(str(DEFAULT_RATE_MULTIPLIER * 100))
-        self._persist_rate()
+        self._persist_preferences()
 
     def _persist_rate(self, _: tk.Event | None = None) -> None:
+        self._persist_preferences()
+
+    def _persist_preferences(self) -> None:
         if self._preference_store is None:
             return
         try:
             self._preference_store.save(
-                UserPreferences(speech_rate_multiplier=self._rate_multiplier())
+                UserPreferences(
+                    speech_rate_multiplier=self._rate_multiplier(),
+                    ui_mode=self._mode,
+                )
             )
         except PreferenceError as exc:
             if hasattr(self, "status_var"):
@@ -306,7 +343,49 @@ class SilentTalkUI:
         self._stop_callback()
         self.status_var.set("已停止並清空佇列")
 
+    def _on_tab_changed(self, _: tk.Event) -> None:
+        mode = "story" if self.notebook.select() == str(self.story) else "manual"
+        if mode == self._mode:
+            if mode == "story":
+                self._enter_story_focus()
+            return
+        self._mode = mode
+        self._persist_preferences()
+        if mode == "story":
+            self._enter_story_focus()
+        else:
+            set_ime_enabled(self.popup.winfo_id(), True)
+            self.input.focus_set()
+
+    def _enter_story_focus(self) -> None:
+        # Chinese IMEs swallow W/A/S/D; arrows keep working if this fails.
+        set_ime_enabled(self.popup.winfo_id(), False)
+        self.story.focus_panel()
+
+    def _on_popup_key(self, event: tk.Event) -> str | None:
+        if self._mode != "story" or event.state & 0x0004:  # leave Ctrl+… alone
+            return None
+        if event.widget is self.notebook and event.keysym in {"Left", "Right"}:
+            return None
+        return "break" if self.story.handle_key(event.keysym) else None
+
+    def _submit_story_choice(self, text: str) -> bool:
+        if not self._submit_text(text):
+            return False
+        self.hide()
+        return True
+
+    def _edit_story_choice(self, text: str) -> None:
+        self.notebook.select(self._manual_tab)
+        self.input.delete("1.0", "end")
+        self.input.insert("1.0", text)
+        self.input.mark_set("insert", "end-1c")
+        self.input.focus_set()
+
     def _on_enter(self, event: tk.Event) -> str:
+        if self._mode == "story":
+            self.story.handle_key("Return")
+            return "break"
         if event.state & 0x0001:
             self.input.insert("insert", "\n")
             return "break"
@@ -330,11 +409,7 @@ class SilentTalkUI:
 
     def _apply_suggestions(self, suggestions: ReplySuggestions) -> None:
         self._latest_suggestions = suggestions
-        self._suggestion_values = [
-            suggestions.agree,
-            suggestions.disagree,
-            suggestions.humor,
-        ]
+        self._suggestion_values = [text for _, text in suggestions.items()]
         trigger = " ".join(suggestions.trigger_text.split())
         if len(trigger) > 100:
             trigger = trigger[:99].rstrip() + "…"
@@ -342,25 +417,28 @@ class SilentTalkUI:
             f"{suggestions.trigger_speaker}：{trigger}"
         )
         self.suggestion_list.delete(0, "end")
-        labels = ("同意", "反對", "玩笑／打圓場")
-        for label, value in zip(labels, self._suggestion_values, strict=True):
-            shown = value or "— 沒有安全的建議 —"
-            self.suggestion_list.insert("end", f"{label}｜{shown}")
+        for lane, value in suggestions.items():
+            shown = value or ("— 產生失敗 —" if suggestions.error else "— 沒有安全的建議 —")
+            self.suggestion_list.insert("end", f"{lane.label}｜{shown}")
         self._select_first_available_suggestion()
+        self.story.set_suggestions(suggestions)
 
-        if self._auto_popup_suggestions and not self.popup.winfo_viewable():
+        if (
+            self._auto_popup_suggestions
+            and suggestions.has_any()
+            and not self.popup.winfo_viewable()
+        ):
             self.popup.deiconify()
             self.popup.lift()
 
     def _render_empty_suggestions(self) -> None:
         self.suggestion_list.delete(0, "end")
-        self.suggestion_list.insert("end", "同意｜等待對話…")
-        self.suggestion_list.insert("end", "反對｜等待對話…")
-        self.suggestion_list.insert("end", "玩笑／打圓場｜等待對話…")
+        for lane in REPLY_LANES:
+            self.suggestion_list.insert("end", f"{lane.label}｜等待對話…")
 
     def _clear_suggestions(self) -> None:
         self._latest_suggestions = None
-        self._suggestion_values = ["", "", ""]
+        self._suggestion_values = [""] * len(REPLY_LANES)
         self.suggestion_context_var.set("等待 Discord 對話…")
         self._render_empty_suggestions()
 
@@ -531,4 +609,8 @@ class SilentTalkUI:
                     self.status_var.set(action.message)
             elif action.kind == "suggestions" and action.suggestions is not None:
                 self._apply_suggestions(action.suggestions)
+            elif action.kind == "thinking":
+                self.story.set_thinking(action.speaker, action.message)
+            elif action.kind == "turn" and action.turn is not None:
+                self.story.add_turn(action.turn)
         self.root.after(50, self._poll_actions)

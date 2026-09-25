@@ -34,3 +34,9 @@ context_char_budget = 2400
 max_reply_chars = 72
 llama_port = 18088
 auto_popup = true
+# Reply model in .runtime/models/llm/. Qwen3-1.7B Q4_K_M uses ~1.6 GB VRAM
+# (fits a 4 GB RTX 3050 Ti next to Discord). "Qwen3-4B-Q4_K_M.gguf" gives
+# better replies but needs ~3.1 GB; only pick it on GPUs with 6 GB or more.
+llm_model = "Qwen3-1.7B-Q4_K_M.gguf"
+# Layers offloaded to the GPU; 0 = CPU only (about 3x slower, still usable).
+llm_gpu_layers = 99
