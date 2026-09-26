@@ -12,6 +12,7 @@ from silenttalk.copilot.context import ConversationStore
 from silenttalk.copilot.llm import LocalReplyModel
 from silenttalk.copilot.persona import Persona
 from silenttalk.copilot.stt import StreamingTranscriber
+from silenttalk.copilot.stt_offline import OfflineTranscriber
 from silenttalk.copilot.types import ConversationTurn, ReplySuggestions
 
 _LOG = logging.getLogger(__name__)
@@ -58,7 +59,10 @@ class CopilotRuntime:
         self._worker: asyncio.Task[None] | None = None
 
         runtime_dir = project_dir / ".runtime"
-        asr_dir = runtime_dir / "models" / "asr"
+        if config.stt_engine == "sensevoice":
+            transcriber, asr_dir = OfflineTranscriber, runtime_dir / "models" / "sensevoice"
+        else:
+            transcriber, asr_dir = StreamingTranscriber, runtime_dir / "models" / "asr"
         llm_model = runtime_dir / "models" / "llm" / config.llm_model
 
         self._context = ConversationStore(
@@ -75,7 +79,7 @@ class CopilotRuntime:
             gpu_layers=config.llm_gpu_layers,
             low_vram=config.llm_low_vram,
         )
-        self._stt = StreamingTranscriber(
+        self._stt = transcriber(
             asr_dir,
             on_turn=self._on_transcribed_turn,
             on_error=on_error,

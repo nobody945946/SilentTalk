@@ -3,6 +3,8 @@
 Usage (from the repo root, models already in .runtime/models/asr):
     python scripts/dev/stt_eval.py            # uses cached audio if present
     python scripts/dev/stt_eval.py --refresh  # re-synthesize with EdgeTTS (network)
+    python scripts/dev/stt_eval.py --engine sensevoice  # Silero VAD + SenseVoice
+                                                         # (.runtime/models/sensevoice + vad)
 
 Baseline 2026-09-25, streaming Paraformer + 0.66 s tail: average CER ~8-9%.
 Known model misses (not bugs): boss→包, lag→了鉤, 打野→達也, 補師→不是, 明天見→明天.
@@ -23,7 +25,7 @@ import numpy as np
 PROJECT_DIR = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_DIR))
 
-from silenttalk.config import CopilotConfig, TTSConfig
+from silenttalk.config import STT_ENGINES, CopilotConfig, TTSConfig
 from silenttalk.copilot.smoke import (
     build_transcriber,
     char_error_rate,
@@ -87,10 +89,13 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--refresh", action="store_true", help="re-synthesize audio")
     parser.add_argument("--ffmpeg", default=shutil.which("ffmpeg") or "ffmpeg")
+    parser.add_argument("--engine", choices=STT_ENGINES, default="paraformer")
     args = parser.parse_args()
 
     asyncio.run(ensure_samples(args.refresh, args.ffmpeg))
-    transcriber, collector = build_transcriber(PROJECT_DIR, CopilotConfig())
+    transcriber, collector = build_transcriber(
+        PROJECT_DIR, CopilotConfig(stt_engine=args.engine)
+    )
     transcriber.start()
     rates: list[float] = []
     try:
@@ -103,7 +108,10 @@ def main() -> int:
             print(f"{sample_id} {flag} {rate:5.0%}  {reference}｜{heard or '（沒有）'}")
     finally:
         transcriber.stop()
-    print(f"\nAVERAGE CER {sum(rates) / len(rates):.1%}  (baseline ~8-9%)")
+    print(
+        f"\nAVERAGE CER {sum(rates) / len(rates):.1%}  engine={args.engine}"
+        "  (baseline: paraformer ~8%, sensevoice target <= 6.5%)"
+    )
     return 0
 
 

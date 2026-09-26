@@ -36,6 +36,7 @@ def test_loads_env_and_toml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     assert settings.copilot.llm_context_size == 4096
     assert settings.copilot.llm_model == "Qwen3-1.7B-Q4_K_M.gguf"
     assert settings.copilot.llm_gpu_layers == 99
+    assert settings.copilot.stt_engine == "paraformer"
     assert settings.validate_runtime() == ["找不到 FFmpeg：missing-ffmpeg-for-test"]
 
 
@@ -115,4 +116,27 @@ def test_rejects_llm_model_path_outside_model_directory(
     monkeypatch.setenv("DISCORD_BOT_TOKEN", "test-token")
     monkeypatch.setenv("OWNER_USER_ID", "123456789")
     with pytest.raises(ConfigError, match="llm_model"):
+        load_settings(tmp_path)
+
+
+def test_accepts_sensevoice_stt_engine(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write_config(tmp_path)
+    with (tmp_path / "config.toml").open("a", encoding="utf-8") as handle:
+        handle.write('[copilot]\nstt_engine = "sensevoice"\n')
+    monkeypatch.setenv("DISCORD_BOT_TOKEN", "test-token")
+    monkeypatch.setenv("OWNER_USER_ID", "123456789")
+    assert load_settings(tmp_path).copilot.stt_engine == "sensevoice"
+
+
+def test_rejects_unknown_stt_engine(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write_config(tmp_path)
+    with (tmp_path / "config.toml").open("a", encoding="utf-8") as handle:
+        handle.write('[copilot]\nstt_engine = "whisper"\n')
+    monkeypatch.setenv("DISCORD_BOT_TOKEN", "test-token")
+    monkeypatch.setenv("OWNER_USER_ID", "123456789")
+    with pytest.raises(ConfigError, match="stt_engine"):
         load_settings(tmp_path)

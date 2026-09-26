@@ -106,7 +106,7 @@ def main() -> int:
             ("回覆模型", copilot.llm_model),
             ("GPU", f"{copilot.llm_gpu_layers} 層" if copilot.llm_gpu_layers else "關閉（CPU）"),
             ("省 VRAM", "開（8-bit KV cache）" if copilot.llm_low_vram else "關"),
-            ("語音辨識", getattr(copilot, "stt_engine", "paraformer")),
+            ("語音辨識", copilot.stt_engine),
         ]
         if copilot.enabled
         else []

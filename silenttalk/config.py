@@ -9,6 +9,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 DEFAULT_LLM_MODEL = "Qwen3-1.7B-Q4_K_M.gguf"
+STT_ENGINES = ("paraformer", "sensevoice")
 
 
 class ConfigError(ValueError):
@@ -65,6 +66,7 @@ class CopilotConfig:
     llm_model: str = DEFAULT_LLM_MODEL
     llm_gpu_layers: int = 99
     llm_low_vram: bool = True
+    stt_engine: str = "paraformer"
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,6 +90,15 @@ def _section(data: dict, name: str) -> dict:
     if not isinstance(value, dict):
         raise ConfigError(f"config.toml 的 [{name}] 必須是 table。")
     return value
+
+
+def _stt_engine(value: object) -> str:
+    engine = str(value).strip().lower()
+    if engine not in STT_ENGINES:
+        raise ConfigError(
+            'copilot.stt_engine 只能是 "paraformer" 或 "sensevoice"。'
+        )
+    return engine
 
 
 def _model_filename(value: object) -> str:
@@ -201,5 +212,6 @@ def load_settings(project_dir: Path) -> Settings:
             ),
             llm_gpu_layers=max(0, min(999, int(copilot.get("llm_gpu_layers", 99)))),
             llm_low_vram=bool(copilot.get("llm_low_vram", True)),
+            stt_engine=_stt_engine(copilot.get("stt_engine", "paraformer")),
         ),
     )

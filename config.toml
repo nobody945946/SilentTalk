@@ -44,3 +44,8 @@ llm_gpu_layers = 99
 # ~2.8 GB instead of ~3.1 GB). Falls back to the normal cache automatically if
 # the GPU driver can't do it.
 llm_low_vram = true
+# Speech-to-text engine: "paraformer" (default, streaming) or "sensevoice"
+# (Silero VAD + offline SenseVoice: about the same accuracy -- 6.9% vs 7.2% CER
+# on scripts/dev/stt_eval.py -- adds punctuation, uses less CPU, ~240 MB extra
+# download). Re-run the launcher after changing it.
+# stt_engine = "paraformer"

@@ -11,6 +11,8 @@ PROJECT_DIR = Path(__file__).resolve().parents[1]
 RUNTIME_DIR = PROJECT_DIR / ".runtime"
 ASR_DIR = RUNTIME_DIR / "models" / "asr"
 LLM_DIR = RUNTIME_DIR / "models" / "llm"
+SENSEVOICE_DIR = RUNTIME_DIR / "models" / "sensevoice"
+VAD_DIR = RUNTIME_DIR / "models" / "vad"
 
 ASSETS = (
     (
@@ -33,6 +35,32 @@ ASSETS = (
         ASR_DIR / "tokens.txt",
         None,
         50_000,
+    ),
+)
+
+# Only downloaded when config.toml sets copilot.stt_engine = "sensevoice".
+# min_size is 95% of the verified byte count.
+SENSEVOICE_ASSETS = (
+    (
+        "SenseVoice INT8",
+        "https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/main/model.int8.onnx?download=true",
+        SENSEVOICE_DIR / "model.int8.onnx",
+        "c71f0ce00bec95b07744e116345e33d8cbbe08cef896382cf907bf4b51a2cd51",
+        227_272_148,  # 239,233,841 bytes
+    ),
+    (
+        "SenseVoice tokens",
+        "https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/main/tokens.txt?download=true",
+        SENSEVOICE_DIR / "tokens.txt",
+        "f449eb28dc567533d7fa59be34e2abca8784f771850c78a47fb731a31429a1dc",
+        300_099,  # 315,894 bytes
+    ),
+    (
+        "Silero VAD",
+        "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx",
+        VAD_DIR / "silero_vad.onnx",
+        "9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6",
+        611_661,  # 643,854 bytes
     ),
 )
 
@@ -183,9 +211,12 @@ def main() -> int:
         )
         return 1
 
+    stt_engine = str(section.get("stt_engine", "paraformer")).strip().lower()
+    stt_assets = SENSEVOICE_ASSETS if stt_engine == "sensevoice" else ()
+
     print("Checking SilentTalk Copilot models...")
     try:
-        for asset in (*ASSETS, *([llm_asset] if llm_asset else [])):
+        for asset in (*ASSETS, *stt_assets, *([llm_asset] if llm_asset else [])):
             _download(*asset)
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)

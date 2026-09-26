@@ -27,7 +27,7 @@
 | 省 VRAM 模式（9/26 新增） | 已完成：`config.toml` 的 `llm_low_vram = true`（8-bit KV cache＋flash attention），1.7B 約 1.4 GB、4B 約 2.8 GB，eval 分數無退步 |
 | UI 改版（9/26 新增） | 已完成：左側導覽（劇情／手動／人設／聲音）、頂部人設晶片＋狀態燈、心情快切（M 鍵）；共用元件在 `widgets.py`、配色在 `theme.py` |
 
-**還沒做的（就是你的任務）：** T1（實機驗收）、T3（SenseVoice，見該節狀態）、T4、T5。T0、T2 已完成，跳過。
+**還沒做的（就是你的任務）：** T1（實機驗收）、T4、T5。T0、T2、T3 已完成，跳過。
 
 ---
 
@@ -176,7 +176,11 @@ git commit -m "Fix Copilot model download, STT accuracy, add WASD story mode"
 
 ---
 
-### T3｜STT 升級：Silero VAD + SenseVoice（較大的任務，分四步做）
+### T3｜STT 升級：Silero VAD + SenseVoice（✅ 已完成，9/26）
+
+**結果：** 已做成可切換（`config.toml` 的 `stt_engine = "sensevoice"`），**預設仍是 `paraformer`**。實測 `stt_eval.py`（各跑兩次，結果相同）：Paraformer 7.2%、SenseVoice 6.9%，差距約 16 句裡一個字，屬誤差範圍；原本寫的 6.0% 沒有重現，6.5% 目標未達。SenseVoice 的優點是有標點、CPU 較省（一句 3.65 s 約 0.23 s 解完）。設定：VAD threshold 0.5、min_silence 0.5、language auto、每段前後補 0.25 s 靜音（在 5 種加噪／小音量版本上比較 7 組設定後選的，避免過擬合）。u03「打rank」的句尾不是被截掉，是模型把 rank 聽成 人／ring。剩下的錯字（boss→寶、lag→來哦、打野→達也、補師→不是）要靠熱詞或文字替換，不是 VAD 能修的。
+
+以下是原本的施工步驟，留作參考：
 
 **為什麼：** 同一組測試音檔，SenseVoice 的 CER 是 **6.0%**（Paraformer 約 8%），完全不掉句尾、有標點、CPU 更省。代價是多下載約 240 MB。
 
@@ -311,7 +315,7 @@ while not vad.empty():
 |---|---|
 | Paraformer，舊 0.2 s tail | 14.7% |
 | **Paraformer，0.66 s tail（目前）** | **8.2%** |
-| SenseVoice int8（T3 目標） | 6.0% |
+| SenseVoice int8（9/26 實測，同一組音檔） | 6.9%（Paraformer 同日重測 7.2%） |
 
 模型本身的固定錯誤（不是 bug，換 SenseVoice 也大多還在）：boss→包/寶、lag→了鉤、打野→達也、補師→不是。
 

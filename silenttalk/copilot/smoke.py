@@ -25,6 +25,7 @@ from silenttalk.copilot.llm import (
 )
 from silenttalk.copilot.script import to_taiwan_traditional
 from silenttalk.copilot.stt import StreamingTranscriber
+from silenttalk.copilot.stt_offline import OfflineTranscriber
 from silenttalk.copilot.types import REPLY_LANES, ReplySuggestions
 from silenttalk.tts.edge import EdgeTTSEngine
 
@@ -140,7 +141,7 @@ async def synthesize_discord_pcm(
 
 
 def transcribe_pcm(
-    transcriber: StreamingTranscriber,
+    transcriber: StreamingTranscriber | OfflineTranscriber,
     collector: TurnCollector,
     pcm: bytes,
     timeout: float = 8.0,
@@ -179,10 +180,16 @@ class TurnCollector:
 
 def build_transcriber(
     project_dir: Path, config: CopilotConfig
-) -> tuple[StreamingTranscriber, TurnCollector]:
+) -> tuple[StreamingTranscriber | OfflineTranscriber, TurnCollector]:
+    """Same engine + model dir selection as CopilotRuntime (config.stt_engine)."""
     collector = TurnCollector()
-    transcriber = StreamingTranscriber(
-        project_dir / ".runtime" / "models" / "asr",
+    models_dir = project_dir / ".runtime" / "models"
+    if config.stt_engine == "sensevoice":
+        transcriber_class, model_dir = OfflineTranscriber, models_dir / "sensevoice"
+    else:
+        transcriber_class, model_dir = StreamingTranscriber, models_dir / "asr"
+    transcriber = transcriber_class(
+        model_dir,
         on_turn=collector.on_turn,
         on_error=lambda message: print(f"  STT error: {message}"),
         endpoint_silence_ms=config.endpoint_silence_ms,
@@ -242,7 +249,10 @@ async def run_copilot_smoke(settings: Settings, project_dir: Path) -> bool:
 
 
 async def _stt_gate(settings: Settings, project_dir: Path) -> bool:
-    print("== Gate C1: 本機 STT（EdgeTTS 產生語音 → Paraformer）")
+    engine_name = {"sensevoice": "SenseVoice"}.get(
+        settings.copilot.stt_engine, "Paraformer"
+    )
+    print(f"== Gate C1: 本機 STT（EdgeTTS 產生語音 → {engine_name}）")
     transcriber, collector = build_transcriber(project_dir, settings.copilot)
     await asyncio.to_thread(transcriber.start)
     rates: list[float] = []
