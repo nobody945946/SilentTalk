@@ -9,7 +9,7 @@ from silenttalk.speech_settings import (
     validate_rate_multiplier,
 )
 
-UI_MODES = ("manual", "story")
+UI_MODES = ("manual", "story", "persona", "voice")
 
 
 class PreferenceError(ValueError):

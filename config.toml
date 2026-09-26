@@ -40,3 +40,7 @@ auto_popup = true
 llm_model = "Qwen3-1.7B-Q4_K_M.gguf"
 # Layers offloaded to the GPU; 0 = CPU only (about 3x slower, still usable).
 llm_gpu_layers = 99
+# 8-bit KV cache + flash attention: 1.7B uses ~1.4 GB instead of ~1.6 GB (4B:
+# ~2.8 GB instead of ~3.1 GB). Falls back to the normal cache automatically if
+# the GPU driver can't do it.
+llm_low_vram = true

@@ -11,3 +11,6 @@ quick_phrases.json
 quick_phrases.json.tmp
 ui_preferences.json
 ui_preferences.json.tmp
+personas.json
+personas.json.tmp
+.claude/worktrees/

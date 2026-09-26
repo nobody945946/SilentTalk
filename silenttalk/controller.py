@@ -10,6 +10,7 @@ from pathlib import Path
 import discord
 
 from silenttalk.config import Settings
+from silenttalk.copilot.persona import Persona
 from silenttalk.copilot.runtime import CopilotRuntime, ThinkingCallback, TurnCallback
 from silenttalk.copilot.types import ReplySuggestions
 from silenttalk.discord_voice import DiscordAudioPlayer, DiscordVoiceClient
@@ -102,6 +103,16 @@ class AppController:
         if copilot is None:
             raise RuntimeError("Copilot 未啟用或啟動失敗。")
         self._loop.call_soon_threadsafe(copilot.regenerate)
+
+    def set_persona(self, persona: Persona) -> None:
+        """Safe from any thread; before start() it is applied once the loop runs."""
+        copilot = self._copilot
+        if copilot is not None and not self._closing:
+            self._loop.call_soon_threadsafe(copilot.set_persona, persona)
+
+    @property
+    def copilot_enabled(self) -> bool:
+        return self._copilot is not None
 
     def stop_playback(self) -> None:
         self._schedule(self._queue.cancel_all())

@@ -10,6 +10,7 @@ from pathlib import Path
 from silenttalk.config import CopilotConfig
 from silenttalk.copilot.context import ConversationStore
 from silenttalk.copilot.llm import LocalReplyModel
+from silenttalk.copilot.persona import Persona
 from silenttalk.copilot.stt import StreamingTranscriber
 from silenttalk.copilot.types import ConversationTurn, ReplySuggestions
 
@@ -72,6 +73,7 @@ class CopilotRuntime:
             context_size=config.llm_context_size,
             max_reply_chars=config.max_reply_chars,
             gpu_layers=config.llm_gpu_layers,
+            low_vram=config.llm_low_vram,
         )
         self._stt = StreamingTranscriber(
             asr_dir,
@@ -107,6 +109,11 @@ class CopilotRuntime:
         turn = ConversationTurn.now(self._owner_user_id, "你", text, is_self=True)
         self._context.append(turn)
         self._emit_turn(turn)
+
+    def set_persona(self, persona: Persona) -> None:
+        """Must run on the runtime loop; applies from the next generation on."""
+        self._llm.set_persona(persona)
+        _LOG.info("copilot_persona_set blank=%s", persona.is_blank)
 
     def regenerate(self) -> bool:
         """Ask again for the newest line. Must run on the runtime loop."""

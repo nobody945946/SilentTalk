@@ -64,6 +64,7 @@ class CopilotConfig:
     auto_popup: bool = True
     llm_model: str = DEFAULT_LLM_MODEL
     llm_gpu_layers: int = 99
+    llm_low_vram: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -199,5 +200,6 @@ def load_settings(project_dir: Path) -> Settings:
                 copilot.get("llm_model", DEFAULT_LLM_MODEL)
             ),
             llm_gpu_layers=max(0, min(999, int(copilot.get("llm_gpu_layers", 99)))),
+            llm_low_vram=bool(copilot.get("llm_low_vram", True)),
         ),
     )

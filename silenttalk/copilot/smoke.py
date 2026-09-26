@@ -212,6 +212,7 @@ def build_reply_model(
         context_size=config.llm_context_size,
         max_reply_chars=config.max_reply_chars,
         gpu_layers=config.llm_gpu_layers,
+        low_vram=config.llm_low_vram,
     )
 
 

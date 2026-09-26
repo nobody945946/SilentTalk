@@ -7,6 +7,7 @@ from pathlib import Path
 
 from silenttalk.config import ConfigError, load_settings
 from silenttalk.controller import AppController
+from silenttalk.copilot.persona import PersonaStore
 from silenttalk.copilot.smoke import run_copilot_smoke
 from silenttalk.copilot.types import ConversationTurn, ReplySuggestions
 from silenttalk.logging_setup import configure_logging
@@ -98,6 +99,18 @@ def main() -> int:
     )
     quick_phrases = QuickPhraseStore(project_dir / "quick_phrases.json")
     preferences = PreferenceStore(project_dir / "ui_preferences.json")
+    personas = PersonaStore(project_dir / "personas.json")
+    copilot = settings.copilot
+    copilot_info = (
+        [
+            ("回覆模型", copilot.llm_model),
+            ("GPU", f"{copilot.llm_gpu_layers} 層" if copilot.llm_gpu_layers else "關閉（CPU）"),
+            ("省 VRAM", "開（8-bit KV cache）" if copilot.llm_low_vram else "關"),
+            ("語音辨識", getattr(copilot, "stt_engine", "paraformer")),
+        ]
+        if copilot.enabled
+        else []
+    )
     ui = SilentTalkUI(
         settings.app.speak_hotkey,
         settings.app.stop_hotkey,
@@ -110,6 +123,9 @@ def main() -> int:
         regenerate_suggestions=(
             controller.regenerate_suggestions if settings.copilot.enabled else None
         ),
+        personas=personas,
+        apply_persona=controller.set_persona,
+        copilot_info=copilot_info,
     )
 
     runtime_issues = settings.validate_runtime()
