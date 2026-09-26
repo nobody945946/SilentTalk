@@ -51,6 +51,7 @@ class StoryPanel(tk.Frame):
         self._thinking = False
         self._failed = False
         self._fresh = True
+        self._character = False
         self._thinking_tick = 0
         self._thinking_about = ("", "")
         self._round = 0
@@ -240,7 +241,8 @@ class StoryPanel(tk.Frame):
         if self._log_turns == 0:
             self._log.delete("1.0", "end")
         if turn.is_self:
-            name, tag = "你", "self"
+            # "你" in copilot mode; the character's name in character mode.
+            name, tag = turn.speaker_name or "你", "self"
         else:
             name, tag = turn.speaker_name, self._speaker_tag(turn.speaker_id)
         self._log.insert("end", f"{name}  ", tag)
@@ -390,9 +392,24 @@ class StoryPanel(tk.Frame):
         self._status_var.set(message)
         self._status_label.configure(fg=theme.ERROR if error else theme.MUTED)
 
+    def set_character_mode(self, enabled: bool, name: str) -> None:
+        """While the bot plays the persona by itself there are no choices to
+        pick; the conversation log shows what it said."""
+        self._character = enabled
+        if enabled:
+            self._choices = {lane.key: "" for lane in REPLY_LANES}
+            self._selected = None
+            self._set_status(f"角色模式：{name or '角色'} 會自己接話（F9 停止播放；再按一次頂部開關回到選項模式）")
+        else:
+            self._set_status("回到選項模式：下一句開始會出現四個選項")
+        self._render_cards()
+
     def _render_cards(self) -> None:
         waiting = self._thinking or self._round == 0
         for key, choice in self._cards.items():
+            if self._character:
+                choice.render("", selected=False, spent=True, placeholder="角色模式中")
+                continue
             choice.render(
                 self._choices.get(key, ""),
                 selected=key == self._selected,

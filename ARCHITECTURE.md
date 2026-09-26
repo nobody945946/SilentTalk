@@ -48,6 +48,8 @@ speech_queue.py            FIFO / cancel / job lifecycle
 | F8 / F9 全域快捷鍵實作 | `silenttalk/hotkeys.py` | `config.toml`, `silenttalk/config.py` |
 | 新增快捷句、UI 內操作 | `silenttalk/ui.py` | `silenttalk/phrases.py` |
 | AI 劇情模式畫面、WASD 操作 | `silenttalk/story_ui.py` | `silenttalk/ui.py`, `silenttalk/ime.py` |
+| 角色模式何時開口（冷卻、點名、問句） | `silenttalk/copilot/character.py` | `copilot/runtime.py`, `config.toml` |
+| 人設欄位、預設人設 | `silenttalk/copilot/persona.py` | `silenttalk/persona_ui.py` |
 | 回覆方向（同意／追問／反對／玩笑）與按鍵對應 | `silenttalk/copilot/types.py` 的 `REPLY_LANES` | `silenttalk/copilot/llm.py` prompt |
 | Copilot 模型檔、GPU layers | `config.toml` `[copilot]` | `scripts/setup_copilot.py` |
 | 文字長度、空白、換行規則 | `silenttalk/text.py` | `silenttalk/config.py` |
@@ -256,6 +258,19 @@ ui.py / story_ui.py
         ▼
 原本 Controller → SpeechQueue → EdgeTTS → Discord
 ```
+
+**角色模式（`copilot/character.py`）**：同一條 STT → context → LLM 管線，但 Bot 自己就是人設角色。`CopilotRuntime.set_character_mode(True)` 之後：
+
+```text
+final transcript（含 Owner 自己的麥克風）
+  → character.should_reply()   叫到名字一定回；否則冷卻＋（問句 或 別人講了 N 句）
+  → LocalReplyModel.character_reply()   一句話或 SKIP；記住最近 4 句，避免口頭禪重複
+  → 生成期間對話又走了 ≥2 句且不是被點名 → 丟掉
+  → Controller._speak_as_character()   SpeechQueue 不閒置就丟掉（不搶話）
+  → SpeechQueue → EdgeTTS → Discord；播放完成才 record_self（以角色名顯示）
+```
+
+角色模式的 system prompt 允許角色承認自己是 AI（Copilot 模式則相反：說話的是真人，不能說自己是 AI）。
 
 重要邊界：
 

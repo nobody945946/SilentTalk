@@ -54,6 +54,7 @@ class AppController:
                 on_error=lambda message: status(AppState.ERROR, message),
                 on_turn=on_turn,
                 on_thinking=on_thinking,
+                on_character_line=self._speak_as_character,
             )
         self._discord = DiscordVoiceClient(
             settings.discord,
@@ -68,6 +69,7 @@ class AppController:
             on_done=self._on_speech_done,
         )
         self._closing = False
+        self._character_voice = ("default", 1.0)
 
     def start(self) -> None:
         self._thread.start()
@@ -97,6 +99,34 @@ class AppController:
         text = getattr(job, "text", "")
         if isinstance(text, str) and text.strip():
             self._copilot.record_self(text)
+
+    def set_character_mode(
+        self, enabled: bool, voice_style: str = "default", rate_multiplier: float = 1.0
+    ) -> None:
+        """Safe from any thread. In character mode the bot is the active
+        persona and speaks up by itself, in this voice."""
+        copilot = self._copilot
+        if copilot is None:
+            raise RuntimeError("Copilot 未啟用或啟動失敗。")
+        if voice_style not in VOICE_STYLES:
+            voice_style = "default"
+        self._character_voice = (voice_style, validate_rate_multiplier(rate_multiplier))
+        self._loop.call_soon_threadsafe(copilot.set_character_mode, enabled)
+
+    def _speak_as_character(self, line: str) -> None:
+        """Runs on the backend loop. Never talks over itself: if something is
+        still being said (or the owner queued text), this line is dropped."""
+        if self._closing or not self._queue.is_idle:
+            _LOG.info("character_line_dropped reason=busy")
+            return
+        try:
+            text = normalize_text(line, self._settings.app.max_text_length)
+        except ValueError:
+            text = normalize_text(
+                line[: self._settings.app.max_text_length], self._settings.app.max_text_length
+            )
+        style, rate = self._character_voice
+        self._schedule(self._queue.enqueue(text, voice_style=style, rate_multiplier=rate))
 
     def regenerate_suggestions(self) -> None:
         copilot = self._copilot

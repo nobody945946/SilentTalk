@@ -147,14 +147,27 @@ class Persona:
             if rel.name and rel.relation and rel.name.casefold() in folded
         ]
 
-    def reminder_line(self) -> str:
-        """One line restating who is talking, placed right before the answer."""
+    def reminder_line(self, what: str = "四句都要是", *, list_catchphrases: bool = True) -> str:
+        """One line restating who is talking, placed right before the answer.
+
+        Character mode speaks one line after another, so listing catchphrases
+        there makes every line use one; it says "use them rarely" instead."""
         bits = [self.name.strip() or "你"]
         if self.speech_style.strip():
             bits.append(_one_line(self.speech_style).split("，")[0])
         if self.catchphrases.strip():
-            bits.append("口頭禪偶爾用：" + _one_line(self.catchphrases))
-        return "（記住：你是" + "；".join(bits) + "。四句都要是這個人會說的話。）"
+            bits.append(
+                "口頭禪偶爾用：" + _one_line(self.catchphrases)
+                if list_catchphrases
+                else "口頭禪和代表台詞少用，大約四五句才一次"
+            )
+        return "（記住：你是" + "；".join(bits) + f"。{what}這個人會說的話。）"
+
+    def signature_phrases(self) -> list[str]:
+        """Catchphrases and sample lines: what a small model over-repeats."""
+        phrases = [p.strip() for p in self.catchphrases.split("、") if len(p.strip()) >= 2]
+        phrases += [line.strip() for line in self.sample_lines.splitlines() if line.strip()]
+        return phrases
 
     def length_rule(self) -> str:
         return REPLY_LENGTHS.get(self.reply_length, REPLY_LENGTHS["normal"])

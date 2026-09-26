@@ -307,11 +307,32 @@ while not vad.empty():
 - 天花板 4.3 vs 本地 3.0–3.3：**瓶頸是小模型本身**，prompt 已經榨得差不多。下一步是蒸餾。
 - 串流顯示已上線：第一個選項約在總時間 35% 出現（3050 Ti 上 4B 估計 0.8 s 看到第一個、全部約 2–2.5 s）。
 
-**進行中：蒸餾一個通用人設 LoRA**
+**進行中：蒸餾一個通用人設 LoRA（全自動，會自己續跑）**
+
+- 一鍵流程：`scripts/dev/distill_pipeline.sh`（`--status` 看進度）。每個階段完成會在 `.runtime/dev/distill/state/` 留標記，重跑會從斷點繼續；老師掛掉會自動重啟；`distill_data.py` 對網路錯誤會退避重試。
+- **cron 看門狗（9/27 加在使用者的 crontab）：** `*/5 * * * * /home/clawd/SilentTalk/scripts/dev/distill_pipeline.sh`。flock 保證只跑一份；`state/done` 出現後可以把這行從 `crontab -e` 刪掉。
+- 資料：220 個人設、800 段情境；每個人設 14 筆四選項＋6 筆角色模式（約 4800 筆），用的就是正式版 prompt。
+- 訓練完會自動轉 GGUF adapter，並跑 `persona_eval`（四選項與角色模式各一次），結果存在 `.runtime/dev/persona_eval/gemma4-E2B_lora_*.json`。
+- 開發機工具在 `.runtime/tools/`（llama-server b11179、`convert_lora_to_gguf.py`）；`source .runtime/tools/env.sh`。
+
+原本的規劃：
 1. 老師：`Qwen3-30B-A3B-Instruct-2507`（Apache-2.0，允許用輸出訓練）。**不能用 Claude 產訓練資料**（Anthropic 條款禁止用輸出訓練模型）；Claude 只當評審。
 2. `scripts/dev/distill_data.py personas / scenes / replies`：老師產 ~200 個人設、~1500 段對話、~3000 筆四方向回覆；預設人設和探測情境絕不進訓練資料（它們是測試集）。
 3. `scripts/dev/train_lora.py`：bf16 LoRA，只算回覆的 loss；訓練環境 `.runtime/train-venv`（torch cu124）。
 4. 用 llama.cpp 的 `convert_lora_to_gguf.py` 轉成 adapter，`llama-server --lora` 載入，再跑 `persona_eval.py` 比較。
+
+---
+
+### 3.7｜角色模式（9/27 完成第一版）
+
+**使用者的最終目標：** Bot 自己就是一個角色，陪大家聊天。Copilot（你選、Bot 說）是基礎，兩者並存。
+
+- **開關：** F8 視窗頂部「角色模式」，每次啟動預設關閉。開啟後 `CopilotRuntime` 不再產四個選項，改成 `LocalReplyModel.character_reply()` 產一句（或 SKIP）。
+- **何時開口：** `silenttalk/copilot/character.py`（純函式、有單元測試）。叫到名字／暱稱必回；否則要過冷卻（預設 8 s）且（問句 或 別人已講 3 句）。生成期間對話又走了 2 句以上、且不是被點名 → 丟掉。語音佇列不閒置 → 丟掉（不搶話、不疊加）。
+- **誠實：** 角色模式的 prompt 允許、也要求被認真問「是不是 AI」時承認（說話者就是 AI）。Copilot 模式相反（說話者是真人）。**不要把兩者的規則混用。**
+- **口頭禪重複：** 一句接一句說時，小模型幾乎每句都塞口頭禪（實測 86%）。`LocalReplyModel` 記住最近 4 句，用過的口頭禪／代表台詞會在下一句 prompt 裡點名「不要再用」→ 40%。
+- **實測（Gemma 4 E2B，`persona_eval.py --mode character --runs 2`）：** voice 3.68、stance 3.42、natural 3.26、fit（時機）3.36、捏造 2%、踩底線 5%、盲測辨識 99%，3090 上 0.34 s／句（3050 Ti 推估 0.6–0.8 s）。
+- **還沒做：** 多人同時說話的插話判斷（目前只看 STT 的 final 句）、Bot 說話時有人開口就停（barge-in）、長期記憶（跨場次記得誰是誰）。
 
 ---
 

@@ -2,12 +2,12 @@
 
 Usage (needs the separate training venv, see HANDOFF.md):
     .runtime/train-venv/bin/python scripts/dev/train_lora.py \
-        --base Qwen/Qwen3-4B-Instruct-2507 --out .runtime/dev/lora/qwen3-4b-2507
+        --base .runtime/hf/gemma-4-E2B-it-qat --out .runtime/dev/lora/gemma4-e2b
 
 Then convert the adapter for llama.cpp (convert_lora_to_gguf.py ships in the
 llama.cpp source tree of the same build as llama-server):
     python <llama.cpp>/convert_lora_to_gguf.py --base <hf snapshot dir> \
-        --outtype f16 --outfile persona-lora.gguf .runtime/dev/lora/qwen3-4b-2507
+        --outtype f16 --outfile persona-lora.gguf .runtime/dev/lora/gemma4-e2b
 
 One generic adapter is trained on many synthetic character sheets, so it
 works for whatever persona the user writes; it is not per-persona.
@@ -22,6 +22,10 @@ from pathlib import Path
 
 PROJECT_DIR = Path(__file__).resolve().parents[2]
 DATA = PROJECT_DIR / ".runtime" / "dev" / "distill" / "replies.jsonl"
+TARGET_MODULES = (
+    r"^(?!.*(vision|audio)).*layers\.\d+\."
+    r"(self_attn\.(q|k|v|o)_proj|mlp\.(gate|up|down)_proj)$"
+)
 
 
 def main() -> int:
@@ -35,6 +39,7 @@ def main() -> int:
     parser.add_argument("--batch", type=int, default=4)
     parser.add_argument("--grad-accum", type=int, default=4)
     parser.add_argument("--holdout", type=float, default=0.03)
+    parser.add_argument("--max-steps", type=int, default=-1, help="dry runs only")
     args = parser.parse_args()
 
     import torch
@@ -49,11 +54,20 @@ def main() -> int:
         # Render exactly like llama-server --jinja with enable_thinking off, so
         # the adapter sees the same tokens at inference time. Loss is on the
         # completion (the four lines) only.
-        *prompt, answer = row["messages"]
-        text = tokenizer.apply_chat_template(
-            prompt, tokenize=False, add_generation_prompt=True, enable_thinking=False
+        prompt = tokenizer.apply_chat_template(
+            row["messages"][:-1],
+            tokenize=False,
+            add_generation_prompt=True,
+            enable_thinking=False,
         )
-        return {"prompt": text, "completion": answer["content"] + tokenizer.eos_token}
+        # The completion ends with the template's own end-of-turn marker
+        # (Gemma: <turn|>, Qwen: <|im_end|>), which llama.cpp stops on.
+        full = tokenizer.apply_chat_template(
+            row["messages"], tokenize=False, enable_thinking=False
+        )
+        if not full.startswith(prompt):
+            raise ValueError("chat template does not extend the prompt")
+        return {"prompt": prompt, "completion": full[len(prompt) :]}
 
     rows = [json.loads(line) for line in Path(args.data).read_text(encoding="utf-8").splitlines()]
     random.Random(0).shuffle(rows)
@@ -69,14 +83,16 @@ def main() -> int:
     config = SFTConfig(
         output_dir=args.out,
         num_train_epochs=args.epochs,
+        max_steps=args.max_steps,
         learning_rate=args.lr,
         lr_scheduler_type="cosine",
-        warmup_ratio=0.05,
+        warmup_steps=10,
         per_device_train_batch_size=args.batch,
         per_device_eval_batch_size=args.batch,
         gradient_accumulation_steps=args.grad_accum,
         gradient_checkpointing=True,
         bf16=True,
+        use_cpu=not torch.cuda.is_available(),  # CPU only for pipeline dry runs
         logging_steps=10,
         eval_strategy="steps",
         eval_steps=50,
@@ -95,7 +111,9 @@ def main() -> int:
             r=args.rank,
             lora_alpha=args.rank * 2,
             lora_dropout=0.05,
-            target_modules="all-linear",
+            # Text layers only: Gemma 4 checkpoints also carry vision and
+            # audio towers, which llama.cpp does not load for this use.
+            target_modules=TARGET_MODULES,
             task_type="CAUSAL_LM",
         ),
     )

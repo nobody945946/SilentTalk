@@ -66,6 +66,10 @@ class CopilotConfig:
     llm_model: str = DEFAULT_LLM_MODEL
     llm_gpu_layers: int = 99
     llm_low_vram: bool = True
+    # Character mode: seconds of quiet after the bot spoke, and lines from
+    # others, before it joins in without being called by name.
+    character_cooldown_seconds: float = 8.0
+    character_turn_gap: int = 3
     stt_engine: str = "paraformer"
 
 
@@ -212,6 +216,10 @@ def load_settings(project_dir: Path) -> Settings:
             ),
             llm_gpu_layers=max(0, min(999, int(copilot.get("llm_gpu_layers", 99)))),
             llm_low_vram=bool(copilot.get("llm_low_vram", True)),
+            character_cooldown_seconds=max(
+                0.0, min(600.0, float(copilot.get("character_cooldown_seconds", 8.0)))
+            ),
+            character_turn_gap=max(0, min(50, int(copilot.get("character_turn_gap", 3)))),
             stt_engine=_stt_engine(copilot.get("stt_engine", "paraformer")),
         ),
     )

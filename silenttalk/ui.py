@@ -94,6 +94,7 @@ class SilentTalkUI:
         regenerate_suggestions: Callable[[], None] | None = None,
         personas: PersonaStore | None = None,
         apply_persona: Callable[[Persona], None] | None = None,
+        set_character_mode: Callable[[bool, str, float], None] | None = None,
         copilot_info: Sequence[tuple[str, str]] = (),
         font_override: str | None = None,
     ) -> None:
@@ -103,6 +104,9 @@ class SilentTalkUI:
         self._phrase_store = quick_phrases
         self._preference_store = preferences
         self._apply_persona_callback = apply_persona
+        self._character_callback = set_character_mode
+        self._character_on = False
+        self._persona_name = ""
         self._copilot_enabled = regenerate_suggestions is not None
         self._phrases: list[QuickPhrase] = []
         self._actions: queue.SimpleQueue[UIAction] = queue.SimpleQueue()
@@ -243,6 +247,14 @@ class SilentTalkUI:
         persona_label.pack(side="left", padx=(0, 10))
         for widget in (chip, self._persona_avatar, persona_label):
             widget.bind("<Button-1>", lambda _: self.show_page("persona"))
+        # Character mode: the bot *is* this persona and joins in by itself.
+        # Off at every start, so it never talks unexpectedly.
+        self._character_chip: Chip | None = None
+        if self._character_callback is not None:
+            self._character_chip = Chip(
+                header, "角色模式：關", self._toggle_character, size=9
+            )
+            self._character_chip.pack(side="left", padx=(8, 0), pady=14)
 
         status = tk.Frame(header, bg=theme.SURFACE)
         status.pack(side="right", padx=16)
@@ -701,11 +713,30 @@ class SilentTalkUI:
 
     def _apply_persona(self, persona: Persona, *, announce: bool = True) -> None:
         name = persona.name or "不使用人設"
+        self._persona_name = persona.name
         mood = "" if persona.mood in ("", "平常") else f" · {persona.mood}"
         self._persona_var.set(f"{name}{mood}")
         self._persona_avatar.set_name(persona.name)
         if self._apply_persona_callback is not None:
             self._apply_persona_callback(persona)
+
+    def _toggle_character(self) -> None:
+        self._set_character_mode(not self._character_on)
+
+    def _set_character_mode(self, enabled: bool) -> None:
+        if self._character_callback is None or self._character_chip is None:
+            return
+        try:
+            self._character_callback(
+                enabled, self._voice_style, self._rate_multiplier()
+            )
+        except Exception as exc:  # noqa: BLE001 - shown to the user, app keeps running
+            self._show_status(AppState.ERROR, str(exc))
+            return
+        self._character_on = enabled
+        self._character_chip.set_selected(enabled)
+        self._character_chip.configure(text=f"角色模式：{'開' if enabled else '關'}")
+        self.story.set_character_mode(enabled, self._persona_name)
 
     def _on_mood(self, mood: str) -> None:
         self.persona_panel.set_mood(mood)
@@ -722,6 +753,8 @@ class SilentTalkUI:
         for chip_key, chip in self._voice_chips.items():
             chip.set_selected(chip_key == key)
         self._update_voice_summary()
+        if self._character_on:
+            self._set_character_mode(True)  # the character speaks in the new voice
 
     def _update_voice_summary(self) -> None:
         if hasattr(self, "_voice_summary") and hasattr(self, "rate_var"):
@@ -743,6 +776,8 @@ class SilentTalkUI:
 
     def _persist_rate(self, _: tk.Event | None = None) -> None:
         self._persist_preferences()
+        if self._character_on:
+            self._set_character_mode(True)
 
     def _persist_preferences(self) -> None:
         if self._preference_store is None or not hasattr(self, "rate_var"):

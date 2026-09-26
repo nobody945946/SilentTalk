@@ -41,6 +41,7 @@ def main() -> int:
     sent: list[str] = []
     regenerated: list[bool] = []
     applied: list[str] = []
+    character: list[tuple[bool, str, float]] = []
     personas = PersonaStore(temp / "personas.json")
     personas.save(PersonaState(list(PRESET_PERSONAS), PRESET_PERSONAS[0].id))
     ui = SilentTalkUI(
@@ -54,7 +55,8 @@ def main() -> int:
         regenerate_suggestions=lambda: regenerated.append(True),
         personas=personas,
         apply_persona=lambda persona: applied.append(persona.mood),
-        copilot_info=[("回覆模型", "Qwen3-1.7B-Q4_K_M.gguf"), ("省 VRAM", "開")],
+        set_character_mode=lambda on, style, rate: character.append((on, style, rate)),
+        copilot_info=[("回覆模型", "gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf"), ("省 VRAM", "開")],
         font_override=args.font,
     )
 
@@ -151,6 +153,12 @@ def main() -> int:
     shot("10_persona_preview")
     ui.show_page("voice")
     shot("11_voice")
+    ui.show_page("story")
+    ui._toggle_character()
+    ui.add_conversation_turn(ConversationTurn(12, "小雨", "凱哥你晚餐要吃什麼"))
+    ui.add_conversation_turn(ConversationTurn(0, "凱哥", "欸我都可以啦，拉麵？", is_self=True))
+    shot("12_character")
+    ui._toggle_character()
     ui.root.destroy()
 
     expected = "上一把就是這樣被架，我覺得先丟煙再進比較穩"
@@ -159,6 +167,8 @@ def main() -> int:
         problems.append(f"double-press D should send once, got {sent}")
     if streamed != ("a", 1):
         problems.append(f"streamed choice should survive the final result, got {streamed}")
+    if [on for on, _style, _rate in character] != [True, False]:
+        problems.append(f"character toggle should switch on then off, got {character}")
     if regenerated != [True]:
         problems.append("R should call regenerate once")
     if not applied or applied[-1] != "開心":

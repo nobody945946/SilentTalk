@@ -23,6 +23,7 @@ import random
 import re
 import sys
 import threading
+import time
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
@@ -36,6 +37,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from persona_eval import PROBE_SCENES, EvalReplyModel  # noqa: E402
 
 from silenttalk.config import CopilotConfig  # noqa: E402
+from silenttalk.copilot.character import is_addressed, talks_to_you  # noqa: E402
 from silenttalk.copilot.persona import (  # noqa: E402
     MOODS,
     PRESET_PERSONAS,
@@ -102,10 +104,23 @@ def chat(url: str, system: str, user: str, *, temperature: float, max_tokens: in
         headers={"Content-Type": "application/json"},
         method="POST",
     )
-    with urllib.request.urlopen(request, timeout=600) as response:
-        body = json.loads(response.read().decode("utf-8"))
+    # The teacher may be restarting (pipeline supervisor) or the box may be
+    # busy; wait it out instead of losing the job. ~15 min before giving up.
+    for attempt in range(12):
+        try:
+            with urllib.request.urlopen(request, timeout=600) as response:
+                body = json.loads(response.read().decode("utf-8"))
+            break
+        except (OSError, json.JSONDecodeError) as exc:
+            if attempt == 11:
+                raise TeacherUnavailable(str(exc)) from exc
+            time.sleep(min(120, 5 * 2**attempt))
     text = str(body["choices"][0]["message"]["content"] or "")
     return re.sub(r"<think>.*?</think>", "", text, flags=re.S).strip()
+
+
+class TeacherUnavailable(RuntimeError):
+    pass
 
 
 def _json_block(text: str, opener: str) -> Any:
@@ -124,7 +139,13 @@ def _append(path: Path, record: dict[str, Any]) -> None:
 def _read(path: Path) -> list[dict[str, Any]]:
     if not path.exists():
         return []
-    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
+    rows = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        try:
+            rows.append(json.loads(line))
+        except json.JSONDecodeError:
+            pass  # a line cut short when the process was killed mid-write
+    return rows
 
 
 # ---------------------------------------------------------------- personas
@@ -157,9 +178,14 @@ def persona_request(rng: random.Random) -> tuple[str, dict[str, Any]]:
 
 def make_personas(args: argparse.Namespace) -> None:
     path = OUT_DIR / "personas.jsonl"
-    have = len(_read(path))
+    # Skipped (malformed) answers leave gaps; keep going until the count is met.
+    while (have := len(_read(path))) < args.count:
+        _persona_round(args, path, have)
+
+
+def _persona_round(args: argparse.Namespace, path: Path, have: int) -> None:
     rng = random.Random(1000 + have)
-    jobs = [persona_request(rng) for _ in range(max(0, args.count - have))]
+    jobs = [persona_request(rng) for _ in range(args.count - have)]
 
     def work(job: tuple[str, dict[str, Any]]) -> None:
         user, skeleton = job
@@ -203,7 +229,11 @@ def scene_request(rng: random.Random) -> str:
 
 def make_scenes(args: argparse.Namespace) -> None:
     path = OUT_DIR / "scenes.jsonl"
-    have = len(_read(path))
+    while (have := len(_read(path))) < args.count:
+        _scene_round(args, path, have)
+
+
+def _scene_round(args: argparse.Namespace, path: Path, have: int) -> None:
     rng = random.Random(2000 + have)
     probe_lines = {line for _p, scene in PROBE_SCENES for _s, line in scene}
     jobs = [scene_request(rng) for _ in range(max(0, args.count - have))]
@@ -260,48 +290,95 @@ def make_replies(args: argparse.Namespace) -> None:
     preset_names = {p.name for p in PRESET_PERSONAS}
     personas = [p for p in personas if p.name not in preset_names]
     path = OUT_DIR / "replies.jsonl"
-    done = {(r["persona_id"], r["scene_index"], r["mood"]) for r in _read(path)}
+    # Resumable per persona: only the missing replies are generated, on scenes
+    # that persona has not answered yet. A rejected answer is simply retried
+    # on another scene in the next pass.
+    for _pass in range(4):
+        jobs = _reply_jobs(args, personas, scenes, _read(path))
+        if not jobs:
+            break
+        _reply_round(args, path, scenes, jobs)
 
-    rng = random.Random(3000)
+
+def _reply_jobs(
+    args: argparse.Namespace,
+    personas: list[Persona],
+    scenes: list[Any],
+    done_rows: list[dict[str, Any]],
+) -> list[tuple[Persona, int, str]]:
+    """Missing (persona, scene, mode) jobs. Modes: "copilot" (four options for
+    the user) and "character" (the bot speaks one line as the persona)."""
+    used: dict[tuple[str, str], set[int]] = {}
+    for row in done_rows:
+        key = (row["persona_id"], row.get("mode", "copilot"))
+        used.setdefault(key, set()).add(row["scene_index"])
+    rng = random.Random(3000 + len(done_rows))
+    # ~10% blank persona so the no-persona mode does not regress; each blank
+    # slot gets its own id so it is counted like a persona.
+    cast = personas + [
+        blank_persona(f"none-{n}") for n in range(max(1, len(personas) // 10))
+    ]
     jobs = []
-    # ~10% blank persona so the no-persona mode does not regress.
-    cast = personas + [blank_persona()] * max(1, len(personas) // 10)
     for persona in cast:
-        for scene_index in rng.sample(range(len(scenes)), min(args.per_persona, len(scenes))):
-            mood = rng.choice(MOODS) if rng.random() < 0.4 else "平常"
-            if (persona.id, scene_index, mood) not in done:
-                jobs.append((replace(persona, mood=mood), scene_index))
+        for mode, target in (("copilot", args.per_persona), ("character", args.per_character)):
+            mine = used.get((persona.id, mode), set())
+            free = [i for i in range(len(scenes)) if i not in mine]
+            for scene_index in rng.sample(free, min(max(0, target - len(mine)), len(free))):
+                mood = rng.choice(MOODS) if rng.random() < 0.4 else "平常"
+                jobs.append((replace(persona, mood=mood), scene_index, mode))
+    return jobs
 
+
+def _reply_round(
+    args: argparse.Namespace,
+    path: Path,
+    scenes: list[Any],
+    jobs: list[tuple[Persona, int, str]],
+) -> None:
     config = CopilotConfig()
-    builder = EvalReplyModel(Path("unused"), max_reply_chars=config.max_reply_chars,
-                             variant=args.variant, sampling={}, grammar=False)
     drops: dict[str, int] = {}
 
-    def work(job: tuple[Any, int]) -> None:
-        persona, scene_index = job
-        builder_local = EvalReplyModel(Path("unused"), max_reply_chars=config.max_reply_chars,
-                                       variant=args.variant, sampling={}, grammar=False)
-        builder_local.set_persona(persona)
+    def work(job: tuple[Persona, int, str]) -> None:
+        persona, scene_index, mode = job
+        builder = EvalReplyModel(Path("unused"), max_reply_chars=config.max_reply_chars,
+                                 variant=args.variant, sampling={}, grammar=False)
+        builder.set_persona(persona)
         context, speaker, text = scene_prompt_inputs(scenes[scene_index])
-        system = builder_local._build_system_prompt(persona)
-        user = "/no_think\n" + builder_local._build_prompt(
-            context=context, trigger_speaker=speaker, trigger_text=text,
-            relationships=persona.relationship_notes(context + "\n" + speaker),
-        )
-        try:
-            raw = chat(args.teacher_url, system, user, temperature=0.7, max_tokens=300)
-        except OSError as exc:
-            print(f"reply error: {exc}", flush=True)
-            return
-        parsed = builder._parse_suggestions(raw, speaker, text)
-        lines = {lane.code: parsed.text_for(lane) for lane in REPLY_LANES}
-        reason = check_reply(lines, config.max_reply_chars)
+        # Exactly the production prompts (LocalReplyModel), so the student
+        # learns the requests it will really get.
+        if mode == "character":
+            system = builder._build_character_system_prompt(persona)
+            user = "/no_think\n" + builder._build_character_prompt(
+                context=context, trigger_speaker=speaker, trigger_text=text,
+                addressed=talks_to_you(text) or is_addressed(text, persona),
+            )
+        else:
+            system = builder._build_system_prompt(persona)
+            user = "/no_think\n" + builder._build_prompt(
+                context=context, trigger_speaker=speaker, trigger_text=text,
+                relationships=persona.relationship_notes(context + "\n" + speaker),
+            )
+        # TeacherUnavailable propagates: the run exits non-zero and the
+        # pipeline supervisor restarts the teacher and resumes.
+        raw = chat(args.teacher_url, system, user, temperature=0.7,
+                   max_tokens=90 if mode == "character" else 300)
+        if mode == "character":
+            line = builder._parse_character_line(raw, text)
+            reason = None
+            if len(line) > config.max_reply_chars or "|" in line:
+                reason = "character format"
+            answer = line or "SKIP"
+        else:
+            parsed = builder._parse_suggestions(raw, speaker, text)
+            lines = {lane.code: parsed.text_for(lane) for lane in REPLY_LANES}
+            reason = check_reply(lines, config.max_reply_chars)
+            answer = "\n".join(f"{code}|{lines[code] or 'SKIP'}" for code in lines)
         if reason:
             drops[reason] = drops.get(reason, 0) + 1
             return
-        answer = "\n".join(f"{code}|{lines[code] or 'SKIP'}" for code in lines)
         _append(path, {
             "persona_id": persona.id, "scene_index": scene_index, "mood": persona.mood,
+            "mode": mode,
             "messages": [
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
@@ -322,7 +399,8 @@ def main() -> int:
     parser.add_argument("--teacher-url", default="http://127.0.0.1:18200")
     parser.add_argument("--workers", type=int, default=4, help="match llama-server --parallel")
     parser.add_argument("--count", type=int, default=200)
-    parser.add_argument("--per-persona", type=int, default=14)
+    parser.add_argument("--per-persona", type=int, default=14, help="four-option samples")
+    parser.add_argument("--per-character", type=int, default=6, help="character-mode samples")
     parser.add_argument("--variant", default="prod", help="prompt variant the student will use")
     args = parser.parse_args()
     OUT_DIR.mkdir(parents=True, exist_ok=True)

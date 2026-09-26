@@ -69,6 +69,11 @@ class SpeechQueue:
     def current(self) -> SpeechJob | None:
         return self._current
 
+    @property
+    def is_idle(self) -> bool:
+        """Nothing queued, synthesizing or playing."""
+        return self._idle.is_set()
+
     def start(self) -> None:
         if self._worker is None or self._worker.done():
             self._worker = asyncio.create_task(self._run(), name="speech-queue")

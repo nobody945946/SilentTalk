@@ -6,6 +6,7 @@ import dataclasses
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import threading
@@ -74,6 +75,21 @@ HUMOR：開玩笑／打圓場。用你的幽默風格和對話裡已有的梗緩
 
 只准輸出 AGREE、ASK、DISAGREE、HUMOR 四行，格式「代號|句子」，不要解釋。"""
 
+# Character mode: the bot itself is the character and speaks one line aloud
+# with nobody approving it first, so it may stay silent (SKIP) and must not
+# pretend to be human when sincerely asked.
+_CHARACTER_SYSTEM = """你是 Discord 語音頻道裡的一個角色 Bot，由 AI 扮演{who}，和大家一起用語音聊天。你說的話會直接用語音播出來。
+
+規則：
+- 只根據真實對話回應，不得杜撰別人的身分、經歷、情緒或事實。關於你自己，只用人設裡寫到的事，不要編新的經歷。
+- 你是 AI 扮演的角色：平常用角色口吻聊天；有人認真問你是不是 AI、機器人或真人時，要誠實承認你是 AI 角色（可以用角色口吻說）。
+- 台灣繁體中文口語，只說一句話，長度{length}，最長不得超過 {max_chars} 字。
+- 像朋友聊天一樣自然接話：附和、追問、吐槽或開玩笑，選這個角色此刻最可能的反應。不要重複別人的話，不要說教，不要每句都叫對方名字。
+- 不羞辱、不人身攻擊，不拿外貌、疾病、性別、種族、家庭、收入開玩笑。
+- 這時候插話不自然（別人在私下聊、話題跟你無關、你剛說過類似的話）就輸出 SKIP。
+{sheet}
+只輸出一行：你要說的話，或 SKIP。不要加引號、名字或解釋。"""
+
 _END_PUNCTUATION = "？?！!。.…~～」』)）"
 _THINK_OPEN = "<think>"
 _THINK_CLOSE = "</think>"
@@ -111,9 +127,13 @@ class LocalReplyModel:
         self._stderr_tail: collections.deque[str] = collections.deque(maxlen=40)
         self._base_url = f"http://127.0.0.1:{port}"
         self._persona = blank_persona()
+        # What the character said lately, to stop it repeating its catchphrases.
+        self._recent_character_lines: collections.deque[str] = collections.deque(maxlen=4)
 
     def set_persona(self, persona: Persona) -> None:
         """Takes effect on the next request; the system prompt cache refills once."""
+        if persona.id != self._persona.id:
+            self._recent_character_lines.clear()
         self._persona = persona
 
     async def start(self) -> None:
@@ -249,6 +269,95 @@ class LocalReplyModel:
         raw = await asyncio.to_thread(self._request_completion, system, prompt, on_lines)
         return self._parse_suggestions(raw, trigger_speaker, trigger_text)
 
+    async def character_reply(
+        self,
+        *,
+        context: str,
+        trigger_speaker: str,
+        trigger_text: str,
+        addressed: bool = False,
+    ) -> str:
+        """One line the character says aloud, or "" when it should stay quiet."""
+        system = self._build_character_system_prompt(self._persona)
+        prompt = self._build_character_prompt(
+            context=context,
+            trigger_speaker=trigger_speaker,
+            trigger_text=trigger_text,
+            addressed=addressed,
+        )
+        raw = await asyncio.to_thread(
+            self._request_completion, system, prompt, None, 90
+        )
+        line = self._parse_character_line(raw, trigger_text)
+        if line:
+            self._recent_character_lines.append(line)
+        return line
+
+    def _build_character_prompt(
+        self,
+        *,
+        context: str,
+        trigger_speaker: str,
+        trigger_text: str,
+        addressed: bool,
+    ) -> str:
+        persona = self._persona
+        relationships = persona.relationship_notes(context + "\n" + trigger_speaker)
+        relation_part = ""
+        if relationships:
+            relation_part = "\n你和在場的人的關係：\n" + "\n".join(
+                f"- {note}" for note in relationships
+            ) + "\n"
+        addressed_part = "（對方是在跟你說話，要回應）\n" if addressed else ""
+        reminder = ""
+        if not persona.is_blank:
+            reminder = persona.reminder_line("這句要是", list_catchphrases=False) + "\n"
+        used = [
+            phrase
+            for phrase in persona.signature_phrases()
+            if any(_signature_used(phrase, line) for line in self._recent_character_lines)
+        ]
+        if used:
+            reminder += (
+                "（你最近已經說過" + "、".join(f"「{p}」" for p in used[:3])
+                + "，這句換個說法，不要再用）\n"
+            )
+        return f"""下面是真實 Discord 語音對話（語音辨識結果，可能有錯字、沒有標點）。「你」是你自己之前說過的話。
+
+{context}
+{relation_part}
+最後一句：
+{trigger_speaker}：{trigger_text}
+{addressed_part}
+{reminder}你要說："""
+
+    def _build_character_system_prompt(self, persona: Persona) -> str:
+        sheet = persona.render_system_block()
+        return _CHARACTER_SYSTEM.format(
+            who="下面人設裡的人" if sheet else "一個友善、好聊的朋友",
+            length=persona.length_rule(),
+            max_chars=self._max_reply_chars,
+            sheet=f"\n【你的人設】口吻、用詞、句長、立場都照這裡：\n{sheet}\n" if sheet else "",
+        )
+
+    def _parse_character_line(self, raw: str, trigger_text: str) -> str:
+        cleaned = raw.strip()
+        close_index = cleaned.lower().rfind(_THINK_CLOSE)
+        if close_index >= 0:
+            cleaned = cleaned[close_index + len(_THINK_CLOSE) :]
+        line = next((part.strip() for part in cleaned.splitlines() if part.strip()), "")
+        # Tolerate "SAY|…", "你要說：…" and "<own name>：…" decorations, but
+        # never strip other text before a colon ("說真的：…" is speech).
+        names = {"你", "我", self._persona.name.strip()} | {
+            nick.strip() for nick in self._persona.nickname.split("、")
+        }
+        speaker = "|".join(re.escape(name) for name in names if name)
+        line = re.sub(rf"^(SAY\s*[|｜:：]|你要說\s*[:：]|({speaker})\s*[:：])", "", line).strip()
+        value = self._clean_reply(line)
+        if not value or value.upper().startswith("SKIP") or _compact(value) == _compact(trigger_text):
+            return ""
+        return value
+
     def _drain_stderr(self, stream: IO[bytes]) -> None:
         for raw_line in iter(stream.readline, b""):
             line = raw_line.decode("utf-8", errors="replace").strip()
@@ -283,6 +392,7 @@ class LocalReplyModel:
         system: str,
         prompt: str,
         on_lines: Callable[[str], None] | None = None,
+        max_tokens: int = 240,
     ) -> str:
         payload = {
             "model": "local",
@@ -295,7 +405,7 @@ class LocalReplyModel:
             "chat_template_kwargs": {"enable_thinking": False},
             "temperature": 0.65,
             "top_p": 0.85,
-            "max_tokens": 240,
+            "max_tokens": max_tokens,
             "stream": on_lines is not None,
         }
         request = urllib.request.Request(
@@ -472,6 +582,14 @@ def list_llama_devices(executable: str) -> list[str]:
     return [
         line.strip() for line in output.splitlines() if "MiB" in line and ":" in line
     ]
+
+
+def _signature_used(phrase: str, line: str) -> bool:
+    """A catchphrase appears, or a long sample line is echoed in part."""
+    phrase, line = _compact(phrase), _compact(line)
+    if len(phrase) <= 6:
+        return bool(phrase) and phrase in line
+    return any(phrase[i : i + 5] in line for i in range(len(phrase) - 4))
 
 
 def _compact(text: str) -> str:
