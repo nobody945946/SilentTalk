@@ -178,6 +178,7 @@ class CopilotRuntime:
                 context=context,
                 trigger_speaker=trigger.speaker_name,
                 trigger_text=trigger.text,
+                on_partial=self._on_suggestions,
             )
         except asyncio.CancelledError:
             raise

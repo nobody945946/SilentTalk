@@ -147,6 +147,15 @@ class Persona:
             if rel.name and rel.relation and rel.name.casefold() in folded
         ]
 
+    def reminder_line(self) -> str:
+        """One line restating who is talking, placed right before the answer."""
+        bits = [self.name.strip() or "你"]
+        if self.speech_style.strip():
+            bits.append(_one_line(self.speech_style).split("，")[0])
+        if self.catchphrases.strip():
+            bits.append("口頭禪偶爾用：" + _one_line(self.catchphrases))
+        return "（記住：你是" + "；".join(bits) + "。四句都要是這個人會說的話。）"
+
     def length_rule(self) -> str:
         return REPLY_LENGTHS.get(self.reply_length, REPLY_LENGTHS["normal"])
 

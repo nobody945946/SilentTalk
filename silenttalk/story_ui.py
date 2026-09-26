@@ -50,6 +50,7 @@ class StoryPanel(tk.Frame):
         self._sent = False
         self._thinking = False
         self._failed = False
+        self._fresh = True
         self._thinking_tick = 0
         self._thinking_about = ("", "")
         self._round = 0
@@ -262,6 +263,7 @@ class StoryPanel(tk.Frame):
     def set_thinking(self, speaker: str, text: str) -> None:
         was_thinking = self._thinking
         self._thinking = True
+        self._fresh = True
         self._thinking_about = (speaker, text)
         self._render_cards()
         if not was_thinking:
@@ -269,8 +271,14 @@ class StoryPanel(tk.Frame):
             self._tick_thinking()
 
     def set_suggestions(self, suggestions: ReplySuggestions) -> None:
-        self._thinking = False
-        self._sent = False
+        """Partial results (streamed lane by lane) fill in the same round; the
+        user may already pick one, and later updates keep that choice."""
+        fresh = self._fresh
+        self._fresh = not suggestions.partial
+        self._thinking = suggestions.partial
+        if fresh:
+            self._sent = False
+            self._selected = None
         self._failed = bool(suggestions.error)
         if suggestions.error:
             self._choices = {lane.key: "" for lane in REPLY_LANES}
@@ -281,12 +289,17 @@ class StoryPanel(tk.Frame):
             self._render_cards()
             return
 
-        self._round += 1
-        self._round_var.set(f"第 {self._round} 回合")
-        self._round_label.configure(bg=theme.ACCENT, fg=theme.ACCENT_INK)
+        if fresh:
+            self._round += 1
+            self._round_var.set(f"第 {self._round} 回合")
+            self._round_label.configure(bg=theme.ACCENT, fg=theme.ACCENT_INK)
         self._choices = {lane.key: suggestions.text_for(lane) for lane in REPLY_LANES}
-        self._selected = None
-        self._select_first_available()
+        if self._selected is None or not self._choices.get(self._selected):
+            self._selected = None
+            self._select_first_available()
+        if suggestions.partial:
+            self._render_cards()
+            return
         if not suggestions.has_any():
             self._set_status("這句沒有想到合適的回覆，按 R 重想")
         elif suggestions.trigger_text != self._line_var.get():
@@ -364,7 +377,12 @@ class StoryPanel(tk.Frame):
             return
         speaker, text = self._thinking_about
         dots = "．" * (1 + self._thinking_tick % 3)
-        self._set_status(f"正在替「{speaker}：{_trim(text, 30)}」想選項{dots}")
+        if not self._fresh and any(self._choices.values()):
+            # Some lanes of this round are in; the rest are still streaming.
+            if not self._sent:
+                self._set_status(f"可以先選了，其他選項還在想{dots}")
+        else:
+            self._set_status(f"正在替「{speaker}：{_trim(text, 30)}」想選項{dots}")
         self._thinking_tick += 1
         self.after(400, self._tick_thinking)
 

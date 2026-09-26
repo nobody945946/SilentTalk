@@ -58,6 +58,8 @@ class ReplySuggestions:
     humor: str = ""
     ask: str = ""
     error: str = ""
+    # True while the model is still writing; the remaining lanes will follow.
+    partial: bool = False
 
     def text_for(self, lane: ReplyLane) -> str:
         return str(getattr(self, lane.field))

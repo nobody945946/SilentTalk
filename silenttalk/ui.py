@@ -793,6 +793,7 @@ class SilentTalkUI:
     # ---- suggestions ---------------------------------------------------------------
 
     def _apply_suggestions(self, suggestions: ReplySuggestions) -> None:
+        kept = self._selected_suggestion_index() if suggestions.partial else None
         self._latest_suggestions = suggestions
         self._suggestion_values = [text for _, text in suggestions.items()]
         trigger = " ".join(suggestions.trigger_text.split())
@@ -803,7 +804,13 @@ class SilentTalkUI:
         )
         self.suggestion_list.delete(0, "end")
         for index, (lane, value) in enumerate(suggestions.items()):
-            shown = value or ("產生失敗" if suggestions.error else "沒有合適的建議")
+            shown = value or (
+                "產生失敗"
+                if suggestions.error
+                else "思考中…"
+                if suggestions.partial
+                else "沒有合適的建議"
+            )
             self.suggestion_list.insert(
                 "end", f"  {lane.key.upper()}  {lane.label}｜{shown}"
             )
@@ -812,10 +819,16 @@ class SilentTalkUI:
                 foreground=theme.lane_color(lane.code) if value else theme.DIM,
                 selectforeground=theme.lane_color(lane.code) if value else theme.DIM,
             )
-        self._select_first_available_suggestion()
+        if kept is not None and self._suggestion_values[kept]:
+            self.suggestion_list.selection_set(kept)
+            self.suggestion_list.activate(kept)
+        else:
+            self._select_first_available_suggestion()
         self.story.set_suggestions(suggestions)
         if suggestions.error:
             self._ai_dot.set(theme.ERROR, "AI 錯誤")
+        elif suggestions.partial:
+            self._ai_dot.set(theme.ACCENT_HI, "AI 思考中")
         else:
             self._ai_dot.set(theme.OK, "AI 待命")
 
@@ -849,6 +862,10 @@ class SilentTalkUI:
                 self.suggestion_list.activate(index)
                 self.suggestion_list.see(index)
                 return
+
+    def _selected_suggestion_index(self) -> int | None:
+        selected = self.suggestion_list.curselection()
+        return int(selected[0]) if selected else None
 
     def _selected_suggestion_text(self) -> str:
         selected = self.suggestion_list.curselection()

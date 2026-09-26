@@ -95,6 +95,20 @@ def main() -> int:
     pump(1.0)
     shot("2_thinking")
 
+    # Streaming: two lanes are in, the user already picks ASK; the final
+    # result must keep that choice and stay in the same round.
+    ui.set_suggestions(
+        ReplySuggestions(
+            "阿傑",
+            trigger,
+            agree="好啊，一個人守我們三個衝一定吃得下",
+            ask="你確定只有一個嗎？剛剛是誰看到的？",
+            partial=True,
+        )
+    )
+    pump()
+    press("a")
+    shot("2b_streaming")
     ui.set_suggestions(
         ReplySuggestions(
             "阿傑",
@@ -105,6 +119,7 @@ def main() -> int:
         )
     )
     pump()
+    streamed = (ui.story._selected, ui.story._round)
     shot("3_choices")
     press("d")
     shot("4_selected_d")
@@ -142,6 +157,8 @@ def main() -> int:
     problems = []
     if sent != [expected]:
         problems.append(f"double-press D should send once, got {sent}")
+    if streamed != ("a", 1):
+        problems.append(f"streamed choice should survive the final result, got {streamed}")
     if regenerated != [True]:
         problems.append("R should call regenerate once")
     if not applied or applied[-1] != "開心":

@@ -151,3 +151,15 @@ def test_store_forgets_an_active_id_that_no_longer_exists(tmp_path: Path) -> Non
     state = PersonaStore(path).load()
     assert state.active == "none"
     assert state.active_persona().is_blank
+
+
+def test_persona_reminder_sits_right_before_the_answer() -> None:
+    model = LocalReplyModel(Path("unused.gguf"))
+    kwargs = {"context": "阿傑：衝B啦", "trigger_speaker": "阿傑", "trigger_text": "衝B啦"}
+
+    assert "記住" not in model._build_prompt(**kwargs)
+    model.set_persona(PRESET_PERSONAS[0])
+    prompt = model._build_prompt(**kwargs)
+
+    assert prompt.endswith("（記住：你是凱哥；句子短、節奏快；口頭禪偶爾用：穩啦、我的我的、笑死。四句都要是這個人會說的話。）\n輸出四行：")
+    assert "【你的人設】" in model._build_system_prompt(PRESET_PERSONAS[0])

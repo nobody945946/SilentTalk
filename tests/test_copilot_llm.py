@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from silenttalk.copilot.llm import LocalReplyModel
@@ -84,3 +85,19 @@ def test_simplified_model_output_is_shown_in_traditional() -> None:
     parsed = model._parse_suggestions("AGREE|这个视频我也看过", "A", "昨天那部片")
 
     assert parsed.agree == "這個影片我也看過"
+
+
+def test_stream_reports_each_completed_line() -> None:
+    from silenttalk.copilot.llm import consume_stream
+
+    pieces = ["AGREE|好", "啊\nASK|真的", "嗎？\nDISAG", "REE|不要\nHUMOR|笑死"]
+    events = [b": keep-alive\n"] + [
+        ("data: " + json.dumps({"choices": [{"delta": {"content": p}}]}) + "\n").encode()
+        for p in pieces
+    ] + [b"data: [DONE]\n"]
+    seen: list[str] = []
+
+    text = consume_stream(events, seen.append)
+
+    assert text == "AGREE|好啊\nASK|真的嗎？\nDISAGREE|不要\nHUMOR|笑死"
+    assert seen == ["AGREE|好啊", "AGREE|好啊\nASK|真的嗎？", "AGREE|好啊\nASK|真的嗎？\nDISAGREE|不要"]

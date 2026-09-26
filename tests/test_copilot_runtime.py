@@ -16,7 +16,7 @@ class SlowFakeLLM:
         self.release = asyncio.Event()
 
     async def suggest(
-        self, *, context: str, trigger_speaker: str, trigger_text: str
+        self, *, context: str, trigger_speaker: str, trigger_text: str, on_partial=None
     ) -> ReplySuggestions:
         self.calls.append(trigger_text)
         await self.release.wait()
