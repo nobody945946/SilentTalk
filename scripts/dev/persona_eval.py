@@ -153,6 +153,24 @@ FEWSHOT_REPLIES: dict[str, tuple[str, str, str, str]] = {
 }
 
 
+# cot: teacher-only. Think about the character first, then answer after a
+# separator. Used to make distillation data better than the teacher's
+# single-shot answers; the student is trained on the final four lines only.
+COT_INSTRUCTIONS = """先用 3～6 行簡短分析（不會被看到）：
+1. 對方最後一句真正在說什麼、想要什麼回應。
+2. 以「你」的人設，對這件事的立場和情緒是什麼？哪些人設細節跟這段對話有關？沒關係的細節（雷點、秘密、背景）不要硬塞。
+3. 口頭禪四句裡最多用一次，而且要用在語意通順的地方；說話方式和句長照人設。
+4. 每個方向是否真的站得住？「你」不會說的方向就寫 SKIP。
+然後單獨一行寫 ===，再輸出 AGREE、ASK、DISAGREE、HUMOR 四行，格式「代號|句子」。"""
+COT_SEPARATOR = "==="
+
+
+def strip_cot(text: str) -> str:
+    """The four lines after the analysis; empty if the separator is missing."""
+    index = text.rfind(COT_SEPARATOR)
+    return text[index + len(COT_SEPARATOR):] if index >= 0 else ""
+
+
 class EvalReplyModel(LocalReplyModel):
     """LocalReplyModel with experiment knobs; production code stays untouched
     until a variant wins."""
@@ -163,9 +181,13 @@ class EvalReplyModel(LocalReplyModel):
         self.variant = variant
         self.sampling = sampling
         self.grammar = grammar
+        self.server_args: list[str] = []
 
     def _build_system_prompt(self, persona: Persona) -> str:
         system = super()._build_system_prompt(persona)
+        if self.variant == "cot":
+            tail = "只准輸出 AGREE、ASK、DISAGREE、HUMOR 四行，格式「代號|句子」，不要解釋。"
+            system = system.replace(tail, COT_INSTRUCTIONS)
         if self.variant == "fewshot" and persona.id in FEWSHOT_REPLIES:
             # The in-character exchange replaces the neutral worked example.
             start = system.find("範例（")
@@ -178,6 +200,9 @@ class EvalReplyModel(LocalReplyModel):
         if self.variant == "noreminder" and not self._persona.is_blank:
             prompt = prompt.replace(self._persona.reminder_line() + "\n", "")
         return prompt
+
+    async def _launch(self, args: list[str]) -> None:
+        await super()._launch(args + self.server_args)
 
     def _request_completion(self, system: str, prompt: str) -> str:
         messages = [{"role": "system", "content": system}]
@@ -204,6 +229,8 @@ class EvalReplyModel(LocalReplyModel):
             "max_tokens": 240,
             "stream": False,
         }
+        if self.variant == "cot":
+            payload["max_tokens"] = 900
         payload.update(self.sampling)
         if self.grammar:
             payload["grammar"] = FORMAT_GRAMMAR
@@ -213,9 +240,14 @@ class EvalReplyModel(LocalReplyModel):
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(request, timeout=60) as response:
+        with urllib.request.urlopen(request, timeout=300) as response:
             body = json.loads(response.read().decode("utf-8"))
-        return str(body["choices"][0]["message"]["content"] or "")
+        text = str(body["choices"][0]["message"]["content"] or "")
+        return strip_cot(text) if self.variant == "cot" else text
+
+
+async def _noop() -> None:
+    return None
 
 
 async def generate(args: argparse.Namespace) -> list[dict[str, Any]]:
@@ -231,6 +263,11 @@ async def generate(args: argparse.Namespace) -> list[dict[str, Any]]:
         sampling=json.loads(args.sampling),
         grammar=args.grammar,
     )
+    model.server_args = args.server_args.split()
+    if args.url:
+        # Score a server that is already running (e.g. a big teacher model).
+        model._base_url = args.url.rstrip("/")
+        model.start = model.stop = _noop  # type: ignore[method-assign]
     await model.start()
     items: list[dict[str, Any]] = []
     try:
@@ -455,9 +492,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--model", help="file name in .runtime/models/llm")
     parser.add_argument("--runs", type=int, default=1)
-    parser.add_argument("--variant", default="prod", choices=("prod", "noreminder", "fewshot"))
+    parser.add_argument("--variant", default="prod", choices=("prod", "noreminder", "fewshot", "cot"))
     parser.add_argument("--grammar", action="store_true", help="GBNF-constrain the format")
     parser.add_argument("--sampling", default="{}", help='JSON overrides, e.g. {"min_p":0.05}')
+    parser.add_argument("--url", help="use a llama-server that is already running")
+    parser.add_argument("--server-args", default="", help='extra llama-server flags, e.g. "--swa-full"')
     parser.add_argument("--judge", default="sonnet", help="claude model alias, or 'none'")
     parser.add_argument("--tag", help="output file name (default: derived from options)")
     parser.add_argument("--oracle", help="generate with this claude model instead (ceiling)")

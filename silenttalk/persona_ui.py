@@ -315,7 +315,7 @@ class PersonaPanel(tk.Frame):
         tk.Label(
             box,
             text=(
-                f"建議控制在 {RECOMMENDED_PROMPT_CHARS} 字內：太長的人設會讓 1.7B 小模型"
+                f"建議控制在 {RECOMMENDED_PROMPT_CHARS} 字內：太長的人設會讓本機小模型"
                 "開始不照四行格式，也會讓第一次回覆變慢（之後會被快取）。"
             ),
             bg=theme.SURFACE,

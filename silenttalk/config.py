@@ -8,7 +8,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-DEFAULT_LLM_MODEL = "Qwen3-1.7B-Q4_K_M.gguf"
+DEFAULT_LLM_MODEL = "gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf"
 STT_ENGINES = ("paraformer", "sensevoice")
 
 

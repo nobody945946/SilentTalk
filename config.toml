@@ -34,10 +34,11 @@ context_char_budget = 2400
 max_reply_chars = 72
 llama_port = 18088
 auto_popup = true
-# Reply model in .runtime/models/llm/. Qwen3-1.7B Q4_K_M uses ~1.6 GB VRAM
-# (fits a 4 GB RTX 3050 Ti next to Discord). "Qwen3-4B-Q4_K_M.gguf" gives
-# better replies but needs ~3.1 GB; only pick it on GPUs with 6 GB or more.
-llm_model = "Qwen3-1.7B-Q4_K_M.gguf"
+# Reply model in .runtime/models/llm/ (downloaded by the launcher). Gemma 4 E2B
+# uses ~1.4 GB VRAM + ~2 GB RAM and keeps personas best for its size.
+# Alternatives: "Qwen3.5-4B-Q4_K_M.gguf" (same quality, ~2.9 GB VRAM, slower)
+# or "Qwen3-1.7B-Q4_K_M.gguf" (weaker personas, a bit faster on CPU only).
+llm_model = "gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf"
 # Layers offloaded to the GPU; 0 = CPU only (about 3x slower, still usable).
 llm_gpu_layers = 99
 # 8-bit KV cache + flash attention: 1.7B uses ~1.4 GB instead of ~1.6 GB (4B:

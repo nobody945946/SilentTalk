@@ -34,7 +34,7 @@ def test_loads_env_and_toml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     assert settings.copilot.enabled is True
     assert settings.copilot.endpoint_silence_ms == 650
     assert settings.copilot.llm_context_size == 4096
-    assert settings.copilot.llm_model == "Qwen3-1.7B-Q4_K_M.gguf"
+    assert settings.copilot.llm_model == "gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf"
     assert settings.copilot.llm_gpu_layers == 99
     assert settings.copilot.stt_engine == "paraformer"
     assert settings.validate_runtime() == ["找不到 FFmpeg：missing-ffmpeg-for-test"]

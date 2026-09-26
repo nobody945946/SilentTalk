@@ -24,6 +24,7 @@
 | T0 提交 | 已完成（commit 140b348） |
 | T2「同意」變問句 | 已完成：prompt 加規則＋一組不同情境的範例；`agree_is_question` 0.50–0.62 → 0.00–0.07，速度不變 |
 | 人設系統（9/26 新增） | 已完成：`silenttalk/copilot/persona.py`＋人設頁 `persona_ui.py`，見第 3.5 節 |
+| 預設模型換成 Gemma 4 E2B（9/27） | 已完成：人格分數和 Qwen3.5-4B 打平、VRAM 和 1.7B 一樣（~1.4 GB），見 3.6 節 |
 | 省 VRAM 模式（9/26 新增） | 已完成：`config.toml` 的 `llm_low_vram = true`（8-bit KV cache＋flash attention），1.7B 約 1.4 GB、4B 約 2.8 GB，eval 分數無退步 |
 | UI 改版（9/26 新增） | 已完成：左側導覽（劇情／手動／人設／聲音）、頂部人設晶片＋狀態燈、心情快切（M 鍵）；共用元件在 `widgets.py`、配色在 `theme.py` |
 
@@ -52,7 +53,7 @@ python3.12 -m venv .venv
 .venv/bin/python scripts/setup_copilot.py
 ```
 
-會下載約 1.4 GB 到 `.runtime/models/`（此資料夾已被 git 忽略，**絕對不要 commit**）。每個檔案都會驗 SHA256；看到 `SilentTalk Copilot models are ready.` 才算成功。
+會下載約 2.9 GB 到 `.runtime/models/`（此資料夾已被 git 忽略，**絕對不要 commit**）。每個檔案都會驗 SHA256；看到 `SilentTalk Copilot models are ready.` 才算成功。
 
 ### 1.3 llama-server
 
@@ -121,7 +122,7 @@ git commit -m "Fix Copilot model download, STT accuracy, add WASD story mode"
 
 這個任務要請**使用者**在那台筆電上操作，你負責給他指令、看他貼回來的輸出。
 
-1. 雙擊 `啟動 SilentTalk.cmd`，等它跑完（第一次會下載約 1.4 GB）。
+1. 雙擊 `啟動 SilentTalk.cmd`，等它跑完（第一次會下載約 2.9 GB）。
 2. 關掉 SilentTalk（F8 → 退出），在 repo 資料夾開 PowerShell：
    ```powershell
    .venv\Scripts\python.exe app.py --copilot-smoke
@@ -134,7 +135,7 @@ git commit -m "Fix Copilot model download, STT accuracy, add WASD story mode"
 | `沒有（CPU 模式…）` | llama.cpp 沒看到 GPU | 請使用者更新 NVIDIA 驅動；筆電要確認不是被強制用內顯 |
 | `STT PASS / LLM PASS`，exit code 0 | 驗收通過 | 記下延遲中位數 |
 | `延遲中位數` > 3 s | 太慢 | 先確認 GPU 行；若 GPU 正常仍慢，回報給使用者，不要自己換模型 |
-| `格式 不合格` | 模型沒照四行格式 | 確認 `config.toml` 的 `llm_model` 是 `Qwen3-1.7B-Q4_K_M.gguf` |
+| `格式 不合格` | 模型沒照四行格式 | 確認 `config.toml` 的 `llm_model` 是 `gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf` |
 | exit code 5 | 有 gate FAIL | 看是哪個 gate 的哪一行 |
 
 4. 再請使用者正常啟動、進 Discord 語音、請朋友講幾句話，然後打開 `silenttalk.log` 搜尋：
@@ -266,9 +267,51 @@ while not vad.empty():
 - **資料：** `silenttalk/copilot/persona.py` 的 `Persona`。欄位：名字、暱稱、身分、背景、慾望、害怕、價值觀、說話方式、口頭禪、代表台詞、回覆長度、近況、擅長、人際關係（依 Discord 顯示名稱）、底線，以及 6 條 1～5 的個性滑桿（3＝中性，不進 prompt）。另有「心情」（平常／開心／興奮／累／煩躁／低落／專注打遊戲），是**你當下**的狀態，劇情模式按 M 或點上方晶片切換。
 - **存檔：** `personas.json`（已 gitignore，跟快捷句一樣是使用者設定）。第一次啟動會帶入三個範本人設（凱哥、小晴、黑焰）。
 - **prompt 放哪：** 人設轉成文字放在 **system prompt**，內容不變時 llama-server 會重用 prompt cache，只有編輯後第一次比較慢（約 +0.5 s）。人際關係只挑「這段對話裡真的出現的人」放進 user prompt。人設頁底部的「AI 實際看到的人設」顯示真正送出的文字與字數（上限 700 字）。
-- **實測（1.7B，`llm_eval.py --persona preset-carry` 等）：** 凱哥（很短）平均 11 字、口頭禪自然出現 19%；黑焰（中二）16 字、全部指標達標。4B 模型口頭禪用得更多（62%），但格式合格率掉到 0.91，**所以預設仍是 1.7B**。
+- **實測（1.7B，`llm_eval.py --persona preset-carry` 等）：** 凱哥（很短）平均 11 字、口頭禪自然出現 19%；黑焰（中二）16 字、全部指標達標。4B 模型口頭禪用得更多（62%），但格式合格率掉到 0.91，當時預設仍是 1.7B（9/27 起預設改為 Gemma 4 E2B，見 3.6 節）。
 - **測試：** `tests/test_copilot_persona.py`。
 - **規則：** 人設可以存檔；**對話內容仍然不能寫進硬碟**（規則 2 不變）。
+
+---
+
+### 3.6｜人格穩定度研究（9/26–27 進行中）
+
+**目標（使用者原話）：** 人格穩定的 Discord 陪聊機器人，低成本設備（4 GB VRAM）就能跑。
+
+**量測工具：** `scripts/dev/persona_eval.py`。三個預設人設 × 14 個探測情境（被問是不是 AI、被問背景、被甩鍋、被慫恿嘲笑新手、動漫很幼稚、被要求「正常一點」、長對話漂移……）。評審是 `claude -p --model sonnet`（只看合成資料，不碰真實對話），分兩次打分：
+- `attribution`：盲測「這組回覆是哪個人設說的」，亂猜 0.33。
+- `voice`／`stance`／`natural`（1–5）、`facts_violation`（捏造或矛盾自身設定）、`boundary_violation`（踩底線）、`lanes_ok`（方向正確率）。
+- **評審本身的誤差：** 同一份輸出重評，attribution ±0.07、voice ±0.1、stance ±0.25。差距小於這些不算數，要用 `--runs 2`。
+- `--oracle sonnet` 讓強模型用同一份 prompt 回答，當作天花板。
+
+**結果（正式 prompt，除非另註）：**
+
+| 模型 | voice | stance | natural | lanes_ok | 捏造／踩底線 | 3090 延遲 |
+|---|---|---|---|---|---|---|
+| Sonnet（天花板，只供比較） | 4.21 | 4.31 | 4.29 | 0.90 | 0 / 0 | — |
+| **Qwen3.5-4B Q4_K_M**（runs 2） | 3.60 | **3.29** | **3.06** | 0.80 | 0.05 / **0.07** | 0.81 s |
+| **Gemma 4 E2B QAT UD-Q4_K_XL（預設，runs 2）** | 3.54 | 3.25 | 3.01 | 0.76 | 0.04 / **0.05** | 0.58 s |
+| Qwen3-30B-A3B-Instruct-2507（老師，只在開發機跑） | 3.81 | 3.52 | 3.10 | 0.83 | 0.02 / 0.10 | 4 s |
+| Qwen3-4B-Instruct-2507 Q4_K_M（runs 2） | 3.68 | 3.07 | 2.68 | 0.81 | 0.06 / 0.15 | 0.65 s |
+| Qwen3-4B Q4_K_M | 3.24 | 2.71 | 2.36 | 0.62 | 0.10 / 0.19 | 0.57 s |
+| Qwen3-1.7B Q4_K_M（舊預設） | 3.10 | 2.52 | 2.21 | 0.54 | 0.10 / 0.10 | 0.34 s |
+| Qwen3.5-2B Q4_K_M | 2.76 | 2.45 | 2.14 | 0.49 | 0.07 / 0.19 | 0.48 s |
+| MiniCPM5-2B Q4_K_M | 3.14 | 2.64 | 2.02 | 0.37 | 常整組空白或四行重複 | 0.39 s |
+
+**VRAM／RAM 實測（正式設定，省 VRAM 模式開）：** Gemma 4 E2B 1.44 GB＋RAM 2.0 GB；Qwen3-1.7B 1.37 GB＋0.7 GB；Qwen3-4B-2507 2.80 GB；Qwen3.5-4B 2.85 GB＋1.5 GB。純 CPU（24 核機器、同時有別的負載）：Gemma 每次約 5–6 s（第一個選項約 2 s），1.7B 約 4–5.4 s。
+
+**結論：預設改為 Gemma 4 E2B。** 品質和 Qwen3.5-4B 打平，VRAM 跟 1.7B 一樣，速度比 4B 快 30%。3050 Ti 推估每次約 1.1 s（串流第一個選項約 0.4 s）。Gemma 常省略問號，`llm.py` 會替沒有標點的「追問」補「？」（TTS 語調需要）。llama.cpp b11179 不需要 `--swa-full` 也能重用 prompt cache（已實測）。
+
+**學到的事：**
+- 舊 prompt 的「同意」會逼角色附和慫恿（黑焰：「這技術確實很爛，退坑是明智之選」）。改成「從你的立場順著聊，做不到就 SKIP」、人設放在 system prompt 最後、答題前加一行人設提醒 → 已上線（`llm.py` 的 `_PERSONA_SYSTEM`、`Persona.reminder_line()`）。
+- 試過沒用的：GBNF 格式約束（格式本來就沒問題）、手寫角色口吻 few-shot（4B 反而變差）。
+- 天花板 4.3 vs 本地 3.0–3.3：**瓶頸是小模型本身**，prompt 已經榨得差不多。下一步是蒸餾。
+- 串流顯示已上線：第一個選項約在總時間 35% 出現（3050 Ti 上 4B 估計 0.8 s 看到第一個、全部約 2–2.5 s）。
+
+**進行中：蒸餾一個通用人設 LoRA**
+1. 老師：`Qwen3-30B-A3B-Instruct-2507`（Apache-2.0，允許用輸出訓練）。**不能用 Claude 產訓練資料**（Anthropic 條款禁止用輸出訓練模型）；Claude 只當評審。
+2. `scripts/dev/distill_data.py personas / scenes / replies`：老師產 ~200 個人設、~1500 段對話、~3000 筆四方向回覆；預設人設和探測情境絕不進訓練資料（它們是測試集）。
+3. `scripts/dev/train_lora.py`：bf16 LoRA，只算回覆的 loss；訓練環境 `.runtime/train-venv`（torch cu124）。
+4. 用 llama.cpp 的 `convert_lora_to_gguf.py` 轉成 adapter，`llama-server --lora` 載入，再跑 `persona_eval.py` 比較。
 
 ---
 
@@ -301,7 +344,7 @@ while not vad.empty():
 | 模型 | VRAM | 四行格式 | RTX 3090 每次延遲 | 3050 Ti 推估 | 3050 Ti 實測（T1 填） |
 |---|---|---|---|---|---|
 | Qwen3-0.6B（舊） | 0.9 GB | 0/32 ❌ | 0.2 s | — | — |
-| **Qwen3-1.7B Q4_K_M（預設）** | **1.6 GB** | 32/32 ✅ | 0.35 s | 1–1.5 s | |
+| Qwen3-1.7B Q4_K_M（9/26 前的預設） | 1.6 GB | 32/32 ✅ | 0.35 s | 1–1.5 s | |
 | Qwen3-4B Q4_K_M | 3.1 GB | 32/32 ✅ | 0.6 s | 1.5–2.5 s，但 4 GB 會太擠 | |
 | 1.7B 純 CPU（6 threads） | — | — | 約 28 token/s → 約 3 s | 筆電 CPU 更慢 | |
 
@@ -323,6 +366,8 @@ while not vad.empty():
 
 | 檔名（`.runtime/models/llm/`） | 來源 | 位元組 | sha256 |
 |---|---|---|---|
+| `gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf`（預設） | `unsloth/gemma-4-E2B-it-qat-GGUF` | 2,620,370,976 | `e531007218dfab990486a5de7676a6932d6ea8dea233d1f698d7c21cf8a16889` |
+| `Qwen3.5-4B-Q4_K_M.gguf` | `unsloth/Qwen3.5-4B-GGUF` | 2,740,937,888 | `00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4` |
 | `Qwen3-1.7B-Q4_K_M.gguf` | `unsloth/Qwen3-1.7B-GGUF` | 1,107,409,472 | `b139949c5bd74937ad8ed8c8cf3d9ffb1e99c866c823204dc42c0d91fa181897` |
 | `Qwen3-4B-Q4_K_M.gguf` | `Qwen/Qwen3-4B-GGUF`（官方） | 2,497,280,256 | `7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5` |
 

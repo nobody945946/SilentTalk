@@ -239,7 +239,7 @@ bounded session context
         │
         ▼
 copilot/llm.py
-Qwen3-1.7B Q4_K_M（config 可換）/ persistent llama-server
+Gemma 4 E2B（config 可換）/ persistent llama-server
         │
         ▼
 ReplySuggestions（欄位與按鍵由 REPLY_LANES 定義）

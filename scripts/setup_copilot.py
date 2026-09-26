@@ -69,7 +69,22 @@ SENSEVOICE_ASSETS = (
 # Qwen's official repos only publish Q8_0 for 0.6B/1.7B, so Q4_K_M comes from unsloth.
 # Qwen3-0.6B is deliberately absent: in benchmarks it ignored the four-line
 # format on 29 of 32 lanes and mostly parroted the transcript back.
+# Default since 2026-09-27: Gemma 4 E2B (Apache-2.0) matched Qwen3.5-4B on
+# scripts/dev/persona_eval.py (voice 3.54 / stance 3.25 / natural 3.01) while
+# needing ~1.4 GB of VRAM like Qwen3-1.7B; its per-layer embeddings stay in RAM.
 LLM_MODELS = {
+    "gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf": (
+        "Gemma 4 E2B QAT Q4_K_XL",
+        "https://huggingface.co/unsloth/gemma-4-E2B-it-qat-GGUF/resolve/main/gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf?download=true",
+        "e531007218dfab990486a5de7676a6932d6ea8dea233d1f698d7c21cf8a16889",
+        2_600_000_000,
+    ),
+    "Qwen3.5-4B-Q4_K_M.gguf": (
+        "Qwen3.5-4B Q4_K_M",
+        "https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf?download=true",
+        "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4",
+        2_700_000_000,
+    ),
     "Qwen3-1.7B-Q4_K_M.gguf": (
         "Qwen3-1.7B Q4_K_M",
         "https://huggingface.co/unsloth/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q4_K_M.gguf?download=true",
@@ -83,7 +98,7 @@ LLM_MODELS = {
         2_490_000_000,
     ),
 }
-DEFAULT_LLM_MODEL = "Qwen3-1.7B-Q4_K_M.gguf"
+DEFAULT_LLM_MODEL = "gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf"
 
 
 def _copilot_section() -> dict:

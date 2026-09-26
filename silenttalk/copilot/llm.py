@@ -74,6 +74,7 @@ HUMOR：開玩笑／打圓場。用你的幽默風格和對話裡已有的梗緩
 
 只准輸出 AGREE、ASK、DISAGREE、HUMOR 四行，格式「代號|句子」，不要解釋。"""
 
+_END_PUNCTUATION = "？?！!。.…~～」』)）"
 _THINK_OPEN = "<think>"
 _THINK_CLOSE = "</think>"
 # llama-server stderr lines worth keeping in the app log: they prove whether
@@ -396,6 +397,10 @@ class LocalReplyModel:
                 value = self._clean_reply(remainder)
                 if value.upper() == "SKIP" or _compact(value) == echo:
                     value = ""
+                elif lane.code == "ASK" and value and value[-1] not in _END_PUNCTUATION:
+                    # Gemma often drops the question mark; TTS needs it to
+                    # say the line with a rising, questioning tone.
+                    value += "？"
                 values[lane.field] = value
                 break
 

@@ -28,7 +28,7 @@ Discord 其他真人語音
 → 當約 650 ms 沒有新語音（或開放式麥克風下約 0.8 秒沒有新字）時視為一句完成
 → 簡體轉台灣繁體（OpenCC s2twp）
 → Session Context
-→ 本機 Qwen3-1.7B Q4_K_M / llama.cpp（Vulkan，約 1.6 GB VRAM）
+→ 本機 Gemma 4 E2B / llama.cpp（Vulkan，約 1.4 GB VRAM＋2 GB RAM）
 → 四個固定方向的回覆建議
 ```
 
@@ -202,7 +202,7 @@ edge-tts 官方說明：可調整 rate、volume、pitch，但不再支援自訂 
 
 - 檢查並以 winget 安裝 Python 3.12、FFmpeg 與 llama.cpp（缺少時才安裝）。
 - 建立 `.venv`，安裝 `requirements.txt` 內的套件。
-- Copilot 開啟時，自動下載本機 ASR INT8 encoder/decoder/tokens 與 Qwen3-1.7B Q4_K_M（`config.toml` 的 `copilot.llm_model` 可改成 `Qwen3-4B-Q4_K_M.gguf`，6 GB 以上 GPU 才建議）；第一次約 1.4 GB，之後從 `.runtime/` 直接沿用。`silenttalk.log` 的 `copilot_llm_devices` 會列出 llama.cpp 看到的 GPU；顯示 `none(cpu-only)` 代表模型跑在 CPU。
+- Copilot 開啟時，自動下載本機 ASR INT8 encoder/decoder/tokens 與 Gemma 4 E2B（`config.toml` 的 `copilot.llm_model` 可改成 `Qwen3.5-4B-Q4_K_M.gguf`，品質相近但約 2.9 GB VRAM、較慢）；第一次約 2.9 GB，之後從 `.runtime/` 直接沿用。`silenttalk.log` 的 `copilot_llm_devices` 會列出 llama.cpp 看到的 GPU；顯示 `none(cpu-only)` 代表模型跑在 CPU。
 - 模型檔使用 SHA256 / 最低大小檢查，下載中斷只留下 `.part`，不把半份模型當成功。
 - 若 `.env` 不存在，由 `.env.example` 建立並開啟記事本讓你填入憑證。
 - 驗證 `.env`、`config.toml` 與 Python source 可編譯。

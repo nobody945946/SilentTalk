@@ -101,3 +101,14 @@ def test_stream_reports_each_completed_line() -> None:
 
     assert text == "AGREE|好啊\nASK|真的嗎？\nDISAGREE|不要\nHUMOR|笑死"
     assert seen == ["AGREE|好啊", "AGREE|好啊\nASK|真的嗎？", "AGREE|好啊\nASK|真的嗎？\nDISAGREE|不要"]
+
+
+def test_ask_lane_gets_a_question_mark_for_tts() -> None:
+    model = LocalReplyModel(Path("unused.gguf"))
+    parsed = model._parse_suggestions(
+        "AGREE|好啊\nASK|你買錯的是哪一款\nDISAGREE|不要吧！\nHUMOR|笑死", "Ken", "退款"
+    )
+
+    assert parsed.ask == "你買錯的是哪一款？"
+    assert parsed.disagree == "不要吧！"
+    assert parsed.humor == "笑死"

@@ -75,7 +75,7 @@ TEXT_FIELDS: dict[str, tuple[str, str, int]] = {
 
 MAX_RELATIONSHIPS = 12
 MAX_RELATION_CHARS = 60
-# Rough ceiling for the rendered persona block. Past this, a 1.7B model starts
+# Rough ceiling for the rendered persona block. Past this, a small model starts
 # ignoring the four-line format, and first-request latency grows on 4 GB GPUs.
 RECOMMENDED_PROMPT_CHARS = 700
 
