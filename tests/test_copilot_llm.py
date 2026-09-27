@@ -456,8 +456,10 @@ def test_only_character_requests_use_the_lora() -> None:
     model = LocalReplyModel(Path("unused.gguf"), lora_path=Path("adapter.gguf"))
     assert model._lora_field(True) == {}  # not loaded until the server starts with it
     model._lora_loaded = True
-    assert model._lora_field(True) == {"lora": [{"id": 0, "scale": 1.0}]}
-    assert model._lora_field(False) == {"lora": [{"id": 0, "scale": 0.0}]}
+    # Each scale keeps its own slot: llama-server drops a slot's prompt cache
+    # when the scale changes.
+    assert model._lora_field(True) == {"lora": [{"id": 0, "scale": 1.0}], "id_slot": 0}
+    assert model._lora_field(False) == {"lora": [{"id": 0, "scale": 0.0}], "id_slot": 1}
 
 
 @pytest.mark.asyncio

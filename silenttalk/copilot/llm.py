@@ -227,6 +227,17 @@ class LocalReplyModel:
         threads = max(2, min(6, (os.cpu_count() or 4) // 2))
         devices = await asyncio.to_thread(list_llama_devices, executable)
         _LOG.info("copilot_llm_devices %s", " | ".join(devices) or "none(cpu-only)")
+        self._lora_loaded = False
+        if self._lora_path is not None and not self._lora_path.is_file():
+            _LOG.warning("copilot_lora_missing file=%s", self._lora_path.name)
+        with_lora = self._lora_path is not None and self._lora_path.is_file()
+        # One slot per adapter setting. llama-server drops a slot's prompt
+        # cache whenever the adapter scale differs from the last request's
+        # (measured: the whole 1.3k-token chat re-read, ~0.9 s on a 3090),
+        # so requests with and without it keep a slot each (_slot_field).
+        # Without an adapter one slot: recent llama-server defaults to
+        # several, which splits the context on a 4 GB laptop GPU.
+        slots = 2 if with_lora else 1
         args = [
             executable,
             "--model",
@@ -236,25 +247,19 @@ class LocalReplyModel:
             "--port",
             str(self._port),
             "--ctx-size",
-            str(self._context_size),
+            str(self._context_size * slots),
             "--threads",
             str(threads),
             "--n-gpu-layers",
             str(self._gpu_layers),
-            # One slot: recent llama-server defaults to several parallel slots,
-            # which splits the context and competes for a 4 GB laptop GPU.
             "--parallel",
-            "1",
+            str(slots),
             # Needed so chat_template_kwargs.enable_thinking reaches Qwen3's template.
             "--jinja",
         ]
-        self._lora_loaded = False
-        if self._lora_path is not None:
-            if self._lora_path.is_file():
-                args += ["--lora", str(self._lora_path)]
-                self._lora_loaded = True
-            else:
-                _LOG.warning("copilot_lora_missing file=%s", self._lora_path.name)
+        if with_lora:
+            args += ["--lora", str(self._lora_path)]
+            self._lora_loaded = True
         _LOG.info(
             "copilot_llm_start model=%s context=%d threads=%d gpu_layers=%d low_vram=%s",
             self._model_path.name,
@@ -662,11 +667,15 @@ class LocalReplyModel:
             raise LocalLLMError(f"本機回覆模型失敗：{exc}") from exc
 
     def _lora_field(self, character: bool) -> dict[str, object]:
-        """Every request sets the adapter's scale: llama-server applies a
-        loaded adapter to requests that leave it out."""
+        """Every request sets the adapter's scale (llama-server applies a
+        loaded adapter to requests that leave it out) and the slot kept for
+        that scale, so switching does not throw away the other's cache."""
         if not self._lora_loaded:
             return {}
-        return {"lora": [{"id": 0, "scale": 1.0 if character else 0.0}]}
+        return {
+            "lora": [{"id": 0, "scale": 1.0 if character else 0.0}],
+            "id_slot": 0 if character else 1,
+        }
 
     def _request_messages(
         self,
