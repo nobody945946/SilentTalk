@@ -488,6 +488,9 @@ def _dave_receive_ready(voice: discord.VoiceClient) -> bool:
     return bool(getattr(connection, "can_encrypt", False))
 
 
+STREAM_INPUT_OPTIONS = "-f mp3 -probesize 32 -analyzeduration 0 -fflags nobuffer"
+
+
 class DiscordAudioPlayer:
     def __init__(self, client: DiscordVoiceClient, audio: AudioConfig) -> None:
         self._client = client
@@ -538,11 +541,22 @@ class DiscordAudioPlayer:
         options = "-vn"
         if audio.ffmpeg_filter:
             options += f' -af "{audio.ffmpeg_filter}"'
-        source = discord.FFmpegOpusAudio(
-            str(audio.path),
-            executable=self._audio.ffmpeg_path,
-            options=options,
-        )
+        if audio.stream is not None:
+            # MP3 still arriving on stdin: say what it is, or FFmpeg buffers
+            # input to probe it (first packet 602 ms -> 267 ms median).
+            source = discord.FFmpegOpusAudio(
+                audio.stream,
+                pipe=True,
+                executable=self._audio.ffmpeg_path,
+                before_options=STREAM_INPUT_OPTIONS,
+                options=options,
+            )
+        else:
+            source = discord.FFmpegOpusAudio(
+                str(audio.path),
+                executable=self._audio.ffmpeg_path,
+                options=options,
+            )
         voice.play(source, after=after)
         await asyncio.wait_for(
             finished,

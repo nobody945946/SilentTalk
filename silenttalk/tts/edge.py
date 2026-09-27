@@ -5,14 +5,27 @@ import logging
 import tempfile
 from pathlib import Path
 
+import aiohttp
 import edge_tts
 
 from silenttalk.config import TTSConfig
 from silenttalk.speech_settings import combine_edge_rate, validate_rate_multiplier
 from silenttalk.tts.base import AudioResult
+from silenttalk.tts.stream import AudioStream
 from silenttalk.voice_styles import VOICE_STYLES, VoiceStyle
 
 _LOG = logging.getLogger(__name__)
+
+# speech.platform.bing.com resolves to IPv6 first; where IPv6 does not get
+# through, aiohttp's default 250 ms happy-eyeballs delay was added to 5 of 12
+# requests on the dev box (first audio 352 ms median -> 244 ms, 0 slow runs
+# with 50 ms). IPv6 is still tried first.
+_HAPPY_EYEBALLS_DELAY = 0.05
+
+
+def _connector() -> aiohttp.TCPConnector:
+    # One per request: the session edge_tts opens owns and closes it.
+    return aiohttp.TCPConnector(happy_eyeballs_delay=_HAPPY_EYEBALLS_DELAY)
 
 
 def _consume_legacy_style_prefix(text: str, voice_style: str) -> tuple[str, str]:
@@ -92,15 +105,39 @@ class EdgeTTSEngine:
         self._voice = str(female["ShortName"])
         _LOG.info("edge_tts_voice_selected voice=%s", self._voice)
 
-    async def synthesize(
+    async def stream(
         self,
         text: str,
         voice_style: str | VoiceStyle = "default",
         rate_multiplier: float = 1.0,
     ) -> AudioResult:
+        """Like synthesize(), but returns as soon as the first MP3 chunk is in;
+        the rest keeps arriving in `AudioResult.stream`. Nothing is written to
+        disk."""
+        spoken_text, voice, rate, pitch, volume, audio_filter = await self._settings(
+            text, voice_style, rate_multiplier
+        )
+        communicate = edge_tts.Communicate(
+            spoken_text, voice, rate=rate, volume=volume, pitch=pitch,
+            connector=_connector(),
+        )
+
+        async def chunks():
+            async for chunk in communicate.stream():
+                if chunk["type"] == "audio":
+                    yield chunk["data"]
+
+        stream = AudioStream()
+        await stream.start(chunks, first_chunk_timeout=self._config.timeout_seconds)
+        return AudioResult(
+            None, None, None, "mp3", ffmpeg_filter=audio_filter, stream=stream
+        )
+
+    async def _settings(
+        self, text: str, voice_style: str | VoiceStyle, rate_multiplier: float
+    ) -> tuple[str, str, str, str, str, str | None]:
         if not self._voice:
             await self.initialize()
-
         effective_config = TTSConfig(
             engine=self._config.engine,
             voice=self._voice,
@@ -109,11 +146,21 @@ class EdgeTTSEngine:
             volume=self._config.volume,
             timeout_seconds=self._config.timeout_seconds,
         )
-        spoken_text, voice, rate, pitch, volume, audio_filter = resolve_speech_settings(
+        return resolve_speech_settings(
             text,
             effective_config,
             voice_style=voice_style,
             rate_multiplier=rate_multiplier,
+        )
+
+    async def synthesize(
+        self,
+        text: str,
+        voice_style: str | VoiceStyle = "default",
+        rate_multiplier: float = 1.0,
+    ) -> AudioResult:
+        spoken_text, voice, rate, pitch, volume, audio_filter = await self._settings(
+            text, voice_style, rate_multiplier
         )
 
         fd, raw_path = tempfile.mkstemp(
@@ -130,6 +177,7 @@ class EdgeTTSEngine:
                 rate=rate,
                 volume=volume,
                 pitch=pitch,
+                connector=_connector(),
             )
             await asyncio.wait_for(
                 communicate.save(str(path)), timeout=self._config.timeout_seconds

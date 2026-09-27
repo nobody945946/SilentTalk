@@ -141,7 +141,9 @@ class SpeechQueue:
             try:
                 job.state = JobState.SYNTHESIZING
                 self._status(AppState.SYNTHESIZING, "語音合成中…")
-                audio = await self._tts.synthesize(
+                # Engines that can stream start playback on the first chunk.
+                synthesize = getattr(self._tts, "stream", self._tts.synthesize)
+                audio = await synthesize(
                     job.text,
                     voice_style=job.voice_style,
                     rate_multiplier=job.rate_multiplier,
@@ -156,10 +158,12 @@ class SpeechQueue:
                 if generation == self._generation:
                     job.state = JobState.DONE
                     _LOG.info(
-                        "job_done job_id=%s char_count=%d backend=edge synthesis_ms=%d",
+                        "job_done job_id=%s char_count=%d backend=edge synthesis_ms=%d"
+                        " streamed=%s",
                         job.id,
                         len(job.text),
                         synth_ms,
+                        audio.stream is not None,
                     )
                     if self._on_done is not None:
                         try:
@@ -177,7 +181,7 @@ class SpeechQueue:
                 self._status(AppState.ERROR, f"播放失敗：{exc}")
             finally:
                 if audio is not None:
-                    audio.path.unlink(missing_ok=True)
+                    audio.discard()
                 self._current = None
                 self._queue.task_done()
                 if self._queue.empty():
