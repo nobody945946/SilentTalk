@@ -94,7 +94,7 @@ def _render(chardata: Path, script: dict, refined: dict[int, str]) -> list[dict]
             for i, line in refined.items()
         )
     )
-    args = type("Args", (), {"max_prompt_chars": 100_000})()
+    args = type("Args", (), {"max_prompt_chars": 100_000, "max_chars": 72})()
     character_data.make_render(args)
     return [
         json.loads(line) for line in (chardata / "train.jsonl").read_text().splitlines()
@@ -141,3 +141,11 @@ def test_no_test_set_name_can_be_used(chardata: Path) -> None:
     personas, humans = character_data.held_out()
     assert "凱哥" in personas and "小晴" in personas
     assert personas <= humans  # a test persona name is not allowed as a speaker either
+
+
+def test_unrefined_lines_fall_back_to_the_script(chardata: Path) -> None:
+    script = _script([("阿誠", "老婆你在嗎", NAME), (NAME, "在啦幹嘛", "阿誠")])
+    rows = _render(chardata, script, {})
+    [line] = [r for r in rows if r["kind"] == "line"]
+    assert line["messages"][-1]["content"] == "在啦幹嘛"
+    assert line["line_source"] == "script"

@@ -839,6 +839,10 @@ def make_refine(args: argparse.Namespace) -> None:
         for point in decision_points(script, raw["name"]):
             if point["speaks"] and (number, point["index"]) not in done:
                 jobs.append((number, point["index"], point["aimed"]))
+    # Random order: refining is the slow step (the teacher's experts partly on
+    # the CPU), and stopping it early must leave a random subset, not the
+    # first personas only. Unrefined lines fall back to the script (render).
+    random.Random(5000).shuffle(jobs)
     print(f"refine: {len(jobs)} lines to improve", flush=True)
     stats = {"kept_script": 0, "replaced": 0}
 
@@ -962,6 +966,10 @@ def make_render(args: argparse.Namespace) -> None:
                 "persona_id": persona.id,
                 "role": raw.get("role", ""),
             }
+            if point["speaks"]:
+                meta["line_source"] = (
+                    "refined" if (number, index) in refined else "script"
+                )
             # The same questions the app asks (LocalReplyModel.character_turn):
             # "is this line for you" on every line, and in "active" mode,
             # after a quiet stretch, "would joining in now be natural".
@@ -991,7 +999,11 @@ def make_render(args: argparse.Namespace) -> None:
             if point["speaks"]:
                 line = refined.get((number, index))
                 if not line:
-                    continue
+                    # Not refined (stopped early): the teacher's own script
+                    # line, if it passes the same checks as the candidates.
+                    line = script["lines"][index + 1]["t"]
+                    if not usable(line, spec, args):
+                        continue
                 messages = model.character_messages(
                     turns=history,
                     summary=script["summary_before"],
