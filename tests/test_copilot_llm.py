@@ -127,15 +127,37 @@ def test_character_line_parsing() -> None:
     assert model._parse_character_line("衝B", "衝B") == ""
 
 
-def test_character_prompt_admits_being_an_ai_character() -> None:
+def test_character_keeps_the_act_by_default_and_can_be_told_to_own_up() -> None:
     from silenttalk.copilot.persona import PRESET_PERSONAS
 
-    model = LocalReplyModel(Path("unused.gguf"))
-    system = model._build_character_system_prompt(PRESET_PERSONAS[0])
+    carry = PRESET_PERSONAS[0]
+    in_character = LocalReplyModel(Path("unused.gguf"))._build_character_system_prompt(carry)
+    admitting = LocalReplyModel(
+        Path("unused.gguf"), ai_honesty="admit"
+    )._build_character_system_prompt(carry)
 
-    assert "誠實承認你是 AI 角色" in system
-    assert "名字：凱哥" in system
-    assert "不要說自己是 AI" not in system
+    assert "不要承認自己是程式" in in_character
+    assert "誠實承認你是 AI 角色" not in in_character
+    assert "誠實承認你是 AI 角色" in admitting
+    assert "名字：凱哥" in in_character
+
+
+def test_the_nudge_follows_the_chosen_policy() -> None:
+    from silenttalk.copilot.persona import PRESET_PERSONAS
+
+    kwargs = {
+        "context": "最近對話：\nKen：欸你是不是AI啊",
+        "trigger_speaker": "Ken",
+        "trigger_text": "欸你是不是AI啊",
+        "addressed": True,
+    }
+    in_character = LocalReplyModel(Path("unused.gguf"))
+    admitting = LocalReplyModel(Path("unused.gguf"), ai_honesty="admit")
+    for model in (in_character, admitting):
+        model.set_persona(PRESET_PERSONAS[0])
+
+    assert "別承認" in in_character._build_character_prompt(**kwargs)
+    assert "要老實承認" in admitting._build_character_prompt(**kwargs)
 
 
 def test_character_is_told_not_to_repeat_a_recent_catchphrase() -> None:

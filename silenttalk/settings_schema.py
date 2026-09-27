@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from silenttalk.config import STT_ENGINES
-from silenttalk.copilot.character import ENGAGEMENT_MODES
+from silenttalk.copilot.character import AI_HONESTY_MODES, ENGAGEMENT_MODES
 from silenttalk.voice_styles import PERSONA_VOICES
 
 
@@ -59,6 +59,12 @@ PAGES: tuple[Page, ...] = (
                     "被叫到才回：文字 @它或回覆它的訊息、語音叫它的名字。"
                     "會主動加入：它也會自己插話。",
                     choices=ENGAGEMENT_MODES,
+                ),
+                Setting(
+                    "copilot", "character_ai_honesty", "被問「你是AI嗎」", "choice",
+                    "照角色演：當成朋友開玩笑，用角色的方式帶過，不承認自己是程式——"
+                    "角色比較完整。承認：認真被問時老實說自己是 AI 扮演的角色。",
+                    choices=AI_HONESTY_MODES,
                 ),
                 Setting(
                     "copilot", "character_follow_up_seconds", "追問窗口", "float",

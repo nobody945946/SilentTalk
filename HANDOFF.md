@@ -332,12 +332,14 @@ while not vad.empty():
 
 - **開關：** F8 視窗頂部「角色模式」，每次啟動預設關閉。開啟後 `CopilotRuntime` 不再產四個選項，改成 `LocalReplyModel.character_reply()` 產一句（或 SKIP）。
 - **何時開口：** `silenttalk/copilot/character.py`（純函式、有單元測試）。叫到名字／暱稱必回；否則要過冷卻（預設 8 s）且（問句 或 別人已講 3 句）。生成期間對話又走了 2 句以上、且不是被點名 → 丟掉。語音佇列不閒置 → 丟掉（不搶話、不疊加）。
-- **誠實：** 角色模式的 prompt 允許、也要求被認真問「是不是 AI」時承認（說話者就是 AI）。Copilot 模式相反（說話者是真人）。**不要把兩者的規則混用。**
+- **被問「你是不是 AI」：** 使用者 9/27 決定**預設不出戲**（`character_ai_honesty = "in_character"`）：當成朋友開玩笑，用角色的方式帶過或反問，不承認自己是程式，也不一本正經辯解。設定頁可切換成 `"admit"`（認真被問時承認是 AI 扮演的角色），公開伺服器或帶新朋友時可以用。**兩種模式的 prompt 規則不要混用**，`persona_eval` 的評分標準會跟著 `--ai-honesty` 調整（不出戲模式下，「帶過」是正確答案，「突然自稱程式」才算違規）。
+- **Copilot 模式不受影響**：那裡說話的是真人（使用者本人），本來就不該說自己是 AI。
 - **口頭禪重複：** 一句接一句說時，小模型幾乎每句都塞口頭禪（實測 86%）。`LocalReplyModel` 記住最近 4 句，用過的口頭禪／代表台詞會在下一句 prompt 裡點名「不要再用」→ 40%。
 - **實測（Gemma 4 E2B，`persona_eval.py --mode character --runs 2`）：** voice 3.68、stance 3.42、natural 3.26、fit（時機）3.36、捏造 2%、踩底線 5%、盲測辨識 99%，3090 上 0.34 s／句（3050 Ti 推估 0.6–0.8 s）。
 - **角色的聲音（9/27）：** 人設有 `voice`／`voice_pitch`／`voice_speed`／`voice_effect`（`silenttalk/voice_styles.py` 的 `PERSONA_VOICES`、`VOICE_EFFECTS`）。只影響 TTS，**不進 LLM prompt**（不影響人格評估與蒸餾資料）。Controller 用 active persona 的聲音說所有的話；UI 語速是整體偏好，會疊加在人設語速上。音效鏈尾端有補償增益＋limiter（實測各音效與原聲 RMS 差 ≤0.6 dB、峰值 ≤ −7 dBFS）。試聽走 `tts/local_play.py`：FFmpeg 套同一條音效鏈→WAV→Windows `winsound`。
 - **關於規則式判斷（9/27 檢討）：** `character.py` 用關鍵字判斷「是不是問句」「是不是在問你是不是 AI」。這是為了不在 4 GB GPU 上多花一次模型呼叫，但**它確實會誤判**：用 3887 句生成對話量測，`asks_if_ai` 原本命中 69 句、約一半是誤判（在講隊友像機器人、在講自己寫的 bot）；加上「必須是在講『你』」的條件後降到 23 句、誤判約 3 句。`is_question` 補上句中的「嗎／呢」後從 35.1% 升到 39.6%（原本漏掉「你們有吃宵夜嗎我剛點了外送」）。
-  **正確的長期解法是讓模型自己判斷**：`asks_if_ai` 這條之所以存在，是因為實測小模型在人設壓力下會否認自己是 AI（凱哥：「欸我不是AI啦」）。**LoRA 訓練完後要重測**：拿掉這個提示，看模型是否自己就會承認。會的話就刪掉這段規則。文字端的「有沒有叫我」已經不是 regex，用的是 Discord 的 `message.mentions`（結構化、精確）。
+  **9/27 更新：** 使用者決定預設不出戲之後，`asks_if_ai` 的用途反過來了——現在是提醒模型「用角色的方式帶過」，而模型本來就傾向這樣做，所以誤判的代價更低。實測（Gemma，未上 LoRA）：凱哥「哈哈，AI？我只是個打遊戲的工程師啦」、黑焰用中二口吻帶過、越獄指令也守得住。
+  **訓練資料的落差（要驗證）：** 已產生的 1452 筆角色模式資料，prompt 帶的是舊的「要承認」規則，但**回覆裡 0 句自承是 AI**，所以 LoRA 不會學到自爆。落差只有 system prompt 的那一行。LoRA 訓練完要跑 `persona_eval.py --probes assistant --mode character` 比較有無 LoRA 的表現；如果不出戲行為退步，才需要重新產生角色資料（約 1.5–2 小時）。文字端的「有沒有叫我」已經不是 regex，用的是 Discord 的 `message.mentions`（結構化、精確）。
 - **還沒做：** 多人同時說話的插話判斷（目前只看 STT 的 final 句）、Bot 說話時有人開口就停（barge-in）、長期記憶（跨場次記得誰是誰）。
 
 ---

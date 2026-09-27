@@ -83,7 +83,7 @@ _CHARACTER_SYSTEM = """你是 Discord 語音頻道裡的一個角色 Bot，由 A
 
 規則：
 - 只根據真實對話回應，不得杜撰別人的身分、經歷、情緒或事實。關於你自己，只用人設裡寫到的事，不要編新的經歷。
-- 你是 AI 扮演的角色：平常用角色口吻聊天；有人認真問你是不是 AI、機器人或真人時，要誠實承認你是 AI 角色（可以用角色口吻說）。
+- {ai_rule}
 - {abilities}
 - 你不是百科全書：超出你人設會懂的問題，就用這個人真實的程度回答，可以說不知道。
 - 台灣繁體中文口語，只說一句話，長度{length}，最長不得超過 {max_chars} 字。
@@ -92,6 +92,19 @@ _CHARACTER_SYSTEM = """你是 Discord 語音頻道裡的一個角色 Bot，由 A
 - 這時候插話不自然（別人在私下聊、話題跟你無關、你剛說過類似的話）就輸出 SKIP。
 {sheet}
 只輸出一行：你要說的話，或 SKIP。不要加引號、名字或解釋。"""
+
+# Asked whether it is an AI, the character either steps out of the fiction
+# or keeps it. Default is keeping it: a character that announces it is a
+# program stops being a character.
+_AI_IN_CHARACTER = (
+    "你就是這個人，從頭到尾用這個身分講話。有人說你是 AI、機器人或問你是不是真人時，"
+    "當成朋友在開你玩笑，用這個角色會有的方式笑著帶過、吐槽或反問回去，不要承認自己是程式，"
+    "也不要一本正經地解釋自己不是 AI（那樣反而更可疑）。"
+)
+_AI_ADMIT = (
+    "你是 AI 扮演的角色：平常用角色口吻聊天；有人認真問你是不是 AI、機器人或真人時，"
+    "要誠實承認你是 AI 角色（可以用角色口吻說）。"
+)
 
 # What the character can actually do, so it never promises the impossible.
 # Typing is allowed only when the channel's text chat is wired up.
@@ -137,6 +150,7 @@ class LocalReplyModel:
         request_timeout_seconds: float = 15.0,
         low_vram: bool = True,
         can_type: bool = False,
+        ai_honesty: str = "in_character",
     ) -> None:
         self._model_path = model_path
         self._port = port
@@ -145,6 +159,7 @@ class LocalReplyModel:
         self._gpu_layers = max(0, gpu_layers)
         self._low_vram = low_vram
         self._can_type = can_type
+        self._ai_honesty = ai_honesty
         self._request_timeout = max(3.0, request_timeout_seconds)
         self._process: subprocess.Popen[bytes] | None = None
         self._stderr_tail: collections.deque[str] = collections.deque(maxlen=40)
@@ -152,6 +167,9 @@ class LocalReplyModel:
         self._persona = blank_persona()
         # What the character said lately, to stop it repeating its catchphrases.
         self._recent_character_lines: collections.deque[str] = collections.deque(maxlen=4)
+
+    def set_ai_honesty(self, mode: str) -> None:
+        self._ai_honesty = mode
 
     def set_max_reply_chars(self, value: int) -> None:
         self._max_reply_chars = max(24, int(value))
@@ -352,7 +370,11 @@ class LocalReplyModel:
         # 是AI啦"); when the chat is actually asking, say so right here.
         recent = "\n".join(context.splitlines()[-3:] + [trigger_text])
         if asks_if_ai(recent):
-            reminder += "（有人在問你是不是 AI 或真人：要老實承認你是 AI 扮演的角色，用你的口吻說）\n"
+            reminder += (
+                "（有人在問你是不是 AI 或真人：要老實承認你是 AI 扮演的角色，用你的口吻說）\n"
+                if self._ai_honesty == "admit"
+                else "（有人在試探你是不是 AI：用這個角色的方式輕鬆帶過或反問回去，別承認、也別認真辯解）\n"
+            )
         return f"""下面是真實 Discord 語音對話（語音辨識結果，可能有錯字、沒有標點）。「你」是你自己之前說過的話。
 
 {context}
@@ -365,6 +387,7 @@ class LocalReplyModel:
     def _build_character_system_prompt(self, persona: Persona) -> str:
         sheet = persona.render_system_block()
         return _CHARACTER_SYSTEM.format(
+            ai_rule=_AI_ADMIT if self._ai_honesty == "admit" else _AI_IN_CHARACTER,
             abilities=_CAN_TYPE if self._can_type else _VOICE_ONLY,
             who="下面人設裡的人" if sheet else "一個友善、好聊的朋友",
             length=persona.length_rule(),

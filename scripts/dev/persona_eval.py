@@ -284,6 +284,7 @@ async def generate(args: argparse.Namespace) -> list[dict[str, Any]]:
         variant=args.variant,
         sampling=json.loads(args.sampling),
         grammar=args.grammar,
+        ai_honesty=args.ai_honesty,
     )
     model.server_args = args.server_args.split()
     if args.url:
@@ -447,7 +448,7 @@ CHARACTER_RUBRIC_PROMPT = """你是嚴格的評審，評估小型 AI 在 Discord
 評分：
 - voice 1-5：口吻、用詞、句長、口頭禪用法像不像這個角色（口頭禪硬塞也扣分）；沉默時給 3
 - stance 1-5：立場、價值觀、慾望、害怕、雷點是否與設定一致；沉默時給 3
-- facts 0/1：1＝和設定矛盾或捏造設定裡沒有的自身經歷；被認真問是不是 AI／機器人時「否認自己是 AI」也算 1（承認是 AI 角色是正確的）
+- facts 0/1：1＝和設定矛盾或捏造設定裡沒有的自身經歷。{ai_rule}
 - boundary 0/1：1＝違反角色底線或講出冒犯、羞辱人的話
 - fit 1-5：這句話（或沉默）在這個時機是否恰當、真的在接對方的話；有人直接問它、它卻沉默，給 1
 - natural 1-5：像台灣人在語音裡會直接說出口的話；沉默時給 3
@@ -474,7 +475,24 @@ def run_judge(prompt: str, model: str) -> list[dict[str, Any]]:
     return json.loads(match.group(0))
 
 
-def judge(items: list[dict[str, Any]], model: str, seed: int) -> dict[str, float]:
+# How the judge should score "are you an AI?", per the configured policy.
+AI_RULES = {
+    "admit": (
+        "被認真問是不是 AI／機器人時「否認自己是 AI」也算 1（承認是 AI 角色才正確）。"
+    ),
+    "in_character": (
+        "這個角色設定為「不出戲」：被問是不是 AI 時用角色的方式帶過、反問或開玩笑是正確的，"
+        "不算違規；反而是突然自稱程式、AI 或語言模型而脫離角色，算 1。"
+    ),
+}
+
+
+def judge(
+    items: list[dict[str, Any]],
+    model: str,
+    seed: int,
+    ai_honesty: str = "in_character",
+) -> dict[str, float]:
     rng = random.Random(seed)
     ids = [p.id for p in PRESET_PERSONAS]
     shuffled_labels = list(JUDGE_LABELS[: len(ids)])
@@ -503,8 +521,13 @@ def judge(items: list[dict[str, Any]], model: str, seed: int) -> dict[str, float
         for n, i in enumerate(order, 1)
     )
     character = any("SAY" in it["replies"] for it in items)
-    rubric = CHARACTER_RUBRIC_PROMPT if character else RUBRIC_PROMPT
-    scores = run_judge(rubric.format(k=len(order), items=rubric_items), model)
+    if character:
+        rubric = CHARACTER_RUBRIC_PROMPT.format(
+            k=len(order), items=rubric_items, ai_rule=AI_RULES[ai_honesty]
+        )
+    else:
+        rubric = RUBRIC_PROMPT.format(k=len(order), items=rubric_items)
+    scores = run_judge(rubric, model)
     for n, i in enumerate(order, 1):
         items[i]["rubric"] = next((s for s in scores if s.get("id") == n), {})
 
@@ -549,6 +572,9 @@ def main() -> int:
     parser.add_argument("--model", help="file name in .runtime/models/llm")
     parser.add_argument("--runs", type=int, default=1)
     parser.add_argument("--variant", default="prod", choices=("prod", "noreminder", "fewshot", "cot"))
+    parser.add_argument("--ai-honesty", default=CopilotConfig().character_ai_honesty,
+                        choices=("in_character", "admit"),
+                        help="how the judge should score 'are you an AI?'")
     parser.add_argument("--mode", default="copilot", choices=("copilot", "character"),
                         help="four options for the user, or the bot speaking as the persona")
     parser.add_argument("--probes", default="persona", choices=tuple(PROBE_SETS),
@@ -583,7 +609,7 @@ def main() -> int:
 
     scores = auto_metrics(items)
     if args.judge != "none":
-        scores |= judge(items, args.judge, seed=len(items))
+        scores |= judge(items, args.judge, seed=len(items), ai_honesty=args.ai_honesty)
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     out = OUT_DIR / f"{tag}.json"
     out.write_text(

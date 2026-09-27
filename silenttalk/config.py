@@ -8,7 +8,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from silenttalk.copilot.character import ENGAGEMENT_MODES
+from silenttalk.copilot.character import AI_HONESTY_MODES, ENGAGEMENT_MODES
 from silenttalk.settings_store import SETTINGS_FILE, SettingsStore, merge
 
 DEFAULT_LLM_MODEL = "gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf"
@@ -81,6 +81,8 @@ class CopilotConfig:
     compact_context: bool = True
     compact_keep_turns: int = 20
     compact_batch_turns: int = 12
+    # Asked whether it is an AI: "in_character" keeps the act, "admit" owns up.
+    character_ai_honesty: str = "in_character"
     character_engagement: str = "called"
     character_follow_up_seconds: float = 20.0
     character_cooldown_seconds: float = 8.0
@@ -274,6 +276,11 @@ def load_settings(project_dir: Path) -> Settings:
             compact_context=bool(copilot.get("compact_context", True)),
             compact_keep_turns=max(8, min(200, int(copilot.get("compact_keep_turns", 20)))),
             compact_batch_turns=max(4, min(200, int(copilot.get("compact_batch_turns", 12)))),
+            character_ai_honesty=_one_of(
+                copilot.get("character_ai_honesty", "in_character"),
+                [mode for mode, _ in AI_HONESTY_MODES],
+                "character_ai_honesty",
+            ),
             character_engagement=_one_of(
                 copilot.get("character_engagement", "called"),
                 [mode for mode, _ in ENGAGEMENT_MODES],

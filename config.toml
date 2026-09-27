@@ -55,6 +55,9 @@ llm_low_vram = true
 # after it spoke so a back-and-forth needs the name only once. "active" = it
 # also joins in by itself, after the cooldown, on a question or once the
 # others have said character_turn_gap lines.
+# Asked "are you an AI?": "in_character" keeps the act (an NPC does not
+# announce it is scripted), "admit" owns up when sincerely asked.
+character_ai_honesty = "in_character"
 character_engagement = "called"
 character_follow_up_seconds = 20
 character_cooldown_seconds = 8

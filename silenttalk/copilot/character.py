@@ -32,6 +32,14 @@ _GENERIC_NAMES = ("機器人", "bot", "ai")
 #             not need the name every time. Predictable in a busy channel.
 #   active  - also joins in on its own: after a cooldown, on a question or
 #             once the others have talked for a while.
+# Asked "are you an AI?", the character either stays in the fiction or steps
+# out of it. In a private channel among friends this is a storytelling
+# choice, like an NPC never admitting it is scripted.
+AI_HONESTY_MODES: tuple[tuple[str, str], ...] = (
+    ("in_character", "照角色演（不承認）"),
+    ("admit", "承認自己是 AI"),
+)
+
 ENGAGEMENT_MODES: tuple[tuple[str, str], ...] = (
     ("called", "被叫到才回"),
     ("active", "會主動加入"),
@@ -85,7 +93,10 @@ _ABOUT_YOU = re.compile(r"你(?!們)\s*[^，。！？\s]{0,6}?(是|像|不是|�
 
 
 def asks_if_ai(text: str) -> bool:
-    """Someone is asking this bot whether it is an AI or a real person.
+    """Someone is probing this bot about whether it is an AI or a real person.
+
+    Used either way round: to tell the character to own up, or to tell it to
+    stay in character - which is why a false match costs so little now.
 
     Both halves are required: the AI word, and the line being about "you".
     Mentioning a bot or an AI while talking about something else (a laggy

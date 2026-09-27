@@ -110,6 +110,7 @@ class CopilotRuntime:
             gpu_layers=config.llm_gpu_layers,
             low_vram=config.llm_low_vram,
             can_type=can_type,
+            ai_honesty=config.character_ai_honesty,
         )
         self._stt = transcriber(
             asr_dir,
@@ -194,6 +195,9 @@ class CopilotRuntime:
             max_reply_chars=int(
                 copilot.get("max_reply_chars", self._config.max_reply_chars)
             ),
+            character_ai_honesty=str(
+                copilot.get("character_ai_honesty", self._config.character_ai_honesty)
+            ),
         )
         self._compact_keep = max(
             self._config.recent_turns,
@@ -203,6 +207,9 @@ class CopilotRuntime:
             4, int(copilot.get("compact_batch_turns", self._config.compact_batch_turns))
         )
         self._llm.set_max_reply_chars(self._config.max_reply_chars)
+        self._llm.set_ai_honesty(
+            str(copilot.get("character_ai_honesty", self._config.character_ai_honesty))
+        )
         _LOG.info(
             "copilot_settings_applied engagement=%s compact=%s",
             self._character_policy.mode,
