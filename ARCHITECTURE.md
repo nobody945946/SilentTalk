@@ -55,7 +55,7 @@ speech_queue.py            FIFO / cancel / job lifecycle
 | 語音頻道文字聊天的讀寫 | `silenttalk/discord_voice.py`（`on_message` / `send_text`） | `config.toml [discord] text_chat`, `controller.py` |
 | 角色模式何時開口 | `silenttalk/copilot/llm.py` 的 `character_turn`、`_GATE_QUESTION` | `copilot/runtime.py`, `copilot/character.py`（設定選項） |
 | 人設欄位、預設人設 | `silenttalk/copilot/persona.py` | `silenttalk/persona_ui.py` |
-| 選項（接話／追問／表態／玩笑）與按鍵對應 | `silenttalk/copilot/types.py` 的 `REPLY_LANES` | `silenttalk/copilot/llm.py` 的 `_LANE_ASKS`、`_OPTIONS_ASK` |
+| 選項的四個位置與按鍵對應 | `silenttalk/copilot/types.py` 的 `REPLY_LANES` | `silenttalk/copilot/llm.py` 的 `suggest`、`_OPTIONS_ASK` |
 | Copilot 模型檔、GPU layers | `config.toml` `[copilot]` | `scripts/setup_copilot.py` |
 | 文字長度、空白、換行規則 | `silenttalk/text.py` | `silenttalk/config.py` |
 | TTS 聲音、速度、音高、音量 | `config.toml` | `silenttalk/tts/edge.py` |
@@ -251,15 +251,11 @@ bounded session context
 copilot/llm.py  LocalReplyModel.suggest()
 Gemma 4 E2B（config 可換）/ persistent llama-server
 和角色模式同一段 chat（別人＝user「名字：內容」、你說過的＝assistant、人設與關係在 system），
-尾端請模型一次寫五行：心裡|… 再四句
+尾端問「換你說話了：說一句你現在會說的話」，溫度 1.0 取樣最多 7 次，
+留下最多四句彼此不像、也不重複對方的話（同一段快取，每多一句只多生成那句）
         │
         ▼
-ReplySuggestions（thought＋四格；欄位與按鍵由 REPLY_LANES 定義）
-  ├─ 心裡想（顯示在選項上方）
-  ├─ W 接話
-  ├─ A 追問
-  ├─ D 表態
-  └─ S 玩笑（可 SKIP）
+ReplySuggestions（四格依產生順序填入 W／A／D／S；欄位與按鍵由 REPLY_LANES 定義）
         │
         ▼
 ui.py / story_ui.py

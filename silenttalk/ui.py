@@ -943,7 +943,7 @@ class SilentTalkUI:
                 else "沒有合適的建議"
             )
             self.suggestion_list.insert(
-                "end", f"  {lane.key.upper()}  {lane.label}｜{shown}"
+                "end", f"  {lane.key.upper()}｜{shown}"
             )
             self.suggestion_list.itemconfigure(
                 index,
@@ -975,7 +975,7 @@ class SilentTalkUI:
         self.suggestion_list.delete(0, "end")
         for index, lane in enumerate(REPLY_LANES):
             self.suggestion_list.insert(
-                "end", f"  {lane.key.upper()}  {lane.label}｜等待對話…"
+                "end", f"  {lane.key.upper()}｜等待對話…"
             )
             self.suggestion_list.itemconfigure(index, foreground=theme.DIM)
 

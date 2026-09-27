@@ -86,38 +86,27 @@ _ENGAGEMENT_RULES = {
     ),
 }
 
-# Options mode (選項) asks the same chat for what "you" could say next; the
-# owner picks one, so the character never decides whether to speak.
+# Options mode (選項): the same chat as character mode, asked several times
+# for a line the character would say; the owner picks one of up to four.
 _ENGAGEMENT_RULES["options"] = (
-    "每次你會被要求先寫下心裡的想法，再想幾句現在可以說出口的話，由你挑一句說；不要輸出 SKIP。"
+    "每次輪到你，就說一句你現在會說的話，你的主人會從幾句裡挑一句說出口；不要輸出 SKIP。"
 )
-
-# The four options come from one thought, in one request. Asked for four
-# stock reactions to the last line (agree / ask / disagree / joke), Gemma 4
-# E2B answered the wrong line, disagreed for the sake of it and repeated one
-# persona trait in every round (laptop test, 2026-09-28: "敷衍、過度跟隨每一
-# 句話，缺乏角色自己的中心想法"). Writing its own view of the moment first
-# gives the four a shared point of view; asked as separate requests they
-# came out near-identical, and shown each other's lines they copied them.
-_THOUGHT_TAG = "心裡"
+_OPTIONS_ASK = "（換你說話了：說一句你現在會說的話）"
+# Options are sampled lines, not four fixed intents. Asked for agree / ask /
+# disagree / joke in one go, Gemma 4 E2B answered the wrong line, disagreed
+# for the sake of it and repeated one trait (laptop test, 2026-09-28: "敷衍、
+# 過度跟隨每一句話"); asked to write its thought first and four lines from it,
+# it did worse still. Sampling what the character itself would say won the
+# blind A/B against the four-intent prompt (options_eval: better 53% vs 42%,
+# on-topic 2.94 vs 2.56, usable lines 1.68 vs 1.43 of 4). Each extra sample
+# reuses the cached prompt, so it costs only its own ~20 tokens.
+_OPTIONS_TEMPERATURE = 1.0
+_OPTIONS_TRIES = 7
+# Two lines this alike count as one option.
+_OPTIONS_ALIKE = 0.6
 # Requests the character adapter can be applied to: the two gate questions,
 # the character's line, and the options.
 LORA_PARTS = ("called", "active", "line", "options")
-_LANE_ASKS = {
-    "AGREE": "把你心裡想說的說出來",
-    "ASK": "問一個你真的想知道的問題",
-    "DISAGREE": "你自己的立場、提醒或想法；不同意就直說，但不要為反對而反對",
-    "HUMOR": "用你的幽默方式鬧一下或打圓場；沒有自然的笑點就寫 SKIP",
-}
-_OPTIONS_ASK = (
-    "（換你說話了。先寫你心裡現在的想法：大家在聊什麼、你怎麼看、你最想說或想做什麼。"
-    "再照這個想法替自己想四句現在可以說出口的話，每句都要是你這個人會說的，四句的意思要不一樣：\n"
-    + f"{_THOUGHT_TAG}|你現在的想法，一兩句\n"
-    + "".join(f"{lane.label}|{_LANE_ASKS[lane.code]}\n" for lane in REPLY_LANES)
-    + "只輸出這五行，格式「標籤|內容」）"
-)
-_OPTIONS_MAX_TOKENS = 260
-_THOUGHT_CHARS = 100
 
 # Asked on the same chat (same prompt cache) before writing a line, answered
 # with one grammar-constrained token. A small model told to "answer or SKIP"
@@ -334,34 +323,30 @@ class LocalReplyModel:
         trigger_text: str,
         on_partial: Callable[[ReplySuggestions], None] | None = None,
     ) -> ReplySuggestions:
-        """What "you" could say next: the character's own thought about the
-        moment, then one line per lane written from it. With `on_partial`,
-        the thought and each lane are also reported as soon as they are
-        complete (called from a worker thread), so the first choice shows up
-        long before the fourth is written."""
+        """Up to four different lines the character itself would say next,
+        sampled from one cached request. With `on_partial`, each new line is
+        reported as soon as it is written (from a worker thread), so the
+        first choice shows up long before the fourth."""
         messages = self.option_messages(turns=turns, summary=summary)
-        if on_partial is None:
+        lines: list[str] = []
+        for _ in range(_OPTIONS_TRIES):
+            if len(lines) >= len(REPLY_LANES):
+                break
             raw = await asyncio.to_thread(
-                self._request_messages, messages, None, _OPTIONS_MAX_TOKENS,
-                "options" in self._lora_uses,
+                self._request_messages, messages, None, 60,
+                "options" in self._lora_uses, _OPTIONS_TEMPERATURE,
             )
-            return self._parse_suggestions(raw, trigger_speaker, trigger_text)
-
-        shown = 0
-
-        def on_lines(text: str) -> None:
-            nonlocal shown
-            partial = self._parse_suggestions(text, trigger_speaker, trigger_text)
-            filled = bool(partial.thought) + sum(bool(value) for _, value in partial.items())
-            if filled > shown:
-                shown = filled
-                on_partial(dataclasses.replace(partial, partial=True))
-
-        raw = await asyncio.to_thread(
-            self._request_messages, messages, on_lines, _OPTIONS_MAX_TOKENS,
-            "options" in self._lora_uses,
-        )
-        return self._parse_suggestions(raw, trigger_speaker, trigger_text)
+            line = self._parse_character_line(raw, trigger_text)
+            if not line or any(_alike(line, other) for other in lines):
+                continue
+            lines.append(line)
+            if on_partial is not None and len(lines) < len(REPLY_LANES):
+                on_partial(
+                    dataclasses.replace(
+                        _options(lines, trigger_speaker, trigger_text), partial=True
+                    )
+                )
+        return _options(lines, trigger_speaker, trigger_text)
 
     def option_messages(
         self, *, turns: Sequence[ConversationTurn], summary: str = ""
@@ -683,6 +668,7 @@ class LocalReplyModel:
         on_lines: Callable[[str], None] | None = None,
         max_tokens: int = 240,
         character: bool = False,
+        temperature: float = 0.65,
     ) -> str:
         payload = {
             "model": "local",
@@ -691,7 +677,7 @@ class LocalReplyModel:
             # The system prompt is identical across requests; reuse its KV cache.
             "cache_prompt": True,
             "chat_template_kwargs": {"enable_thinking": False},
-            "temperature": 0.65,
+            "temperature": temperature,
             "top_p": 0.85,
             "max_tokens": max_tokens,
             "stream": on_lines is not None,
@@ -716,66 +702,6 @@ class LocalReplyModel:
             return str(body["choices"][0]["message"]["content"] or "")
         except (KeyError, IndexError, TypeError) as exc:
             raise LocalLLMError("本機回覆模型回傳格式異常。") from exc
-
-    def _parse_suggestions(
-        self,
-        raw: str,
-        trigger_speaker: str,
-        trigger_text: str,
-    ) -> ReplySuggestions:
-        cleaned = raw.strip()
-        lower = cleaned.lower()
-        open_index = lower.find(_THINK_OPEN)
-        close_index = lower.rfind(_THINK_CLOSE)
-        if open_index >= 0 and close_index >= open_index:
-            cleaned = (
-                cleaned[:open_index] + cleaned[close_index + len(_THINK_CLOSE) :]
-            ).strip()
-
-        tags = {lane.label: lane for lane in REPLY_LANES} | {
-            lane.code: lane for lane in REPLY_LANES
-        }
-        thought = ""
-        values: dict[str, str] = {lane.field: "" for lane in REPLY_LANES}
-        for line in cleaned.splitlines():
-            # Small models like to decorate: "1. **接話**｜…", "- 追問: …".
-            stripped = line.strip().lstrip("-*•#>0123456789.、) ").strip()
-            parts = re.split(r"[|｜:：]", stripped, maxsplit=1)
-            if len(parts) != 2:
-                continue
-            tag = parts[0].strip(" *【】[]「」").upper()
-            if tag == _THOUGHT_TAG:
-                thought = self._clean_thought(parts[1])
-                continue
-            lane = tags.get(tag)
-            if lane is None:
-                continue
-            value = self._clean_reply(parts[1].lstrip(" *"))
-            if (
-                value.upper().startswith("SKIP")
-                or _echoes(value, trigger_text)
-                # Now and then the first lane is the thought read out.
-                or (thought and _echoes(value, thought))
-            ):
-                value = ""
-            elif lane.code == "ASK" and value and value[-1] not in _END_PUNCTUATION:
-                # Gemma often drops the question mark; TTS needs it to
-                # say the line with a rising, questioning tone.
-                value += "？"
-            values[lane.field] = value
-
-        return ReplySuggestions(
-            trigger_speaker=trigger_speaker,
-            trigger_text=trigger_text,
-            thought=thought,
-            **values,
-        )
-
-    def _clean_thought(self, value: str) -> str:
-        value = to_taiwan_traditional(" ".join(value.split())).strip("（）()「」*")
-        if len(value) > _THOUGHT_CHARS:
-            value = value[:_THOUGHT_CHARS].rstrip() + "…"
-        return value
 
     def _clean_reply(self, value: str) -> str:
         value = value.strip().strip("\"'「」『』*")
@@ -881,6 +807,18 @@ def _signature_used(phrase: str, line: str) -> bool:
     if len(phrase) <= 6:
         return bool(phrase) and phrase in line
     return any(phrase[i : i + 5] in line for i in range(len(phrase) - 4))
+
+
+def _options(lines: list[str], trigger_speaker: str, trigger_text: str) -> ReplySuggestions:
+    """Sampled lines in the W/A/D/S slots, in the order they were written."""
+    values = {lane.field: "" for lane in REPLY_LANES}
+    for lane, line in zip(REPLY_LANES, lines, strict=False):
+        values[lane.field] = line
+    return ReplySuggestions(trigger_speaker=trigger_speaker, trigger_text=trigger_text, **values)
+
+
+def _alike(a: str, b: str) -> bool:
+    return difflib.SequenceMatcher(None, _compact(a), _compact(b)).ratio() >= _OPTIONS_ALIKE
 
 
 def _echoes(reply: str, line: str) -> bool:

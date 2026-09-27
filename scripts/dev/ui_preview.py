@@ -139,7 +139,6 @@ def main() -> int:
 
     # Streaming: two lanes are in, the user already picks ASK; the final
     # result must keep that choice and stay in the same round.
-    thought = "阿傑又想硬衝，上一把就是這樣被架，我想先丟煙再進"
     ui.set_suggestions(
         ReplySuggestions(
             "阿傑",
@@ -147,7 +146,6 @@ def main() -> int:
             agree="好啊，一個人守我們三個衝一定吃得下",
             ask="你確定只有一個嗎？剛剛是誰看到的？",
             partial=True,
-            thought=thought,
         )
     )
     pump()
@@ -160,12 +158,10 @@ def main() -> int:
             agree="好啊，一個人守我們三個衝一定吃得下",
             ask="你確定只有一個嗎？剛剛是誰看到的？",
             disagree="上一把就是這樣被架，我覺得先丟煙再進比較穩",
-            thought=thought,
         )
     )
     pump()
     streamed = (ui.story._selected, ui.story._round)
-    shown_thought = ui.story._thought_var.get()
     shot("3_choices")
     press("d")
     shot("4_selected_d")
@@ -269,8 +265,6 @@ def main() -> int:
 
     expected = "上一把就是這樣被架，我覺得先丟煙再進比較穩"
     problems = []
-    if shown_thought != f"心裡想：{thought}":
-        problems.append(f"the character's thought should show above the choices, got {shown_thought!r}")
     if held != (held_text, trigger):
         problems.append(f"a newer round must not replace choices being read, got {held}")
     if revealed != ("好，煙丟完我第一個進", newer, 1):

@@ -86,7 +86,7 @@ LLM_SCENES: tuple[tuple[tuple[str, str], ...], ...] = (
 # Qwen3-1.7B Q4_K_M: ~0.35 s on an RTX 3090, estimated 1-1.5 s on a 3050 Ti
 # Laptop, ~3 s CPU-only. Above this the story-mode choices feel laggy.
 LLM_MAX_MEDIAN_SECONDS = 3.0
-# The joke lane may legitimately SKIP, so three of four lanes is the floor.
+# Sampling may not find four different lines, so three of four is the floor.
 LLM_MIN_LANES = 3
 
 
@@ -306,7 +306,7 @@ async def _llm_gate(settings: Settings, project_dir: Path) -> bool:
         print(f"  {result.seconds:4.1f}s  {result.lanes}/4 格｜對方：{result.trigger}")
         for lane in REPLY_LANES:
             print(
-                f"        {lane.key.upper()} {lane.label}：{result.suggestions.text_for(lane) or '—'}"
+                f"        {lane.key.upper()}：{result.suggestions.text_for(lane) or '—'}"
             )
     median = statistics.median(r.seconds for r in results)
     format_ok = all(r.lanes >= LLM_MIN_LANES for r in results)

@@ -110,20 +110,6 @@ class StoryPanel(tk.Frame):
             )
         ).pack(fill="x", pady=(theme.px(2), 0))
 
-        # The character's own view of the moment: the four choices are
-        # written from it, so it is what makes them hang together.
-        self._thought_var = tk.StringVar(value="")
-        self._thought_label = tk.Label(
-            self,
-            textvariable=self._thought_var,
-            bg=theme.BG,
-            fg=theme.ACCENT_HI,
-            font=theme.font(10),
-            anchor="w",
-            justify="left",
-        )
-        wrap_to_width(self._thought_label)
-
         self._status_var = tk.StringVar(value="選項會在對方說完話後出現")
         self._status_label = tk.Label(
             self,
@@ -287,8 +273,6 @@ class StoryPanel(tk.Frame):
             self._sent = False
             self._selected = None
         self._failed = bool(suggestions.error)
-        if fresh or suggestions.thought:
-            self._show_thought(suggestions.thought)
         if suggestions.error:
             self._choices = {lane.key: "" for lane in REPLY_LANES}
             self._selected = None
@@ -364,15 +348,6 @@ class StoryPanel(tk.Frame):
             self._thinking_tick = 0
             self._tick_thinking()
 
-    def _show_thought(self, thought: str) -> None:
-        self._thought_var.set(f"心裡想：{thought}" if thought else "")
-        if thought and not self._thought_label.winfo_manager():
-            self._thought_label.pack(
-                fill="x", pady=(theme.px(8), 0), before=self._status_label
-            )
-        elif not thought and self._thought_label.winfo_manager():
-            self._thought_label.pack_forget()
-
     def _show_line(self, speaker: str, text: str) -> None:
         self._speaker_var.set(speaker)
         self._speaker_label.configure(fg=self._colors.get(speaker, theme.ACCENT_HI))
@@ -391,8 +366,7 @@ class StoryPanel(tk.Frame):
             self._set_status("這回合已經說過了，等下一句或按 R 重想")
             return
         if not self._choices.get(key):
-            lane = self._lanes[key]
-            self._set_status(f"{lane.key.upper()}「{lane.label}」這次沒有合適的選項")
+            self._set_status(f"{key.upper()} 這次沒有選項")
         self._selected = key
         self._render_cards()
 
@@ -460,7 +434,6 @@ class StoryPanel(tk.Frame):
         if enabled:
             self._choices = {lane.key: "" for lane in REPLY_LANES}
             self._selected = None
-            self._show_thought("")
             self._set_status(f"{name or '角色'} 正在自己聊天")
         else:
             self._set_status("回到選項模式：下一句開始會出現四個選項")
@@ -487,7 +460,7 @@ class StoryPanel(tk.Frame):
 
 
 class _ChoiceCard(tk.Frame):
-    """One lane: colored stripe, keycap, lane name, reply text."""
+    """One option: colored stripe, keycap, reply text."""
 
     def __init__(self, master: tk.Misc, lane: ReplyLane) -> None:
         super().__init__(
@@ -498,7 +471,7 @@ class _ChoiceCard(tk.Frame):
         self._stripe = tk.Frame(
             self, bg=theme.mix(theme.PANEL, self._color, 0.45), width=theme.px(3)
         )
-        self._stripe.grid(row=0, column=0, rowspan=2, sticky="ns")
+        self._stripe.grid(row=0, column=0, sticky="ns")
         self._keycap = tk.Label(
             self,
             text=lane.key.upper(),
@@ -511,20 +484,10 @@ class _ChoiceCard(tk.Frame):
         self._keycap.grid(
             row=0,
             column=1,
-            rowspan=2,
             sticky="n",
             padx=(theme.px(12), theme.px(12)),
             pady=theme.px(12),
         )
-        self._label = tk.Label(
-            self,
-            text=lane.label,
-            bg=theme.PANEL,
-            fg=self._color,
-            font=theme.font(9),
-            anchor="w",
-        )
-        self._label.grid(row=0, column=2, sticky="w", pady=(theme.px(10), 0))
         self._text = tk.Label(
             self,
             text="",
@@ -535,7 +498,7 @@ class _ChoiceCard(tk.Frame):
             justify="left",
         )
         self._text.grid(
-            row=1, column=2, sticky="ew", padx=(0, theme.px(14)), pady=(0, theme.px(12))
+            row=0, column=2, sticky="ew", padx=(0, theme.px(14)), pady=theme.px(12)
         )
         wrap_to_width(self._text)
         self.columnconfigure(2, weight=1)
@@ -543,7 +506,7 @@ class _ChoiceCard(tk.Frame):
     def bind_all_parts(
         self, sequence: str, handler: Callable[[tk.Event], object]
     ) -> None:
-        for widget in (self, self._stripe, self._keycap, self._label, self._text):
+        for widget in (self, self._stripe, self._keycap, self._text):
             widget.bind(sequence, handler)
             widget.configure(cursor="hand2")
 
@@ -567,7 +530,6 @@ class _ChoiceCard(tk.Frame):
             bg=self._color if live else theme.PANEL_TOP,
             fg=theme.ACCENT_INK if live else self._color,
         )
-        self._label.configure(bg=background)
         self._text.configure(bg=background, fg=foreground, text=shown)
 
 
