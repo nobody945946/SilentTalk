@@ -245,12 +245,19 @@ def persona_sheet(persona: Any) -> str:
     return sheet
 
 
+# Set by --cpu: no GPU layers, for when a training run holds the GPU.
+# Decisions and lines compare fine; latencies do not.
+CPU_ONLY = False
+
+
 def copilot_config() -> dict[str, Any]:
     values = dict(COPILOT_DEFAULTS)
     config_path = PROJECT_DIR / "config.toml"
     if config_path.exists():
         with config_path.open("rb") as handle:
             values.update(tomllib.load(handle).get("copilot", {}))
+    if CPU_ONLY:
+        values["llm_gpu_layers"] = 0
     return values
 
 
@@ -674,7 +681,11 @@ def main() -> int:
     parser.add_argument("--judge-model", default="sonnet")
     parser.add_argument("--judge-batch", type=int, default=20)
     parser.add_argument("--seed", type=int, default=7)
+    parser.add_argument("--cpu", action="store_true",
+                        help="no GPU layers (latencies are then not comparable)")
     args = parser.parse_args()
+    global CPU_ONLY
+    CPU_ONLY = args.cpu
 
     data_sha256 = hashlib.sha256(args.data.read_bytes()).hexdigest()
     test_set = load_test_set(args.data)
