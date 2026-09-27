@@ -27,7 +27,7 @@ mkdir -p "$STATE" "$LOGS"
 LOG=$LOGS/pipeline.log
 
 PERSONAS=${PERSONAS:-300}
-PER_PERSONA=${PER_PERSONA:-3}
+PER_PERSONA=${PER_PERSONA:-2}
 TEACHER=${TEACHER:-.runtime/models/teacher/Qwen3-30B-A3B-Instruct-2507-UD-Q4_K_XL.gguf}
 TEACHER_PORT=18200
 STUDENT_HF=${STUDENT_HF:-.runtime/hf/gemma-4-E2B-it-qat}
@@ -35,6 +35,9 @@ STUDENT_GGUF=${STUDENT_GGUF:-gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf}
 LORA_DIR=.runtime/dev/lora/character-e2b
 LORA_GGUF=.runtime/models/llm/character-e2b-lora.gguf
 LLAMA_SRC=.runtime/tools/llama.cpp-b11179
+# With part of the experts on the CPU (the GPU is shared), more parallel
+# slots batch more tokens per pass over those weights.
+SLOTS=${SLOTS:-8}
 
 log() { echo "$(date '+%F %T') $*" | tee -a "$LOG"; }
 
@@ -86,7 +89,7 @@ teacher_up() {
     log "starting teacher $(basename "$TEACHER")"
     # --fit sizes the offload to the VRAM the shared GPU has free.
     nohup llama-server -m "$TEACHER" --host 127.0.0.1 --port "$TEACHER_PORT" \
-        --fit on --fit-target 2048 -c 32768 --parallel 4 -fa on \
+        --fit on --fit-target 2048 -c $((SLOTS * 4096)) --parallel "$SLOTS" -fa on \
         --cache-type-k q8_0 --cache-type-v q8_0 --jinja -t 12 \
         > "$LOGS/teacher.log" 2>&1 9>&- &
     for _ in $(seq 300); do
@@ -117,7 +120,7 @@ teacher_down() {
 data() {
     teacher_up || return 1
     .venv/bin/python scripts/dev/character_data.py "$@" \
-        --teacher-url "http://127.0.0.1:$TEACHER_PORT" --workers 4 &
+        --teacher-url "http://127.0.0.1:$TEACHER_PORT" --workers "$SLOTS" &
     DATA_JOB=$!
     local job=$DATA_JOB misses=0 tp finished status
     while true; do
