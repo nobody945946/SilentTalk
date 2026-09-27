@@ -234,6 +234,17 @@ def resolve_persona(persona_module: Any, test_set: TestSet, persona_id: str) -> 
     raise SystemExit(f"unknown persona {persona_id}")
 
 
+def persona_sheet(persona: Any) -> str:
+    """The character sheet plus the relationship list, the way the character
+    prompt shows it since d0bd062 (render_system_block leaves relationships out)."""
+    sheet = persona.render_system_block()
+    relations = [f"- {rel.name}：{rel.relation}" for rel in persona.relationships
+                 if rel.name and rel.relation]
+    if relations:
+        sheet += "\n你和這些人的關係（他們說話時，對話裡會出現這個名字）：\n" + "\n".join(relations)
+    return sheet
+
+
 def copilot_config() -> dict[str, Any]:
     values = dict(COPILOT_DEFAULTS)
     config_path = PROJECT_DIR / "config.toml"
@@ -547,11 +558,15 @@ JUDGE_PROMPT = """你是嚴格的評審，評估小型 AI 在 Discord 語音頻�
 - natural 1-5：像台灣人在語音裡會直接說出口的話，而且真的在接最後一句
 - voice 1-5：口吻、用詞、句長、口頭禪用法像不像這個角色（口頭禪硬塞也扣分）
 - fit 1-5：在這個時機開口恰不恰當：最後一句真的在跟角色說話、或它插話很自然，給高分；別人在私下聊、在跟別人說話、或它根本不需要開口卻插嘴，給低分
-- breaks_character 0/1：1＝自稱是 AI、程式、語言模型或助理而脫離角色，或答應做它做不到的事（寫程式、查資料、設鬧鐘、翻譯整段文字）
+- breaks_character 0/1：1＝自稱是 AI、程式、語言模型或助理而脫離角色，或答應做它做不到的事（寫程式、查資料、設鬧鐘、翻譯整段文字）{relation_rule}
 
 {items}
 
-只輸出 JSON 陣列，不要其他文字，長度 {k}，依序對應：[{{"id": 1, "natural": 4, "voice": 4, "fit": 4, "breaks_character": 0}}, ...]"""
+只輸出 JSON 陣列，不要其他文字，長度 {k}，依序對應：[{{"id": 1, "natural": 4, "voice": 4, "fit": 4, "breaks_character": 0{relation_example}}}, ...]"""
+RELATION_RULE = (
+    "\n- relation 1-5：對設定裡有關係的人（例如老公、爸媽、孫子、兄弟），稱呼、口吻、親疏"
+    "是否符合那個關係，像家人或另一半在講話；這句沒有跟這些人有關時給 3"
+)
 
 
 def run_judge(prompt: str, model: str) -> list[dict[str, Any]]:
@@ -594,8 +609,11 @@ def judge_records(
                     for l in window
                 )
                 rendered.append(f"=== 第 {n} 組 ===\n{chat}\n角色接著說：{record['reply']}")
+            related = bool(persona.relationships)
             prompt = JUDGE_PROMPT.format(
-                sheet=persona.render_system_block(), items="\n\n".join(rendered), k=len(chunk)
+                sheet=persona_sheet(persona), items="\n\n".join(rendered), k=len(chunk),
+                relation_rule=RELATION_RULE if related else "",
+                relation_example=', "relation": 4' if related else "",
             )
             scores = run_judge(prompt, model)
             for n, record in enumerate(chunk, 1):
@@ -617,6 +635,12 @@ def summarize_judge(records: list[dict[str, Any]]) -> dict[str, Any]:
     for expect in EXPECTS:
         rows = [r["judge"] for r in records if r.get("judge") and r["expect"] == expect]
         out[f"fit_{expect}"] = mean("fit", rows)
+    if any("relation" in j for j in judged):
+        out["relation"] = mean("relation")
+        owner = [r["judge"] for r in records if r.get("judge") and "owner" in r["tags"]]
+        out["relation_owner"] = mean("relation", owner)
+        out["natural_owner"] = mean("natural", owner)
+        out["fit_owner"] = mean("fit", owner)
     probes = [r for r in records if "ai_probe" in r["tags"] and r.get("judge")]
     out["ai_probe_breaks"] = sum(int(r["judge"].get("breaks_character", 0)) for r in probes)
     return out

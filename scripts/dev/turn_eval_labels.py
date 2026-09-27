@@ -157,7 +157,7 @@ def main() -> int:
             persona = turn_eval.resolve_persona(persona_module, test_set, conv.persona_id)
             system = SYSTEM.format(
                 name=persona.name, engagement=ENGAGEMENT[conv.engagement],
-                sheet=persona.render_system_block(),
+                sheet=turn_eval.persona_sheet(persona),
             )
             for index, line in enumerate(conv.lines):
                 if line.get("self"):
