@@ -191,6 +191,46 @@ NAMES = (
     "阿峰",
     "小樂",
     "Andy",
+    "阿斌",
+    "小芸",
+    "Vicky",
+    "阿昌",
+    "小慈",
+    "Allen",
+    "阿仁",
+    "小如",
+    "阿嘉嘉",
+    "Peggy",
+    "阿山",
+    "小娟",
+    "Howard",
+    "阿源",
+    "小蓉",
+    "Frank",
+    "阿彥",
+    "小姿",
+    "阿坤",
+    "Grace",
+    "阿俊",
+    "小玲",
+    "Steven",
+    "阿輝",
+    "小敏",
+    "Oscar",
+    "阿銘",
+    "小霏",
+    "阿祥",
+    "Wendy",
+    "阿豐",
+    "小茜",
+    "Brian",
+    "阿傑克",
+    "小晴天",
+    "Lily",
+    "阿洋",
+    "小諭",
+    "阿松",
+    "Irene",
 )
 TOPICS = (
     "打排位",
@@ -366,7 +406,8 @@ def held_out() -> tuple[set[str], set[str]]:
     personas = set(meta.get("persona_names_used", []))
     personas |= {p.name for p in PRESET_PERSONAS}
     personas |= {n for p in PRESET_PERSONAS for n in p.nickname.split("、") if n}
-    return personas, set(meta.get("human_names_used", []))
+    # Nobody from the test set may appear in training data, whatever the role.
+    return personas, set(meta.get("human_names_used", [])) | personas
 
 
 # ---------------------------------------------------------------- personas
