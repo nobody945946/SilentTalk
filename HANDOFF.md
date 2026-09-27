@@ -315,6 +315,7 @@ while not vad.empty():
 - 訓練完會自動轉 GGUF adapter，並跑 `persona_eval`（四選項與角色模式各一次），結果存在 `.runtime/dev/persona_eval/gemma4-E2B_lora_*.json`。
 - 開發機工具在 `.runtime/tools/`（llama-server b11179、`convert_lora_to_gguf.py`）；`source .runtime/tools/env.sh`。
 - **無人值守的規則（9/27 實測過）：** 老師當掉 → `tail --pid` 立刻重啟（8.8 s 恢復）；老師卡死 → `/health` 連 3 次失敗（10 s 間隔）後重啟（44 s）。斷網時生成、訓練、轉檔照跑，只有評審（`claude` CLI）等網路回來；VRAM 不足時訓練等下一輪。這兩種「現在不行」都不算失敗。**同一階段連續真的失敗 3 次 → `state/<stage>.blocked`，不再自動重試**：看 `logs/<stage>.log`，修好後刪掉 `.blocked` 檔，cron 會接著跑。
+- **注意（9/27 10:08）：** 角色模式的 prompt 在蒸餾途中改過（加了「只能用嘴巴聊天」與「被問是不是 AI 要承認」）。已產生的角色模式訓練資料用的是舊 prompt，而 pipeline 的評估會用新 prompt。比較前要先用**現在的 prompt** 重跑無 LoRA 的基準：`persona_eval.py --mode character --runs 2 --tag gemma4-E2B_character_v3`，拿它（而不是 `character_norepeat`）跟 LoRA 比。四選項模式的 prompt 沒變，`prod_r2` 仍可用。
 - **流程跑完之後要人（或 LLM）判斷的只有一件事：** 比較 `persona_eval/gemma4-E2B_lora_{r2,character}.json` 與 `gemma4-E2B_{prod_r2,character_norepeat}.json`，LoRA 明顯較好才上線（量化 adapter、放進 repo、`llm.py` 加 `--lora`）。
 
 原本的規劃：
