@@ -109,6 +109,7 @@ def main() -> int:
     )
     parser.add_argument("--gpu-layers", type=int, default=99, help="0 = CPU only")
     parser.add_argument("--skip-tts", action="store_true", help="no internet")
+    parser.add_argument("--llama-server", help="path to llama-server(.exe)")
     args = parser.parse_args()
 
     rows: list[tuple[str, str]] = []
@@ -170,18 +171,28 @@ def gpu_memory_used() -> int | None:
 # ---------------------------------------------------------------- LLM
 
 
-def find_llama_server() -> str:
+def find_llama_server(explicit: str | None) -> str:
+    if explicit:
+        if not Path(explicit).is_file():
+            raise BenchError(f"--llama-server 指定的檔案不存在：{explicit}")
+        return explicit
+    winget = Path(os.environ.get("LOCALAPPDATA", "")) / "Microsoft" / "WinGet"
     if os.name == "nt":
-        links = (
-            Path(os.environ.get("LOCALAPPDATA", "")) / "Microsoft" / "WinGet" / "Links"
-        )
+        links = winget / "Links"
         os.environ["PATH"] = f"{links}{os.pathsep}{os.environ.get('PATH', '')}"
     exe = shutil.which("llama-server.exe") or shutil.which("llama-server")
-    if not exe:
-        raise BenchError(
-            "找不到 llama-server（Linux 開發機先 source .runtime/tools/env.sh）"
-        )
-    return exe
+    if exe:
+        return exe
+    # winget sometimes unpacks a portable package without creating the
+    # Links shim; the exe is then only under Packages\ggml.llamacpp_*.
+    if os.name == "nt":
+        found = sorted((winget / "Packages").glob("ggml.llamacpp*/**/llama-server.exe"))
+        if found:
+            return str(found[-1])
+    raise BenchError(
+        "找不到 llama-server。Windows：winget install --id ggml.llamacpp -e，"
+        "或用 --llama-server 指定路徑；Linux 開發機先 source .runtime/tools/env.sh"
+    )
 
 
 def bench_llm(
@@ -192,7 +203,8 @@ def bench_llm(
         model = PROJECT_DIR / ".runtime" / "models" / "llm" / args.model
     if not model.is_file():
         raise BenchError(f"找不到模型 {model}")
-    exe = find_llama_server()
+    exe = find_llama_server(args.llama_server)
+    rows.append(("llama-server", exe))
     listing = subprocess.run(
         [exe, "--list-devices"],
         capture_output=True,
