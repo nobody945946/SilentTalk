@@ -195,9 +195,6 @@ class LocalReplyModel:
         self._persona = blank_persona()
         # What the character said lately, to stop it repeating its catchphrases.
         self._recent_character_lines: collections.deque[str] = collections.deque(maxlen=4)
-        # The last options round's thought, handed to the next round so the
-        # character keeps what it was after instead of starting over each line.
-        self._last_thought = ""
 
     def set_ai_honesty(self, mode: str) -> None:
         self._ai_honesty = mode
@@ -209,7 +206,6 @@ class LocalReplyModel:
         """Takes effect on the next request; the system prompt cache refills once."""
         if persona.id != self._persona.id:
             self._recent_character_lines.clear()
-            self._last_thought = ""
         self._persona = persona
 
     async def start(self) -> None:
@@ -335,9 +331,7 @@ class LocalReplyModel:
             raw = await asyncio.to_thread(
                 self._request_messages, messages, None, _OPTIONS_MAX_TOKENS
             )
-            return self._remember_thought(
-                self._parse_suggestions(raw, trigger_speaker, trigger_text)
-            )
+            return self._parse_suggestions(raw, trigger_speaker, trigger_text)
 
         shown = 0
 
@@ -352,14 +346,7 @@ class LocalReplyModel:
         raw = await asyncio.to_thread(
             self._request_messages, messages, on_lines, _OPTIONS_MAX_TOKENS
         )
-        return self._remember_thought(
-            self._parse_suggestions(raw, trigger_speaker, trigger_text)
-        )
-
-    def _remember_thought(self, suggestions: ReplySuggestions) -> ReplySuggestions:
-        if suggestions.thought:
-            self._last_thought = suggestions.thought
-        return suggestions
+        return self._parse_suggestions(raw, trigger_speaker, trigger_text)
 
     def option_messages(
         self, *, turns: Sequence[ConversationTurn], summary: str = ""
@@ -373,8 +360,6 @@ class LocalReplyModel:
         ask = _OPTIONS_ASK
         if not self._persona.is_blank:
             ask = self._persona.reminder_line("說出口的話要是", list_catchphrases=False) + "\n" + ask
-        if self._last_thought:
-            ask = f"（你剛才心裡想的是：{self._last_thought}）\n" + ask
         if messages[-1]["role"] == "user":
             messages[-1] = {"role": "user", "content": messages[-1]["content"] + "\n\n" + ask}
         else:

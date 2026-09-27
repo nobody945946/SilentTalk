@@ -102,10 +102,6 @@ async def generate(args: argparse.Namespace) -> None:
             old_persona = te.resolve_persona(old.persona, test_set, conv.persona_id)
             new_model.set_persona(new_persona)
             old_model.set_persona(old_persona)
-            # Each conversation starts fresh, even when the persona repeats.
-            for model in (new_model, old_model):
-                if hasattr(model, "_last_thought"):
-                    model._last_thought = ""
             ids = te.speaker_ids(conv)
             new_turns: list[Any] = []
             old_turns: list[Any] = []
