@@ -358,3 +358,14 @@ async def test_active_mode_asks_a_different_gate_question() -> None:
     await called.character_turn(turns=_chat(CHAT), engagement="called")
     await active.character_turn(turns=_chat(CHAT), engagement="active")
     assert called.requests[0][1][-1] != active.requests[0][1][-1]
+
+
+@pytest.mark.asyncio
+async def test_gate_and_line_share_the_system_prompt_in_active_mode() -> None:
+    """Same system prompt for both requests, so the second one reuses the
+    first one's cache, and the gate judges by the chosen engagement."""
+    model = _Scripted(gate="是")
+    await model.character_turn(turns=_chat(CHAT), engagement="active")
+    gate, line = model.requests[0][1], model.requests[1][1]
+    assert gate[0] == line[0]
+    assert "話題你有想法或有梗" in gate[0]["content"]

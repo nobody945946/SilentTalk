@@ -383,13 +383,9 @@ class LocalReplyModel:
         `turns` is the whole chat so far, the character's own lines marked
         `is_self`; `addressed` is Discord's own @mention or reply signal."""
         if not addressed:
-            base = self.character_messages(turns=turns, summary=summary, gate=True)
-            if base[-1]["role"] != "user":
+            gate = self.gate_messages(turns=turns, summary=summary, engagement=engagement)
+            if gate is None:
                 return ""  # the character spoke last; nothing new to answer
-            question = _GATE_QUESTION.get(engagement, _GATE_QUESTION["called"])
-            gate = base[:-1] + [
-                {"role": "user", "content": base[-1]["content"] + "\n\n" + question}
-            ]
             answer = await asyncio.to_thread(self._request_gate, gate)
             if answer != "是":
                 return ""
@@ -405,6 +401,25 @@ class LocalReplyModel:
         if line:
             self._recent_character_lines.append(line)
         return line
+
+    def gate_messages(
+        self,
+        *,
+        turns: Sequence[ConversationTurn],
+        summary: str = "",
+        engagement: str = "called",
+    ) -> list[dict[str, str]] | None:
+        """The 是/否 request asked before writing a line: the cached chat with
+        the gate question on the end. None when the character spoke last."""
+        base = self.character_messages(
+            turns=turns, summary=summary, engagement=engagement, gate=True
+        )
+        if base[-1]["role"] != "user":
+            return None
+        question = _GATE_QUESTION.get(engagement, _GATE_QUESTION["called"])
+        return base[:-1] + [
+            {"role": "user", "content": base[-1]["content"] + "\n\n" + question}
+        ]
 
     def character_messages(
         self,
