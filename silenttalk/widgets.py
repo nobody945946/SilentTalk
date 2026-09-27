@@ -592,6 +592,10 @@ def wrap_to_width(label: tk.Label, margin: int = 0) -> tk.Label:
         if width > 40 and str(label.cget("wraplength")) != str(width):
             label.configure(wraplength=width)
 
+    # Until the first layout, cap the line: an unwrapped label asks for its
+    # whole text on one line, and a long line would widen the window itself.
+    if str(label.cget("wraplength")) in ("0", ""):
+        label.configure(wraplength=theme.px(420))
     label.bind("<Configure>", resize, add="+")
     return label
 

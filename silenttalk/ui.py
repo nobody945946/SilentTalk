@@ -143,6 +143,8 @@ class SilentTalkUI:
         # The chat mode to come back to (and to save); the chat page's
         # character view is never saved: it starts paused every time.
         self._chat_mode = self._mode if self._mode in ("story", "manual") else "manual"
+        # The chat view to return to from another page, character included.
+        self._chat_view = self._chat_mode
 
         _enable_crisp_text()
         self.root = tk.Tk()
@@ -154,7 +156,12 @@ class SilentTalkUI:
         self.popup = tk.Toplevel(self.root, bg=theme.BG)
         self.popup.title("SilentTalk")
         self.popup.attributes("-topmost", True)
-        self.popup.minsize(860, 640)
+        # An explicit size, scaled and kept on screen: without one the window
+        # grows to whatever its content asks for (a long line, a big card).
+        width = min(theme.px(920), self.popup.winfo_screenwidth() - theme.px(40))
+        height = min(theme.px(700), self.popup.winfo_screenheight() - theme.px(90))
+        self.popup.geometry(f"{width}x{height}")
+        self.popup.minsize(min(theme.px(760), width), min(theme.px(560), height))
         self.popup.protocol("WM_DELETE_WINDOW", self.hide)
         self.popup.bind("<Escape>", lambda _: self.hide())
         self.popup.bind("<Return>", self._on_enter)
@@ -649,7 +656,7 @@ class SilentTalkUI:
             self._show_chat_mode(key)
             page = "chat"
         elif key == "chat":
-            self._show_chat_mode(self._chat_mode)
+            self._show_chat_mode(self._chat_view)
             page = "chat"
         elif key in self._pages:
             if self._mode == "persona" and key != "persona":
@@ -677,8 +684,13 @@ class SilentTalkUI:
         if mode != "character" and self._character_on:
             # The bot plays the persona *or* speaks for you, never both.
             self._set_character_mode(False)
-            self.status_var.set("角色已暫停")
+            if self._character_on:
+                # Pausing failed (the error is in the status line): stay.
+                mode = "character"
+            else:
+                self.status_var.set("角色已暫停")
         self._mode = mode
+        self._chat_view = mode
         self._chat_header.set_mode(mode)
         for key, view in self._chat_views.items():
             if key == mode:

@@ -223,6 +223,15 @@ def main() -> int:
     ui.add_conversation_turn(ConversationTurn(12, "小雨", "凱哥你晚餐要吃什麼"))
     ui.add_conversation_turn(ConversationTurn(0, "凱哥", "欸我都可以啦，拉麵？", is_self=True))
     shot("12_character")
+    # Looking at another page is not leaving the character view.
+    ui.show_page("persona")
+    ui.show_page("chat")
+    kept_running = ui._character_on and ui._mode == "character"
+    # A very long line wraps; it must not widen the window.
+    width_before = ui.popup.winfo_width()
+    ui.add_conversation_turn(ConversationTurn(11, "阿傑", "欸" + "這句話真的很長" * 20))
+    pump()
+    widened = ui.popup.winfo_width() - width_before
     ui.show_page("story")  # speaking for you again pauses the character
     ui.root.destroy()
 
@@ -249,6 +258,10 @@ def main() -> int:
         problems.append(f"M should switch mood 平常 -> 開心, got {applied}")
     if personas.load().mood != "開心":
         problems.append("mood change should be saved to personas.json")
+    if not kept_running:
+        problems.append("visiting another page must not pause a running character")
+    if widened > 0:
+        problems.append(f"a long line widened the window by {widened}px")
     for problem in problems:
         print("FAIL:", problem)
     print("UI flow OK" if not problems else "UI flow BROKEN")

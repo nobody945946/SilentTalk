@@ -61,9 +61,15 @@ LANE_COLORS = {
 }
 
 
+_SPEAKERS: dict[int, int] = {}
+
+
 def speaker_color(speaker_id: int) -> str:
-    """The same person keeps the same color everywhere (transcript, dialogue)."""
-    return SPEAKER_COLORS[speaker_id % len(SPEAKER_COLORS)]
+    """The same person keeps the same color everywhere (transcript, dialogue).
+    Colors go out in order of first appearance, so the first six people in a
+    session never share one (a Discord user id modulo 6 often would)."""
+    index = _SPEAKERS.setdefault(speaker_id, len(_SPEAKERS))
+    return SPEAKER_COLORS[index % len(SPEAKER_COLORS)]
 
 
 def lane_color(code: str) -> str:
