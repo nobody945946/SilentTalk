@@ -187,6 +187,7 @@ source .runtime/tools/env.sh     # llama-server b11179 (Vulkan) 進 PATH
   - 角色的每句台詞：用 App 的正式請求再寫 4 個版本，老師挑最自然的（避開「欸」開頭）。
   - 輸出兩種列：判斷題（是／否，否最多是是的 2 倍）和台詞；別人的語音台詞加 STT 雜訊；「欸」開頭最多 12%。
   - 親密關係只給成年人；未成年角色不碰戀愛。
+- **正在跑（2026-09-27 16:25 起）**，cron 看門狗 `*/5 * * * * .../character_pipeline.sh` 已加，**流程跑完（`.runtime/dev/chardata/state/done`）後要從 `crontab -e` 刪掉**。
 - `scripts/dev/character_pipeline.sh [--status]`：personas → scripts → refine → render → train_check → train → convert → eval → eval_judge，無人值守、可續跑（規則同 6.1）。adapter 輸出到 `.runtime/models/llm/character-e2b-lora.gguf`，`[copilot] character_lora` 填這個檔名就會載入；**只有角色模式的請求套用，Copilot 請求的 LoRA 強度是 0**。
 - 試跑過（小模型當替身老師）：四個資料步驟、訓練遮罩（只對答案算 loss）都正確。
 - 單一請求切換 LoRA 強度已驗證（隨機初始化的 adapter，溫度 0）：強度 0 的輸出和沒載 adapter 逐字相同，強度 1 確實改變輸出。所以 Copilot 不受角色 LoRA 影響。
