@@ -44,6 +44,9 @@ class DiscordConfig:
     owner_leave_grace_seconds: float = 8.0
     voice_reconnect_cooldown_seconds: float = 2.0
     voice_ready_timeout_seconds: float = 12.0
+    # Read and answer in the voice channel's built-in text chat. Needs the
+    # Message Content Intent on the bot (Discord Developer Portal).
+    text_chat: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -184,6 +187,7 @@ def load_settings(project_dir: Path) -> Settings:
             voice_ready_timeout_seconds=max(
                 1.0, float(discord.get("voice_ready_timeout_seconds", 12.0))
             ),
+            text_chat=bool(discord.get("text_chat", False)),
         ),
         audio=AudioConfig(
             ffmpeg_path=str(audio.get("ffmpeg_path", "ffmpeg")),

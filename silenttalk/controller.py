@@ -56,11 +56,18 @@ class AppController:
                 on_turn=on_turn,
                 on_thinking=on_thinking,
                 on_character_line=self._speak_as_character,
+                on_character_text=self._type_as_character,
+                can_type=settings.discord.text_chat,
             )
         self._discord = DiscordVoiceClient(
             settings.discord,
             status,
             pcm_callback=self._copilot.accept_pcm if self._copilot else None,
+            text_callback=(
+                self._copilot.accept_text
+                if self._copilot and settings.discord.text_chat
+                else None
+            ),
         )
         self._tts = EdgeTTSEngine(settings.tts, Path(self._temp.name))
         self._queue = SpeechQueue(
@@ -131,6 +138,30 @@ class AppController:
             voice_style = "default"
         self._character_voice = (voice_style, validate_rate_multiplier(rate_multiplier))
         self._loop.call_soon_threadsafe(copilot.set_character_mode, enabled)
+
+    def send_text(self, raw_text: str) -> None:
+        """Type a line into the voice channel's text chat instead of saying it."""
+        text = normalize_text(raw_text, self._settings.app.max_text_length)
+        self._schedule(self._send_text(text))
+
+    async def _send_text(self, text: str) -> None:
+        if not await self._discord.send_text(text):
+            self._status(AppState.ERROR, "訊息送不出去：確認 Bot 有這個頻道的發言權限。")
+            return
+        if self._copilot is not None:
+            # Same rule as speech: only what actually reached the channel
+            # counts as something "you" said.
+            self._copilot.record_self(text)
+
+    def _type_as_character(self, line: str) -> None:
+        """Runs on the backend loop; the character answers a typed line."""
+        if self._closing:
+            return
+        try:
+            text = normalize_text(line, self._settings.app.max_text_length)
+        except ValueError:
+            return
+        self._schedule(self._send_text(text))
 
     def _speak_as_character(self, line: str) -> None:
         """Runs on the backend loop. Never talks over itself: if something is

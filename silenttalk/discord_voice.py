@@ -16,6 +16,10 @@ from silenttalk.tts.base import AudioResult
 _LOG = logging.getLogger(__name__)
 StatusCallback = Callable[[AppState, str], None]
 PCMCallback = Callable[[int, str, bytes], None]
+# (author id, display name, content) typed in the voice channel's text chat.
+TextCallback = Callable[[int, str, str], None]
+# Discord's own limit; a character's line is far shorter, but a paste is not.
+MAX_TEXT_CHARS = 2000
 
 
 class DiscordVoiceClient(discord.Client):
@@ -24,14 +28,21 @@ class DiscordVoiceClient(discord.Client):
         config: DiscordConfig,
         status: StatusCallback,
         pcm_callback: PCMCallback | None = None,
+        text_callback: TextCallback | None = None,
     ) -> None:
         intents = discord.Intents.none()
         intents.guilds = True
         intents.voice_states = True
+        if config.text_chat:
+            # Message Content is privileged: without it in the Developer
+            # Portal the gateway refuses the connection, so this is opt-in.
+            intents.guild_messages = True
+            intents.message_content = True
         super().__init__(intents=intents)
         self._config = config
         self._status = status
         self._pcm_callback = pcm_callback
+        self._text_callback = text_callback
         self._event_loop: asyncio.AbstractEventLoop | None = None
         self._voice_lock = asyncio.Lock()
         self._voice_monitor_task: asyncio.Task[None] | None = None
@@ -44,6 +55,50 @@ class DiscordVoiceClient(discord.Client):
 
     def set_pcm_callback(self, callback: PCMCallback | None) -> None:
         self._pcm_callback = callback
+
+    def set_text_callback(self, callback: TextCallback | None) -> None:
+        self._text_callback = callback
+
+    async def on_message(self, message: discord.Message) -> None:
+        """Typed lines from the voice channel the bot is sitting in.
+
+        Only that channel's own chat: SilentTalk never reads the server's
+        other text channels, and nothing typed is written to disk.
+        """
+        callback = self._text_callback
+        voice = self.active_voice()
+        if callback is None or voice is None or message.channel.id != voice.channel.id:
+            return
+        if message.author.bot or (self.user and message.author.id == self.user.id):
+            return
+        content = message.clean_content.strip()
+        if not content:
+            return  # attachment, sticker or embed only
+        name = str(
+            getattr(message.author, "display_name", None)
+            or getattr(message.author, "name", None)
+            or message.author.id
+        )
+        _LOG.info("text_message_received char_count=%d", len(content))
+        callback(message.author.id, name, content)
+
+    async def send_text(self, text: str) -> bool:
+        """Say something in the voice channel's text chat. False if it could
+        not be sent (not connected, missing permission, Discord error)."""
+        voice = self.active_voice()
+        channel = getattr(voice, "channel", None)
+        if channel is None or not hasattr(channel, "send"):
+            _LOG.info("text_send_skipped reason=no_channel")
+            return False
+        try:
+            await channel.send(text[:MAX_TEXT_CHARS])
+        except discord.Forbidden:
+            _LOG.warning("text_send_failed reason=forbidden channel_id=%s", channel.id)
+            return False
+        except discord.HTTPException as exc:
+            _LOG.warning("text_send_failed status=%s", getattr(exc, "status", "?"))
+            return False
+        return True
 
     async def on_ready(self) -> None:
         self._event_loop = asyncio.get_running_loop()

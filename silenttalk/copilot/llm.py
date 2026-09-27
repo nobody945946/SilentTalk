@@ -84,7 +84,7 @@ _CHARACTER_SYSTEM = """你是 Discord 語音頻道裡的一個角色 Bot，由 A
 規則：
 - 只根據真實對話回應，不得杜撰別人的身分、經歷、情緒或事實。關於你自己，只用人設裡寫到的事，不要編新的經歷。
 - 你是 AI 扮演的角色：平常用角色口吻聊天；有人認真問你是不是 AI、機器人或真人時，要誠實承認你是 AI 角色（可以用角色口吻說）。
-- 你只存在於這個語音頻道，只能用嘴巴聊天：不能打字、寫程式、寫文章、翻譯整段文字、上網查資料、設提醒，也不會記得下次聊天。被要求做這些事時，用這個角色會有的方式回應（推託、吐槽、給一句口頭建議、叫對方自己來或用別的工具），絕對不要答應或假裝在做你做不到的事。
+- {abilities}
 - 你不是百科全書：超出你人設會懂的問題，就用這個人真實的程度回答，可以說不知道。
 - 台灣繁體中文口語，只說一句話，長度{length}，最長不得超過 {max_chars} 字。
 - 像朋友聊天一樣自然接話：附和、追問、吐槽或開玩笑，選這個角色此刻最可能的反應。不要重複別人的話，不要說教，不要每句都叫對方名字。
@@ -92,6 +92,20 @@ _CHARACTER_SYSTEM = """你是 Discord 語音頻道裡的一個角色 Bot，由 A
 - 這時候插話不自然（別人在私下聊、話題跟你無關、你剛說過類似的話）就輸出 SKIP。
 {sheet}
 只輸出一行：你要說的話，或 SKIP。不要加引號、名字或解釋。"""
+
+# What the character can actually do, so it never promises the impossible.
+# Typing is allowed only when the channel's text chat is wired up.
+_VOICE_ONLY = (
+    "你只存在於這個語音頻道，只能用嘴巴聊天：不能打字、寫程式、寫文章、翻譯整段文字、"
+    "上網查資料、設提醒，也不會記得下次聊天。被要求做這些事時，用這個角色會有的方式回應"
+    "（推託、吐槽、給一句口頭建議、叫對方自己來或用別的工具），絕對不要答應或假裝在做你做不到的事。"
+)
+_CAN_TYPE = (
+    "你只存在於這個頻道，可以講話也可以在聊天室打一句短訊息，但你是這個人、不是助理："
+    "不寫程式、不寫文章或作業、不翻譯整段文字、不上網查資料、不設提醒，也不會記得下次聊天。"
+    "被要求做這些事時，用這個角色會有的方式回應（推託、吐槽、給一句口頭建議、叫對方自己來或用別的工具），"
+    "絕對不要答應或假裝在做你做不到的事。"
+)
 
 _END_PUNCTUATION = "？?！!。.…~～」』)）"
 _THINK_OPEN = "<think>"
@@ -118,6 +132,7 @@ class LocalReplyModel:
         gpu_layers: int = 99,
         request_timeout_seconds: float = 15.0,
         low_vram: bool = True,
+        can_type: bool = False,
     ) -> None:
         self._model_path = model_path
         self._port = port
@@ -125,6 +140,7 @@ class LocalReplyModel:
         self._max_reply_chars = max(24, max_reply_chars)
         self._gpu_layers = max(0, gpu_layers)
         self._low_vram = low_vram
+        self._can_type = can_type
         self._request_timeout = max(3.0, request_timeout_seconds)
         self._process: subprocess.Popen[bytes] | None = None
         self._stderr_tail: collections.deque[str] = collections.deque(maxlen=40)
@@ -342,6 +358,7 @@ class LocalReplyModel:
     def _build_character_system_prompt(self, persona: Persona) -> str:
         sheet = persona.render_system_block()
         return _CHARACTER_SYSTEM.format(
+            abilities=_CAN_TYPE if self._can_type else _VOICE_ONLY,
             who="下面人設裡的人" if sheet else "一個友善、好聊的朋友",
             length=persona.length_rule(),
             max_chars=self._max_reply_chars,

@@ -36,7 +36,9 @@ class SlowFakeLLM:
         return "收到"
 
 
-async def _runtime(tmp_path: Path) -> tuple[CopilotRuntime, SlowFakeLLM, list]:
+async def _runtime(
+    tmp_path: Path, *, text: bool = False
+) -> tuple[CopilotRuntime, SlowFakeLLM, list]:
     delivered: list[ReplySuggestions | ConversationTurn | str] = []
     runtime = CopilotRuntime(
         tmp_path,
@@ -45,7 +47,10 @@ async def _runtime(tmp_path: Path) -> tuple[CopilotRuntime, SlowFakeLLM, list]:
         on_suggestions=delivered.append,
         on_error=lambda _: None,
         on_turn=delivered.append,
-        on_character_line=delivered.append,
+        on_character_line=lambda line: delivered.append(("spoke", line)),
+        on_character_text=(
+            (lambda line: delivered.append(("typed", line))) if text else None
+        ),
     )
     llm = SlowFakeLLM()
     runtime._llm = llm  # type: ignore[assignment]
@@ -132,7 +137,7 @@ async def test_character_answers_its_name_and_speaks_the_line(tmp_path: Path) ->
     await _settle()
 
     assert llm.calls == [("character", "凱哥你覺得呢", True)]
-    assert "收到" in delivered
+    assert ("spoke", "收到") in delivered
     assert not any(isinstance(item, ReplySuggestions) for item in delivered)
     await _stop(runtime)
 
@@ -173,5 +178,36 @@ async def test_character_drops_a_reply_once_the_chat_moved_on(tmp_path: Path) ->
     await _settle()
 
     assert llm.calls[0] == ("character", "晚餐要吃什麼", False)
-    assert "收到" not in delivered
+    assert ("spoke", "收到") not in delivered
+    await _stop(runtime)
+
+
+@pytest.mark.asyncio
+async def test_typed_lines_are_answered_by_typing(tmp_path: Path) -> None:
+    runtime, llm, delivered = await _runtime(tmp_path, text=True)
+    runtime.set_persona(PRESET_PERSONAS[0])
+    runtime.set_character_mode(True)
+    runtime._handle_turn(2, "阿傑", "凱哥你在嗎", "text")
+    await _settle()
+    llm.release.set()
+    await _settle()
+
+    assert ("typed", "收到") in delivered
+    assert not any(item[0] == "spoke" for item in delivered if isinstance(item, tuple))
+    turns = [item for item in delivered if isinstance(item, ConversationTurn)]
+    assert [turn.via for turn in turns] == ["text"]
+    await _stop(runtime)
+
+
+@pytest.mark.asyncio
+async def test_typed_lines_fall_back_to_speech_when_text_is_off(tmp_path: Path) -> None:
+    runtime, llm, delivered = await _runtime(tmp_path)  # no on_character_text
+    runtime.set_persona(PRESET_PERSONAS[0])
+    runtime.set_character_mode(True)
+    runtime._handle_turn(2, "阿傑", "凱哥你在嗎", "text")
+    await _settle()
+    llm.release.set()
+    await _settle()
+
+    assert ("spoke", "收到") in delivered
     await _stop(runtime)

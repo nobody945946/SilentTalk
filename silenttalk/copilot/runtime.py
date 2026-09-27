@@ -40,6 +40,7 @@ class _Trigger:
     # Position in the conversation, to notice when the chat moved on.
     seq: int = 0
     addressed: bool = False
+    via: str = "voice"
 
 
 class CopilotRuntime:
@@ -56,6 +57,8 @@ class CopilotRuntime:
         on_turn: TurnCallback | None = None,
         on_thinking: ThinkingCallback | None = None,
         on_character_line: LineCallback | None = None,
+        on_character_text: LineCallback | None = None,
+        can_type: bool = False,
     ) -> None:
         self._config = config
         self._owner_user_id = owner_user_id
@@ -64,6 +67,7 @@ class CopilotRuntime:
         self._on_turn = on_turn
         self._on_thinking = on_thinking
         self._on_character_line = on_character_line
+        self._on_character_text = on_character_text
         self._persona = blank_persona()
         self._character_mode = False
         self._character_policy = CharacterPolicy(
@@ -98,6 +102,7 @@ class CopilotRuntime:
             max_reply_chars=config.max_reply_chars,
             gpu_layers=config.llm_gpu_layers,
             low_vram=config.llm_low_vram,
+            can_type=can_type,
         )
         self._stt = transcriber(
             asr_dir,
@@ -128,6 +133,15 @@ class CopilotRuntime:
 
     def accept_pcm(self, speaker_id: int, speaker_name: str, pcm: bytes) -> None:
         self._stt.push_pcm(speaker_id, speaker_name, pcm)
+
+    def accept_text(self, speaker_id: int, speaker_name: str, text: str) -> None:
+        """A line someone typed in the channel; safe from any thread."""
+        loop = self._loop
+        if loop is None or loop.is_closed():
+            return
+        loop.call_soon_threadsafe(
+            self._handle_turn, speaker_id, speaker_name, text, "text"
+        )
 
     def record_self(self, text: str) -> None:
         """Something the bot actually said aloud (after playback finished)."""
@@ -179,13 +193,14 @@ class CopilotRuntime:
         speaker_id: int,
         speaker_name: str,
         text: str,
+        via: str = "voice",
     ) -> None:
         # In copilot mode the bot speaks *for* the owner, so the owner's own mic
         # is not conversation; in character mode the owner is one more friend.
         if speaker_id == self._owner_user_id and not self._character_mode:
             return
 
-        turn = ConversationTurn.now(speaker_id, speaker_name, text)
+        turn = ConversationTurn.now(speaker_id, speaker_name, text, via=via)
         self._context.append(turn)
         self._emit_turn(turn)
         self._turn_seq += 1
@@ -194,7 +209,7 @@ class CopilotRuntime:
         if len(_compact(text)) < _MIN_TRIGGER_CHARS or self._wake is None:
             return
 
-        trigger = _Trigger(speaker_name, text, self._turn_seq)
+        trigger = _Trigger(speaker_name, text, self._turn_seq, via=via)
         if self._character_mode:
             addressed = is_addressed(text, self._persona)
             if not should_reply(
@@ -205,7 +220,7 @@ class CopilotRuntime:
                 now=time.monotonic(),
             ):
                 return
-            trigger = _Trigger(speaker_name, text, self._turn_seq, addressed)
+            trigger = _Trigger(speaker_name, text, self._turn_seq, addressed, via)
 
         # Latest wins: while a generation is running, newer lines replace the
         # queued trigger instead of stacking requests on a small GPU.
@@ -253,8 +268,13 @@ class CopilotRuntime:
             return
         if moved_on >= self._character_policy.stale_turns and not trigger.addressed:
             return  # the chat moved on; a late reply would sound off
-        if self._on_character_line is not None:
-            self._on_character_line(line)
+        # Answer in the medium the line came in: typed gets typed, spoken
+        # gets spoken. Falls back to speaking if text is unavailable.
+        deliver = self._on_character_line
+        if trigger.via == "text" and self._on_character_text is not None:
+            deliver = self._on_character_text
+        if deliver is not None:
+            deliver(line)
 
     async def _generate(self, trigger: _Trigger) -> None:
         if self._on_thinking is not None:

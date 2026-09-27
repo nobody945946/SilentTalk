@@ -12,6 +12,11 @@ volume = "+0%"
 timeout_seconds = 20.0
 
 [discord]
+# Also read and answer in the voice channel's built-in text chat. Needs the
+# Message Content Intent enabled for the bot in the Discord Developer Portal
+# (Bot -> Privileged Gateway Intents); without it SilentTalk stays voice-only
+# and says so in silenttalk.log.
+text_chat = false
 disconnect_when_owner_leaves = true
 voice_reconnect_interval_seconds = 20.0
 voice_reconnect_max_interval_seconds = 60.0

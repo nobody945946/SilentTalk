@@ -23,6 +23,9 @@ export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 # pipeline keeps going without internet. Only the judge stages need network
 # and simply retry (cron) until it is back.
 export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 HF_DATASETS_OFFLINE=1
+# Stage logs are redirected to files; without this, a stage's stdout (training
+# loss, per-stage progress) sits in Python's buffer for hours.
+export PYTHONUNBUFFERED=1
 
 DIR=.runtime/dev/distill
 STATE=$DIR/state

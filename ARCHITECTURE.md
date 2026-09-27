@@ -48,6 +48,7 @@ speech_queue.py            FIFO / cancel / job lifecycle
 | F8 / F9 全域快捷鍵實作 | `silenttalk/hotkeys.py` | `config.toml`, `silenttalk/config.py` |
 | 新增快捷句、UI 內操作 | `silenttalk/ui.py` | `silenttalk/phrases.py` |
 | AI 劇情模式畫面、WASD 操作 | `silenttalk/story_ui.py` | `silenttalk/ui.py`, `silenttalk/ime.py` |
+| 語音頻道文字聊天的讀寫 | `silenttalk/discord_voice.py`（`on_message` / `send_text`） | `config.toml [discord] text_chat`, `controller.py` |
 | 角色模式何時開口（冷卻、點名、問句） | `silenttalk/copilot/character.py` | `copilot/runtime.py`, `config.toml` |
 | 人設欄位、預設人設 | `silenttalk/copilot/persona.py` | `silenttalk/persona_ui.py` |
 | 回覆方向（同意／追問／反對／玩笑）與按鍵對應 | `silenttalk/copilot/types.py` 的 `REPLY_LANES` | `silenttalk/copilot/llm.py` prompt |
@@ -271,6 +272,8 @@ final transcript（含 Owner 自己的麥克風）
 ```
 
 角色模式的 system prompt 允許角色承認自己是 AI（Copilot 模式則相反：說話的是真人，不能說自己是 AI）。
+
+**文字聊天（`text_chat = true`）**：`DiscordVoiceClient.on_message` 只收「Bot 目前所在語音頻道」的內建聊天，過濾 Bot 自己與其他 Bot、空訊息；`CopilotRuntime.accept_text()` 產生 `via="text"` 的 turn，之後和語音走同一條路。輸出依 `trigger.via` 決定：打字來的用 `channel.send()` 回，語音來的走 SpeechQueue；文字送出成功後才 `record_self`。`message_content` 是特權 intent，只有開啟設定時才要求，否則 gateway 會拒絕連線。
 
 重要邊界：
 

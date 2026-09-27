@@ -38,12 +38,14 @@ class StoryPanel(tk.Frame):
         on_edit: EditCallback,
         on_regenerate: Callable[[], None] | None,
         on_mood: MoodCallback | None = None,
+        on_type: ConfirmCallback | None = None,
     ) -> None:
         super().__init__(master, bg=theme.BG, takefocus=1, highlightthickness=0)
         self._on_confirm = on_confirm
         self._on_edit = on_edit
         self._on_regenerate = on_regenerate
         self._on_mood = on_mood
+        self._on_type = on_type
         self._lanes = {lane.key: lane for lane in REPLY_LANES}
         self._choices: dict[str, str] = {lane.key: "" for lane in REPLY_LANES}
         self._selected: str | None = None
@@ -189,6 +191,7 @@ class StoryPanel(tk.Frame):
                 ("再按一次 / Enter", "說出"),
                 ("R", "重想"),
                 ("E", "拿去改"),
+                ("T", "打字送出"),
                 ("M", "換心情"),
                 ("Esc", "收起"),
             ),
@@ -229,6 +232,9 @@ class StoryPanel(tk.Frame):
                 self._on_edit(text)
             else:
                 self._set_status("先選一個有內容的選項再改寫")
+            return True
+        if key == "t":
+            self._confirm(self._selected or "", typed=True)
             return True
         if key == "m":
             index = MOODS.index(self._mood) if self._mood in MOODS else -1
@@ -354,15 +360,23 @@ class StoryPanel(tk.Frame):
                 self._render_cards()
                 return
 
-    def _confirm(self, key: str) -> None:
+    def _confirm(self, key: str, *, typed: bool = False) -> None:
+        """Send the chosen reply: spoken by default, typed into the channel's
+        chat with T (same option, different medium)."""
         text = self._choices.get(key, "")
+        if typed and self._on_type is None:
+            self._set_status("打字功能未啟用（config.toml 的 [discord] text_chat）")
+            return
         if self._sent or not text:
             self._select(key)
             return
         self._selected = key
-        if self._on_confirm(text):
+        send = self._on_type if typed else self._on_confirm
+        assert send is not None
+        if send(text):
             self._sent = True
-            self._set_status(f"已說出：「{_trim(text, 40)}」— 等下一句")
+            verb = "已打出" if typed else "已說出"
+            self._set_status(f"{verb}：「{_trim(text, 40)}」— 等下一句")
         self._render_cards()
 
     def _regenerate(self) -> None:

@@ -43,6 +43,7 @@ def main() -> int:
     applied: list[str] = []
     character: list[tuple[bool, str, float]] = []
     previews: list[tuple[str, str]] = []
+    typed: list[str] = []
     personas = PersonaStore(temp / "personas.json")
     personas.save(PersonaState(list(PRESET_PERSONAS), PRESET_PERSONAS[0].id))
     ui = SilentTalkUI(
@@ -58,6 +59,7 @@ def main() -> int:
         apply_persona=lambda persona: applied.append(persona.mood),
         set_character_mode=lambda on, style, rate: character.append((on, style, rate)),
         preview_voice=lambda text, persona, _rate: previews.append((text, persona.voice)),
+        send_text=typed.append,
         copilot_info=[("回覆模型", "gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf"), ("省 VRAM", "開")],
         font_override=args.font,
     )
@@ -130,6 +132,14 @@ def main() -> int:
     press("d")
     ui.show()
     shot("5_after_send")
+    # T types the chosen reply into the channel chat instead of saying it.
+    ui.set_suggestions(
+        ReplySuggestions("小雨", "晚餐吃什麼", agree="我都可以啦", ask="你想吃什麼？")
+    )
+    pump()
+    press("a")
+    press("t")
+    ui.show()
     ui.set_suggestions(
         ReplySuggestions("小雨", "x", error="本機回覆模型失敗：timed out")
     )
@@ -176,6 +186,8 @@ def main() -> int:
         problems.append(f"character toggle should switch on then off, got {character}")
     if previews != [("欸我的，下波我先進", "zh-TW-YunJheNeural")]:
         problems.append(f"voice preview should say 凱哥's first sample line in his voice, got {previews}")
+    if typed != ["你想吃什麼？"]:
+        problems.append(f"T should type the selected reply, got {typed}")
     if regenerated != [True]:
         problems.append("R should call regenerate once")
     if not applied or applied[-1] != "開心":

@@ -340,7 +340,15 @@ while not vad.empty():
 
 ---
 
-### T6｜Discord 文字聊天（使用者 9/27 10:10 要求，下一個要做的）
+### T6｜Discord 文字聊天（✅ 已完成，9/27）
+
+**做好了什麼：** `config.toml [discord] text_chat = true` 後，Bot 讀寫它所在語音頻道的內建文字聊天；角色模式「打字問就打字回、講話問就講話回」；劇情頁 `T` 鍵把選中的選項打字送出；角色 prompt 依 `text_chat` 切換「只能講話」或「可以打一句短訊息，但你不是助理」。測試：`tests/test_text_chat.py`（只讀自己頻道、擋 Bot 與空訊息、intent 只在開啟時要求、送不出去回 False 不丟例外）、`tests/test_copilot_runtime.py`（打字來的不會用講的回；沒有文字管道時退回語音）。
+
+**還沒驗證：** 無法在開發機連真的 Discord。**請使用者實機測一次**：開 Message Content Intent → `text_chat = true` → 在語音頻道聊天室打字叫角色的名字 → 應該看到它打字回；`silenttalk.log` 會有 `text_message_received` 與（失敗時）`text_send_failed`。
+
+以下是原始規劃，留作參考：
+
+### T6 原始規劃
 
 **需求原話：** 「我要加入DC打字功能，讓模型除了語音也能文字回復」。
 

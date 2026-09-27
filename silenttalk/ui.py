@@ -96,6 +96,7 @@ class SilentTalkUI:
         apply_persona: Callable[[Persona], None] | None = None,
         set_character_mode: Callable[[bool, str, float], None] | None = None,
         preview_voice: Callable[[str, Persona, float], None] | None = None,
+        send_text: Callable[[str], None] | None = None,
         copilot_info: Sequence[tuple[str, str]] = (),
         font_override: str | None = None,
     ) -> None:
@@ -107,6 +108,7 @@ class SilentTalkUI:
         self._apply_persona_callback = apply_persona
         self._character_callback = set_character_mode
         self._preview_callback = preview_voice
+        self._send_text_callback = send_text
         self._character_on = False
         self._persona_name = ""
         self._copilot_enabled = regenerate_suggestions is not None
@@ -170,6 +172,7 @@ class SilentTalkUI:
             on_edit=self._edit_story_choice,
             on_regenerate=regenerate_suggestions,
             on_mood=self._on_mood,
+            on_type=self._type_story_choice if send_text else None,
         )
         self._manual_tab = self._build_manual_page(self._pages_frame)
         self.persona_panel = PersonaPanel(
@@ -823,6 +826,18 @@ class SilentTalkUI:
 
     def _submit_story_choice(self, text: str) -> bool:
         if not self._submit_text(text):
+            return False
+        self.hide()
+        return True
+
+    def _type_story_choice(self, text: str) -> bool:
+        """T: type the chosen reply into the channel's chat instead of saying it."""
+        if self._send_text_callback is None:
+            return False
+        try:
+            self._send_text_callback(text)
+        except (TextValidationError, ValueError) as exc:
+            self.status_var.set(str(exc))
             return False
         self.hide()
         return True

@@ -11,6 +11,8 @@ class ConversationTurn:
     text: str
     is_self: bool = False
     created_at: float = 0.0
+    # "voice" (spoken, via STT) or "text" (typed in the channel's chat).
+    via: str = "voice"
 
     @classmethod
     def now(
@@ -20,12 +22,14 @@ class ConversationTurn:
         text: str,
         *,
         is_self: bool = False,
+        via: str = "voice",
     ) -> "ConversationTurn":
         return cls(
             speaker_id=speaker_id,
             speaker_name=speaker_name,
             text=text,
             is_self=is_self,
+            via=via,
             created_at=time(),
         )
 
