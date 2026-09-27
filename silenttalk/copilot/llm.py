@@ -638,12 +638,27 @@ def consume_stream(events: Iterable[bytes], on_lines: Callable[[str], None]) -> 
 
 
 def find_llama_server() -> str:
-    executable = shutil.which("llama-server.exe") or shutil.which("llama-server")
+    executable = (
+        shutil.which("llama-server.exe")
+        or shutil.which("llama-server")
+        or _winget_llama_server()
+    )
     if not executable:
         raise LocalLLMError(
             "找不到 llama-server.exe；請重新執行「啟動 SilentTalk.cmd」自動部署。"
         )
     return executable
+
+
+def _winget_llama_server() -> str | None:
+    """winget can unpack llama.cpp without creating its WinGet\\Links shim
+    (seen on a 3050 Ti laptop); the exe is then only in the package folder."""
+    local = os.environ.get("LOCALAPPDATA")
+    if not local:
+        return None
+    packages = Path(local) / "Microsoft" / "WinGet" / "Packages"
+    found = sorted(packages.glob("ggml.llamacpp*/**/llama-server.exe"))
+    return str(found[-1]) if found else None
 
 
 def list_llama_devices(executable: str) -> list[str]:

@@ -41,6 +41,9 @@ if errorlevel 1 (
     exit /b 1
 )
 
+rem winget can unpack llama.cpp without creating its Links shim; the exe
+rem is then only in its package folder.
+for /d %%D in ("%LOCALAPPDATA%\Microsoft\WinGet\Packages\ggml.llamacpp_*") do set "PATH=%%D;!PATH!"
 where llama-server.exe >nul 2>nul
 if errorlevel 1 (
     where winget.exe >nul 2>nul
@@ -58,6 +61,7 @@ if errorlevel 1 (
         exit /b 1
     )
     set "PATH=%LOCALAPPDATA%\Microsoft\WinGet\Links;%PATH%"
+    for /d %%D in ("%LOCALAPPDATA%\Microsoft\WinGet\Packages\ggml.llamacpp_*") do set "PATH=%%D;!PATH!"
 )
 
 if not exist "scripts\setup_copilot.py" (
