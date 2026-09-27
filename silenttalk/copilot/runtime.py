@@ -37,6 +37,9 @@ class _Trigger:
     # Discord's own signal: an @mention of the bot or a reply to it.
     addressed: bool = False
     via: str = "voice"
+    # time.monotonic() when the line came in, to log how long an answer took
+    # including any wait behind the previous generation.
+    heard_at: float = 0.0
 
 
 class CopilotRuntime:
@@ -257,7 +260,9 @@ class CopilotRuntime:
         # In character mode every line goes to the model, which reads the
         # whole chat and decides whether it is being talked to (SKIP if not).
         # Keyword rules could not tell "阿凱你在嗎" from "我剛才跟阿凱講話".
-        trigger = _Trigger(speaker_name, text, self._turn_seq, mentioned, via)
+        trigger = _Trigger(
+            speaker_name, text, self._turn_seq, mentioned, via, time.monotonic()
+        )
 
         # Latest wins: while a generation is running, newer lines replace the
         # queued trigger instead of stacking requests on a small GPU.
@@ -333,8 +338,10 @@ class CopilotRuntime:
             return
         moved_on = self._turn_seq - trigger.seq
         _LOG.info(
-            "copilot_character_line latency_ms=%d spoke=%s addressed=%s moved_on=%d",
+            "copilot_character_line latency_ms=%d since_heard_ms=%d spoke=%s"
+            " addressed=%s moved_on=%d",
             round((time.perf_counter() - started) * 1000),
+            round((time.monotonic() - trigger.heard_at) * 1000) if trigger.heard_at else -1,
             bool(line),
             trigger.addressed,
             moved_on,
