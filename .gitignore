@@ -16,4 +16,6 @@ personas.json.tmp
 .claude/worktrees/
 settings.json
 settings.json.tmp
+# Superseded work kept for reference on the dev box only (old launcher, past
+# handoffs). Anything still needed must live in the docs that are tracked.
 archive/
