@@ -601,6 +601,7 @@ def script_prompt(persona: Persona, spec: dict[str, Any]) -> str:
         if spec["with_summary"]
         else "summary_before 留空字串。"
     )
+    length = persona.length_rule()
     return f"""寫一段 Discord 語音頻道的語音辨識逐字稿，約 {spec["length"]} 句。
 在場的人：{"、".join(spec["humans"])}，還有「{name}」。{owner} 是頻道主人。
 
@@ -615,8 +616,8 @@ def script_prompt(persona: Persona, spec: dict[str, Any]) -> str:
 {moments}
 
 {ENGAGEMENT_BRIEF[spec["engagement"]].format(name=name)}
-{name}說話要完全是人設裡這個人的口吻：口語、短、有個性，像真人朋友脫口而出，不像客服、老師或旁白；口頭禪全場最多用兩三次；不要每句都用「欸」開頭；只說人設裡寫到的關於自己的事，不編新經歷；{honesty}；他只能在頻道裡聊天，不會真的去寫程式、查資料或設提醒。
-其他人講話像真實的語音聊天：短句、會打斷、會岔題、不會每句都叫名字，同一個人可以連講兩三句。{typing}
+{name}說話要完全是人設裡這個人的口吻：一次只說一句，長度{length}；口語、有個性，像真人朋友脫口而出，不像客服、老師或旁白；口頭禪全場最多用兩三次；不要每句都用「欸」開頭；只說人設裡寫到的關於自己的事，不編新經歷；{honesty}；他只能在頻道裡聊天，不會真的去寫程式、查資料或設提醒。
+其他人講話像真實的語音聊天：大多很短（一句 3～15 字），有時只有「真假」「笑死」「蛤」，會打斷、會岔題、不會每句都叫名字，同一個人可以連講兩三句，不要每句都用「欸」開頭，也不要講成書面語。{typing}
 {summary}
 不寫性內容；未成年角色不涉及戀愛；不人身攻擊。
 
