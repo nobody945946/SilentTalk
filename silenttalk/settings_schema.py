@@ -56,8 +56,8 @@ PAGES: tuple[Page, ...] = (
             (
                 Setting(
                     "copilot", "character_engagement", "開口時機", "choice",
-                    "被叫到才回：文字 @它或回覆它的訊息、語音叫它的名字。"
-                    "會主動加入：它也會自己插話。",
+                    "被叫到才回：有人叫它、問它或回應它時才接話（每句由本機模型判斷）。"
+                    "會主動加入：話題合適時它也會自己插話。",
                     choices=ENGAGEMENT_MODES,
                 ),
                 Setting(
@@ -65,21 +65,6 @@ PAGES: tuple[Page, ...] = (
                     "照角色演：當成朋友開玩笑，用角色的方式帶過，不承認自己是程式——"
                     "角色比較完整。承認：認真被問時老實說自己是 AI 扮演的角色。",
                     choices=AI_HONESTY_MODES,
-                ),
-                Setting(
-                    "copilot", "character_follow_up_seconds", "追問窗口", "float",
-                    "它剛回完話後這段時間內，下一句不用再叫名字也會接。0＝關閉。",
-                    minimum=0, maximum=120, step=5, unit="秒",
-                ),
-                Setting(
-                    "copilot", "character_cooldown_seconds", "主動發言冷卻", "float",
-                    "只在「會主動加入」時有用：講完話後這段時間內不主動插話。",
-                    minimum=0, maximum=120, step=1, unit="秒",
-                ),
-                Setting(
-                    "copilot", "character_turn_gap", "冷場幾句才插話", "int",
-                    "只在「會主動加入」時有用：別人講了這麼多句它才自己開口。",
-                    minimum=1, maximum=20,
                 ),
             ),
         ),

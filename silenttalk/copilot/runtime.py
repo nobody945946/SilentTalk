@@ -66,12 +66,7 @@ class CopilotRuntime:
         self._on_character_text = on_character_text
         self._persona = blank_persona()
         self._character_mode = False
-        self._character_policy = CharacterPolicy(
-            mode=config.character_engagement,
-            follow_up_seconds=config.character_follow_up_seconds,
-            cooldown_seconds=config.character_cooldown_seconds,
-            turn_gap=config.character_turn_gap,
-        )
+        self._character_policy = CharacterPolicy(mode=config.character_engagement)
         self._turn_seq = 0
         self._loop: asyncio.AbstractEventLoop | None = None
         self._pending: _Trigger | None = None
@@ -172,13 +167,6 @@ class CopilotRuntime:
         policy = self._character_policy
         self._character_policy = CharacterPolicy(
             mode=str(copilot.get("character_engagement", policy.mode)),
-            follow_up_seconds=float(
-                copilot.get("character_follow_up_seconds", policy.follow_up_seconds)
-            ),
-            cooldown_seconds=float(
-                copilot.get("character_cooldown_seconds", policy.cooldown_seconds)
-            ),
-            turn_gap=int(copilot.get("character_turn_gap", policy.turn_gap)),
             stale_turns=policy.stale_turns,
         )
         self._config = replace(

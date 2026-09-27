@@ -1,9 +1,10 @@
-"""When the bot, playing its persona on its own, should speak up.
+"""Character-mode settings, and the keyword rules it used to run on.
 
-Character mode has no human approving each line, so the rules err on the side
-of staying quiet: always answer when someone calls the character by name,
-otherwise only join in after a cooldown, and then only for a question or once
-the others have talked for a while. The model can still decline with SKIP.
+The runtime no longer gates lines with these rules: the local model reads
+the whole chat and decides (LocalReplyModel.character_turn). `address_of`,
+`should_reply` and friends stay as the "old" baseline that
+scripts/dev/turn_eval.py measures the model against; `asks_if_ai` still
+backs the opt-in "admit" policy.
 """
 
 from __future__ import annotations

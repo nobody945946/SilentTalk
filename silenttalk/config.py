@@ -84,9 +84,6 @@ class CopilotConfig:
     # Asked whether it is an AI: "in_character" keeps the act, "admit" owns up.
     character_ai_honesty: str = "in_character"
     character_engagement: str = "called"
-    character_follow_up_seconds: float = 20.0
-    character_cooldown_seconds: float = 8.0
-    character_turn_gap: int = 3
     stt_engine: str = "paraformer"
 
 
@@ -286,13 +283,6 @@ def load_settings(project_dir: Path) -> Settings:
                 [mode for mode, _ in ENGAGEMENT_MODES],
                 "character_engagement",
             ),
-            character_follow_up_seconds=max(
-                0.0, min(600.0, float(copilot.get("character_follow_up_seconds", 20.0)))
-            ),
-            character_cooldown_seconds=max(
-                0.0, min(600.0, float(copilot.get("character_cooldown_seconds", 8.0)))
-            ),
-            character_turn_gap=max(0, min(50, int(copilot.get("character_turn_gap", 3)))),
             stt_engine=_stt_engine(copilot.get("stt_engine", "paraformer")),
         ),
     )
