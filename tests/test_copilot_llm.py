@@ -353,11 +353,23 @@ async def test_a_discord_mention_skips_the_gate() -> None:
 
 
 @pytest.mark.asyncio
-async def test_active_mode_asks_a_different_gate_question() -> None:
-    called, active = _Scripted(gate="否"), _Scripted(gate="否")
-    await called.character_turn(turns=_chat(CHAT), engagement="called")
-    await active.character_turn(turns=_chat(CHAT), engagement="active")
-    assert called.requests[0][1][-1] != active.requests[0][1][-1]
+async def test_active_mode_asks_to_join_in_only_after_a_quiet_stretch() -> None:
+    quiet = _chat(CHAT[:4] + [("Ken", "昨天那把有夠雷"), ("阿傑", "對啊"), ("Ken", "笑死"), ("阿傑", "好啦")])
+    just_spoke = _chat(CHAT)  # the character spoke two lines ago
+
+    asked = _Scripted(gate="否")
+    await asked.character_turn(turns=quiet, engagement="active")
+    questions = [m[-1]["content"] for _, m in asked.requests]
+    assert len(questions) == 2
+    assert "是不是在對你說話" in questions[0] and "開口自然嗎" in questions[1]
+
+    held = _Scripted(gate="否")
+    await held.character_turn(turns=just_spoke, engagement="active")
+    assert len(held.requests) == 1
+
+    called = _Scripted(gate="否")
+    await called.character_turn(turns=quiet, engagement="called")
+    assert len(called.requests) == 1
 
 
 @pytest.mark.asyncio

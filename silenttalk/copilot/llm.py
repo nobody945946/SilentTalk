@@ -171,6 +171,12 @@ _GATE_QUESTION = {
     ),
 }
 _GATE_GRAMMAR = 'root ::= "是" | "否"'
+# "active" mode joins in on its own, but asked "would speaking now be
+# natural?" after every line, Gemma 4 E2B said yes to 76% of lines meant for
+# others (M1 test set). So every line first gets the "called" question, and
+# the join-in question only comes once the character has been quiet this
+# many lines: the model judges the moment, the count keeps the pace.
+_JOIN_AFTER_QUIET_LINES = 4
 
 # Turns kept verbatim in a character request. Past this the oldest ones are
 # dropped a batch at a time, so the prompt prefix (and its KV cache) survives
@@ -384,11 +390,20 @@ class LocalReplyModel:
         `turns` is the whole chat so far, the character's own lines marked
         `is_self`; `addressed` is Discord's own @mention or reply signal."""
         if not addressed:
-            gate = self.gate_messages(turns=turns, summary=summary, engagement=engagement)
-            if gate is None:
+            if turns and turns[-1].is_self:
                 return ""  # the character spoke last; nothing new to answer
-            answer = await asyncio.to_thread(self._request_gate, gate)
-            if answer != "是":
+            ask = [("called", True)]
+            if engagement == "active":
+                ask.append(("active", quiet_for(turns) >= _JOIN_AFTER_QUIET_LINES))
+            for question, allowed in ask:
+                if not allowed:
+                    continue
+                gate = self.gate_messages(
+                    turns=turns, summary=summary, engagement=engagement, question=question
+                )
+                if gate is not None and await asyncio.to_thread(self._request_gate, gate) == "是":
+                    break
+            else:
                 return ""
         # Past the gate the line is for the character: tell it to answer.
         messages = self.character_messages(
@@ -409,17 +424,18 @@ class LocalReplyModel:
         turns: Sequence[ConversationTurn],
         summary: str = "",
         engagement: str = "called",
+        question: str = "called",
     ) -> list[dict[str, str]] | None:
         """The 是/否 request asked before writing a line: the cached chat with
-        the gate question on the end. None when the character spoke last."""
+        a gate question on the end ("called": is this line for you; "active":
+        would joining in now be natural). None when the character spoke last."""
         base = self.character_messages(
             turns=turns, summary=summary, engagement=engagement, gate=True
         )
         if base[-1]["role"] != "user":
             return None
-        question = _GATE_QUESTION.get(engagement, _GATE_QUESTION["called"])
         return base[:-1] + [
-            {"role": "user", "content": base[-1]["content"] + "\n\n" + question}
+            {"role": "user", "content": base[-1]["content"] + "\n\n" + _GATE_QUESTION[question]}
         ]
 
     def character_messages(
@@ -917,6 +933,16 @@ def list_llama_devices(executable: str) -> list[str]:
     return [
         line.strip() for line in output.splitlines() if "MiB" in line and ":" in line
     ]
+
+
+def quiet_for(turns: Sequence[ConversationTurn]) -> int:
+    """Lines from others since the character last spoke."""
+    count = 0
+    for turn in reversed(turns):
+        if turn.is_self:
+            break
+        count += 1
+    return count
 
 
 def _stable_window(turns: Sequence[ConversationTurn]) -> Sequence[ConversationTurn]:
