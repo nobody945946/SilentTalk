@@ -57,6 +57,8 @@ from silenttalk.copilot.types import REPLY_LANES  # noqa: E402
 
 OUT_DIR = PROJECT_DIR / ".runtime" / "dev" / "distill"
 _WRITE_LOCK = threading.Lock()
+TEACHER_RETRY_SECONDS = 3
+TEACHER_WAIT_SECONDS = 20 * 60
 
 ARCHETYPES = (
     "熱血電競選手", "佛系休閒玩家", "毒舌但心軟的大學生", "上班族老鳥", "新手媽媽趁空檔玩",
@@ -104,17 +106,20 @@ def chat(url: str, system: str, user: str, *, temperature: float, max_tokens: in
         headers={"Content-Type": "application/json"},
         method="POST",
     )
-    # The teacher may be restarting (pipeline supervisor) or the box may be
-    # busy; wait it out instead of losing the job. ~15 min before giving up.
-    for attempt in range(12):
+    # The pipeline supervisor restarts a dead or hung teacher within seconds,
+    # so poll often (a refused localhost connect costs microseconds) and pick
+    # up the moment it is back. The deadline only matters if the supervisor
+    # itself is gone.
+    deadline = time.monotonic() + TEACHER_WAIT_SECONDS
+    while True:
         try:
             with urllib.request.urlopen(request, timeout=600) as response:
                 body = json.loads(response.read().decode("utf-8"))
             break
         except (OSError, json.JSONDecodeError) as exc:
-            if attempt == 11:
+            if time.monotonic() >= deadline:
                 raise TeacherUnavailable(str(exc)) from exc
-            time.sleep(min(120, 5 * 2**attempt))
+            time.sleep(TEACHER_RETRY_SECONDS)
     text = str(body["choices"][0]["message"]["content"] or "")
     return re.sub(r"<think>.*?</think>", "", text, flags=re.S).strip()
 

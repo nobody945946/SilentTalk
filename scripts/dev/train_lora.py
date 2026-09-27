@@ -40,6 +40,11 @@ def main() -> int:
     parser.add_argument("--grad-accum", type=int, default=4)
     parser.add_argument("--holdout", type=float, default=0.03)
     parser.add_argument("--max-steps", type=int, default=-1, help="dry runs only")
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="build everything, show which tokens are trained on, one short forward; no training",
+    )
     args = parser.parse_args()
 
     import torch
@@ -78,8 +83,15 @@ def main() -> int:
     print(train[0]["prompt"][-300:] + train[0]["completion"])
 
     model = AutoModelForCausalLM.from_pretrained(
-        args.base, torch_dtype=torch.bfloat16, attn_implementation="sdpa"
+        args.base, dtype=torch.bfloat16, attn_implementation="sdpa"
     )
+    # Text only: Gemma 4 also ships vision/audio towers (~0.9 GiB) that a
+    # text forward never calls. Drop them before the trainer moves the model
+    # to a GPU that other services share.
+    inner = getattr(model, "model", None)
+    for name in ("vision_tower", "audio_tower", "embed_vision", "embed_audio"):
+        if inner is not None and getattr(inner, name, None) is not None:
+            setattr(inner, name, None)
     config = SFTConfig(
         output_dir=args.out,
         num_train_epochs=args.epochs,
@@ -117,10 +129,36 @@ def main() -> int:
             task_type="CAUSAL_LM",
         ),
     )
+    if args.check:
+        return check(trainer, tokenizer)
     trainer.train()
     trainer.save_model(args.out)
     print(f"saved adapter to {args.out}")
     return 0
+
+
+def check(trainer, tokenizer) -> int:
+    """Print the tokens the loss is computed on (must be exactly the answer
+    lines plus the end-of-turn marker) and run one short forward pass."""
+    import torch
+
+    row = trainer.train_dataset[0]
+    ids = row["input_ids"]
+    # TRL marks the prompt with label -100; everything else is trained on.
+    positions = [i for i, label in enumerate(row["labels"]) if label != -100]
+    trained = [ids[i] for i in positions]
+    prompt_tokens = len(tokenizer(row["prompt"], add_special_tokens=False)["input_ids"])
+    print(f"tokens: {len(ids)}, prompt: {prompt_tokens}, trained on: {len(trained)}")
+    print("TRAINED TEXT >>>" + tokenizer.decode(trained) + "<<<")
+    if not positions or positions[0] != prompt_tokens:
+        print("MASK WRONG: trained tokens must start right after the prompt")
+        return 1
+    model = trainer.model
+    sample = torch.tensor([ids[-64:]], device=model.device)
+    with torch.no_grad():
+        logits = model(input_ids=sample).logits
+    print(f"forward ok: logits {tuple(logits.shape)}")
+    return 0 if trained else 1
 
 
 if __name__ == "__main__":
