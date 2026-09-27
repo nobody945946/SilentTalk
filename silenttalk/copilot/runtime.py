@@ -4,7 +4,7 @@ import asyncio
 import logging
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from silenttalk.config import CopilotConfig
@@ -168,6 +168,46 @@ class CopilotRuntime:
         self._persona = persona
         self._llm.set_persona(persona)
         _LOG.info("copilot_persona_set blank=%s", persona.is_blank)
+
+    def apply_settings(self, copilot: dict[str, object]) -> None:
+        """Live settings from the settings page. Must run on the runtime loop.
+
+        Only what does not need a reload: engagement, compaction and reply
+        length. Model, port and STT engine are startup-only."""
+        policy = self._character_policy
+        self._character_policy = CharacterPolicy(
+            mode=str(copilot.get("character_engagement", policy.mode)),
+            follow_up_seconds=float(
+                copilot.get("character_follow_up_seconds", policy.follow_up_seconds)
+            ),
+            cooldown_seconds=float(
+                copilot.get("character_cooldown_seconds", policy.cooldown_seconds)
+            ),
+            turn_gap=int(copilot.get("character_turn_gap", policy.turn_gap)),
+            stale_turns=policy.stale_turns,
+        )
+        self._config = replace(
+            self._config,
+            compact_context=bool(
+                copilot.get("compact_context", self._config.compact_context)
+            ),
+            max_reply_chars=int(
+                copilot.get("max_reply_chars", self._config.max_reply_chars)
+            ),
+        )
+        self._compact_keep = max(
+            self._config.recent_turns,
+            int(copilot.get("compact_keep_turns", self._compact_keep)),
+        )
+        self._compact_trigger = self._compact_keep + max(
+            4, int(copilot.get("compact_batch_turns", self._config.compact_batch_turns))
+        )
+        self._llm.set_max_reply_chars(self._config.max_reply_chars)
+        _LOG.info(
+            "copilot_settings_applied engagement=%s compact=%s",
+            self._character_policy.mode,
+            self._config.compact_context,
+        )
 
     def set_character_mode(self, enabled: bool) -> None:
         """Copilot (you pick, the bot says it) vs. character (the bot is the

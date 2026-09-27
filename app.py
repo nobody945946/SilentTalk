@@ -5,7 +5,7 @@ import asyncio
 import sys
 from pathlib import Path
 
-from silenttalk.config import ConfigError, load_settings
+from silenttalk.config import ConfigError, config_defaults, load_settings
 from silenttalk.controller import AppController
 from silenttalk.copilot.persona import PersonaStore
 from silenttalk.copilot.smoke import run_copilot_smoke
@@ -13,6 +13,7 @@ from silenttalk.copilot.types import ConversationTurn, ReplySuggestions
 from silenttalk.logging_setup import configure_logging
 from silenttalk.phrases import QuickPhraseStore
 from silenttalk.preferences import PreferenceStore
+from silenttalk.settings_store import SETTINGS_FILE, SettingsStore
 from silenttalk.smoke import run_voice_smoke
 from silenttalk.state import AppState
 from silenttalk.ui import SilentTalkUI
@@ -100,6 +101,7 @@ def main() -> int:
     quick_phrases = QuickPhraseStore(project_dir / "quick_phrases.json")
     preferences = PreferenceStore(project_dir / "ui_preferences.json")
     personas = PersonaStore(project_dir / "personas.json")
+    settings_store = SettingsStore(project_dir / SETTINGS_FILE)
     copilot = settings.copilot
     copilot_info = (
         [
@@ -127,6 +129,9 @@ def main() -> int:
         apply_persona=controller.set_persona,
         preview_voice=controller.preview_voice,
         send_text=controller.send_text if settings.discord.text_chat else None,
+        settings_store=settings_store,
+        config_defaults=config_defaults(project_dir),
+        apply_settings=controller.apply_settings,
         set_character_mode=(
             controller.set_character_mode if settings.copilot.enabled else None
         ),

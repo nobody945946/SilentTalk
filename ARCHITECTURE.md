@@ -48,6 +48,8 @@ speech_queue.py            FIFO / cancel / job lifecycle
 | F8 / F9 全域快捷鍵實作 | `silenttalk/hotkeys.py` | `config.toml`, `silenttalk/config.py` |
 | 新增快捷句、UI 內操作 | `silenttalk/ui.py` | `silenttalk/phrases.py` |
 | AI 劇情模式畫面、WASD 操作 | `silenttalk/story_ui.py` | `silenttalk/ui.py`, `silenttalk/ime.py` |
+| 設定頁有哪些項目、分在哪一類 | `silenttalk/settings_schema.py` | `silenttalk/settings_ui.py` |
+| 使用者改過的設定存哪裡 | `silenttalk/settings_store.py`（`settings.json`） | `silenttalk/config.py` 的 `merge` |
 | 語音頻道文字聊天的讀寫 | `silenttalk/discord_voice.py`（`on_message` / `send_text`） | `config.toml [discord] text_chat`, `controller.py` |
 | 角色模式何時開口（冷卻、點名、問句） | `silenttalk/copilot/character.py` | `copilot/runtime.py`, `config.toml` |
 | 人設欄位、預設人設 | `silenttalk/copilot/persona.py` | `silenttalk/persona_ui.py` |
@@ -403,6 +405,16 @@ shutdown()
 - `stop()` 停止目前音訊。
 
 ---
+
+### 設定的兩層
+
+```text
+config.toml          預設值，保留註解，升級時帶來新預設
+   +  settings.json  使用者在設定頁改過的項目（只存差異，已 gitignore）
+   =  load_settings() 合併後走同一套驗證 -> Settings dataclasses
+```
+
+`settings_schema.PAGES` 是唯一的清單：新增一個設定＝加一筆 `Setting`，UI 自動長出控制項。標了 `restart=True` 的只在啟動時讀取，UI 會顯示「需重開」；其餘透過 `AppController.apply_settings()` 立即生效（TTS 聲線、Discord 跟隨、角色開口時機、壓縮、回覆長度）。
 
 ### `silenttalk/config.py` — 設定邊界
 

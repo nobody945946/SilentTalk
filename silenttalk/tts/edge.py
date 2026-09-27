@@ -71,6 +71,12 @@ class EdgeTTSEngine:
     def voice(self) -> str:
         return self._voice
 
+    def apply_config(self, config: TTSConfig) -> None:
+        """Voice and the global rate/pitch/volume tweaks, changed live."""
+        self._config = config
+        if config.voice:
+            self._voice = config.voice
+
     async def initialize(self) -> None:
         if self._voice:
             return

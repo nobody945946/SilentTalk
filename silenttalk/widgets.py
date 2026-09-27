@@ -438,6 +438,94 @@ class Field(tk.Frame):
         )
 
 
+class Toggle(tk.Frame):
+    """On/off switch with the state spelled out, for a settings row."""
+
+    def __init__(
+        self,
+        master: tk.Misc,
+        command: Callable[[bool], object] | None = None,
+        *,
+        bg: str = theme.PANEL,
+    ) -> None:
+        super().__init__(master, bg=bg, cursor="hand2")
+        self._value = False
+        self._command = command
+        self._track = tk.Frame(self, width=34, height=18, bg=theme.PANEL_TOP)
+        self._track.pack(side="left")
+        self._track.pack_propagate(False)
+        self._knob = tk.Frame(self._track, width=14, height=14, bg=theme.MUTED)
+        self._knob.place(x=2, y=2)
+        self._text = tk.Label(self, text="關", bg=bg, fg=theme.MUTED, font=theme.font(9))
+        self._text.pack(side="left", padx=(8, 0))
+        for widget in (self, self._track, self._knob, self._text):
+            widget.bind("<Button-1>", lambda _: self._toggle())
+
+    def _toggle(self) -> None:
+        self.set(not self._value, notify=True)
+
+    def get(self) -> bool:
+        return self._value
+
+    def set(self, value: bool, *, notify: bool = False) -> None:
+        self._value = bool(value)
+        self._track.configure(bg=theme.ACCENT if self._value else theme.PANEL_TOP)
+        self._knob.configure(bg=theme.ACCENT_INK if self._value else theme.MUTED)
+        self._knob.place(x=18 if self._value else 2, y=2)
+        self._text.configure(
+            text="開" if self._value else "關",
+            fg=theme.TEXT if self._value else theme.MUTED,
+        )
+        if notify and self._command is not None:
+            self._command(self._value)
+
+
+class Stepper(tk.Frame):
+    """Number with - / + buttons: no keyboard needed, no invalid states."""
+
+    def __init__(
+        self,
+        master: tk.Misc,
+        *,
+        minimum: float,
+        maximum: float,
+        step: float = 1.0,
+        decimals: int = 0,
+        unit: str = "",
+        command: Callable[[float], object] | None = None,
+        bg: str = theme.PANEL,
+    ) -> None:
+        super().__init__(master, bg=bg)
+        self._min, self._max, self._step = minimum, maximum, step
+        self._decimals = decimals
+        self._unit = unit
+        self._command = command
+        self._value = minimum
+        self._down = Button(self, "−", lambda: self._nudge(-1), kind="ghost", size=10)
+        self._down.pack(side="left")
+        self._label = tk.Label(
+            self, text="", width=8, bg=bg, fg=theme.TEXT, font=theme.font(10, "bold")
+        )
+        self._label.pack(side="left")
+        self._up = Button(self, "＋", lambda: self._nudge(1), kind="ghost", size=10)
+        self._up.pack(side="left")
+
+    def _nudge(self, direction: int) -> None:
+        self.set(self._value + direction * self._step, notify=True)
+
+    def get(self) -> float:
+        return self._value
+
+    def set(self, value: float, *, notify: bool = False) -> None:
+        self._value = max(self._min, min(self._max, float(value)))
+        shown = (
+            f"{self._value:.{self._decimals}f}" if self._decimals else f"{int(self._value)}"
+        )
+        self._label.configure(text=f"{shown}{self._unit}")
+        if notify and self._command is not None:
+            self._command(self._value)
+
+
 def keycap(
     master: tk.Misc,
     text: str,

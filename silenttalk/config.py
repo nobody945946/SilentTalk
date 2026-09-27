@@ -3,12 +3,13 @@ from __future__ import annotations
 import os
 import shutil
 import tomllib
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from dotenv import load_dotenv
 
 from silenttalk.copilot.character import ENGAGEMENT_MODES
+from silenttalk.settings_store import SETTINGS_FILE, SettingsStore, merge
 
 DEFAULT_LLM_MODEL = "gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf"
 STT_ENGINES = ("paraformer", "sensevoice")
@@ -133,6 +134,35 @@ def _model_filename(value: object) -> str:
     return name
 
 
+def config_defaults(project_dir: Path) -> dict[str, dict[str, object]]:
+    """config.toml as-is: what the settings page calls "the default"."""
+    config_path = project_dir / "config.toml"
+    if not config_path.exists():
+        return {}
+    with config_path.open("rb") as handle:
+        raw = tomllib.load(handle)
+    tables = {
+        name: dict(values)
+        for name, values in raw.items()
+        if isinstance(values, dict)
+    }
+    # Values the file leaves out still have a default in the dataclasses;
+    # the page needs them to show a starting position.
+    for section, config in (
+        ("app", AppConfig("F8", "F9")),
+        ("tts", TTSConfig()),
+        ("discord", None),
+        ("audio", AudioConfig()),
+        ("copilot", CopilotConfig()),
+    ):
+        table = tables.setdefault(section, {})
+        if config is None:
+            continue
+        for name, value in asdict(config).items():
+            table.setdefault(name, value)
+    return tables
+
+
 def load_settings(project_dir: Path) -> Settings:
     load_dotenv(project_dir / ".env")
     config_path = project_dir / "config.toml"
@@ -140,6 +170,9 @@ def load_settings(project_dir: Path) -> Settings:
         raise ConfigError(f"找不到唯一設定檔：{config_path}")
     with config_path.open("rb") as handle:
         raw = tomllib.load(handle)
+    # What the settings page changed wins over the file's defaults, and then
+    # goes through exactly the same validation below.
+    raw = merge(raw, SettingsStore(project_dir / SETTINGS_FILE).load())
 
     token = os.getenv("DISCORD_BOT_TOKEN", "").strip()
     owner_raw = os.getenv("OWNER_USER_ID", "").strip()

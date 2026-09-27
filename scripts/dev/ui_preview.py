@@ -12,6 +12,7 @@ sends, R regenerates, M changes mood) and exits non-zero if it breaks.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 import tempfile
 import time
@@ -30,10 +31,13 @@ def main() -> int:
 
     from PIL import ImageGrab
 
+    from silenttalk.config import config_defaults
     from silenttalk.copilot.persona import PRESET_PERSONAS, PersonaState, PersonaStore
     from silenttalk.copilot.types import ConversationTurn, ReplySuggestions
     from silenttalk.phrases import QuickPhraseStore
     from silenttalk.preferences import PreferenceStore
+    from silenttalk.settings_schema import all_settings
+    from silenttalk.settings_store import SettingsStore
     from silenttalk.ui import SilentTalkUI
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -44,6 +48,7 @@ def main() -> int:
     character: list[tuple[bool, str, float]] = []
     previews: list[tuple[str, str]] = []
     typed: list[str] = []
+    applied_settings: list[list[str]] = []
     personas = PersonaStore(temp / "personas.json")
     personas.save(PersonaState(list(PRESET_PERSONAS), PRESET_PERSONAS[0].id))
     ui = SilentTalkUI(
@@ -60,6 +65,9 @@ def main() -> int:
         set_character_mode=lambda on, style, rate: character.append((on, style, rate)),
         preview_voice=lambda text, persona, _rate: previews.append((text, persona.voice)),
         send_text=typed.append,
+        settings_store=SettingsStore(temp / "settings.json"),
+        config_defaults=config_defaults(PROJECT_DIR),
+        apply_settings=lambda tables: applied_settings.append(sorted(tables)),
         copilot_info=[("回覆模型", "gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf"), ("省 VRAM", "開")],
         font_override=args.font,
     )
@@ -168,6 +176,17 @@ def main() -> int:
     shot("10b_persona_preview")
     ui.show_page("voice")
     shot("11_voice")
+    ui.show_page("settings")
+    shot("13_settings_chat")
+    ui.settings_panel.show("model")
+    shot("14_settings_model")
+    ui.settings_panel.show("voice")
+    shot("14b_settings_voice")
+    ui.settings_panel._changed(
+        next(s for s in all_settings() if s.key == "character_engagement"), "active"
+    )
+    ui.settings_panel.show("chat")
+    shot("15_settings_changed")
     ui.show_page("story")
     ui._toggle_character()
     ui.add_conversation_turn(ConversationTurn(12, "小雨", "凱哥你晚餐要吃什麼"))
@@ -186,6 +205,11 @@ def main() -> int:
         problems.append(f"character toggle should switch on then off, got {character}")
     if previews != [("欸我的，下波我先進", "zh-TW-YunJheNeural")]:
         problems.append(f"voice preview should say 凱哥's first sample line in his voice, got {previews}")
+    saved = json.loads((temp / "settings.json").read_text(encoding="utf-8"))
+    if saved != {"copilot": {"character_engagement": "active"}}:
+        problems.append(f"settings page should save only what changed, got {saved}")
+    if not applied_settings:
+        problems.append("settings page should apply live changes")
     if typed != ["你想吃什麼？"]:
         problems.append(f"T should type the selected reply, got {typed}")
     if regenerated != [True]:

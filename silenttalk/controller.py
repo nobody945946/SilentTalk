@@ -5,6 +5,7 @@ import logging
 import tempfile
 import threading
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 
 import discord
@@ -125,6 +126,52 @@ class AppController:
         text = getattr(job, "text", "")
         if isinstance(text, str) and text.strip():
             self._copilot.record_self(text)
+
+    def apply_settings(self, tables: dict[str, dict[str, object]]) -> None:
+        """Settings changed on the settings page. Everything that can take
+        effect without a restart does so here; the rest is already marked
+        "需重開" in the UI and is only read at startup."""
+        copilot = tables.get("copilot", {})
+        tts = tables.get("tts", {})
+        discord = tables.get("discord", {})
+        try:
+            self._settings = replace(
+                self._settings,
+                app=replace(
+                    self._settings.app,
+                    max_text_length=int(
+                        tables.get("app", {}).get(
+                            "max_text_length", self._settings.app.max_text_length
+                        )
+                    ),
+                ),
+                tts=replace(
+                    self._settings.tts,
+                    voice=str(tts.get("voice", self._settings.tts.voice)),
+                    rate=str(tts.get("rate", self._settings.tts.rate)),
+                    pitch=str(tts.get("pitch", self._settings.tts.pitch)),
+                    volume=str(tts.get("volume", self._settings.tts.volume)),
+                ),
+                discord=replace(
+                    self._settings.discord,
+                    disconnect_when_owner_leaves=bool(
+                        discord.get(
+                            "disconnect_when_owner_leaves",
+                            self._settings.discord.disconnect_when_owner_leaves,
+                        )
+                    ),
+                ),
+            )
+        except (TypeError, ValueError) as exc:
+            _LOG.warning("settings_apply_failed error_type=%s", type(exc).__name__)
+            self._status(AppState.ERROR, f"設定套用失敗：{exc}")
+            return
+        self._tts.apply_config(self._settings.tts)
+        self._discord.apply_config(self._settings.discord)
+        runtime = self._copilot
+        if runtime is not None:
+            self._loop.call_soon_threadsafe(runtime.apply_settings, dict(copilot))
+        _LOG.info("settings_applied sections=%s", ",".join(sorted(tables)))
 
     def set_character_mode(
         self, enabled: bool, voice_style: str = "default", rate_multiplier: float = 1.0

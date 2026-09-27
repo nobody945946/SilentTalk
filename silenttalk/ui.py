@@ -18,6 +18,8 @@ from silenttalk.preferences import (
     PreferenceStore,
     UserPreferences,
 )
+from silenttalk.settings_store import SettingsStore
+from silenttalk.settings_ui import SettingsPanel
 from silenttalk.speech_settings import (
     DEFAULT_RATE_MULTIPLIER,
     MAX_RATE_MULTIPLIER,
@@ -44,6 +46,7 @@ PAGES: tuple[tuple[str, str, str], ...] = (
     ("manual", "✎", "手動"),
     ("persona", "☺", "人設"),
     ("voice", "♪", "聲音"),
+    ("settings", "⚙", "設定"),
 )
 
 _DISCORD_STATES = {
@@ -97,6 +100,9 @@ class SilentTalkUI:
         set_character_mode: Callable[[bool, str, float], None] | None = None,
         preview_voice: Callable[[str, Persona, float], None] | None = None,
         send_text: Callable[[str], None] | None = None,
+        settings_store: SettingsStore | None = None,
+        config_defaults: dict[str, dict[str, object]] | None = None,
+        apply_settings: Callable[[dict[str, dict[str, object]]], None] | None = None,
         copilot_info: Sequence[tuple[str, str]] = (),
         font_override: str | None = None,
     ) -> None:
@@ -185,11 +191,19 @@ class SilentTalkUI:
         self._voice_page = self._build_voice_page(
             self._pages_frame, initial_preferences, copilot_info
         )
+        self.settings_panel = SettingsPanel(
+            self._pages_frame,
+            settings_store,
+            config_defaults or {},
+            on_status=self.status_var.set,
+            on_apply=apply_settings,
+        )
         self._pages = {
             "story": self.story,
             "manual": self._manual_tab,
             "persona": self.persona_panel,
             "voice": self._voice_page,
+            "settings": self.settings_panel,
         }
         for page in self._pages.values():
             page.grid(row=0, column=0, sticky="nsew")

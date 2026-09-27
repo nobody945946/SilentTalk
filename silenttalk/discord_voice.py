@@ -58,6 +58,11 @@ class DiscordVoiceClient(discord.Client):
     def set_pcm_callback(self, callback: PCMCallback | None) -> None:
         self._pcm_callback = callback
 
+    def apply_config(self, config: DiscordConfig) -> None:
+        """Live settings. Intents and the token are startup-only, so only the
+        behaviour flags and timings are taken from here."""
+        self._config = config
+
     def set_text_callback(self, callback: TextCallback | None) -> None:
         self._text_callback = callback
 

@@ -153,6 +153,9 @@ class LocalReplyModel:
         # What the character said lately, to stop it repeating its catchphrases.
         self._recent_character_lines: collections.deque[str] = collections.deque(maxlen=4)
 
+    def set_max_reply_chars(self, value: int) -> None:
+        self._max_reply_chars = max(24, int(value))
+
     def set_persona(self, persona: Persona) -> None:
         """Takes effect on the next request; the system prompt cache refills once."""
         if persona.id != self._persona.id:
