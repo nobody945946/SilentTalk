@@ -45,7 +45,10 @@ from typing import Any
 PROJECT_DIR = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_DIR))
 
-from silenttalk.copilot.llm import LocalReplyModel  # noqa: E402
+from silenttalk.copilot.llm import (  # noqa: E402
+    _JOIN_AFTER_QUIET_LINES as JOIN_AFTER_QUIET_LINES,
+)
+from silenttalk.copilot.llm import LocalReplyModel, quiet_for  # noqa: E402
 from silenttalk.copilot.persona import (  # noqa: E402
     PRESET_PERSONAS,
     REPLY_LENGTHS,
@@ -698,6 +701,7 @@ def decision_points(script: dict[str, Any], name: str) -> list[dict[str, Any]]:
             {
                 "index": index,
                 "speaks": speaks,
+                "aimed": aimed,
                 "mention": aimed and line["via"] == "text",
             }
         )
@@ -792,12 +796,12 @@ def make_refine(args: argparse.Namespace) -> None:
         raw = personas[script["spec"]["persona_id"]]
         for point in decision_points(script, raw["name"]):
             if point["speaks"] and (number, point["index"]) not in done:
-                jobs.append((number, point["index"]))
+                jobs.append((number, point["index"], point["aimed"]))
     print(f"refine: {len(jobs)} lines to improve", flush=True)
     stats = {"kept_script": 0, "replaced": 0}
 
-    def work(job: tuple[int, int]) -> None:
-        number, index = job
+    def work(job: tuple[int, int, bool]) -> None:
+        number, index, aimed = job
         raw = personas[scripts[number]["spec"]["persona_id"]]
         script = dict(scripts[number], stt_variants=raw.get("stt_variants", []))
         persona, turns = conversation(script, _persona(raw), noisy=True)
@@ -806,10 +810,12 @@ def make_refine(args: argparse.Namespace) -> None:
         for turn in turns[: index + 1]:
             if turn.is_self:
                 model._recent_character_lines.append(turn.text)
+        # The request the app sends at this point: answering, or joining in.
         messages = model.character_messages(
             turns=turns[: index + 1],
             summary=script["summary_before"],
-            addressed=True,
+            addressed=aimed,
+            joining=not aimed,
             engagement=script["spec"]["engagement"],
         )
         outs = chat(
@@ -914,24 +920,32 @@ def make_render(args: argparse.Namespace) -> None:
                 "persona_id": persona.id,
                 "role": raw.get("role", ""),
             }
+            # The same questions the app asks (LocalReplyModel.character_turn):
+            # "is this line for you" on every line, and in "active" mode,
+            # after a quiet stretch, "would joining in now be natural".
             if not point["mention"]:
-                gate = model.gate_messages(
-                    turns=history,
-                    summary=script["summary_before"],
-                    engagement=spec["engagement"],
-                )
-                if gate is not None:
+                asked = [("called", point["aimed"])]
+                if (
+                    spec["engagement"] == "active"
+                    and not point["aimed"]
+                    and quiet_for(history) >= JOIN_AFTER_QUIET_LINES
+                ):
+                    asked.append(("active", point["speaks"]))
+                for question, answer in asked:
+                    gate = model.gate_messages(
+                        turns=history,
+                        summary=script["summary_before"],
+                        engagement=spec["engagement"],
+                        question=question,
+                    )
+                    if gate is None:
+                        continue
                     row = meta | {
-                        "kind": "gate",
+                        "kind": f"gate_{question}",
                         "messages": gate
-                        + [
-                            {
-                                "role": "assistant",
-                                "content": "是" if point["speaks"] else "否",
-                            }
-                        ],
+                        + [{"role": "assistant", "content": "是" if answer else "否"}],
                     }
-                    (gate_yes if point["speaks"] else gate_no).append(row)
+                    (gate_yes if answer else gate_no).append(row)
             if point["speaks"]:
                 line = refined.get((number, index))
                 if not line:
@@ -939,7 +953,8 @@ def make_render(args: argparse.Namespace) -> None:
                 messages = model.character_messages(
                     turns=history,
                     summary=script["summary_before"],
-                    addressed=True,
+                    addressed=point["aimed"],
+                    joining=not point["aimed"],
                     engagement=spec["engagement"],
                 )
                 replies.append(

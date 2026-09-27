@@ -400,28 +400,20 @@ class LocalReplyModel:
 
         `turns` is the whole chat so far, the character's own lines marked
         `is_self`; `addressed` is Discord's own @mention or reply signal."""
+        joining = False
         if not addressed:
             if turns and turns[-1].is_self:
                 return ""  # the character spoke last; nothing new to answer
-            ask = [("called", True)]
-            if engagement == "active":
-                ask.append(("active", quiet_for(turns) >= _JOIN_AFTER_QUIET_LINES))
-            for question, allowed in ask:
-                if not allowed:
-                    continue
-                gate = self.gate_messages(
-                    turns=turns, summary=summary, engagement=engagement, question=question
+            addressed = await self._gate(turns, summary, engagement, "called")
+            if not addressed and engagement == "active":
+                joining = quiet_for(turns) >= _JOIN_AFTER_QUIET_LINES and await self._gate(
+                    turns, summary, engagement, "active"
                 )
-                if (
-                    gate is not None
-                    and await asyncio.to_thread(self._request_gate, gate, True) == "是"
-                ):
-                    break
-            else:
+            if not addressed and not joining:
                 return ""
-        # Past the gate the line is for the character: tell it to answer.
         messages = self.character_messages(
-            turns=turns, summary=summary, addressed=True, engagement=engagement
+            turns=turns, summary=summary, addressed=addressed, joining=joining,
+            engagement=engagement,
         )
         if messages[-1]["role"] != "user":
             return ""
@@ -431,6 +423,20 @@ class LocalReplyModel:
         if line:
             self._recent_character_lines.append(line)
         return line
+
+    async def _gate(
+        self,
+        turns: Sequence[ConversationTurn],
+        summary: str,
+        engagement: str,
+        question: str,
+    ) -> bool:
+        gate = self.gate_messages(
+            turns=turns, summary=summary, engagement=engagement, question=question
+        )
+        if gate is None:
+            return False
+        return await asyncio.to_thread(self._request_gate, gate, True) == "是"
 
     def gate_messages(
         self,
@@ -460,6 +466,7 @@ class LocalReplyModel:
         addressed: bool = False,
         engagement: str = "called",
         gate: bool = False,
+        joining: bool = False,
     ) -> list[dict[str, str]]:
         """The chat as messages. Everything but the tail of the last message
         is byte-identical to the previous request's, for the prompt cache.
@@ -492,6 +499,10 @@ class LocalReplyModel:
         hints = []
         if addressed:
             hints.append("（最後這句是在叫你，要回應）")
+        elif joining:
+            # "active" mode chiming in: nobody called it, so it must not
+            # answer as if someone had.
+            hints.append("（沒有人叫你，你決定自然地插一句話）")
         if not persona.is_blank:
             hints.append(persona.reminder_line("開口的話要是", list_catchphrases=False))
         used = [

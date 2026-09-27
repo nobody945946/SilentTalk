@@ -319,7 +319,8 @@ class _Scripted(LocalReplyModel):
 
     def _request_gate(self, messages, character=True):
         self.requests.append(("gate", messages))
-        return self.gate
+        # A list scripts one answer per question, in order.
+        return self.gate.pop(0) if isinstance(self.gate, list) else self.gate
 
     def _request_messages(self, messages, on_lines=None, max_tokens=240, character=False):
         self.requests.append(("line", messages))
@@ -411,3 +412,13 @@ def test_only_character_requests_use_the_lora() -> None:
     model._lora_loaded = True
     assert model._lora_field(True) == {"lora": [{"id": 0, "scale": 1.0}]}
     assert model._lora_field(False) == {"lora": [{"id": 0, "scale": 0.0}]}
+
+
+@pytest.mark.asyncio
+async def test_joining_in_is_not_told_it_was_called() -> None:
+    quiet = _chat(CHAT[:4] + [("Ken", "昨天那把有夠雷"), ("阿傑", "對啊"), ("Ken", "笑死"), ("阿傑", "好啦")])
+    model = _Scripted(gate=["否", "是"])
+    assert await model.character_turn(turns=quiet, engagement="active") == "穩啦"
+    line = model.requests[-1][1][-1]["content"]
+    assert "（沒有人叫你，你決定自然地插一句話）" in line
+    assert "在叫你" not in line
