@@ -752,19 +752,6 @@ def decision_points(script: dict[str, Any], name: str) -> list[dict[str, Any]]:
 
 # ---------------------------------------------------------------- refine
 
-PICK_PROMPT = """下面是 Discord 語音聊天的最後幾句，以及角色「{name}」接話的 {k} 個候選。
-角色人設：
-{sheet}
-
-對話：
-{chat}
-
-候選：
-{options}
-
-哪一句最像這個人在語音裡真的會脫口而出的話？標準：口語自然、不做作、不像客服或旁白，符合人設的口吻和立場，接得上前一句，長度合適，不要硬塞口頭禪。
-只回答一個數字（1 到 {k}）。"""
-
 _AI_CLAIM = re.compile(r"(我是|身為)(一個)?\s*(AI|人工智慧|機器人|語言模型|程式)", re.I)
 _ASSISTANT = re.compile(
     r"(以下是|```|def |import |步驟一|第一步[，,：:]|好的，我來幫你)"
@@ -833,18 +820,31 @@ def make_refine(args: argparse.Namespace) -> None:
     path = OUT_DIR / "refined.jsonl"
     done = {(r["script"], r["index"]) for r in _read(path)}
     scripts = _read(OUT_DIR / "scripts.jsonl")
+    # One job per script, its lines in order: each request then extends the
+    # previous one's prompt, so the teacher's cache only prefills the new
+    # lines (shuffled single lines re-read ~1.8k tokens each: 5.5 lines/min).
+    # Scripts come in random order, so stopping early still leaves a random
+    # subset; unrefined lines fall back to the script in render.
     jobs = []
     for number, script in enumerate(scripts):
         raw = personas[script["spec"]["persona_id"]]
-        for point in decision_points(script, raw["name"]):
-            if point["speaks"] and (number, point["index"]) not in done:
-                jobs.append((number, point["index"], point["aimed"]))
-    # Random order: refining is the slow step (the teacher's experts partly on
-    # the CPU), and stopping it early must leave a random subset, not the
-    # first personas only. Unrefined lines fall back to the script (render).
+        points = [
+            (number, point["index"], point["aimed"])
+            for point in decision_points(script, raw["name"])
+            if point["speaks"] and (number, point["index"]) not in done
+        ]
+        if points:
+            jobs.append(points)
     random.Random(5000).shuffle(jobs)
-    print(f"refine: {len(jobs)} lines to improve", flush=True)
+    print(
+        f"refine: {sum(map(len, jobs))} lines to improve in {len(jobs)} scripts",
+        flush=True,
+    )
     stats = {"kept_script": 0, "replaced": 0}
+
+    def work_script(points: list[tuple[int, int, bool]]) -> None:
+        for point in points:
+            work(point)
 
     def work(job: tuple[int, int, bool]) -> None:
         number, index, aimed = job
@@ -878,9 +878,7 @@ def make_refine(args: argparse.Namespace) -> None:
         plain = [c for c in candidates if not c.startswith(("欸", "誒"))]
         options = plain or candidates
         best = (
-            options[0]
-            if len(options) == 1
-            else pick(args, persona, turns[: index + 1], options)
+            options[0] if len(options) == 1 else pick_in_chat(args, messages, options)
         )
         with _WRITE_LOCK:
             stats["kept_script" if best == scripted else "replaced"] += 1
@@ -889,8 +887,36 @@ def make_refine(args: argparse.Namespace) -> None:
             {"script": number, "index": index, "line": best, "candidates": candidates},
         )
 
-    _pool(args.workers, work, jobs)
+    _pool(args.workers, work_script, jobs)
     print(f"refine done {stats}", flush=True)
+
+
+PICK_IN_CHAT = (
+    "（下面是你接這句的幾種說法。哪一句最像你真的會脫口而出的？"
+    "口語自然、不做作、符合你的口吻和立場、接得上，不要硬塞口頭禪。只回答一個數字）\n"
+)
+
+
+def pick_in_chat(
+    args: argparse.Namespace, messages: list[dict[str, str]], options: list[str]
+) -> str:
+    """Ask the pick at the end of the same chat the lines were written in, so
+    the whole prefix is already in the teacher's cache."""
+    last = (
+        messages[-1]["content"]
+        + "\n\n"
+        + PICK_IN_CHAT
+        + "\n".join(f"{n}. {o}" for n, o in enumerate(options, 1))
+    )
+    answer = chat(
+        args.teacher_url,
+        messages[:-1] + [{"role": "user", "content": last}],
+        temperature=0.0,
+        max_tokens=4,
+    )[0]
+    match = re.search(r"\d+", answer)
+    choice = int(match.group(0)) if match else 1
+    return options[choice - 1] if 1 <= choice <= len(options) else options[0]
 
 
 def usable(line: str, spec: dict[str, Any], args: argparse.Namespace) -> bool:
@@ -899,36 +925,6 @@ def usable(line: str, spec: dict[str, Any], args: argparse.Namespace) -> bool:
     if spec["honesty"] != "admit" and _AI_CLAIM.search(line):
         return False
     return not _ASSISTANT.search(line)
-
-
-def pick(
-    args: argparse.Namespace,
-    persona: Persona,
-    turns: list[ConversationTurn],
-    options: list[str],
-) -> str:
-    chat_text = "\n".join(
-        f"{t.speaker_name}（角色）：{t.text}"
-        if t.is_self
-        else f"{t.speaker_name}：{t.text}"
-        for t in turns[-8:]
-    )
-    prompt = PICK_PROMPT.format(
-        name=persona.name,
-        sheet=persona.render_system_block(),
-        chat=chat_text,
-        k=len(options),
-        options="\n".join(f"{n}. {o}" for n, o in enumerate(options, 1)),
-    )
-    answer = chat(
-        args.teacher_url,
-        [{"role": "user", "content": prompt}],
-        temperature=0.0,
-        max_tokens=8,
-    )[0]
-    match = re.search(r"\d+", answer)
-    choice = int(match.group(0)) if match else 1
-    return options[choice - 1] if 1 <= choice <= len(options) else options[0]
 
 
 def _persona(raw: dict[str, Any]) -> Persona:
