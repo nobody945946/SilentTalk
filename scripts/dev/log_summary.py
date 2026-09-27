@@ -22,6 +22,16 @@ PROJECT_DIR = Path(__file__).resolve().parents[2]
 FIELD = re.compile(r"(\w+)=(\S+)")
 
 
+def _exception_type(record: dict) -> str:
+    """The exception class of a traceback ("aiohttp.ClientConnectorError"),
+    never its message: that is what tells a network drop from a bad token."""
+    trace = str(record.get("exception") or "").strip().splitlines()
+    if not trace:
+        return ""
+    name = trace[-1].split(":", 1)[0].strip()
+    return f"（{name}）" if re.fullmatch(r"[\w.]+", name) else ""
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--log", type=Path, default=PROJECT_DIR / "silenttalk.log")
@@ -55,7 +65,7 @@ def main() -> int:
         name = text.split(" ", 1)[0]
         events.setdefault(name, []).append(dict(FIELD.findall(text)))
         if record.get("level") in ("WARNING", "ERROR", "CRITICAL"):
-            problems[f"{record['level']} {name}"] += 1
+            problems[f"{record['level']} {name}{_exception_type(record)}"] += 1
 
     def ms(rows: list[dict[str, str]], key: str) -> str:
         values = [

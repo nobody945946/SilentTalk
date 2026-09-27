@@ -25,7 +25,7 @@
 | 關係型人設（關係進 prompt、稱呼說明） | ✅ |
 | TTS 串流進 Discord | ✅（開發機量過，沒在真 Discord 聽過） |
 | 角色 LoRA（Copilot 請求強度 0） | 🔄 資料產生中，§4 |
-| 真 Discord 實測 | ⬜ 等筆電回報（`laptop-report` 分支） |
+| 真 Discord 實測 | ⬜ 筆電第一次回報（2026-09-27 20:48，`laptop-report`）：bench 一樣（判斷 89 ms、68 token/s）、`--copilot-smoke` 通過（STT CER 1.7%、四選項中位數 1.34 s）；**語音測試沒做**（使用者沒空）；log 有 5 次 discord.py「Attempting a reconnect」ERROR，原因未知，`log_summary.py` 現在會列出例外類別，下次回報就知道 |
 | 縮短「等對方講完」 | ⬜ 需要真人語音資料 |
 
 **測試：** `157 passed`。
