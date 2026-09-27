@@ -283,6 +283,8 @@ def make_model(
         gpu_layers=int(config["llm_gpu_layers"]),
         low_vram=bool(config["llm_low_vram"]),
         ai_honesty=str(config["character_ai_honesty"]),
+        # CPU-only prefill of a fresh persona prompt can pass the app's 15 s.
+        request_timeout_seconds=180.0 if CPU_ONLY else 15.0,
     )
 
 
