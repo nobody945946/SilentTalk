@@ -10,7 +10,7 @@ import edge_tts
 from silenttalk.config import TTSConfig
 from silenttalk.speech_settings import combine_edge_rate, validate_rate_multiplier
 from silenttalk.tts.base import AudioResult
-from silenttalk.voice_styles import VOICE_STYLES
+from silenttalk.voice_styles import VOICE_STYLES, VoiceStyle
 
 _LOG = logging.getLogger(__name__)
 
@@ -31,15 +31,20 @@ def _consume_legacy_style_prefix(text: str, voice_style: str) -> tuple[str, str]
 def resolve_speech_settings(
     text: str,
     config: TTSConfig,
-    voice_style: str = "default",
+    voice_style: str | VoiceStyle = "default",
     rate_multiplier: float = 1.0,
 ) -> tuple[str, str, str, str, str, str | None]:
-    """Resolve text + structured style + UI speed into EdgeTTS/FFmpeg settings."""
+    """Resolve text + structured style + UI speed into EdgeTTS/FFmpeg settings.
+
+    `voice_style` is a VOICE_STYLES key, or a persona's own VoiceStyle."""
     validate_rate_multiplier(rate_multiplier)
-    spoken_text, style_key = _consume_legacy_style_prefix(text, voice_style)
-    style = VOICE_STYLES.get(style_key)
-    if style is None:
-        raise ValueError(f"未知聲線：{style_key}")
+    if isinstance(voice_style, VoiceStyle):
+        spoken_text, style = text, voice_style
+    else:
+        spoken_text, style_key = _consume_legacy_style_prefix(text, voice_style)
+        style = VOICE_STYLES.get(style_key)
+        if style is None:
+            raise ValueError(f"未知聲線：{style_key}")
 
     if style.key == "default":
         voice = config.voice
@@ -84,7 +89,7 @@ class EdgeTTSEngine:
     async def synthesize(
         self,
         text: str,
-        voice_style: str = "default",
+        voice_style: str | VoiceStyle = "default",
         rate_multiplier: float = 1.0,
     ) -> AudioResult:
         if not self._voice:

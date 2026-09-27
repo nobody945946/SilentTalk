@@ -19,7 +19,8 @@ from silenttalk.speech_settings import validate_rate_multiplier
 from silenttalk.state import AppState
 from silenttalk.text import normalize_text
 from silenttalk.tts.edge import EdgeTTSEngine
-from silenttalk.voice_styles import VOICE_STYLES
+from silenttalk.tts.local_play import play_wav, render_wav
+from silenttalk.voice_styles import VOICE_STYLES, VoiceStyle
 
 _LOG = logging.getLogger(__name__)
 StatusCallback = Callable[[AppState, str], None]
@@ -70,6 +71,9 @@ class AppController:
         )
         self._closing = False
         self._character_voice = ("default", 1.0)
+        # The active persona's own voice; when set it is used for everything
+        # the bot says (typed, picked or spoken by the character).
+        self._persona_voice: VoiceStyle | None = None
 
     def start(self) -> None:
         self._thread.start()
@@ -88,10 +92,25 @@ class AppController:
         self._schedule(
             self._queue.enqueue(
                 text,
-                voice_style=voice_style,
+                voice_style=self._persona_voice or voice_style,
                 rate_multiplier=rate,
             )
         )
+
+    def preview_voice(self, text: str, persona: Persona, rate_multiplier: float = 1.0) -> None:
+        """Say `text` in the persona's voice on this PC's speakers only."""
+        text = normalize_text(text, self._settings.app.max_text_length)
+        rate = validate_rate_multiplier(rate_multiplier)
+        style = persona.voice_style() or "default"
+        self._schedule(self._preview(text, style, rate))
+
+    async def _preview(self, text: str, style: str | VoiceStyle, rate: float) -> None:
+        audio = await self._tts.synthesize(text, voice_style=style, rate_multiplier=rate)
+        try:
+            wav = await asyncio.to_thread(render_wav, audio, self._settings.audio.ffmpeg_path)
+            await asyncio.to_thread(play_wav, wav)
+        finally:
+            audio.path.unlink(missing_ok=True)
 
     def _on_speech_done(self, job: object) -> None:
         if self._copilot is None:
@@ -126,7 +145,11 @@ class AppController:
                 line[: self._settings.app.max_text_length], self._settings.app.max_text_length
             )
         style, rate = self._character_voice
-        self._schedule(self._queue.enqueue(text, voice_style=style, rate_multiplier=rate))
+        self._schedule(
+            self._queue.enqueue(
+                text, voice_style=self._persona_voice or style, rate_multiplier=rate
+            )
+        )
 
     def regenerate_suggestions(self) -> None:
         copilot = self._copilot
@@ -136,6 +159,7 @@ class AppController:
 
     def set_persona(self, persona: Persona) -> None:
         """Safe from any thread; before start() it is applied once the loop runs."""
+        self._persona_voice = persona.voice_style()
         copilot = self._copilot
         if copilot is not None and not self._closing:
             self._loop.call_soon_threadsafe(copilot.set_persona, persona)

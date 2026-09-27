@@ -163,3 +163,21 @@ def test_persona_reminder_sits_right_before_the_answer() -> None:
 
     assert prompt.endswith("（記住：你是凱哥；句子短、節奏快；口頭禪偶爾用：穩啦、我的我的、笑死。四句都要是這個人會說的話。）\n輸出四行：")
     assert "【你的人設】" in model._build_system_prompt(PRESET_PERSONAS[0])
+
+
+def test_persona_voice_is_tts_only_and_validated() -> None:
+    from silenttalk.copilot.persona import persona_from_dict, persona_to_dict
+
+    chuuni = PRESET_PERSONAS[2]
+    style = chuuni.voice_style()
+
+    assert style is not None and style.voice == "zh-CN-YunjianNeural"
+    assert style.pitch == "-15Hz" and style.ffmpeg_filter
+    assert "Yunjian" not in LocalReplyModel(Path("unused.gguf"))._build_system_prompt(chuuni)
+    assert persona_from_dict(persona_to_dict(chuuni)).voice_style() == style
+    # No voice settings: the voice page decides.
+    assert Persona(id="p", name="x").voice_style() is None
+    with pytest.raises(PersonaError, match="聲線"):
+        validate_persona(Persona(id="p", name="x", voice="en-US-Unknown"))
+    loud = validate_persona(Persona(id="p", name="x", voice_pitch=999, voice_speed=-999))
+    assert (loud.voice_pitch, loud.voice_speed) == (50, -40)

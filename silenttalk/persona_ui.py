@@ -21,9 +21,16 @@ from silenttalk.copilot.persona import (
     new_persona_id,
     validate_persona,
 )
+from silenttalk.voice_styles import (
+    PERSONA_VOICES,
+    PITCH_STEPS,
+    SPEED_STEPS,
+    VOICE_EFFECTS,
+)
 from silenttalk.widgets import (
     Avatar,
     Button,
+    Chip,
     Field,
     ScrollArea,
     Segmented,
@@ -33,6 +40,7 @@ from silenttalk.widgets import (
 
 ApplyCallback = Callable[[Persona], None]
 StatusCallback = Callable[[str], None]
+PreviewCallback = Callable[[Persona, str], None]
 
 NONE_ID = "none"
 
@@ -66,6 +74,11 @@ SECTIONS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
         ("relationships",),
     ),
     ("底線", "無論如何都不能說出口的話。", ("boundaries",)),
+    (
+        "聲音",
+        "這個角色講話的聲音。設定後，Bot 說的每句話（手動、選項、角色模式）都用它；不會影響 AI 想出來的內容。",
+        ("voice",),
+    ),
 )
 MULTILINE = {"background": 3, "sample_lines": 3, "speech_style": 2, "desires": 2}
 HINTS = {
@@ -83,8 +96,12 @@ class PersonaPanel(tk.Frame):
         *,
         on_apply: ApplyCallback,
         on_status: StatusCallback,
+        on_preview: PreviewCallback | None = None,
     ) -> None:
         super().__init__(master, bg=theme.BG)
+        self._on_preview = on_preview
+        self._voice = ""
+        self._voice_chips: dict[str, Chip] = {}
         self._store = store
         self._on_apply = on_apply
         self._on_status = on_status
@@ -264,6 +281,8 @@ class PersonaPanel(tk.Frame):
                     row, text="", bg=theme.PANEL, fg=theme.DIM, font=theme.font(8)
                 )
                 self._length_hint.pack(side="left", padx=(10, 0))
+            elif key == "voice":
+                self._build_voice(box)
             elif key == "relationships":
                 self._relations = tk.Frame(box, bg=theme.PANEL)
                 self._relations.pack(fill="x")
@@ -282,6 +301,55 @@ class PersonaPanel(tk.Frame):
                 )
                 field.pack(fill="x", pady=(0, 8))
                 self._fields[key] = field
+
+    def _build_voice(self, box: tk.Frame) -> None:
+        grid = tk.Frame(box, bg=theme.PANEL)
+        grid.pack(anchor="w", pady=(0, 8))
+        for index, (voice, label) in enumerate(PERSONA_VOICES):
+            chip = Chip(grid, label, lambda v=voice: self._pick_voice(v), size=9)
+            chip.grid(row=index // 3, column=index % 3, sticky="w", padx=(0, 6), pady=2)
+            self._voice_chips[voice] = chip
+        self._voice_knobs: dict[str, Segmented] = {}
+        for key, label, steps in (
+            ("voice_pitch", "音高", [(str(v), t) for v, t in PITCH_STEPS]),
+            ("voice_speed", "語速", [(str(v), t) for v, t in SPEED_STEPS]),
+            ("voice_effect", "音效", [(k, name) for k, (name, _) in VOICE_EFFECTS.items()]),
+        ):
+            row = tk.Frame(box, bg=theme.PANEL)
+            row.pack(fill="x", pady=(2, 4))
+            tk.Label(
+                row, text=label, width=4, anchor="w", bg=theme.PANEL, fg=theme.MUTED,
+                font=theme.font(9),
+            ).pack(side="left", padx=(0, 10))
+            knob = Segmented(row, steps, lambda _v: self._changed())
+            knob.pack(side="left")
+            self._voice_knobs[key] = knob
+        actions = tk.Frame(box, bg=theme.PANEL)
+        actions.pack(fill="x", pady=(6, 0))
+        Button(actions, "▶ 試聽", self._preview_voice, kind="secondary", size=9).pack(
+            side="left"
+        )
+        tk.Label(
+            actions,
+            text="用代表台詞的第一句，在這台電腦播放，不會送進 Discord。語速頁的整體語速會再疊加。",
+            bg=theme.PANEL, fg=theme.DIM, font=theme.font(8),
+        ).pack(side="left", padx=(10, 0))
+
+    def _pick_voice(self, voice: str) -> None:
+        self._voice = voice
+        for key, chip in self._voice_chips.items():
+            chip.set_selected(key == voice)
+        self._changed()
+
+    def _preview_voice(self) -> None:
+        persona = self._current()
+        if persona is None or self._on_preview is None:
+            return
+        draft = self._collect()
+        lines = [line.strip() for line in draft.sample_lines.splitlines() if line.strip()]
+        text = lines[0] if lines else f"你好，我是{draft.name or '這個角色'}。"
+        self._on_status("試聽中…")
+        self._on_preview(draft, text)
 
     def _build_preview(self, parent: tk.Frame) -> None:
         box = card(parent, bg=theme.SURFACE)
@@ -429,6 +497,10 @@ class PersonaPanel(tk.Frame):
                 for axis in TRAIT_AXES:
                     self._sliders[axis.key].set(persona.trait(axis.key))
                 self._length.set(persona.reply_length)
+                self._pick_voice(persona.voice)
+                self._voice_knobs["voice_pitch"].set(str(_nearest(persona.voice_pitch, PITCH_STEPS)))
+                self._voice_knobs["voice_speed"].set(str(_nearest(persona.voice_speed, SPEED_STEPS)))
+                self._voice_knobs["voice_effect"].set(persona.voice_effect)
                 for frame, _, _ in self._relation_rows:
                     frame.destroy()
                 self._relation_rows.clear()
@@ -501,6 +573,10 @@ class PersonaPanel(tk.Frame):
             name=self._name_var.get(),
             traits={axis.key: self._sliders[axis.key].get() for axis in TRAIT_AXES},
             reply_length=self._length.get(),
+            voice=self._voice,
+            voice_pitch=int(self._voice_knobs["voice_pitch"].get() or 0),
+            voice_speed=int(self._voice_knobs["voice_speed"].get() or 0),
+            voice_effect=self._voice_knobs["voice_effect"].get(),
             relationships=tuple(
                 Relationship(name.get(), relation.get())
                 for _, name, relation in self._relation_rows
@@ -702,3 +778,8 @@ class PersonaPanel(tk.Frame):
 def _trim(text: str, limit: int) -> str:
     compact = " ".join(text.split())
     return compact if len(compact) <= limit else compact[: limit - 1] + "…"
+
+
+def _nearest(value: int, steps: tuple[tuple[int, str], ...]) -> int:
+    """Hand-edited personas.json may hold any value; show the closest step."""
+    return min((step for step, _ in steps), key=lambda step: abs(step - value))

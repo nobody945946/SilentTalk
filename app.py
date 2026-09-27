@@ -125,6 +125,7 @@ def main() -> int:
         ),
         personas=personas,
         apply_persona=controller.set_persona,
+        preview_voice=controller.preview_voice,
         set_character_mode=(
             controller.set_character_mode if settings.copilot.enabled else None
         ),

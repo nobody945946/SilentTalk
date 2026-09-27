@@ -11,6 +11,7 @@ from typing import Protocol
 
 from silenttalk.state import AppState
 from silenttalk.tts.base import AudioResult, TTSEngine
+from silenttalk.voice_styles import VoiceStyle
 
 _LOG = logging.getLogger(__name__)
 
@@ -27,7 +28,8 @@ class JobState(StrEnum):
 @dataclass(slots=True)
 class SpeechJob:
     text: str = field(repr=False)
-    voice_style: str = "default"
+    # A VOICE_STYLES key, or the active persona's own voice.
+    voice_style: str | VoiceStyle = "default"
     rate_multiplier: float = 1.0
     id: str = field(default_factory=lambda: uuid.uuid4().hex)
     created_at: float = field(default_factory=time.time)
@@ -81,7 +83,7 @@ class SpeechQueue:
     async def enqueue(
         self,
         text: str,
-        voice_style: str = "default",
+        voice_style: str | VoiceStyle = "default",
         rate_multiplier: float = 1.0,
     ) -> SpeechJob:
         if self._worker is None or self._worker.done():
@@ -97,7 +99,7 @@ class SpeechQueue:
             "job_queued job_id=%s char_count=%d voice_style=%s rate_multiplier=%.2f",
             job.id,
             len(text),
-            voice_style,
+            voice_style.key if isinstance(voice_style, VoiceStyle) else voice_style,
             rate_multiplier,
         )
         return job

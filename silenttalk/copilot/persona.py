@@ -17,6 +17,13 @@ import uuid
 from dataclasses import asdict, dataclass, field, fields, replace
 from pathlib import Path
 
+from silenttalk.voice_styles import (
+    PERSONA_VOICE_IDS,
+    VOICE_EFFECTS,
+    VoiceStyle,
+    persona_voice_style,
+)
+
 
 class PersonaError(ValueError):
     pass
@@ -109,11 +116,22 @@ class Persona:
     reply_length: str = "normal"
     traits: dict[str, int] = field(default_factory=dict)
     relationships: tuple[Relationship, ...] = ()
+    # How the character sounds (TTS only; never part of the LLM prompt).
+    voice: str = ""
+    voice_pitch: int = 0
+    voice_speed: int = 0
+    voice_effect: str = ""
 
     @property
     def is_blank(self) -> bool:
         """True when nothing would reach the prompt (the neutral "no persona")."""
         return not self.render_system_block() and self.reply_length == "normal"
+
+    def voice_style(self) -> VoiceStyle | None:
+        """The character's own TTS voice, or None to use the voice page."""
+        return persona_voice_style(
+            self.voice, self.voice_pitch, self.voice_speed, self.voice_effect
+        )
 
     def trait(self, key: str) -> int:
         return self.traits.get(key, TRAIT_NEUTRAL)
@@ -226,6 +244,12 @@ def validate_persona(persona: Persona) -> Persona:
     if len(relationships) > MAX_RELATIONSHIPS:
         raise PersonaError(f"人際關係最多 {MAX_RELATIONSHIPS} 位。")
     updates["relationships"] = tuple(relationships)
+    if persona.voice not in PERSONA_VOICE_IDS:
+        raise PersonaError(f"不支援的聲線：{persona.voice}")
+    if persona.voice_effect not in VOICE_EFFECTS:
+        raise PersonaError(f"不支援的音效：{persona.voice_effect}")
+    updates["voice_pitch"] = max(-50, min(50, int(persona.voice_pitch)))
+    updates["voice_speed"] = max(-40, min(40, int(persona.voice_speed)))
     return replace(persona, **updates)  # type: ignore[arg-type]
 
 
@@ -249,6 +273,8 @@ def persona_from_dict(raw: object) -> Persona:
             if not isinstance(value, dict):
                 raise PersonaError("人設 traits 格式錯誤。")
             values[key] = {str(k): int(v) for k, v in value.items()}
+        elif key in ("voice_pitch", "voice_speed"):
+            values[key] = int(value)
         elif key == "relationships":
             if not isinstance(value, list):
                 raise PersonaError("人設 relationships 格式錯誤。")
@@ -291,6 +317,8 @@ PRESET_PERSONAS: tuple[Persona, ...] = (
         sample_lines="欸我的，下波我先進\n穩啦，這把能拿\n笑死，我又被架",
         traits={"energy": 4, "tongue": 4, "playful": 4, "boldness": 4},
         reply_length="short",
+        voice="zh-TW-YunJheNeural",
+        voice_speed=10,
     ),
     Persona(
         id="preset-listener",
@@ -308,6 +336,8 @@ PRESET_PERSONAS: tuple[Persona, ...] = (
         boundaries="不說教、不替別人下結論。",
         sample_lines="聽起來你真的很累欸\n慢慢來，我們一起想",
         traits={"warmth": 5, "tongue": 1, "boldness": 2},
+        voice="zh-TW-HsiaoChenNeural",
+        voice_speed=-10,
     ),
     Persona(
         id="preset-chuuni",
@@ -325,6 +355,9 @@ PRESET_PERSONAS: tuple[Persona, ...] = (
         boundaries="不真的貶低別人。",
         sample_lines="哼，這種程度的團戰，吾之右手尚未解放\n命運的齒輪開始轉動了",
         traits={"energy": 4, "playful": 5, "boldness": 4},
+        voice="zh-CN-YunjianNeural",
+        voice_pitch=-15,
+        voice_effect="echo",
     ),
 )
 

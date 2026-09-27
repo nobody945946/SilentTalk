@@ -95,6 +95,7 @@ class SilentTalkUI:
         personas: PersonaStore | None = None,
         apply_persona: Callable[[Persona], None] | None = None,
         set_character_mode: Callable[[bool, str, float], None] | None = None,
+        preview_voice: Callable[[str, Persona, float], None] | None = None,
         copilot_info: Sequence[tuple[str, str]] = (),
         font_override: str | None = None,
     ) -> None:
@@ -105,6 +106,7 @@ class SilentTalkUI:
         self._preference_store = preferences
         self._apply_persona_callback = apply_persona
         self._character_callback = set_character_mode
+        self._preview_callback = preview_voice
         self._character_on = False
         self._persona_name = ""
         self._copilot_enabled = regenerate_suggestions is not None
@@ -175,6 +177,7 @@ class SilentTalkUI:
             personas,
             on_apply=self._apply_persona,
             on_status=self.status_var.set,
+            on_preview=self._preview_voice if self._preview_callback else None,
         )
         self._voice_page = self._build_voice_page(
             self._pages_frame, initial_preferences, copilot_info
@@ -500,7 +503,12 @@ class SilentTalkUI:
             bg=theme.PANEL,
             fg=theme.DIM,
             font=theme.font(9),
-        ).pack(anchor="w", pady=(0, 8))
+        ).pack(anchor="w", pady=(0, 4))
+        # Shown when the active persona has its own voice, which then wins.
+        self._persona_voice_note = tk.Label(
+            voice, text="", bg=theme.PANEL, fg=theme.ACCENT_HI, font=theme.font(9)
+        )
+        self._persona_voice_note.pack(anchor="w", pady=(0, 8))
         chips = tk.Frame(voice, bg=theme.PANEL)
         chips.pack(anchor="w")
         self._voice_chips: dict[str, Chip] = {}
@@ -714,11 +722,25 @@ class SilentTalkUI:
     def _apply_persona(self, persona: Persona, *, announce: bool = True) -> None:
         name = persona.name or "不使用人設"
         self._persona_name = persona.name
+        if hasattr(self, "_persona_voice_note"):
+            self._persona_voice_note.configure(
+                text=f"目前由人設「{persona.name}」的聲音說話（在人設頁修改）；下面的聲線在不用人設時才生效。"
+                if persona.voice_style() is not None
+                else ""
+            )
         mood = "" if persona.mood in ("", "平常") else f" · {persona.mood}"
         self._persona_var.set(f"{name}{mood}")
         self._persona_avatar.set_name(persona.name)
         if self._apply_persona_callback is not None:
             self._apply_persona_callback(persona)
+
+    def _preview_voice(self, persona: Persona, text: str) -> None:
+        if self._preview_callback is None:
+            return
+        try:
+            self._preview_callback(text, persona, self._rate_multiplier())
+        except Exception as exc:  # noqa: BLE001 - shown to the user
+            self._show_status(AppState.ERROR, f"試聽失敗：{exc}")
 
     def _toggle_character(self) -> None:
         self._set_character_mode(not self._character_on)

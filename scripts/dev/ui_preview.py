@@ -42,6 +42,7 @@ def main() -> int:
     regenerated: list[bool] = []
     applied: list[str] = []
     character: list[tuple[bool, str, float]] = []
+    previews: list[tuple[str, str]] = []
     personas = PersonaStore(temp / "personas.json")
     personas.save(PersonaState(list(PRESET_PERSONAS), PRESET_PERSONAS[0].id))
     ui = SilentTalkUI(
@@ -56,6 +57,7 @@ def main() -> int:
         personas=personas,
         apply_persona=lambda persona: applied.append(persona.mood),
         set_character_mode=lambda on, style, rate: character.append((on, style, rate)),
+        preview_voice=lambda text, persona, _rate: previews.append((text, persona.voice)),
         copilot_info=[("回覆模型", "gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf"), ("省 VRAM", "開")],
         font_override=args.font,
     )
@@ -149,8 +151,11 @@ def main() -> int:
     shot("8_persona")
     ui.persona_panel._scroll._canvas.yview_moveto(0.55)
     shot("9_persona_scrolled")
+    ui.persona_panel._scroll._canvas.yview_moveto(0.8)
+    shot("10_persona_voice")
+    ui.persona_panel._preview_voice()
     ui.persona_panel._scroll._canvas.yview_moveto(1.0)
-    shot("10_persona_preview")
+    shot("10b_persona_preview")
     ui.show_page("voice")
     shot("11_voice")
     ui.show_page("story")
@@ -169,6 +174,8 @@ def main() -> int:
         problems.append(f"streamed choice should survive the final result, got {streamed}")
     if [on for on, _style, _rate in character] != [True, False]:
         problems.append(f"character toggle should switch on then off, got {character}")
+    if previews != [("欸我的，下波我先進", "zh-TW-YunJheNeural")]:
+        problems.append(f"voice preview should say 凱哥's first sample line in his voice, got {previews}")
     if regenerated != [True]:
         problems.append("R should call regenerate once")
     if not applied or applied[-1] != "開心":

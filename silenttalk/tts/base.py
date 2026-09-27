@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
+from silenttalk.voice_styles import VoiceStyle
+
 
 @dataclass(frozen=True, slots=True)
 class AudioResult:
@@ -21,7 +23,7 @@ class TTSEngine(Protocol):
     async def synthesize(
         self,
         text: str,
-        voice_style: str = "default",
+        voice_style: str | VoiceStyle = "default",
         rate_multiplier: float = 1.0,
     ) -> AudioResult: ...
 

@@ -334,6 +334,7 @@ while not vad.empty():
 - **誠實：** 角色模式的 prompt 允許、也要求被認真問「是不是 AI」時承認（說話者就是 AI）。Copilot 模式相反（說話者是真人）。**不要把兩者的規則混用。**
 - **口頭禪重複：** 一句接一句說時，小模型幾乎每句都塞口頭禪（實測 86%）。`LocalReplyModel` 記住最近 4 句，用過的口頭禪／代表台詞會在下一句 prompt 裡點名「不要再用」→ 40%。
 - **實測（Gemma 4 E2B，`persona_eval.py --mode character --runs 2`）：** voice 3.68、stance 3.42、natural 3.26、fit（時機）3.36、捏造 2%、踩底線 5%、盲測辨識 99%，3090 上 0.34 s／句（3050 Ti 推估 0.6–0.8 s）。
+- **角色的聲音（9/27）：** 人設有 `voice`／`voice_pitch`／`voice_speed`／`voice_effect`（`silenttalk/voice_styles.py` 的 `PERSONA_VOICES`、`VOICE_EFFECTS`）。只影響 TTS，**不進 LLM prompt**（不影響人格評估與蒸餾資料）。Controller 用 active persona 的聲音說所有的話；UI 語速是整體偏好，會疊加在人設語速上。音效鏈尾端有補償增益＋limiter（實測各音效與原聲 RMS 差 ≤0.6 dB、峰值 ≤ −7 dBFS）。試聽走 `tts/local_play.py`：FFmpeg 套同一條音效鏈→WAV→Windows `winsound`。
 - **還沒做：** 多人同時說話的插話判斷（目前只看 STT 的 final 句）、Bot 說話時有人開口就停（barge-in）、長期記憶（跨場次記得誰是誰）。
 
 ---
