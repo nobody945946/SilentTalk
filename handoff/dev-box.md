@@ -27,6 +27,7 @@
 | 角色 LoRA（Copilot 請求強度 0） | 🔄 資料產生中，§4 |
 | 真 Discord 實測 | ⬜ 筆電第一次回報（2026-09-27 20:48，`laptop-report`）：bench 一樣（判斷 89 ms、68 token/s）、`--copilot-smoke` 通過（STT CER 1.7%、四選項中位數 1.34 s）；**語音測試沒做**（使用者沒空）；log 有 5 次 discord.py「Attempting a reconnect」ERROR，第二份回報查出是 `ClientConnectorDNSError`：筆電當時解析不到 Discord 的網址（網路／DNS，不是程式問題）。有沒有重連成功還不知道，`log_summary.py` 現在會列出 `discord_ready` 次數 |
 | 縮短「等對方講完」 | ⬜ 需要真人語音資料 |
+| UI 重新設計（三個入口：對話／人設／設定，其他收在下一層；150% 縮放不再切字） | ✅ 開發機預覽 100%／150% 通過；**還沒看過 Windows 實際畫面** |
 
 **測試：** `157 passed`。
 
@@ -51,6 +52,14 @@ xvfb-run -a .venv/bin/python scripts/dev/ui_preview.py --font "Noto Sans CJK TC"
 ```
 
 `source .runtime/tools/env.sh` 會把 llama-server（b11179，Vulkan）放進 PATH。
+
+**UI 截圖要用 `.runtime/tools/ui-preview-env/bin/python`**（conda-forge 的 Tk，有 Xft）：專案 venv 的 Tk 沒有 Xft，中文粗體會變方框，截圖不能拿來判斷。用法和 `--scale 1.5`（模擬 Windows 150%）寫在 `scripts/dev/ui_preview.py` 開頭。
+
+**下次重寫 `handoff/laptop.md` 時要放進去的**（照交接規則：封存舊版再重寫）：
+1. pull 之後在筆電跑 `ui_preview.py`，用 Windows 原生縮放截圖，推回 `laptop-report`（`handoff/reports/laptop-ui/*.png`），確認真正的 Windows 畫面沒有切字或跑版。
+2. LoRA 過關的話：掛上 LoRA 再做一次語音測試。
+3. 上次的 5 次 `ClientConnectorDNSError`：看新版 `log_summary` 的「連上 Discord」次數。
+4. 語音測試（上次使用者沒空）。
 
 ## 3. 角色模式怎麼運作
 
