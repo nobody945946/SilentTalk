@@ -5,6 +5,8 @@ import pytest
 
 from silenttalk.copilot import llm
 from silenttalk.copilot.llm import LocalLLMError, LocalReplyModel
+from silenttalk.copilot.persona import PRESET_PERSONAS
+from silenttalk.copilot.types import ConversationTurn
 
 
 def test_four_lane_parser_strips_thinking_and_keeps_fixed_intents() -> None:
@@ -214,3 +216,145 @@ def test_missing_llama_server_still_raises(
 
     with pytest.raises(LocalLLMError):
         llm.find_llama_server()
+
+
+def _chat(lines: list[tuple[str, str]]) -> list[ConversationTurn]:
+    return [
+        ConversationTurn(2, name, text, is_self=name == "凱哥") for name, text in lines
+    ]
+
+
+CHAT = [
+    ("阿傑", "欸今天要打幾場"),
+    ("小雨", "我等等要先吃飯"),
+    ("小雨", "凱哥你要上嗎"),
+    ("凱哥", "穩啦等我五分鐘"),
+    ("Ken", "昨天那把有夠雷"),
+    ("阿傑", "對啊打野一直送"),
+]
+
+
+def test_character_chat_only_ever_grows_at_the_end() -> None:
+    """Each new line leaves every earlier message byte-identical, so the
+    llama-server prompt cache only prefills the new line."""
+    model = LocalReplyModel(Path("unused.gguf"))  # blank persona: no hints
+    turns = _chat(CHAT)
+    for n in range(1, len(turns)):
+        before = model.character_messages(turns=turns[:n])
+        after = model.character_messages(turns=turns[: n + 1])
+        assert after[: len(before) - 1] == before[:-1]
+        assert after[len(before) - 1]["content"].startswith(before[-1]["content"])
+
+
+def test_character_chat_roles() -> None:
+    model = LocalReplyModel(Path("unused.gguf"))
+    messages = model.character_messages(turns=_chat(CHAT), summary="在聊晚餐")
+
+    # Roles alternate, as chat templates require: the summary and the lines
+    # after it share one user turn.
+    assert [m["role"] for m in messages] == ["system", "user", "assistant", "user"]
+    assert messages[1]["content"] == (
+        "（這場對話稍早的重點：在聊晚餐）\n"
+        "阿傑：欸今天要打幾場\n小雨：我等等要先吃飯\n小雨：凱哥你要上嗎"
+    )
+    assert messages[2]["content"] == "穩啦等我五分鐘"
+    assert messages[3]["content"] == "Ken：昨天那把有夠雷\n阿傑：對啊打野一直送"
+
+
+def test_character_chat_opening_with_its_own_line_starts_with_a_user_turn() -> None:
+    model = LocalReplyModel(Path("unused.gguf"))
+    messages = model.character_messages(turns=_chat([("凱哥", "安安"), ("阿傑", "嗨")]))
+
+    assert [m["role"] for m in messages] == ["system", "user", "assistant", "user"]
+
+
+def test_hints_ride_only_on_the_newest_message() -> None:
+    model = LocalReplyModel(Path("unused.gguf"))
+    model.set_persona(PRESET_PERSONAS[0])
+    messages = model.character_messages(turns=_chat(CHAT), addressed=True)
+
+    assert "（最後這句是在叫你，要回應）" in messages[-1]["content"]
+    assert "記住：你是凱哥" in messages[-1]["content"]
+    assert all("記住" not in m["content"] for m in messages[1:-1])
+    assert "凱哥" in messages[0]["content"]
+
+
+def test_engagement_setting_changes_only_the_system_prompt() -> None:
+    model = LocalReplyModel(Path("unused.gguf"))
+    called = model.character_messages(turns=_chat(CHAT), engagement="called")
+    active = model.character_messages(turns=_chat(CHAT), engagement="active")
+
+    assert called[0] != active[0]
+    assert called[1:] == active[1:]
+
+
+def test_long_chats_drop_old_turns_a_batch_at_a_time() -> None:
+    model = LocalReplyModel(Path("unused.gguf"))
+    turns = [ConversationTurn(2, "阿傑", f"第{n}句") for n in range(60)]
+
+    first_kept = []
+    for n in range(41, 61):
+        content = model.character_messages(turns=turns[:n])[1]["content"]
+        first_kept.append(content.split("\n")[0])
+    # 41..56 turns share one starting point; only crossing a batch moves it.
+    assert set(first_kept[:16]) == {"阿傑：第16句"}
+    assert set(first_kept[16:]) == {"阿傑：第32句"}
+
+
+def test_nothing_to_answer_after_the_characters_own_line() -> None:
+    model = LocalReplyModel(Path("unused.gguf"))
+    messages = model.character_messages(turns=_chat(CHAT[:4]))
+
+    assert messages[-1]["role"] == "assistant"
+
+
+class _Scripted(LocalReplyModel):
+    """Answers the gate and the line from a script, recording each request."""
+
+    def __init__(self, gate: str, line: str = "穩啦") -> None:
+        super().__init__(Path("unused.gguf"))
+        self.set_persona(PRESET_PERSONAS[0])
+        self.gate, self.line = gate, line
+        self.requests: list[tuple[str, list[dict[str, str]]]] = []
+
+    def _request_gate(self, messages):
+        self.requests.append(("gate", messages))
+        return self.gate
+
+    def _request_messages(self, messages, on_lines=None, max_tokens=240):
+        self.requests.append(("line", messages))
+        return self.line
+
+
+@pytest.mark.asyncio
+async def test_gate_no_means_silence_without_writing_a_line() -> None:
+    model = _Scripted(gate="否")
+    assert await model.character_turn(turns=_chat(CHAT)) == ""
+    assert [kind for kind, _ in model.requests] == ["gate"]
+    question = model.requests[0][1][-1]["content"]
+    assert question.endswith("只回答 是 或 否）") and "記住" not in question
+
+
+@pytest.mark.asyncio
+async def test_gate_yes_writes_a_line_told_to_answer() -> None:
+    model = _Scripted(gate="是")
+    assert await model.character_turn(turns=_chat(CHAT)) == "穩啦"
+    assert [kind for kind, _ in model.requests] == ["gate", "line"]
+    gate, line = model.requests[0][1], model.requests[1][1]
+    assert gate[:-1] == line[:-1]  # same cached chat, only the tail differs
+    assert "（最後這句是在叫你，要回應）" in line[-1]["content"]
+
+
+@pytest.mark.asyncio
+async def test_a_discord_mention_skips_the_gate() -> None:
+    model = _Scripted(gate="否")
+    assert await model.character_turn(turns=_chat(CHAT), addressed=True) == "穩啦"
+    assert [kind for kind, _ in model.requests] == ["line"]
+
+
+@pytest.mark.asyncio
+async def test_active_mode_asks_a_different_gate_question() -> None:
+    called, active = _Scripted(gate="否"), _Scripted(gate="否")
+    await called.character_turn(turns=_chat(CHAT), engagement="called")
+    await active.character_turn(turns=_chat(CHAT), engagement="active")
+    assert called.requests[0][1][-1] != active.requests[0][1][-1]

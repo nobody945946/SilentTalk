@@ -12,14 +12,14 @@ import subprocess
 import threading
 import urllib.error
 import urllib.request
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
 from typing import IO
 
 from silenttalk.copilot.character import asks_if_ai
 from silenttalk.copilot.persona import Persona, blank_persona
 from silenttalk.copilot.script import to_taiwan_traditional
-from silenttalk.copilot.types import REPLY_LANES, ReplySuggestions
+from silenttalk.copilot.types import REPLY_LANES, ConversationTurn, ReplySuggestions
 
 _LOG = logging.getLogger(__name__)
 
@@ -119,6 +119,63 @@ _CAN_TYPE = (
     "被要求做這些事時，用這個角色會有的方式回應（推託、吐槽、給一句口頭建議、叫對方自己來或用別的工具），"
     "絕對不要答應或假裝在做你做不到的事。"
 )
+
+# Character mode as one running chat: the others' lines are user messages,
+# the character's own lines are its assistant messages. Nothing before the
+# newest line changes between requests, so llama-server only prefills that
+# line (RTX 3050 Ti: 93 ms to decide; CPU only: 0.15 s instead of 0.65-1.65 s
+# for the old prompt that re-rendered the recent window every time). Whether
+# to speak at all is the model's first word: a line, or SKIP.
+_TURN_SYSTEM = """你是 Discord 語音頻道裡的{who}，和朋友們一起用語音聊天。你說的話會直接用語音播出來。
+
+你會陸續看到頻道裡大家說的話，格式是「名字：內容」，是語音辨識的結果，可能有錯字、沒有標點，名字也可能被聽成同音字。你自己說過的話就是你之前的回覆。
+
+什麼時候開口：{engagement}
+
+規則：
+- 只根據真實對話回應，不得杜撰別人的身分、經歷、情緒或事實。關於你自己，只用人設裡寫到的事，不要編新的經歷。
+- {ai_rule}
+- {abilities}
+- 你不是百科全書：超出你人設會懂的問題，就用這個人真實的程度回答，可以說不知道。
+- 台灣繁體中文口語，只說一句話，長度{length}，最長不得超過 {max_chars} 字。
+- 像朋友聊天一樣自然接話：附和、追問、吐槽或開玩笑，選這個角色此刻最可能的反應。不要重複別人的話，不要說教，不要每句都叫對方名字。
+- 不羞辱、不人身攻擊，不拿外貌、疾病、性別、種族、家庭、收入開玩笑。
+{sheet}
+每次只輸出一行：你要說的話；這時候不該開口就只輸出 SKIP。不要加引號、名字或解釋。"""
+
+_ENGAGEMENT_RULES = {
+    "called": (
+        "只有在有人叫你（名字或暱稱）、問你、要你做什麼，或是在回應你剛說的話時才開口。"
+        "別人彼此在聊、在講到你（說的是你但不是對你說）、或用「你」在跟別人說話時，一律輸出 SKIP。"
+    ),
+    "active": (
+        "被叫到、被問到、有人回應你時一定要回。其他時候你也是聊天的一份子，"
+        "話題你有想法或有梗可以自然插一句，但大部分時候讓別人聊："
+        "別人在私下聊、你剛說過話、或沒什麼好補充時輸出 SKIP。"
+    ),
+}
+
+# Asked on the same chat (same prompt cache) before writing a line, answered
+# with one grammar-constrained token. A small model told to "answer or SKIP"
+# answered every line (0 SKIPs on 18 test lines, Gemma 4 E2B); asked this
+# directly, it can tell a line aimed at it from one merely about it.
+_GATE_QUESTION = {
+    "called": (
+        "（先判斷：最後一句是不是在對你說話？叫你、問你、要你做什麼、回應你剛說的話都算；"
+        "別人彼此在聊、只是講到你、或是在跟別人說話都不算。只回答 是 或 否）"
+    ),
+    "active": (
+        "（先判斷：你現在開口自然嗎？有人在對你說話、問大家問題、或話題正好是你會想接的都算；"
+        "別人在私下聊、你剛說過話、或你沒什麼好補充都不算。只回答 是 或 否）"
+    ),
+}
+_GATE_GRAMMAR = 'root ::= "是" | "否"'
+
+# Turns kept verbatim in a character request. Past this the oldest ones are
+# dropped a batch at a time, so the prompt prefix (and its KV cache) survives
+# most new lines; compaction normally folds them into the summary first.
+_TURN_WINDOW = 40
+_TURN_DROP_BATCH = 16
 
 # A summary longer than this is no longer a summary; it also has to stay
 # small next to the persona in a 4096-token context.
@@ -313,6 +370,120 @@ class LocalReplyModel:
         raw = await asyncio.to_thread(self._request_completion, system, prompt, on_lines)
         return self._parse_suggestions(raw, trigger_speaker, trigger_text)
 
+    async def character_turn(
+        self,
+        *,
+        turns: Sequence[ConversationTurn],
+        summary: str = "",
+        addressed: bool = False,
+        engagement: str = "called",
+    ) -> str:
+        """What the character says after the newest line, or "" to stay quiet.
+
+        `turns` is the whole chat so far, the character's own lines marked
+        `is_self`; `addressed` is Discord's own @mention or reply signal."""
+        if not addressed:
+            base = self.character_messages(turns=turns, summary=summary, gate=True)
+            if base[-1]["role"] != "user":
+                return ""  # the character spoke last; nothing new to answer
+            question = _GATE_QUESTION.get(engagement, _GATE_QUESTION["called"])
+            gate = base[:-1] + [
+                {"role": "user", "content": base[-1]["content"] + "\n\n" + question}
+            ]
+            answer = await asyncio.to_thread(self._request_gate, gate)
+            if answer != "是":
+                return ""
+        # Past the gate the line is for the character: tell it to answer.
+        messages = self.character_messages(
+            turns=turns, summary=summary, addressed=True, engagement=engagement
+        )
+        if messages[-1]["role"] != "user":
+            return ""
+        raw = await asyncio.to_thread(self._request_messages, messages, None, 90)
+        newest = next((turn.text for turn in reversed(turns) if not turn.is_self), "")
+        line = self._parse_character_line(raw, newest)
+        if line:
+            self._recent_character_lines.append(line)
+        return line
+
+    def character_messages(
+        self,
+        *,
+        turns: Sequence[ConversationTurn],
+        summary: str = "",
+        addressed: bool = False,
+        engagement: str = "called",
+        gate: bool = False,
+    ) -> list[dict[str, str]]:
+        """The chat as messages. Everything but the tail of the last message
+        is byte-identical to the previous request's, for the prompt cache.
+        `gate` leaves out the per-request hints (the gate adds its question)."""
+        persona = self._persona
+        messages = [
+            {"role": "system", "content": self._build_turn_system_prompt(persona, engagement)}
+        ]
+        if summary:
+            messages.append({"role": "user", "content": f"（這場對話稍早的重點：{summary}）"})
+        for turn in _stable_window(turns):
+            if turn.is_self:
+                if messages[-1]["role"] == "system":
+                    # Chat templates want a user turn first.
+                    messages.append({"role": "user", "content": "（對話開始）"})
+                if messages[-1]["role"] == "assistant":
+                    messages[-1]["content"] += "\n" + turn.text
+                else:
+                    messages.append({"role": "assistant", "content": turn.text})
+                continue
+            line = f"{turn.speaker_name}：{turn.text}"
+            if messages[-1]["role"] == "user":
+                messages[-1]["content"] += "\n" + line
+            else:
+                messages.append({"role": "user", "content": line})
+        if messages[-1]["role"] != "user" or gate:
+            return messages
+        # Per-request hints ride on the end of the newest message only; the
+        # next request drops them again, which costs a few tokens of prefill.
+        hints = []
+        if addressed:
+            hints.append("（最後這句是在叫你，要回應）")
+        if not persona.is_blank:
+            hints.append(persona.reminder_line("開口的話要是", list_catchphrases=False))
+        used = [
+            phrase
+            for phrase in persona.signature_phrases()
+            if any(_signature_used(phrase, line) for line in self._recent_character_lines)
+        ]
+        if used:
+            hints.append(
+                "（你最近已經說過" + "、".join(f"「{p}」" for p in used[:3])
+                + "，這句換個說法，不要再用）"
+            )
+        if self._ai_honesty == "admit":
+            recent = [turn.text for turn in turns if not turn.is_self][-4:]
+            if asks_if_ai("\n".join(recent)):
+                hints.append(
+                    "（有人在問你是不是 AI 或真人：要老實承認你是 AI 扮演的角色，用你的口吻說）"
+                )
+        if hints:
+            messages[-1] = {
+                "role": "user",
+                "content": messages[-1]["content"] + "\n\n" + "\n".join(hints),
+            }
+        return messages
+
+    def _build_turn_system_prompt(self, persona: Persona, engagement: str) -> str:
+        sheet = persona.render_system_block()
+        name = persona.name.strip()
+        return _TURN_SYSTEM.format(
+            who=f"「{name}」" if name else "一個友善、好聊的朋友",
+            engagement=_ENGAGEMENT_RULES.get(engagement, _ENGAGEMENT_RULES["called"]),
+            ai_rule=_AI_ADMIT if self._ai_honesty == "admit" else _AI_IN_CHARACTER,
+            abilities=_CAN_TYPE if self._can_type else _VOICE_ONLY,
+            length=persona.length_rule(),
+            max_chars=self._max_reply_chars,
+            sheet=f"\n【你的人設】口吻、用詞、句長、立場都照這裡：\n{sheet}\n" if sheet else "",
+        )
+
     async def character_reply(
         self,
         *,
@@ -476,12 +647,50 @@ class LocalReplyModel:
         on_lines: Callable[[str], None] | None = None,
         max_tokens: int = 240,
     ) -> str:
+        messages = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": "/no_think\n" + prompt},
+        ]
+        return self._request_messages(messages, on_lines, max_tokens)
+
+    def _request_gate(self, messages: list[dict[str, str]]) -> str:
         payload = {
             "model": "local",
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": "/no_think\n" + prompt},
-            ],
+            "messages": messages,
+            "cache_prompt": True,
+            "chat_template_kwargs": {"enable_thinking": False},
+            "grammar": _GATE_GRAMMAR,
+            "temperature": 0.0,
+            "max_tokens": 1,
+        }
+        body = self._post(payload)
+        try:
+            return str(body["choices"][0]["message"]["content"] or "").strip()
+        except (KeyError, IndexError, TypeError) as exc:
+            raise LocalLLMError("本機回覆模型回傳格式異常。") from exc
+
+    def _post(self, payload: dict[str, object]) -> dict:
+        request = urllib.request.Request(
+            self._base_url + "/v1/chat/completions",
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=self._request_timeout) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except (OSError, urllib.error.URLError, json.JSONDecodeError) as exc:
+            raise LocalLLMError(f"本機回覆模型失敗：{exc}") from exc
+
+    def _request_messages(
+        self,
+        messages: list[dict[str, str]],
+        on_lines: Callable[[str], None] | None = None,
+        max_tokens: int = 240,
+    ) -> str:
+        payload = {
+            "model": "local",
+            "messages": messages,
             # The system prompt is identical across requests; reuse its KV cache.
             "cache_prompt": True,
             "chat_template_kwargs": {"enable_thinking": False},
@@ -679,6 +888,15 @@ def list_llama_devices(executable: str) -> list[str]:
     return [
         line.strip() for line in output.splitlines() if "MiB" in line and ":" in line
     ]
+
+
+def _stable_window(turns: Sequence[ConversationTurn]) -> Sequence[ConversationTurn]:
+    """The newest turns, trimmed a batch at a time so the start stays put."""
+    excess = len(turns) - _TURN_WINDOW
+    if excess <= 0:
+        return turns
+    start = -(-excess // _TURN_DROP_BATCH) * _TURN_DROP_BATCH
+    return turns[start:]
 
 
 def _signature_used(phrase: str, line: str) -> bool:

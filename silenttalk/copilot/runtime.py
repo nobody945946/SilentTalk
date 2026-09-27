@@ -8,12 +8,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from silenttalk.config import CopilotConfig
-from silenttalk.copilot.character import (
-    CharacterPolicy,
-    CharacterState,
-    address_of,
-    should_reply,
-)
+from silenttalk.copilot.character import CharacterPolicy
 from silenttalk.copilot.context import ConversationStore
 from silenttalk.copilot.llm import LocalReplyModel
 from silenttalk.copilot.persona import Persona, blank_persona
@@ -39,6 +34,7 @@ class _Trigger:
     text: str
     # Position in the conversation, to notice when the chat moved on.
     seq: int = 0
+    # Discord's own signal: an @mention of the bot or a reply to it.
     addressed: bool = False
     via: str = "voice"
 
@@ -76,7 +72,6 @@ class CopilotRuntime:
             cooldown_seconds=config.character_cooldown_seconds,
             turn_gap=config.character_turn_gap,
         )
-        self._character_state = CharacterState()
         self._turn_seq = 0
         self._loop: asyncio.AbstractEventLoop | None = None
         self._pending: _Trigger | None = None
@@ -162,7 +157,6 @@ class CopilotRuntime:
         turn = ConversationTurn.now(self._owner_user_id, name, text, is_self=True)
         self._context.append(turn)
         self._emit_turn(turn)
-        self._character_state.spoke(time.monotonic())
 
     def set_persona(self, persona: Persona) -> None:
         """Must run on the runtime loop; applies from the next generation on."""
@@ -223,7 +217,6 @@ class CopilotRuntime:
             return
         self._character_mode = enabled
         self._pending = None
-        self._character_state = CharacterState(turns_since_spoke=0)
         _LOG.info("copilot_character_mode enabled=%s", enabled)
 
     def regenerate(self) -> bool:
@@ -265,30 +258,13 @@ class CopilotRuntime:
         if self._wake is not None and self._pending is None:
             # Nothing waiting to generate: a good moment to compact.
             self._maybe_compact()
-        if self._character_mode:
-            self._character_state.heard()
         if len(_compact(text)) < _MIN_TRIGGER_CHARS or self._wake is None:
             return
 
-        trigger = _Trigger(speaker_name, text, self._turn_seq, via=via)
-        if self._character_mode:
-            address = address_of(text, self._persona, mention=mentioned)
-            if not should_reply(
-                self._character_policy,
-                self._character_state,
-                text,
-                addressed=address.worth_reading,
-                now=time.monotonic(),
-            ):
-                return
-            if not address.worth_reading:
-                self._character_state.follow_ups += 1
-            # Only an unmistakable call makes the prompt insist on an answer.
-            # A name that merely turned up in the line is handed to the model
-            # with the whole sentence; it can still answer SKIP.
-            trigger = _Trigger(
-                speaker_name, text, self._turn_seq, address.called, via
-            )
+        # In character mode every line goes to the model, which reads the
+        # whole chat and decides whether it is being talked to (SKIP if not).
+        # Keyword rules could not tell "阿凱你在嗎" from "我剛才跟阿凱講話".
+        trigger = _Trigger(speaker_name, text, self._turn_seq, mentioned, via)
 
         # Latest wins: while a generation is running, newer lines replace the
         # queued trigger instead of stacking requests on a small GPU.
@@ -350,11 +326,11 @@ class CopilotRuntime:
     async def _speak(self, trigger: _Trigger) -> None:
         started = time.perf_counter()
         try:
-            line = await self._llm.character_reply(
-                context=self._context.render_for_prompt(),
-                trigger_speaker=trigger.speaker_name,
-                trigger_text=trigger.text,
+            line = await self._llm.character_turn(
+                turns=self._context.snapshot(),
+                summary=self._context.summary,
                 addressed=trigger.addressed,
+                engagement=self._character_policy.mode,
             )
         except asyncio.CancelledError:
             raise

@@ -15,6 +15,8 @@ class SlowFakeLLM:
     def __init__(self) -> None:
         self.calls: list[str] = []
         self.release = asyncio.Event()
+        # What character_turn answers; "" means the model chose SKIP.
+        self.character_line = "收到"
 
     async def suggest(
         self, *, context: str, trigger_speaker: str, trigger_text: str, on_partial=None
@@ -27,17 +29,24 @@ class SlowFakeLLM:
     def set_persona(self, persona: object) -> None:
         pass
 
+    def set_max_reply_chars(self, value: int) -> None:
+        pass
+
+    def set_ai_honesty(self, mode: str) -> None:
+        pass
+
     async def summarize(self, transcript: str, previous: str = "") -> str:
         self.calls.append(("summarize", transcript.count("\n") + 1, previous))
         return "稍早在聊晚餐"
 
-    async def character_reply(
-        self, *, context: str, trigger_speaker: str, trigger_text: str, addressed: bool
+    async def character_turn(
+        self, *, turns, summary: str, addressed: bool, engagement: str
     ) -> str:
-        self.calls.append(("character", trigger_text, addressed))
+        newest = next(turn.text for turn in reversed(turns) if not turn.is_self)
+        self.calls.append(("character", newest, addressed, engagement))
         await self.release.wait()
         self.release.clear()
-        return "收到"
+        return self.character_line
 
 
 async def _runtime(
@@ -133,48 +142,65 @@ async def _character_runtime(tmp_path: Path) -> tuple[CopilotRuntime, SlowFakeLL
 
 
 @pytest.mark.asyncio
-async def test_character_answers_its_name_and_speaks_the_line(tmp_path: Path) -> None:
+async def test_character_speaks_what_the_model_says(tmp_path: Path) -> None:
     runtime, llm, delivered = await _character_runtime(tmp_path)
     runtime._handle_turn(2, "阿傑", "凱哥你覺得呢")
     await _settle()
     llm.release.set()
     await _settle()
 
-    assert llm.calls == [("character", "凱哥你覺得呢", True)]
+    assert llm.calls == [("character", "凱哥你覺得呢", False, "called")]
     assert ("spoke", "收到") in delivered
     assert not any(isinstance(item, ReplySuggestions) for item in delivered)
     await _stop(runtime)
 
 
 @pytest.mark.asyncio
-async def test_character_answers_one_follow_up_then_stays_quiet(tmp_path: Path) -> None:
-    """Default "called" mode: after it speaks, the next line continues the
-    exchange without repeating its name; the rest of the chat is not its
-    business until someone names it again."""
-    runtime, llm, _ = await _character_runtime(tmp_path)
-    runtime.record_self("我先講一句")
-    runtime._handle_turn(2, "阿傑", "我剛剛吃了拉麵")  # follow-up: answered
+async def test_character_stays_quiet_when_the_model_skips(tmp_path: Path) -> None:
+    """No keyword gate in front of the model: it sees every line, including
+    ones that only mention the character, and decides for itself."""
+    runtime, llm, delivered = await _character_runtime(tmp_path)
+    llm.character_line = ""
+    runtime._handle_turn(2, "阿傑", "我剛才跟阿凱講話")
     await _settle()
-    runtime._handle_turn(3, "小雨", "晚餐吃什麼")  # not for it any more
-    runtime._handle_turn(2, "阿傑", "我也餓了")
+    llm.release.set()
     await _settle()
 
-    assert llm.calls == [("character", "我剛剛吃了拉麵", False)]
+    assert llm.calls == [("character", "我剛才跟阿凱講話", False, "called")]
+    assert not any(isinstance(item, tuple) and item[0] == "spoke" for item in delivered)
     await _stop(runtime)
 
 
 @pytest.mark.asyncio
-async def test_character_ignores_the_room_until_it_is_named(tmp_path: Path) -> None:
+async def test_character_sees_its_own_lines_and_the_engagement_setting(
+    tmp_path: Path,
+) -> None:
     runtime, llm, _ = await _character_runtime(tmp_path)
-    runtime._handle_turn(2, "阿傑", "欸晚餐吃什麼")
-    runtime._handle_turn(3, "小雨", "我都可以")
-    runtime._handle_turn(2, "阿傑", "那就麥當勞吧")
+    runtime.apply_settings({"character_engagement": "active"})
+    runtime.record_self("我先講一句")
+    runtime._handle_turn(2, "阿傑", "我剛剛吃了拉麵")
     await _settle()
-    assert llm.calls == []
 
-    runtime._handle_turn(3, "小雨", "凱哥你說呢")
+    assert llm.calls == [("character", "我剛剛吃了拉麵", False, "active")]
+    turns = runtime._context.snapshot()
+    assert [(turn.text, turn.is_self) for turn in turns] == [
+        ("我先講一句", True),
+        ("我剛剛吃了拉麵", False),
+    ]
+    llm.release.set()
     await _settle()
-    assert llm.calls == [("character", "凱哥你說呢", True)]
+    await _stop(runtime)
+
+
+@pytest.mark.asyncio
+async def test_a_discord_mention_is_passed_on_as_addressed(tmp_path: Path) -> None:
+    runtime, llm, _ = await _character_runtime(tmp_path)
+    runtime._handle_turn(2, "阿傑", "你覺得呢", "text", True)
+    await _settle()
+
+    assert llm.calls == [("character", "你覺得呢", True, "called")]
+    llm.release.set()
+    await _settle()
     await _stop(runtime)
 
 
@@ -194,15 +220,14 @@ async def test_owner_mic_counts_only_in_character_mode(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_character_drops_a_reply_once_the_chat_moved_on(tmp_path: Path) -> None:
     runtime, llm, delivered = await _character_runtime(tmp_path)
-    runtime.record_self("我剛說過一句")
-    runtime._handle_turn(2, "阿傑", "晚餐要吃什麼")  # follow-up, not named
+    runtime._handle_turn(2, "阿傑", "晚餐要吃什麼")
     await _settle()
     runtime._handle_turn(3, "小雨", "我要吃拉麵")
     runtime._handle_turn(2, "阿傑", "好啊那走")
     llm.release.set()
     await _settle()
 
-    assert llm.calls[0] == ("character", "晚餐要吃什麼", False)
+    assert llm.calls[0] == ("character", "晚餐要吃什麼", False, "called")
     assert ("spoke", "收到") not in delivered  # the chat moved on while thinking
     await _stop(runtime)
 
