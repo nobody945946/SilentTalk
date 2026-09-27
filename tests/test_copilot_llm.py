@@ -383,3 +383,11 @@ def test_relationships_are_in_the_character_system_prompt() -> None:
     )
     system = model.character_messages(turns=_chat(CHAT))[0]["content"]
     assert "- 阿明：我老公，結婚三年" in system
+
+
+def test_a_line_that_mostly_repeats_what_was_said_is_dropped() -> None:
+    model = LocalReplyModel(Path("unused.gguf"))
+    assert model._parse_character_line("有啊，週末去看電影", "有啊我們週末去看電影") == ""
+    # Sharing a phrase is not echoing.
+    assert model._parse_character_line("好啦好啦，油錢我們分吧", "讚喔 那油錢我們分")
+    assert model._parse_character_line("穩啦", "穩") == "穩啦"

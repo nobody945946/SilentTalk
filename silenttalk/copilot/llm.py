@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import collections
 import dataclasses
+import difflib
 import json
 import logging
 import os
@@ -613,7 +614,7 @@ class LocalReplyModel:
         speaker = "|".join(re.escape(name) for name in names if name)
         line = re.sub(rf"^(SAY\s*[|｜:：]|你要說\s*[:：]|({speaker})\s*[:：])", "", line).strip()
         value = self._clean_reply(line)
-        if not value or value.upper().startswith("SKIP") or _compact(value) == _compact(trigger_text):
+        if not value or value.upper().startswith("SKIP") or _echoes(value, trigger_text):
             return ""
         return value
 
@@ -933,6 +934,15 @@ def _signature_used(phrase: str, line: str) -> bool:
     if len(phrase) <= 6:
         return bool(phrase) and phrase in line
     return any(phrase[i : i + 5] in line for i in range(len(phrase) - 4))
+
+
+def _echoes(reply: str, line: str) -> bool:
+    """The reply mostly repeats the line it answers ("有啊我們週末去看電影" ->
+    "有啊，週末去看電影"): a small model does this instead of answering."""
+    reply, line = _compact(reply), _compact(line)
+    if reply == line:
+        return True
+    return len(reply) >= 4 and difflib.SequenceMatcher(None, reply, line).ratio() >= 0.75
 
 
 def _compact(text: str) -> str:
