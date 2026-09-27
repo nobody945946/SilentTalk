@@ -4,13 +4,19 @@ Every candidate plays the character at each "speak" point of the M1 test
 set (scripts/dev/turn_eval_data.jsonl), with exactly the request the app
 sends once the gate said 是 (LocalReplyModel.character_messages, addressed).
 Teacher candidates also get a "+pick" variant: four samples, then the same
-model picks the most natural one, which is how training data would be made.
+model picks the most natural one, which is how training data would be made;
+and a "+think" variant: the model's own reasoning mode on (offline, so its
+slowness costs nothing at runtime), then the line. Time per variant is kept
+in timing.json: a teacher has to regenerate thousands of lines.
 Claude then ranks the candidates blind, point by point. Claude only
 evaluates here; its output never becomes training data (handoff/dev-box.md rule 2).
 
     .venv/bin/python scripts/dev/teacher_bakeoff.py generate [--only NAME,...]
     .venv/bin/python scripts/dev/teacher_bakeoff.py judge [--passes 2]
     .venv/bin/python scripts/dev/teacher_bakeoff.py report
+    # rank a subset in its own verdict file (more than ~6 versions per
+    # ranking makes the judge noisy):
+    ... judge --tag pick --variants student-gemma4-e2b,qwen3-30b-a3b+pick,...
 
 Resumable: generated lines and judgements are kept in .runtime/dev/m3/.
 The test set is synthetic, so saving the lines does not break rule 1.
@@ -47,6 +53,8 @@ from silenttalk.copilot.types import ConversationTurn  # noqa: E402
 OUT_DIR = PROJECT_DIR / ".runtime" / "dev" / "m3"
 LINES_PATH = OUT_DIR / "lines.json"
 JUDGE_PATH = OUT_DIR / "judge.json"
+TIMING_PATH = OUT_DIR / "timing.json"
+THINK_TOKENS = 3000
 PORT = 18420
 LLM_DIR = PROJECT_DIR / ".runtime" / "models" / "llm"
 TEACHER_DIR = PROJECT_DIR / ".runtime" / "models" / "teacher"
@@ -215,7 +223,12 @@ def stop_server(server: subprocess.Popen[bytes]) -> None:
 
 
 def complete(
-    messages: list[dict[str, str]], *, temperature: float, max_tokens: int, n: int = 1
+    messages: list[dict[str, str]],
+    *,
+    temperature: float,
+    max_tokens: int,
+    n: int = 1,
+    think: bool = False,
 ) -> list[str]:
     outputs = []
     for _ in range(n):
@@ -225,17 +238,29 @@ def complete(
             "top_p": 0.9,
             "max_tokens": max_tokens,
             "cache_prompt": True,
-            "chat_template_kwargs": {"enable_thinking": False},
+            "chat_template_kwargs": {"enable_thinking": think},
         }
         request = urllib.request.Request(
             f"http://127.0.0.1:{PORT}/v1/chat/completions",
             data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
             headers={"Content-Type": "application/json"},
         )
-        with urllib.request.urlopen(request, timeout=600) as response:
-            text = json.load(response)["choices"][0]["message"]["content"] or ""
-        outputs.append(re.sub(r"<think>.*?</think>", "", text, flags=re.S).strip())
+        with urllib.request.urlopen(request, timeout=900) as response:
+            message = json.load(response)["choices"][0]["message"]
+        text = message.get("content") or ""
+        if think and (message.get("reasoning_content") or "<think>" in text):
+            with _LOCK:
+                THOUGHT_SEEN.add("reasoning")
+        # A reasoning model that ran out of tokens mid-thought leaves an
+        # unclosed <think>; nothing after it is an answer.
+        text = re.sub(r"<think>.*?(</think>|$)", "", text, flags=re.S).strip()
+        outputs.append(text)
     return outputs
+
+
+# Set when a +think request actually came back with reasoning; a model
+# without a reasoning mode just answers, and the report says so.
+THOUGHT_SEEN: set[str] = set()
 
 
 # ---------------------------------------------------------------- generate
@@ -246,13 +271,17 @@ def generate(args: argparse.Namespace) -> None:
     points = speak_points(turn_eval.load_test_set())
     lines: dict[str, dict[str, str]] = _load(LINES_PATH)
     names = args.only.split(",") if args.only else list(CANDIDATES)
+    timing: dict[str, dict[str, Any]] = _load(TIMING_PATH)
     for name in names:
         gguf, is_teacher = CANDIDATES[name]
-        variants = [name] + ([f"{name}+pick"] if is_teacher else [])
-        todo = [
-            p for p in points if any(v not in lines.get(p["id"], {}) for v in variants)
+        stages = [("plain", [name] + ([f"{name}+pick"] if is_teacher else []))]
+        if is_teacher and not args.no_think:
+            stages.append(("think", [f"{name}+think"]))
+        todo_by_stage = [
+            (stage, [p for p in points if any(v not in lines.get(p["id"], {}) for v in variants)])
+            for stage, variants in stages
         ]
-        if not todo:
+        if not any(todo for _, todo in todo_by_stage):
             print(f"{name}: done", flush=True)
             continue
         if not gguf.is_file():
@@ -262,18 +291,27 @@ def generate(args: argparse.Namespace) -> None:
         server = start_server(gguf)
         print(f"{name}: server up in {time.monotonic() - started:.0f} s", flush=True)
         try:
-            with ThreadPoolExecutor(4) as pool:
-                job = functools.partial(_generate_one, lines, name, is_teacher)
-                for n, _ in enumerate(pool.map(job, todo), 1):
-                    if n % 10 == 0:
-                        with _LOCK:
-                            _save(LINES_PATH, lines)
-                        print(f"  {name} {n}/{len(todo)}", flush=True)
-            _save(LINES_PATH, lines)
-            print(
-                f"{name}: {len(todo)} points in {time.monotonic() - started:.0f} s",
-                flush=True,
-            )
+            for stage, todo in todo_by_stage:
+                if not todo:
+                    continue
+                THOUGHT_SEEN.clear()
+                stage_started = time.monotonic()
+                one = _generate_one if stage == "plain" else _generate_think
+                with ThreadPoolExecutor(4) as pool:
+                    job = functools.partial(one, lines, name, is_teacher)
+                    for n, _ in enumerate(pool.map(job, todo), 1):
+                        if n % 10 == 0:
+                            with _LOCK:
+                                _save(LINES_PATH, lines)
+                            print(f"  {name} {stage} {n}/{len(todo)}", flush=True)
+                _save(LINES_PATH, lines)
+                seconds = time.monotonic() - stage_started
+                entry = timing.setdefault(name, {})
+                entry[f"{stage}_seconds_per_point"] = round(seconds / len(todo), 2)
+                if stage == "think":
+                    entry["reasoning_seen"] = bool(THOUGHT_SEEN)
+                _save(TIMING_PATH, timing)
+                print(f"{name} {stage}: {len(todo)} points in {seconds:.0f} s", flush=True)
         finally:
             stop_server(server)
 
@@ -294,6 +332,16 @@ def _generate_one(
         result[f"{name}+pick"] = pick(point, samples)
     with _LOCK:
         lines.setdefault(point["id"], {}).update(result)
+
+
+def _generate_think(
+    lines: dict[str, dict[str, str]], name: str, is_teacher: bool, point: dict[str, Any]
+) -> None:
+    raw = complete(
+        request_messages(point), temperature=0.65, max_tokens=THINK_TOKENS, think=True
+    )[0]
+    with _LOCK:
+        lines.setdefault(point["id"], {})[f"{name}+think"] = parse_line(point, raw)
 
 
 def pick(point: dict[str, Any], samples: list[str]) -> str:
@@ -318,11 +366,27 @@ def pick(point: dict[str, Any], samples: list[str]) -> str:
 # ---------------------------------------------------------------- judge
 
 
+def _variants(args: argparse.Namespace, lines: dict[str, dict[str, str]]) -> list[str]:
+    everything = sorted({v for row in lines.values() for v in row})
+    if not args.variants:
+        return everything
+    wanted = args.variants.split(",")
+    missing = [v for v in wanted if v not in everything]
+    if missing:
+        raise SystemExit(f"no lines for {missing}; generate them first")
+    return sorted(wanted)
+
+
+def _judge_path(args: argparse.Namespace) -> Path:
+    return OUT_DIR / f"judge-{args.tag}.json" if args.tag else JUDGE_PATH
+
+
 def judge(args: argparse.Namespace) -> None:
     points = {p["id"]: p for p in speak_points(turn_eval.load_test_set())}
     lines = _load(LINES_PATH)
-    verdicts: dict[str, list[dict[str, Any]]] = _load(JUDGE_PATH)
-    variants = sorted({v for row in lines.values() for v in row})
+    judge_path = _judge_path(args)
+    verdicts: dict[str, list[dict[str, Any]]] = _load(judge_path)
+    variants = _variants(args, lines)
     for pass_no in range(args.passes):
         key = f"pass{pass_no}"
         done = verdicts.setdefault(key, [])
@@ -374,7 +438,7 @@ def judge(args: argparse.Namespace) -> None:
                             ],
                         }
                     )
-                _save(JUDGE_PATH, verdicts)
+                _save(judge_path, verdicts)
                 print(
                     f"  {key} {persona_id} {start + len(chunk)}/{len(pids)}", flush=True
                 )
@@ -382,9 +446,10 @@ def judge(args: argparse.Namespace) -> None:
 
 
 def report(args: argparse.Namespace) -> None:
-    verdicts = _load(JUDGE_PATH)
+    verdicts = _load(_judge_path(args))
     lines = _load(LINES_PATH)
-    variants = sorted({v for row in lines.values() for v in row})
+    variants = _variants(args, lines)
+    timing = _load(TIMING_PATH)
     student = "student-gemma4-e2b"
     per_pass: dict[str, dict[str, float]] = {}
     rows: dict[str, dict[str, Any]] = {}
@@ -413,14 +478,21 @@ def report(args: argparse.Namespace) -> None:
                 round(p.get(name, float("nan")), 2) for p in per_pass.values()
             ],
         }
-    print("| 候選 | 平均名次（越小越好） | 各輪 | 贏學生的比例 | 不及格 |")
-    print("|---|---|---|---|---|")
+    print("| 候選 | 平均名次（越小越好） | 各輪 | 贏學生的比例 | 不及格 | 秒／點 |")
+    print("|---|---|---|---|---|---|")
     for name, row in sorted(rows.items(), key=lambda kv: kv[1]["mean_rank"] or 99):
+        base, _, kind = name.partition("+")
+        entry = timing.get(base, {})
+        seconds = entry.get(f"{'think' if kind == 'think' else 'plain'}_seconds_per_point")
+        if kind == "think" and entry.get("reasoning_seen") is False:
+            seconds = f"{seconds}（沒有推理模式）"
+        row["seconds_per_point"] = seconds
         print(
             f"| {name} | {row['mean_rank']} | {row['rank_by_pass']} | "
-            f"{row['win_vs_student']} | {row['bad']} |"
+            f"{row['win_vs_student']} | {row['bad']} | {seconds or '—'} |"
         )
-    (OUT_DIR / "report.json").write_text(json.dumps(rows, ensure_ascii=False, indent=2))
+    name = f"report-{args.tag}.json" if args.tag else "report.json"
+    (OUT_DIR / name).write_text(json.dumps(rows, ensure_ascii=False, indent=2))
 
 
 def _load(path: Path) -> dict:
@@ -440,6 +512,9 @@ def main() -> int:
     parser.add_argument("--passes", type=int, default=2)
     parser.add_argument("--batch", type=int, default=6)
     parser.add_argument("--judge-model", default="sonnet")
+    parser.add_argument("--variants", help="judge/report: only these versions")
+    parser.add_argument("--tag", help="judge/report: separate verdict file judge-<tag>.json")
+    parser.add_argument("--no-think", action="store_true", help="generate: skip +think")
     args = parser.parse_args()
     {"generate": generate, "judge": judge, "report": report}[args.step](args)
     return 0
