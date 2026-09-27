@@ -149,3 +149,20 @@ def test_unrefined_lines_fall_back_to_the_script(chardata: Path) -> None:
     [line] = [r for r in rows if r["kind"] == "line"]
     assert line["messages"][-1]["content"] == "在啦幹嘛"
     assert line["line_source"] == "script"
+
+
+@pytest.mark.parametrize(
+    "line", ["我是一段會說話的字，你聽起來像嗎", "我只是個程式啦", "身為AI我不能說"]
+)
+def test_lines_admitting_to_be_a_program_are_rejected(line: str) -> None:
+    spec = {"honesty": "in_character"}
+    args = type("Args", (), {"max_chars": 72})()
+    assert not character_data.usable(line, spec, args)
+    assert character_data.usable(line, {"honesty": "admit"}, args)
+
+
+def test_a_normal_line_passes() -> None:
+    args = type("Args", (), {"max_chars": 72})()
+    assert character_data.usable(
+        "我是你老婆欸，還問", {"honesty": "in_character"}, args
+    )

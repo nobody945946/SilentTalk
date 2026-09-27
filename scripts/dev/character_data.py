@@ -752,7 +752,13 @@ def decision_points(script: dict[str, Any], name: str) -> list[dict[str, Any]]:
 
 # ---------------------------------------------------------------- refine
 
-_AI_CLAIM = re.compile(r"(我是|身為)(一個)?\s*(AI|人工智慧|機器人|語言模型|程式)", re.I)
+# "I am an AI" in any wording a character slips into; refine once let
+# "我是一段會說話的字" through.
+_AI_CLAIM = re.compile(
+    r"(我是|我只是|身為|我不過是)(一個|一段|一串|個)?\s*"
+    r"(AI|人工智慧|機器人|語言模型|模型|程式|代碼|程式碼|虛擬|會說話的字|文字|數據)",
+    re.I,
+)
 _ASSISTANT = re.compile(
     r"(以下是|```|def |import |步驟一|第一步[，,：:]|好的，我來幫你)"
 )
@@ -994,6 +1000,8 @@ def make_render(args: argparse.Namespace) -> None:
                     (gate_yes if answer else gate_no).append(row)
             if point["speaks"]:
                 line = refined.get((number, index))
+                if line and not usable(line, spec, args):
+                    line = None  # filters grew since it was refined
                 if not line:
                     # Not refined (stopped early): the teacher's own script
                     # line, if it passes the same checks as the candidates.
