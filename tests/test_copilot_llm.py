@@ -461,6 +461,29 @@ def test_only_character_requests_use_the_lora() -> None:
 
 
 @pytest.mark.asyncio
+async def test_each_part_uses_the_lora_only_if_chosen() -> None:
+    model = LocalReplyModel(
+        Path("unused.gguf"), lora_path=Path("adapter.gguf"), lora_uses=("called",)
+    )
+    model._lora_loaded = True
+    scales: list[tuple[str, float]] = []
+
+    def gate(messages, character=True):
+        scales.append(("gate", model._lora_field(character)["lora"][0]["scale"]))
+        return "是"
+
+    def line(messages, on_lines=None, max_tokens=240, character=False):
+        scales.append(("line", model._lora_field(character)["lora"][0]["scale"]))
+        return "好啊"
+
+    model._request_gate = gate  # type: ignore[method-assign]
+    model._request_messages = line  # type: ignore[method-assign]
+    await model.character_turn(turns=_chat(CHAT))
+
+    assert scales == [("gate", 1.0), ("line", 0.0)]
+
+
+@pytest.mark.asyncio
 async def test_joining_in_is_not_told_it_was_called() -> None:
     quiet = _chat(CHAT[:4] + [("Ken", "昨天那把有夠雷"), ("阿傑", "對啊"), ("Ken", "笑死"), ("阿傑", "好啦")])
     model = _Scripted(gate=["否", "是"])

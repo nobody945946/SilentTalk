@@ -248,6 +248,8 @@ def persona_sheet(persona: Any) -> str:
 # Set by --cpu: no GPU layers, for when a training run holds the GPU.
 # Decisions and lines compare fine; latencies do not.
 CPU_ONLY = False
+# Set by --lora-uses: which requests the adapter is applied to.
+LORA_USES: tuple[str, ...] | None = None
 
 
 def copilot_config() -> dict[str, Any]:
@@ -273,7 +275,9 @@ def ensure_llama_server_on_path() -> None:
 def make_model(
     llm_module: Any, model_path: Path, config: dict[str, Any], lora: Path | None = None
 ) -> Any:
-    extra = {"lora_path": lora} if lora is not None else {}
+    extra: dict[str, Any] = {"lora_path": lora} if lora is not None else {}
+    if lora is not None and LORA_USES is not None:
+        extra["lora_uses"] = LORA_USES
     return llm_module.LocalReplyModel(
         model_path,
         **extra,
@@ -685,9 +689,16 @@ def main() -> int:
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--cpu", action="store_true",
                         help="no GPU layers (latencies are then not comparable)")
+    parser.add_argument("--lora-uses", help="with --lora: comma-separated parts "
+                        "(called,active,line) that use the adapter; default all")
+    parser.add_argument("--port", type=int, help="llama-server port (default 18411)")
     args = parser.parse_args()
-    global CPU_ONLY
+    global CPU_ONLY, LORA_USES, EVAL_PORT
     CPU_ONLY = args.cpu
+    if args.lora_uses:
+        LORA_USES = tuple(part.strip() for part in args.lora_uses.split(",") if part.strip())
+    if args.port:
+        EVAL_PORT = args.port
 
     data_sha256 = hashlib.sha256(args.data.read_bytes()).hexdigest()
     test_set = load_test_set(args.data)

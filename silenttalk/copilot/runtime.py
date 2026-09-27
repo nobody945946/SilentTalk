@@ -109,6 +109,7 @@ class CopilotRuntime:
                 if config.character_lora
                 else None
             ),
+            lora_uses=config.character_lora_uses,
         )
         self._stt = transcriber(
             asr_dir,

@@ -100,6 +100,9 @@ _ENGAGEMENT_RULES["options"] = (
 # gives the four a shared point of view; asked as separate requests they
 # came out near-identical, and shown each other's lines they copied them.
 _THOUGHT_TAG = "心裡"
+# Requests the character adapter can be applied to: the two gate questions,
+# the character's line, and the options.
+LORA_PARTS = ("called", "active", "line", "options")
 _LANE_ASKS = {
     "AGREE": "把你心裡想說的說出來",
     "ASK": "問一個你真的想知道的問題",
@@ -176,13 +179,14 @@ class LocalReplyModel:
         can_type: bool = False,
         ai_honesty: str = "in_character",
         lora_path: Path | None = None,
-        lora_for_options: bool = False,
+        lora_uses: Iterable[str] = ("called", "active", "line"),
     ) -> None:
         self._model_path = model_path
         self._lora_path = lora_path
-        # The adapter is trained on character lines; options share its chat
-        # format, so it can be switched on for them too once it helps there.
-        self._lora_for_options = lora_for_options
+        # Which requests the adapter is applied to (LORA_PARTS): it can help
+        # one part and hurt another, so each is switched on only where the
+        # eval says it wins.
+        self._lora_uses = frozenset(lora_uses)
         # Set once the adapter is on llama-server's command line.
         self._lora_loaded = False
         self._port = port
@@ -334,7 +338,7 @@ class LocalReplyModel:
         if on_partial is None:
             raw = await asyncio.to_thread(
                 self._request_messages, messages, None, _OPTIONS_MAX_TOKENS,
-                self._lora_for_options,
+                "options" in self._lora_uses,
             )
             return self._parse_suggestions(raw, trigger_speaker, trigger_text)
 
@@ -350,7 +354,7 @@ class LocalReplyModel:
 
         raw = await asyncio.to_thread(
             self._request_messages, messages, on_lines, _OPTIONS_MAX_TOKENS,
-            self._lora_for_options,
+            "options" in self._lora_uses,
         )
         return self._parse_suggestions(raw, trigger_speaker, trigger_text)
 
@@ -401,7 +405,9 @@ class LocalReplyModel:
         )
         if messages[-1]["role"] != "user":
             return ""
-        raw = await asyncio.to_thread(self._request_messages, messages, None, 90, True)
+        raw = await asyncio.to_thread(
+            self._request_messages, messages, None, 90, "line" in self._lora_uses
+        )
         newest = next((turn.text for turn in reversed(turns) if not turn.is_self), "")
         line = self._parse_character_line(raw, newest)
         if line:
@@ -420,7 +426,8 @@ class LocalReplyModel:
         )
         if gate is None:
             return False
-        return await asyncio.to_thread(self._request_gate, gate, True) == "是"
+        use_lora = question in self._lora_uses
+        return await asyncio.to_thread(self._request_gate, gate, use_lora) == "是"
 
     def gate_messages(
         self,
@@ -655,8 +662,8 @@ class LocalReplyModel:
             raise LocalLLMError(f"本機回覆模型失敗：{exc}") from exc
 
     def _lora_field(self, character: bool) -> dict[str, object]:
-        """The adapter is trained for character mode: other requests
-        (summaries, options unless lora_for_options) run the plain model."""
+        """Every request sets the adapter's scale: llama-server applies a
+        loaded adapter to requests that leave it out."""
         if not self._lora_loaded:
             return {}
         return {"lora": [{"id": 0, "scale": 1.0 if character else 0.0}]}

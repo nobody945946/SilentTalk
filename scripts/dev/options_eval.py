@@ -83,7 +83,7 @@ async def generate(args: argparse.Namespace) -> None:
     lora = llm_dir / args.lora if args.lora else None
     new_model = te.make_model(llm_module, model_path, config, lora)
     if lora is not None:
-        new_model._lora_for_options = True
+        new_model._lora_uses = frozenset({"options"})
     # Same server for both (the old client only builds different prompts)
     # unless the old side runs another model, or the new side has an adapter:
     # llama-server applies a loaded adapter to requests that do not set its

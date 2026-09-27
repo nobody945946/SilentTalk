@@ -50,9 +50,11 @@ llm_gpu_layers = 99
 # ~2.8 GB instead of ~3.1 GB). Falls back to the normal cache automatically if
 # the GPU driver can't do it.
 llm_low_vram = true
-# Character-mode LoRA adapter in .runtime/models/llm/ ("" = none). Only the
-# character's own requests use it; Copilot suggestions stay on the plain model.
+# Character-mode LoRA adapter in .runtime/models/llm/ ("" = none), and which
+# requests use it: "called" / "active" (the two "should I speak?" questions),
+# "line" (what the character says), "options" (the W/A/S/D choices).
 character_lora = ""
+character_lora_uses = "called,active,line"
 # When the character speaks up, decided line by line by the local model:
 # "called" = only when someone calls it, asks it or answers it; "active" = it
 # also joins in by itself when the topic suits it.
