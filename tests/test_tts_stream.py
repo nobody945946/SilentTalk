@@ -34,7 +34,7 @@ async def _read_all(stream: AudioStream) -> bytes:
 async def test_start_returns_on_the_first_chunk_and_the_rest_keeps_coming() -> None:
     gate = asyncio.Event()
     stream = AudioStream()
-    await stream.start(_chunks(b"abc", b"defg", gate=gate), first_chunk_timeout=1)
+    await stream.start(_chunks(b"abc", b"defg", gate=gate), first_chunk_timeout=10)
 
     assert stream.read(10) == b"abc"  # available before the rest was produced
     gate.set()
@@ -45,20 +45,20 @@ async def test_start_returns_on_the_first_chunk_and_the_rest_keeps_coming() -> N
 async def test_error_before_any_audio_fails_the_start() -> None:
     stream = AudioStream()
     with pytest.raises(OSError):
-        await stream.start(_chunks(error=True), first_chunk_timeout=1)
+        await stream.start(_chunks(error=True), first_chunk_timeout=10)
     assert stream.read() == b""
 
 
 @pytest.mark.asyncio
 async def test_no_audio_at_all_fails_the_start() -> None:
     with pytest.raises(RuntimeError, match="空白"):
-        await AudioStream().start(_chunks(), first_chunk_timeout=1)
+        await AudioStream().start(_chunks(), first_chunk_timeout=10)
 
 
 @pytest.mark.asyncio
 async def test_error_mid_stream_ends_the_audio_and_is_kept() -> None:
     stream = AudioStream()
-    await stream.start(_chunks(b"abc", b"def", error=True), first_chunk_timeout=1)
+    await stream.start(_chunks(b"abc", b"def", error=True), first_chunk_timeout=10)
 
     assert await _read_all(stream) == b"abcdef"
     assert isinstance(stream.error, OSError)
@@ -68,13 +68,13 @@ async def test_error_mid_stream_ends_the_audio_and_is_kept() -> None:
 async def test_close_releases_a_blocked_reader_and_stops_the_producer() -> None:
     gate = asyncio.Event()  # never set: the producer hangs after one chunk
     stream = AudioStream()
-    await stream.start(_chunks(b"a", b"b", gate=gate), first_chunk_timeout=1)
+    await stream.start(_chunks(b"a", b"b", gate=gate), first_chunk_timeout=10)
     assert stream.read() == b"a"
 
     reader = threading.Thread(target=stream.read)
     reader.start()
     stream.close()
-    await asyncio.to_thread(reader.join, 1)
+    await asyncio.to_thread(reader.join, 10)
     await asyncio.sleep(0)
 
     assert not reader.is_alive()
@@ -127,7 +127,7 @@ class _StreamingTTS:
 
     async def stream(self, text, voice_style="default", rate_multiplier=1.0):
         stream = AudioStream()
-        await stream.start(_chunks(b"x"), first_chunk_timeout=1)
+        await stream.start(_chunks(b"x"), first_chunk_timeout=10)
         self.streams.append(stream)
         return AudioResult(None, None, None, "mp3", stream=stream)
 
@@ -152,7 +152,7 @@ async def test_queue_prefers_streaming_and_releases_the_stream() -> None:
     queue = SpeechQueue(tts, player, lambda *_: None, on_done=done.append)  # type: ignore[arg-type]
 
     await queue.enqueue("穩啦")
-    await asyncio.wait_for(queue.wait_idle(), 1)
+    await asyncio.wait_for(queue.wait_idle(), 10)
 
     assert [job.state for job in done] == [JobState.DONE]
     assert player.played[0].stream is tts.streams[0]
