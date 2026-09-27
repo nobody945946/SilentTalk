@@ -263,9 +263,13 @@ def ensure_llama_server_on_path() -> None:
         os.environ["LD_LIBRARY_PATH"] = f"{tools[-1]}{os.pathsep}{os.environ.get('LD_LIBRARY_PATH', '')}"
 
 
-def make_model(llm_module: Any, model_path: Path, config: dict[str, Any]) -> Any:
+def make_model(
+    llm_module: Any, model_path: Path, config: dict[str, Any], lora: Path | None = None
+) -> Any:
+    extra = {"lora_path": lora} if lora is not None else {}
     return llm_module.LocalReplyModel(
         model_path,
+        **extra,
         port=EVAL_PORT,
         context_size=int(config["llm_context_size"]),
         max_reply_chars=int(config["max_reply_chars"]),
@@ -408,7 +412,10 @@ async def run_new(args: argparse.Namespace, test_set: TestSet) -> list[dict[str,
             "addressed=..., engagement=...) in silenttalk/copilot/llm.py; it does not exist yet."
         )
     config = copilot_config()
-    model = make_model(llm_module, args.model_path, config)
+    lora = PROJECT_DIR / ".runtime" / "models" / "llm" / args.lora if args.lora else None
+    if lora is not None and not lora.is_file():
+        raise SystemExit(f"LoRA adapter not found: {lora}")
+    model = make_model(llm_module, args.model_path, config, lora)
     await model.start()
     records: list[dict[str, Any]] = []
     try:
@@ -653,6 +660,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--policy", choices=("old", "new"), default="old")
     parser.add_argument("--model", help="gguf in .runtime/models/llm/ (default: config.toml)")
+    parser.add_argument("--lora", help="new policy only: adapter gguf in .runtime/models/llm/")
     parser.add_argument("--data", type=Path, default=DATA_PATH)
     parser.add_argument("--tag", help="results name (default: <policy>-<model stem>)")
     parser.add_argument("--old-rev", default=OLD_REV,
