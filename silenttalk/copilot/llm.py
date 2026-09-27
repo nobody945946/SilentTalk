@@ -542,6 +542,10 @@ class LocalReplyModel:
             sheet += (
                 "\n你和這些人的關係（他們說話時，對話裡會出現這個名字）：\n"
                 + "\n".join(relations)
+                # M1 family chats: a wife answered "老婆你選哪臺車啊" as if
+                # she were the husband, and missed lines that opened with 老婆.
+                + "\n他們用關係叫你（例如「老婆」「媽」「阿嬤」「哥」）就是在叫你；"
+                "你跟他們說話要符合這個關係，不要搞混誰是誰。"
             )
         name = persona.name.strip()
         return _TURN_SYSTEM.format(
