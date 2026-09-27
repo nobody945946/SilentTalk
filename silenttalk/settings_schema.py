@@ -35,6 +35,8 @@ class Group:
     title: str
     subtitle: str = ""
     settings: tuple[Setting, ...] = ()
+    # Rarely touched: folded under the page's 「進階」 section.
+    advanced: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,6 +104,7 @@ PAGES: tuple[Page, ...] = (
                     minimum=20, maximum=500, step=10,
                 ),
             ),
+            advanced=True,
         ),
         Group(
             "回覆",
@@ -117,8 +120,8 @@ PAGES: tuple[Page, ...] = (
                     "有新的候選回覆時自動顯示 SilentTalk（不會搶走遊戲焦點）。",
                 ),
                 Setting(
-                    "app", "max_text_length", "手動輸入上限", "int",
-                    "手動分頁一次最多能送出的字數。",
+                    "app", "max_text_length", "打字輸入上限", "int",
+                    "「打字」一次最多能送出的字數。",
                     minimum=20, maximum=2000, step=20, unit="字",
                 ),
             ),
@@ -178,6 +181,7 @@ PAGES: tuple[Page, ...] = (
                     minimum=1, maximum=120, step=1, unit="秒",
                 ),
             ),
+            advanced=True,
         ),
     )),
     Page("voice", "聲音", (
@@ -191,7 +195,7 @@ PAGES: tuple[Page, ...] = (
                 ),
                 Setting(
                     "tts", "rate", "語速微調", "text",
-                    '例："+0%"、"-10%"。「聲音」頁的語速會再疊加。',
+                    '例："+0%"、"-10%"。上面「聲音風格」的語速會再疊加。',
                 ),
                 Setting("tts", "pitch", "音高微調", "text", '例："+0Hz"、"-15Hz"。'),
                 Setting("tts", "volume", "音量微調", "text", '例："+0%"、"+10%"。'),
@@ -217,6 +221,7 @@ PAGES: tuple[Page, ...] = (
                     restart=True,
                 ),
             ),
+            advanced=True,
         ),
     )),
     Page("listen", "聽力", (
@@ -247,7 +252,7 @@ PAGES: tuple[Page, ...] = (
             (
                 Setting(
                     "copilot", "enabled", "啟用 Copilot", "bool",
-                    "關掉就只剩手動輸入和快捷句的 TTS。",
+                    "關掉就只剩打字和快捷句的 TTS。",
                     restart=True,
                 ),
                 Setting(

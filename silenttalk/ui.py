@@ -7,6 +7,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 from silenttalk import theme
+from silenttalk.chat_ui import CharacterView, ChatHeader, Transcript
 from silenttalk.copilot.persona import Persona, PersonaStore
 from silenttalk.copilot.types import REPLY_LANES, ConversationTurn, ReplySuggestions
 from silenttalk.hotkeys import GlobalHotkeys
@@ -30,24 +31,26 @@ from silenttalk.story_ui import StoryPanel
 from silenttalk.text import TextValidationError
 from silenttalk.voice_styles import voice_style_choices, voice_style_label
 from silenttalk.widgets import (
-    Avatar,
     Button,
     Chip,
+    Disclosure,
     StatusDot,
     card,
     hint_row,
-    section_title,
+    wrap_to_width,
 )
 
-# (page key, rail glyph, rail label). Glyphs stay in the BMP: Tk 8.6 on
-# Windows draws astral-plane emoji inconsistently.
-PAGES: tuple[tuple[str, str, str], ...] = (
-    ("story", "◆", "劇情"),
-    ("manual", "✎", "手動"),
+# Three places, like a phone's tab bar: talking, who you are, and settings.
+# Everything else is a layer inside one of them. (key, glyph, label); glyphs
+# stay in the BMP: Tk 8.6 on Windows draws astral-plane emoji inconsistently.
+NAV: tuple[tuple[str, str, str], ...] = (
+    ("chat", "◆", "對話"),
     ("persona", "☺", "人設"),
-    ("voice", "♪", "聲音"),
     ("settings", "⚙", "設定"),
 )
+# The chat page's modes, and where the old page names now live.
+CHAT_MODES = ("character", "story", "manual")
+_PAGE_ALIASES = {"voice": ("settings", "voice")}
 
 _DISCORD_STATES = {
     AppState.STARTING: (theme.DIM, "啟動中"),
@@ -137,6 +140,9 @@ class SilentTalkUI:
             initial_preferences = UserPreferences()
             preference_error = str(exc)
         self._mode = initial_preferences.ui_mode
+        # The chat mode to come back to (and to save); the chat page's
+        # character view is never saved: it starts paused every time.
+        self._chat_mode = self._mode if self._mode in ("story", "manual") else "manual"
 
         _enable_crisp_text()
         self.root = tk.Tk()
@@ -162,7 +168,9 @@ class SilentTalkUI:
                 ),
             )
 
-        self._build_header()
+        # Bottom bar first: pack gives the last widgets whatever is left, and
+        # the status line must never be squeezed out.
+        self._build_status_bar(preference_error)
         body = tk.Frame(self.popup, bg=theme.BG)
         body.pack(fill="both", expand=True)
         self._build_rail(body)
@@ -170,17 +178,10 @@ class SilentTalkUI:
         self._pages_frame.pack(side="left", fill="both", expand=True)
         self._pages_frame.rowconfigure(0, weight=1)
         self._pages_frame.columnconfigure(0, weight=1)
-        self._build_status_bar(preference_error)
 
-        self.story = StoryPanel(
-            self._pages_frame,
-            on_confirm=self._submit_story_choice,
-            on_edit=self._edit_story_choice,
-            on_regenerate=regenerate_suggestions,
-            on_mood=self._on_mood,
-            on_type=self._type_story_choice if send_text else None,
+        self._chat_page = self._build_chat_page(
+            self._pages_frame, regenerate_suggestions, send_text
         )
-        self._manual_tab = self._build_manual_page(self._pages_frame)
         self.persona_panel = PersonaPanel(
             self._pages_frame,
             personas,
@@ -188,21 +189,25 @@ class SilentTalkUI:
             on_status=self.status_var.set,
             on_preview=self._preview_voice if self._preview_callback else None,
         )
-        self._voice_page = self._build_voice_page(
-            self._pages_frame, initial_preferences, copilot_info
-        )
         self.settings_panel = SettingsPanel(
             self._pages_frame,
             settings_store,
             config_defaults or {},
             on_status=self.status_var.set,
-            on_apply=apply_settings,
+            on_apply=self._settings_applied,
+        )
+        self._apply_settings_callback = apply_settings
+        # The voice and speed used when a persona has no voice of its own,
+        # and what the local AI runs on: settings, one layer down.
+        self.settings_panel.add_custom_group(
+            "voice", lambda parent: self._build_voice_group(parent, initial_preferences)
+        )
+        self.settings_panel.add_custom_group(
+            "model", lambda parent: self._build_model_info(parent, copilot_info)
         )
         self._pages = {
-            "story": self.story,
-            "manual": self._manual_tab,
+            "chat": self._chat_page,
             "persona": self.persona_panel,
-            "voice": self._voice_page,
             "settings": self.settings_panel,
         }
         for page in self._pages.values():
@@ -211,11 +216,12 @@ class SilentTalkUI:
         state = self.persona_panel.state
         self.story.set_mood(state.mood)
         self._apply_persona(state.active_persona(), announce=False)
+        self._character_view.set_engagement(
+            str(self.settings_panel.value("copilot", "character_engagement") or "called")
+        )
         if not self._copilot_enabled:
             self._ai_dot.set(theme.DIM, "AI 關閉")
-        self.show_page(
-            self._mode if self._mode in self._pages else "manual", focus=False
-        )
+        self.show_page(self._mode if self._mode in CHAT_MODES else "manual", focus=False)
         self.popup.withdraw()
 
         self._hotkeys = GlobalHotkeys(
@@ -229,84 +235,26 @@ class SilentTalkUI:
 
     # ---- chrome ----------------------------------------------------------------
 
-    def _build_header(self) -> None:
-        header = tk.Frame(self.popup, bg=theme.SURFACE, height=52)
-        header.pack(fill="x")
-        header.pack_propagate(False)
-        brand = tk.Frame(header, bg=theme.SURFACE)
-        brand.pack(side="left", padx=(16, 0))
-        tk.Label(
-            brand,
-            text="◢",
-            bg=theme.SURFACE,
-            fg=theme.ACCENT,
-            font=theme.font(14, "bold"),
-        ).pack(side="left")
-        tk.Label(
-            brand,
-            text="SilentTalk",
-            bg=theme.SURFACE,
-            fg=theme.TEXT,
-            font=theme.font(13, "bold"),
-        ).pack(side="left", padx=(4, 0))
-
-        # Persona chip: who the AI is speaking as, one click to edit.
-        chip = tk.Frame(header, bg=theme.PANEL_HI, cursor="hand2")
-        chip.pack(side="left", padx=(20, 0), pady=10)
-        self._persona_avatar = Avatar(chip, 24, bg=theme.PANEL_HI)
-        self._persona_avatar.pack(side="left", padx=(6, 6), pady=3)
-        self._persona_var = tk.StringVar(value="")
-        persona_label = tk.Label(
-            chip,
-            textvariable=self._persona_var,
-            bg=theme.PANEL_HI,
-            fg=theme.TEXT,
-            font=theme.font(9),
-            padx=0,
-        )
-        persona_label.pack(side="left", padx=(0, 10))
-        for widget in (chip, self._persona_avatar, persona_label):
-            widget.bind("<Button-1>", lambda _: self.show_page("persona"))
-        # Character mode: the bot *is* this persona and joins in by itself.
-        # Off at every start, so it never talks unexpectedly.
-        self._character_chip: Chip | None = None
-        if self._character_callback is not None:
-            self._character_chip = Chip(
-                header, "角色模式：關", self._toggle_character, size=9
-            )
-            self._character_chip.pack(side="left", padx=(8, 0), pady=14)
-
-        status = tk.Frame(header, bg=theme.SURFACE)
-        status.pack(side="right", padx=16)
-        self._ai_dot = StatusDot(status, "AI 待命")
-        self._ai_dot.set(theme.OK)
-        self._ai_dot.pack(side="right", padx=(14, 0))
-        self._discord_dot = StatusDot(status, "啟動中")
-        self._discord_dot.pack(side="right")
-        tk.Frame(self.popup, bg=theme.LINE, height=1).pack(fill="x")
-
     def _build_rail(self, body: tk.Frame) -> None:
-        rail = tk.Frame(body, bg=theme.SURFACE, width=76)
+        rail = tk.Frame(body, bg=theme.SURFACE)
         rail.pack(side="left", fill="y")
-        rail.pack_propagate(False)
-        self._rail_items: dict[str, tuple[tk.Frame, ...]] = {}
-        for key, glyph, label in PAGES:
+        tk.Label(
+            rail, text="◢", bg=theme.SURFACE, fg=theme.ACCENT, font=theme.font(16)
+        ).pack(pady=(theme.px(16), theme.px(14)))
+        self._rail_items: dict[str, tuple[tk.Misc, ...]] = {}
+        for key, glyph, label in NAV:
             item = tk.Frame(rail, bg=theme.SURFACE, cursor="hand2")
-            item.pack(fill="x", pady=(10 if key == "story" else 2, 0))
-            marker = tk.Frame(item, bg=theme.SURFACE, width=3)
-            marker.pack(side="left", fill="y")
-            inner = tk.Frame(item, bg=theme.SURFACE)
-            inner.pack(side="left", fill="x", expand=True, pady=8)
-            icon = tk.Label(inner, text=glyph, bg=theme.SURFACE, font=theme.font(15))
-            icon.pack()
-            text = tk.Label(inner, text=label, bg=theme.SURFACE, font=theme.font(9))
-            text.pack()
-            for widget in (item, marker, inner, icon, text):
+            item.pack(fill="x", padx=theme.px(8), pady=theme.px(2))
+            icon = tk.Label(item, text=glyph, bg=theme.SURFACE, font=theme.font(15))
+            icon.pack(padx=theme.px(14), pady=(theme.px(8), 0))
+            text = tk.Label(item, text=label, bg=theme.SURFACE, font=theme.font(9))
+            text.pack(pady=(0, theme.px(8)))
+            for widget in (item, icon, text):
                 widget.bind("<Button-1>", lambda _, k=key: self.show_page(k))
-            self._rail_items[key] = (item, marker, inner, icon, text)
+            self._rail_items[key] = (item, icon, text)
 
         stop = tk.Frame(rail, bg=theme.SURFACE, cursor="hand2")
-        stop.pack(side="bottom", fill="x", pady=(0, 12))
+        stop.pack(side="bottom", fill="x", pady=(0, theme.px(14)))
         stop_icon = tk.Label(
             stop, text="■", bg=theme.SURFACE, fg=theme.ERROR, font=theme.font(13)
         )
@@ -316,56 +264,109 @@ class SilentTalkUI:
             text=f"停止 {self._stop_hotkey}",
             bg=theme.SURFACE,
             fg=theme.MUTED,
-            font=theme.font(8),
+            font=theme.font(9),
         )
         stop_text.pack()
         for widget in (stop, stop_icon, stop_text):
             widget.bind("<Button-1>", lambda _: self._stop_from_button())
-        tk.Frame(body, bg=theme.LINE, width=1).pack(side="left", fill="y")
 
     def _build_status_bar(self, initial: str) -> None:
-        tk.Frame(self.popup, bg=theme.LINE, height=1).pack(fill="x", side="bottom")
-        bar = tk.Frame(self.popup, bg=theme.SURFACE, height=30)
+        bar = tk.Frame(self.popup, bg=theme.SURFACE)
         bar.pack(fill="x", side="bottom")
-        bar.pack_propagate(False)
+        inner = tk.Frame(bar, bg=theme.SURFACE)
+        inner.pack(fill="x", padx=theme.px(14), pady=theme.px(6))
+        # Connection and AI state live down here, out of the way until they
+        # turn yellow or red.
+        self._discord_dot = StatusDot(inner, "啟動中")
+        self._discord_dot.pack(side="left")
+        self._ai_dot = StatusDot(inner, "AI 待命")
+        self._ai_dot.set(theme.OK)
+        self._ai_dot.pack(side="left", padx=(theme.px(14), 0))
         self.status_var = tk.StringVar(value=initial or "啟動中…")
         self._status_label = tk.Label(
-            bar,
+            inner,
             textvariable=self.status_var,
             bg=theme.SURFACE,
             fg=theme.MUTED,
             font=theme.font(9),
             anchor="w",
         )
-        self._status_label.pack(side="left", fill="x", expand=True, padx=14)
+        self._status_label.pack(side="left", fill="x", expand=True, padx=(theme.px(18), 0))
         quit_label = tk.Label(
-            bar,
+            inner,
             text="退出",
             bg=theme.SURFACE,
             fg=theme.DIM,
             font=theme.font(9),
             cursor="hand2",
         )
-        quit_label.pack(side="right", padx=(0, 14))
+        quit_label.pack(side="right")
         quit_label.bind("<Button-1>", lambda _: self.close())
-        tk.Label(
-            bar,
-            text=f"{self._speak_hotkey} 叫出／Esc 收起　",
-            bg=theme.SURFACE,
-            fg=theme.DIM,
-            font=theme.font(8),
-        ).pack(side="right")
+
+    # ---- chat page ---------------------------------------------------------------
+
+    def _build_chat_page(
+        self,
+        parent: tk.Frame,
+        regenerate: Callable[[], None] | None,
+        send_text: Callable[[str], None] | None,
+    ) -> tk.Frame:
+        page = tk.Frame(parent, bg=theme.BG)
+        inner = tk.Frame(page, bg=theme.BG)
+        inner.pack(
+            fill="both",
+            expand=True,
+            padx=theme.px(24),
+            pady=(theme.px(18), theme.px(14)),
+        )
+        modes = [("story", "選項"), ("manual", "打字")]
+        if self._character_callback is not None:
+            modes.insert(0, ("character", "角色"))
+        self._chat_header = ChatHeader(
+            inner,
+            modes,
+            on_mode=lambda key: self.show_page(key),
+            on_mood=self._on_mood_pick,
+            on_persona=lambda: self.show_page("persona"),
+        )
+        self._chat_header.pack(fill="x", pady=(0, theme.px(14)))
+
+        # The mode's own controls are packed before the transcript so a small
+        # window shrinks the transcript, never the buttons.
+        self._chat_stack = tk.Frame(inner, bg=theme.BG)
+        self._chat_stack.pack(side="bottom", fill="x")
+        self.transcript = Transcript(inner)
+        self.transcript.pack(fill="both", expand=True)
+
+        self.story = StoryPanel(
+            self._chat_stack,
+            on_confirm=self._submit_story_choice,
+            on_edit=self._edit_story_choice,
+            on_regenerate=regenerate,
+            on_mood=self._on_mood,
+            on_type=self._type_story_choice if send_text else None,
+        )
+        self._character_view = CharacterView(
+            self._chat_stack,
+            on_run=self._set_character_mode,
+            on_engagement=self._set_engagement,
+            stop_hotkey=self._stop_hotkey,
+        )
+        self._manual_tab = self._build_manual_page(self._chat_stack)
+        self._chat_views = {
+            "story": self.story,
+            "character": self._character_view,
+            "manual": self._manual_tab,
+        }
+        return page
 
     # ---- manual page -------------------------------------------------------------
 
     def _build_manual_page(self, parent: tk.Frame) -> tk.Frame:
         page = tk.Frame(parent, bg=theme.BG)
-        section_title(
-            page, "手動輸入", "打字讓 Bot 替你說；Copilot 建議可以直接用或填進來再改。"
-        ).pack(fill="x", padx=18, pady=(14, 10))
-
         compose = card(page, padx=0, pady=0)
-        compose.outer.pack(fill="x", padx=18)
+        compose.outer.pack(fill="x", pady=(theme.px(12), 0))
+        self._manual_compose = compose.outer
         self.input = tk.Text(
             compose,
             height=3,
@@ -374,15 +375,16 @@ class SilentTalkUI:
             fg=theme.TEXT,
             insertbackground=theme.TEXT,
             relief="flat",
-            padx=12,
-            pady=10,
+            highlightthickness=0,
+            padx=theme.px(16),
+            pady=theme.px(12),
             font=theme.font(12),
             undo=True,
         )
         self.input.pack(fill="x")
         self.input.bind("<Tab>", self._on_suggestion_tab)
         compose_bar = tk.Frame(compose, bg=theme.PANEL)
-        compose_bar.pack(fill="x", padx=10, pady=(0, 8))
+        compose_bar.pack(fill="x", padx=theme.px(14), pady=(0, theme.px(10)))
         self._voice_summary = tk.Label(
             compose_bar,
             text="",
@@ -393,20 +395,20 @@ class SilentTalkUI:
         )
         self._voice_summary.pack(side="left")
         self._voice_summary.bind("<Button-1>", lambda _: self.show_page("voice"))
-        Button(
-            compose_bar, "說出來  Enter", self._submit_input, kind="primary", size=9
-        ).pack(side="right")
+        Button(compose_bar, "說出來", self._submit_input, kind="primary", size=10).pack(
+            side="right"
+        )
         tk.Label(
             compose_bar,
-            text="Shift+Enter 換行",
+            text="Enter 說出 · Shift+Enter 換行",
             bg=theme.PANEL,
             fg=theme.DIM,
-            font=theme.font(8),
-        ).pack(side="right", padx=10)
+            font=theme.font(9),
+        ).pack(side="right", padx=theme.px(12))
 
-        suggest = card(page)
-        suggest.outer.pack(fill="x", padx=18, pady=(12, 0))
-        top = tk.Frame(suggest, bg=theme.PANEL)
+        # Copilot's four ideas: only there when there is something to pick.
+        self._suggest_card = card(page)
+        top = tk.Frame(self._suggest_card, bg=theme.PANEL)
         top.pack(fill="x")
         tk.Label(
             top,
@@ -418,19 +420,20 @@ class SilentTalkUI:
         hint_row(
             top, (("↑↓", "選"), ("Tab", "填入"), ("Enter", "直接說")), bg=theme.PANEL
         ).pack(side="right")
-        self.suggestion_context_var = tk.StringVar(value="等待 Discord 對話…")
-        tk.Label(
-            suggest,
-            textvariable=self.suggestion_context_var,
-            bg=theme.PANEL,
-            fg=theme.MUTED,
-            font=theme.font(9),
-            anchor="w",
-            justify="left",
-            wraplength=640,
-        ).pack(fill="x", pady=(4, 6))
+        self.suggestion_context_var = tk.StringVar(value="")
+        wrap_to_width(
+            tk.Label(
+                self._suggest_card,
+                textvariable=self.suggestion_context_var,
+                bg=theme.PANEL,
+                fg=theme.MUTED,
+                font=theme.font(9),
+                anchor="w",
+                justify="left",
+            )
+        ).pack(fill="x", pady=(theme.px(4), theme.px(6)))
         self.suggestion_list = tk.Listbox(
-            suggest,
+            self._suggest_card,
             height=len(REPLY_LANES),
             exportselection=False,
             font=theme.font(11),
@@ -441,6 +444,7 @@ class SilentTalkUI:
             highlightthickness=0,
             relief="flat",
             activestyle="none",
+            bd=0,
         )
         self.suggestion_list.pack(fill="x")
         self.suggestion_list.bind("<Tab>", self._on_suggestion_tab)
@@ -448,22 +452,15 @@ class SilentTalkUI:
         self.suggestion_list.bind("<Double-Button-1>", self._on_suggestion_enter)
         self._render_empty_suggestions()
 
-        phrases = card(page)
-        phrases.outer.pack(fill="both", expand=True, padx=18, pady=(12, 14))
-        top = tk.Frame(phrases, bg=theme.PANEL)
-        top.pack(fill="x")
-        tk.Label(
-            top,
-            text="快捷句",
-            bg=theme.PANEL,
-            fg=theme.TEXT,
-            font=theme.font(10, "bold"),
-        ).pack(side="left")
-        hint_row(top, (("Ctrl+1～9", "直接說"), ("雙擊", "說出")), bg=theme.PANEL).pack(
-            side="right"
+        # Quick phrases are reached with Ctrl+1-9; the list is for editing.
+        self._phrases_box = Disclosure(
+            page,
+            "快捷句",
+            "Ctrl+1～9 直接說出前九句；展開可以新增、修改、刪除。",
         )
+        self._phrases_box.pack(fill="x", pady=(theme.px(12), 0))
         self.phrase_list = tk.Listbox(
-            phrases,
+            self._phrases_box.body,
             height=5,
             exportselection=False,
             font=theme.font(10),
@@ -474,72 +471,71 @@ class SilentTalkUI:
             highlightthickness=0,
             relief="flat",
             activestyle="none",
+            bd=0,
         )
-        self.phrase_list.pack(fill="both", expand=True, pady=(6, 8))
+        self.phrase_list.pack(fill="x", pady=(0, theme.px(8)))
         self.phrase_list.bind("<Double-Button-1>", self._on_phrase_double_click)
-        controls = tk.Frame(phrases, bg=theme.PANEL)
+        controls = tk.Frame(self._phrases_box.body, bg=theme.PANEL)
         controls.pack(fill="x")
         Button(controls, "新增目前文字", self._add_quick_phrase, size=9).pack(
             side="left"
         )
         Button(controls, "載入", self._load_selected_phrase, kind="ghost", size=9).pack(
-            side="left", padx=(6, 0)
+            side="left", padx=(theme.px(6), 0)
         )
         Button(controls, "更新", self._update_quick_phrase, kind="ghost", size=9).pack(
-            side="left", padx=(6, 0)
+            side="left", padx=(theme.px(6), 0)
         )
         Button(controls, "刪除", self._delete_quick_phrase, kind="danger", size=9).pack(
             side="right"
         )
         return page
 
-    # ---- voice page ----------------------------------------------------------------
+    # ---- voice (a group on the settings page) ----------------------------------------
 
-    def _build_voice_page(
-        self,
-        parent: tk.Frame,
-        preferences: UserPreferences,
-        copilot_info: Sequence[tuple[str, str]],
-    ) -> tk.Frame:
-        page = tk.Frame(parent, bg=theme.BG)
-        section_title(
-            page, "聲音", "手動輸入、快捷句與劇情模式共用這裡的聲線和語速。"
-        ).pack(fill="x", padx=18, pady=(14, 10))
-        voice = card(page)
-        voice.outer.pack(fill="x", padx=18)
+    def _build_voice_group(
+        self, parent: tk.Frame, preferences: UserPreferences
+    ) -> None:
+        voice = card(parent)
+        voice.outer.pack(fill="x", pady=(0, theme.px(12)))
         tk.Label(
             voice,
-            text="聲線",
+            text="聲音風格",
             bg=theme.PANEL,
             fg=theme.TEXT,
-            font=theme.font(10, "bold"),
+            font=theme.font(11, "bold"),
         ).pack(anchor="w")
-        tk.Label(
+        # Shown when the active persona has its own voice, which then wins.
+        self._persona_voice_note = tk.Label(
             voice,
-            text="快捷句會記住存下時的聲線。",
+            text="",
             bg=theme.PANEL,
             fg=theme.DIM,
             font=theme.font(9),
-        ).pack(anchor="w", pady=(0, 4))
-        # Shown when the active persona has its own voice, which then wins.
-        self._persona_voice_note = tk.Label(
-            voice, text="", bg=theme.PANEL, fg=theme.ACCENT_HI, font=theme.font(9)
+            justify="left",
+            anchor="w",
         )
-        self._persona_voice_note.pack(anchor="w", pady=(0, 8))
+        self._persona_voice_note.pack(anchor="w", fill="x", pady=(theme.px(2), theme.px(10)))
+        wrap_to_width(self._persona_voice_note)
         chips = tk.Frame(voice, bg=theme.PANEL)
         chips.pack(anchor="w")
         self._voice_chips: dict[str, Chip] = {}
         for index, (key, label) in enumerate(self._style_choices):
             chip = Chip(chips, label, lambda k=key: self._set_style(k), size=10)
-            chip.grid(row=index // 2, column=index % 2, sticky="w", padx=(0, 6), pady=3)
+            chip.grid(
+                row=index // 2,
+                column=index % 2,
+                sticky="w",
+                padx=(0, theme.px(6)),
+                pady=theme.px(3),
+            )
             self._voice_chips[key] = chip
 
-        speed = card(page)
-        speed.outer.pack(fill="x", padx=18, pady=(12, 0))
-        top = tk.Frame(speed, bg=theme.PANEL)
-        top.pack(fill="x")
+        tk.Frame(voice, bg=theme.LINE, height=1).pack(fill="x", pady=(theme.px(14), 0))
+        top = tk.Frame(voice, bg=theme.PANEL)
+        top.pack(fill="x", pady=(theme.px(12), 0))
         tk.Label(
-            top, text="語速", bg=theme.PANEL, fg=theme.TEXT, font=theme.font(10, "bold")
+            top, text="語速", bg=theme.PANEL, fg=theme.TEXT, font=theme.font(10)
         ).pack(side="left")
         initial_percent = round(preferences.speech_rate_multiplier * 100)
         self.rate_var = tk.DoubleVar(value=initial_percent)
@@ -549,10 +545,10 @@ class SilentTalkUI:
             textvariable=self.rate_text_var,
             bg=theme.PANEL,
             fg=theme.ACCENT_HI,
-            font=theme.font(12, "bold"),
+            font=theme.font(11, "bold"),
         ).pack(side="right")
-        row = tk.Frame(speed, bg=theme.PANEL)
-        row.pack(fill="x", pady=(6, 0))
+        row = tk.Frame(voice, bg=theme.PANEL)
+        row.pack(fill="x", pady=(theme.px(6), 0))
         self.rate_scale = tk.Scale(
             row,
             from_=MIN_RATE_MULTIPLIER * 100,
@@ -569,56 +565,39 @@ class SilentTalkUI:
             highlightthickness=0,
             sliderrelief="flat",
             bd=0,
-            width=10,
-            sliderlength=22,
+            width=theme.px(8),
+            sliderlength=theme.px(20),
         )
         self.rate_scale.pack(side="left", fill="x", expand=True)
         Button(row, "重設 100%", self._reset_rate, kind="ghost", size=9).pack(
-            side="left", padx=(10, 0)
+            side="left", padx=(theme.px(10), 0)
         )
         self.rate_scale.bind("<ButtonRelease-1>", self._persist_rate)
         self.rate_scale.bind("<KeyRelease>", self._persist_rate)
+        self._set_style("default")
 
-        info = card(page, bg=theme.SURFACE)
-        info.outer.pack(fill="x", padx=18, pady=(12, 0))
+    def _build_model_info(
+        self, parent: tk.Frame, copilot_info: Sequence[tuple[str, str]]
+    ) -> None:
+        info = card(parent)
+        info.outer.pack(fill="x", pady=(0, theme.px(12)))
         tk.Label(
             info,
-            text="本機 AI",
-            bg=theme.SURFACE,
+            text="現在跑的",
+            bg=theme.PANEL,
             fg=theme.TEXT,
-            font=theme.font(10, "bold"),
+            font=theme.font(11, "bold"),
         ).pack(anchor="w")
-        rows = list(copilot_info) or [
-            ("狀態", "未啟用（config.toml 的 [copilot] enabled）")
-        ]
-        grid = tk.Frame(info, bg=theme.SURFACE)
-        grid.pack(fill="x", pady=(6, 4))
+        rows = list(copilot_info) or [("狀態", "未啟用")]
+        grid = tk.Frame(info, bg=theme.PANEL)
+        grid.pack(fill="x", pady=(theme.px(6), 0))
         for index, (label, value) in enumerate(rows):
             tk.Label(
-                grid,
-                text=label,
-                bg=theme.SURFACE,
-                fg=theme.DIM,
-                font=theme.font(9),
-                anchor="w",
-            ).grid(row=index, column=0, sticky="w", padx=(0, 16), pady=1)
+                grid, text=label, bg=theme.PANEL, fg=theme.DIM, font=theme.font(9), anchor="w"
+            ).grid(row=index, column=0, sticky="w", padx=(0, theme.px(16)), pady=1)
             tk.Label(
-                grid,
-                text=value,
-                bg=theme.SURFACE,
-                fg=theme.MUTED,
-                font=theme.font(9),
-                anchor="w",
+                grid, text=value, bg=theme.PANEL, fg=theme.MUTED, font=theme.font(9), anchor="w"
             ).grid(row=index, column=1, sticky="w", pady=1)
-        tk.Label(
-            info,
-            text="模型與 GPU 設定在 config.toml 的 [copilot]，改完重新啟動 SilentTalk 生效。",
-            bg=theme.SURFACE,
-            fg=theme.DIM,
-            font=theme.font(8),
-        ).pack(anchor="w")
-        self._set_style("default")
-        return page
 
     # ---- public API --------------------------------------------------------------
 
@@ -661,26 +640,54 @@ class SilentTalkUI:
         self.root.destroy()
 
     def show_page(self, key: str, *, focus: bool = True) -> None:
-        if key not in self._pages:
+        """Pages: chat, persona, settings. The chat page's modes (character,
+        story, manual) and the old page names (voice) are accepted too."""
+        sub = ""
+        if key in _PAGE_ALIASES:
+            key, sub = _PAGE_ALIASES[key]
+        if key in CHAT_MODES:
+            self._show_chat_mode(key)
+            page = "chat"
+        elif key == "chat":
+            self._show_chat_mode(self._chat_mode)
+            page = "chat"
+        elif key in self._pages:
+            if self._mode == "persona" and key != "persona":
+                self.persona_panel.flush()
+            self._mode = key
+            page = key
+        else:
             return
-        if self._mode == "persona" and key != "persona":
-            self.persona_panel.flush()
-        changed = key != self._mode
-        self._mode = key
-        self._pages[key].tkraise()
-        for page_key, parts in self._rail_items.items():
-            selected = page_key == key
-            item, marker, inner, icon, text = parts
+        if sub:
+            self.settings_panel.show(sub)
+        self._pages[page].tkraise()
+        for page_key, (item, icon, text) in self._rail_items.items():
+            selected = page_key == page
             bg = theme.PANEL if selected else theme.SURFACE
-            for widget in (item, inner, icon, text):
+            for widget in (item, icon, text):
                 widget.configure(bg=bg)
-            marker.configure(bg=theme.ACCENT if selected else theme.SURFACE)
             icon.configure(fg=theme.ACCENT_HI if selected else theme.DIM)
             text.configure(fg=theme.TEXT if selected else theme.DIM)
-        if changed and key in ("story", "manual"):
-            self._persist_preferences()
         if focus:
             self._focus_page()
+
+    def _show_chat_mode(self, mode: str) -> None:
+        if self._mode == "persona":
+            self.persona_panel.flush()
+        if mode != "character" and self._character_on:
+            # The bot plays the persona *or* speaks for you, never both.
+            self._set_character_mode(False)
+            self.status_var.set("角色已暫停")
+        self._mode = mode
+        self._chat_header.set_mode(mode)
+        for key, view in self._chat_views.items():
+            if key == mode:
+                view.pack(fill="x")
+            else:
+                view.pack_forget()
+        if mode in ("story", "manual") and mode != self._chat_mode:
+            self._chat_mode = mode
+            self._persist_preferences()
 
     # ---- focus & keys --------------------------------------------------------------
 
@@ -691,6 +698,9 @@ class SilentTalkUI:
             self.story.focus_panel()
             return
         set_ime_enabled(self.popup.winfo_id(), True)
+        if self._mode == "character":
+            self._character_view.focus_set()
+            return
         if self._mode == "manual":
             if self._latest_suggestions is not None and not self.input.get(
                 "1.0", "end-1c"
@@ -737,17 +747,21 @@ class SilentTalkUI:
     # ---- persona -------------------------------------------------------------------
 
     def _apply_persona(self, persona: Persona, *, announce: bool = True) -> None:
-        name = persona.name or "不使用人設"
         self._persona_name = persona.name
         if hasattr(self, "_persona_voice_note"):
             self._persona_voice_note.configure(
-                text=f"目前由人設「{persona.name}」的聲音說話（在人設頁修改）；下面的聲線在不用人設時才生效。"
+                text=f"現在由人設「{persona.name}」自己的聲音說話（在人設頁改）；這裡的聲線給沒有設定聲音的人設用。"
                 if persona.voice_style() is not None
-                else ""
+                else "沒有設定自己聲音的人設、打字和快捷句都用這裡的聲線。"
             )
-        mood = "" if persona.mood in ("", "平常") else f" · {persona.mood}"
-        self._persona_var.set(f"{name}{mood}")
-        self._persona_avatar.set_name(persona.name)
+        subtitle = " ".join(persona.identity.split()) or (
+            "中性口吻" if persona.is_blank else ""
+        )
+        if len(subtitle) > 28:
+            subtitle = subtitle[:27] + "…"
+        self._chat_header.set_persona(persona.name, subtitle)
+        self._chat_header.set_mood(persona.mood)
+        self._character_view.set_persona(persona.name)
         if self._apply_persona_callback is not None:
             self._apply_persona_callback(persona)
 
@@ -763,7 +777,7 @@ class SilentTalkUI:
         self._set_character_mode(not self._character_on)
 
     def _set_character_mode(self, enabled: bool) -> None:
-        if self._character_callback is None or self._character_chip is None:
+        if self._character_callback is None:
             return
         try:
             self._character_callback(
@@ -773,12 +787,27 @@ class SilentTalkUI:
             self._show_status(AppState.ERROR, str(exc))
             return
         self._character_on = enabled
-        self._character_chip.set_selected(enabled)
-        self._character_chip.configure(text=f"角色模式：{'開' if enabled else '關'}")
+        self._character_view.set_running(enabled)
         self.story.set_character_mode(enabled, self._persona_name)
+
+    def _settings_applied(self, tables: dict[str, dict[str, object]]) -> None:
+        # The character view shows the same 開口時機 as the settings page.
+        self._character_view.set_engagement(
+            str(tables.get("copilot", {}).get("character_engagement", "called"))
+        )
+        if self._apply_settings_callback is not None:
+            self._apply_settings_callback(tables)
+
+    def _set_engagement(self, value: str) -> None:
+        """The character view's switch is the settings page's 開口時機."""
+        self.settings_panel.set_value("copilot", "character_engagement", value)
 
     def _on_mood(self, mood: str) -> None:
         self.persona_panel.set_mood(mood)
+
+    def _on_mood_pick(self, mood: str) -> None:
+        self.story.set_mood(mood)
+        self._on_mood(mood)
 
     # ---- voice & rate --------------------------------------------------------------
 
@@ -825,7 +854,7 @@ class SilentTalkUI:
             self._preference_store.save(
                 UserPreferences(
                     speech_rate_multiplier=self._rate_multiplier(),
-                    ui_mode=self._mode,
+                    ui_mode=self._chat_mode,
                 )
             )
         except PreferenceError as exc:
@@ -888,6 +917,10 @@ class SilentTalkUI:
         self.suggestion_context_var.set(
             f"回應 {suggestions.trigger_speaker}：{trigger}"
         )
+        if not self._suggest_card.outer.winfo_ismapped():
+            self._suggest_card.outer.pack(
+                fill="x", pady=(theme.px(12), 0), after=self._manual_compose
+            )
         self.suggestion_list.delete(0, "end")
         for index, (lane, value) in enumerate(suggestions.items()):
             shown = value or (
@@ -937,8 +970,9 @@ class SilentTalkUI:
     def _clear_suggestions(self) -> None:
         self._latest_suggestions = None
         self._suggestion_values = [""] * len(REPLY_LANES)
-        self.suggestion_context_var.set("等待 Discord 對話…")
+        self.suggestion_context_var.set("")
         self._render_empty_suggestions()
+        self._suggest_card.outer.pack_forget()
 
     def _select_first_available_suggestion(self) -> None:
         self.suggestion_list.selection_clear(0, "end")
@@ -1132,5 +1166,6 @@ class SilentTalkUI:
                 self._ai_dot.set(theme.ACCENT_HI, "AI 思考中")
                 self.story.set_thinking(action.speaker, action.message)
             elif action.kind == "turn" and action.turn is not None:
+                self.transcript.add_turn(action.turn)
                 self.story.add_turn(action.turn)
         self.root.after(50, self._poll_actions)

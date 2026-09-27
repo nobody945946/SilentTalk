@@ -48,8 +48,8 @@ class Button(tk.Label):
             bg=self._colors[0],
             fg=self._colors[2],
             font=theme.font(size, "bold" if kind == "primary" else "normal"),
-            padx=padx,
-            pady=pady,
+            padx=theme.px(padx),
+            pady=theme.px(pady),
             cursor="hand2",
         )
         self.bind("<Enter>", lambda _: self._hover(True))
@@ -90,8 +90,8 @@ class Chip(tk.Label):
             master,
             text=text,
             font=theme.font(size),
-            padx=10,
-            pady=3,
+            padx=theme.px(10),
+            pady=theme.px(3),
             cursor="hand2",
         )
         self._render()
@@ -120,15 +120,22 @@ class Segmented(tk.Frame):
         *,
         bg: str = theme.PANEL,
     ) -> None:
-        super().__init__(master, bg=theme.LINE, padx=1, pady=1)
+        # A sunken track with the chosen segment raised, as Windows 11 and
+        # macOS draw it.
+        super().__init__(master, bg=theme.PANEL_HI, padx=theme.px(2), pady=theme.px(2))
         self._on_change = on_change
         self._value = options[0][0]
         self._segments: dict[str, tk.Label] = {}
         for value, label in options:
             segment = tk.Label(
-                self, text=label, font=theme.font(9), padx=12, pady=4, cursor="hand2"
+                self,
+                text=label,
+                font=theme.font(10),
+                padx=theme.px(14),
+                pady=theme.px(4),
+                cursor="hand2",
             )
-            segment.pack(side="left", padx=(0, 1))
+            segment.pack(side="left", padx=(0, theme.px(2)))
             segment.bind("<Button-1>", lambda _, v=value: self.set(v, notify=True))
             self._segments[value] = segment
         self._render()
@@ -147,7 +154,7 @@ class Segmented(tk.Frame):
     def _render(self) -> None:
         for value, segment in self._segments.items():
             if value == self._value:
-                segment.configure(bg=theme.ACCENT, fg=theme.ACCENT_INK)
+                segment.configure(bg=theme.SELECTED, fg=theme.TEXT)
             else:
                 segment.configure(bg=theme.PANEL_HI, fg=theme.MUTED)
 
@@ -168,24 +175,26 @@ class TraitSlider(tk.Frame):
         bg: str = theme.PANEL,
     ) -> None:
         super().__init__(master, bg=bg)
+        self.DOT = theme.px(16)
+        self.GAP = theme.px(22)
         self._value = 3
         self._on_change = on_change
         self._low = tk.Label(
-            self, text=low, bg=bg, font=theme.font(9), width=10, anchor="e"
+            self, text=low, bg=bg, font=theme.font(9), width=14, anchor="e"
         )
         self._low.pack(side="left")
-        width = self.GAP * 4 + self.DOT + 8
+        width = self.GAP * 4 + self.DOT + theme.px(8)
         self._canvas = tk.Canvas(
             self,
             width=width,
-            height=self.DOT + 8,
+            height=self.DOT + theme.px(8),
             bg=bg,
             highlightthickness=0,
             cursor="hand2",
         )
         self._canvas.pack(side="left", padx=8)
         self._high = tk.Label(
-            self, text=high, bg=bg, font=theme.font(9), width=10, anchor="w"
+            self, text=high, bg=bg, font=theme.font(9), width=14, anchor="w"
         )
         self._high.pack(side="left")
         self._canvas.bind("<Button-1>", self._click)
@@ -199,7 +208,7 @@ class TraitSlider(tk.Frame):
         self._render()
 
     def _click(self, event: tk.Event) -> None:
-        step = round((event.x - 4 - self.DOT / 2) / self.GAP)
+        step = round((event.x - theme.px(4) - self.DOT / 2) / self.GAP)
         self.set(step + 1)
         if self._on_change is not None:
             self._on_change(self._value)
@@ -207,14 +216,16 @@ class TraitSlider(tk.Frame):
     def _render(self) -> None:
         canvas = self._canvas
         canvas.delete("all")
-        y = 4 + self.DOT / 2
-        x0 = 4 + self.DOT / 2
-        canvas.create_line(x0, y, x0 + self.GAP * 4, y, fill=theme.LINE, width=2)
+        y = theme.px(4) + self.DOT / 2
+        x0 = theme.px(4) + self.DOT / 2
+        canvas.create_line(
+            x0, y, x0 + self.GAP * 4, y, fill=theme.LINE, width=theme.px(2)
+        )
         for index in range(5):
             x = x0 + index * self.GAP
             level = index + 1
             active = level == self._value
-            radius = self.DOT / 2 if active else 4
+            radius = self.DOT / 2 if active else theme.px(4)
             if active:
                 color = theme.MUTED if level == 3 else theme.ACCENT
             else:
@@ -281,6 +292,7 @@ class Avatar(tk.Canvas):
     def __init__(
         self, master: tk.Misc, size: int = 30, *, bg: str = theme.SURFACE
     ) -> None:
+        size = theme.px(size)
         super().__init__(master, width=size, height=size, bg=bg, highlightthickness=0)
         self._size = size
         self.set_name("")
@@ -295,7 +307,9 @@ class Avatar(tk.Canvas):
                 size / 2,
                 text="?",
                 fill=theme.DIM,
-                font=theme.font(10, "bold"),
+                # Negative size = pixels: the glyph scales with the canvas,
+                # never past it (points grow with Windows scaling).
+                font=(theme.FONT, -round(size * 0.45), "bold"),
             )
             return
         color = theme.SPEAKER_COLORS[sum(map(ord, name)) % len(theme.SPEAKER_COLORS)]
@@ -305,7 +319,7 @@ class Avatar(tk.Canvas):
             size / 2,
             text=name[0],
             fill=theme.ACCENT_INK,
-            font=theme.font(max(9, size // 3), "bold"),
+            font=(theme.FONT, -round(size * 0.45), "bold"),
         )
 
 
@@ -352,8 +366,8 @@ class Field(tk.Frame):
         )
         self._counter = tk.Label(top, text="", bg=bg, fg=theme.DIM, font=theme.font(8))
         self._counter.pack(side="right")
-        border = tk.Frame(self, bg=theme.LINE, padx=1, pady=1)
-        border.pack(fill="x", pady=(3, 0))
+        border = tk.Frame(self, bg=theme.PANEL_HI, padx=1, pady=1)
+        border.pack(fill="x", pady=(theme.px(4), 0))
         self._border = border
         self._multi = lines > 1
         if self._multi:
@@ -365,8 +379,9 @@ class Field(tk.Frame):
                 fg=theme.TEXT,
                 insertbackground=theme.TEXT,
                 relief="flat",
-                padx=8,
-                pady=6,
+                highlightthickness=0,
+                padx=theme.px(8),
+                pady=theme.px(6),
                 font=theme.font(10),
                 undo=True,
             )
@@ -380,23 +395,27 @@ class Field(tk.Frame):
                 fg=theme.TEXT,
                 insertbackground=theme.TEXT,
                 relief="flat",
+                highlightthickness=0,
                 font=theme.font(10),
             )
             self._var.trace_add("write", lambda *_: self._changed())
-        self._widget.pack(fill="x", ipady=4 if not self._multi else 0)
+        self._widget.pack(
+            fill="x", ipady=theme.px(5) if not self._multi else 0, ipadx=theme.px(6)
+        )
         self._widget.bind("<FocusIn>", lambda _: border.configure(bg=theme.ACCENT))
-        self._widget.bind("<FocusOut>", lambda _: border.configure(bg=theme.LINE))
+        self._widget.bind("<FocusOut>", lambda _: border.configure(bg=theme.PANEL_HI))
         if hint:
-            tk.Label(
+            hint_label = tk.Label(
                 self,
                 text=hint,
                 bg=bg,
                 fg=theme.DIM,
-                font=theme.font(8),
+                font=theme.font(9),
                 anchor="w",
                 justify="left",
-                wraplength=520,
-            ).pack(fill="x", pady=(2, 0))
+            )
+            hint_label.pack(fill="x", pady=(theme.px(3), 0))
+            wrap_to_width(hint_label)
         self._update_counter()
 
     def get(self) -> str:
@@ -451,11 +470,15 @@ class Toggle(tk.Frame):
         super().__init__(master, bg=bg, cursor="hand2")
         self._value = False
         self._command = command
-        self._track = tk.Frame(self, width=34, height=18, bg=theme.PANEL_TOP)
+        self._track = tk.Frame(
+            self, width=theme.px(34), height=theme.px(18), bg=theme.PANEL_TOP
+        )
         self._track.pack(side="left")
         self._track.pack_propagate(False)
-        self._knob = tk.Frame(self._track, width=14, height=14, bg=theme.MUTED)
-        self._knob.place(x=2, y=2)
+        self._knob = tk.Frame(
+            self._track, width=theme.px(14), height=theme.px(14), bg=theme.MUTED
+        )
+        self._knob.place(x=theme.px(2), y=theme.px(2))
         self._text = tk.Label(self, text="關", bg=bg, fg=theme.MUTED, font=theme.font(9))
         self._text.pack(side="left", padx=(8, 0))
         for widget in (self, self._track, self._knob, self._text):
@@ -471,7 +494,7 @@ class Toggle(tk.Frame):
         self._value = bool(value)
         self._track.configure(bg=theme.ACCENT if self._value else theme.PANEL_TOP)
         self._knob.configure(bg=theme.ACCENT_INK if self._value else theme.MUTED)
-        self._knob.place(x=18 if self._value else 2, y=2)
+        self._knob.place(x=theme.px(18 if self._value else 2), y=theme.px(2))
         self._text.configure(
             text="開" if self._value else "關",
             fg=theme.TEXT if self._value else theme.MUTED,
@@ -539,8 +562,8 @@ def keycap(
         text=text,
         bg=color,
         fg=fg,
-        font=theme.font(8, "bold"),
-        padx=5,
+        font=theme.font(9),
+        padx=theme.px(6),
         pady=0,
     )
 
@@ -552,39 +575,136 @@ def hint_row(
     row = tk.Frame(master, bg=bg)
     for key, action in items:
         keycap(row, key).pack(side="left")
-        tk.Label(row, text=action, bg=bg, fg=theme.DIM, font=theme.font(8)).pack(
-            side="left", padx=(3, 10)
+        tk.Label(row, text=action, bg=bg, fg=theme.DIM, font=theme.font(9)).pack(
+            side="left", padx=(theme.px(4), theme.px(12))
         )
     return row
+
+
+def wrap_to_width(label: tk.Label, margin: int = 0) -> tk.Label:
+    """Wrap a label at the width it actually gets. A fixed wraplength in pixels
+    breaks lines far too early or too late once Windows scaling changes the
+    font size."""
+
+    def resize(event: tk.Event) -> None:
+        width = event.width - theme.px(margin)
+        # cget returns a Tcl object (a screen distance), not an int.
+        if width > 40 and str(label.cget("wraplength")) != str(width):
+            label.configure(wraplength=width)
+
+    label.bind("<Configure>", resize, add="+")
+    return label
 
 
 def section_title(
     master: tk.Misc, title: str, subtitle: str = "", *, bg: str = theme.BG
 ) -> tk.Frame:
     frame = tk.Frame(master, bg=bg)
-    tk.Label(frame, text=title, bg=bg, fg=theme.TEXT, font=theme.font(11, "bold")).pack(
+    tk.Label(frame, text=title, bg=bg, fg=theme.TEXT, font=theme.font(15, "bold")).pack(
         anchor="w"
     )
     if subtitle:
-        tk.Label(
-            frame,
-            text=subtitle,
-            bg=bg,
-            fg=theme.DIM,
-            font=theme.font(9),
-            justify="left",
-            anchor="w",
-            wraplength=560,
-        ).pack(anchor="w", fill="x")
+        wrap_to_width(
+            tk.Label(
+                frame,
+                text=subtitle,
+                bg=bg,
+                fg=theme.MUTED,
+                font=theme.font(10),
+                justify="left",
+                anchor="w",
+            )
+        ).pack(anchor="w", fill="x", pady=(theme.px(2), 0))
     return frame
 
 
 def card(
-    master: tk.Misc, *, bg: str = theme.PANEL, padx: int = 14, pady: int = 12
+    master: tk.Misc,
+    *,
+    bg: str = theme.PANEL,
+    padx: int = 16,
+    pady: int = 14,
+    outline: bool = False,
 ) -> tk.Frame:
-    """A panel with a 1px outline; returns the inner frame to fill."""
-    outer = tk.Frame(master, bg=theme.LINE, padx=1, pady=1)
-    inner = tk.Frame(outer, bg=bg, padx=padx, pady=pady)
+    """A raised panel; returns the inner frame to fill (pack `.outer`). Depth
+    comes from the surface color; an outline only where a card sits on a
+    surface of the same color."""
+    outer = tk.Frame(
+        master, bg=theme.LINE if outline else bg, padx=int(outline), pady=int(outline)
+    )
+    inner = tk.Frame(outer, bg=bg, padx=theme.px(padx), pady=theme.px(pady))
     inner.pack(fill="both", expand=True)
     inner.outer = outer  # type: ignore[attr-defined]
     return inner
+
+
+class Disclosure(tk.Frame):
+    """A titled section that folds away: the everyday settings stay in view,
+    the rest one click deeper. Put children in `.body`."""
+
+    def __init__(
+        self,
+        master: tk.Misc,
+        title: str,
+        subtitle: str = "",
+        *,
+        opened: bool = False,
+        bg: str = theme.PANEL,
+        on_toggle: Callable[[bool], None] | None = None,
+    ) -> None:
+        super().__init__(master, bg=bg)
+        self._opened = opened
+        self._on_toggle = on_toggle
+        header = tk.Frame(self, bg=bg, cursor="hand2")
+        header.pack(fill="x", padx=theme.px(16), pady=theme.px(12))
+        self._chevron = tk.Label(
+            header, text="", bg=bg, fg=theme.MUTED, font=theme.font(10), width=2
+        )
+        self._chevron.pack(side="left", anchor="n", pady=(theme.px(2), 0))
+        text = tk.Frame(header, bg=bg)
+        text.pack(side="left", fill="x", expand=True)
+        title_label = tk.Label(
+            text, text=title, bg=bg, fg=theme.TEXT, font=theme.font(11, "bold")
+        )
+        title_label.pack(anchor="w")
+        parts: list[tk.Misc] = [header, self._chevron, text, title_label]
+        if subtitle:
+            sub = tk.Label(
+                text,
+                text=subtitle,
+                bg=bg,
+                fg=theme.DIM,
+                font=theme.font(9),
+                justify="left",
+                anchor="w",
+            )
+            sub.pack(anchor="w", fill="x")
+            wrap_to_width(sub)
+            parts.append(sub)
+        for widget in parts:
+            widget.bind("<Button-1>", lambda _: self.toggle())
+        self.body = tk.Frame(self, bg=bg, padx=theme.px(16))
+        self._spacer = tk.Frame(self, bg=bg, height=theme.px(4))
+        self._render()
+
+    @property
+    def opened(self) -> bool:
+        return self._opened
+
+    def toggle(self) -> None:
+        self.set_open(not self._opened)
+        if self._on_toggle is not None:
+            self._on_toggle(self._opened)
+
+    def set_open(self, opened: bool) -> None:
+        self._opened = opened
+        self._render()
+
+    def _render(self) -> None:
+        self._chevron.configure(text="▾" if self._opened else "▸")
+        if self._opened:
+            self.body.pack(fill="x")
+            self._spacer.pack(fill="x", pady=(0, theme.px(10)))
+        else:
+            self.body.pack_forget()
+            self._spacer.pack_forget()

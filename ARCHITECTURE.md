@@ -47,7 +47,9 @@ speech_queue.py            FIFO / cancel / job lifecycle
 | F8 輸入框、按鈕、視窗行為 | `silenttalk/ui.py` | `app.py` |
 | F8 / F9 全域快捷鍵實作 | `silenttalk/hotkeys.py` | `config.toml`, `silenttalk/config.py` |
 | 新增快捷句、UI 內操作 | `silenttalk/ui.py` | `silenttalk/phrases.py` |
-| AI 劇情模式畫面、WASD 操作 | `silenttalk/story_ui.py` | `silenttalk/ui.py`, `silenttalk/ime.py` |
+| 對話頁（模式切換、對話紀錄、角色畫面） | `silenttalk/chat_ui.py` | `silenttalk/ui.py` |
+| 選項模式、WASD 操作 | `silenttalk/story_ui.py` | `silenttalk/ui.py`, `silenttalk/ime.py` |
+| 顏色、字型、跟著螢幕縮放的尺寸 | `silenttalk/theme.py`（`px()`） | `silenttalk/widgets.py` |
 | 設定頁有哪些項目、分在哪一類 | `silenttalk/settings_schema.py` | `silenttalk/settings_ui.py` |
 | 使用者改過的設定存哪裡 | `silenttalk/settings_store.py`（`settings.json`） | `silenttalk/config.py` 的 `merge` |
 | 語音頻道文字聊天的讀寫 | `silenttalk/discord_voice.py`（`on_message` / `send_text`） | `config.toml [discord] text_chat`, `controller.py` |
@@ -87,7 +89,7 @@ SilentTalk/
 │  ├─ controller.py             # UI 與 async backend 的協調層
 │  ├─ discord_voice.py          # Discord Voice routing + playback
 │  ├─ hotkeys.py                # Win32 global hotkeys
-│  ├─ ime.py                    # 劇情模式時暫停 Windows IME
+│  ├─ ime.py                    # 選項模式時暫停 Windows IME
 │  ├─ logging_setup.py          # JSON file logging
 │  ├─ phrases.py                # 快捷句 persistence / CRUD
 │  ├─ copilot/                  # Discord receive → STT → context → local LLM
@@ -101,7 +103,8 @@ SilentTalk/
 │  ├─ smoke.py                  # Voice / TTS 實機 smoke gates
 │  ├─ speech_queue.py           # FIFO jobs + cancel lifecycle
 │  ├─ state.py                  # AppState
-│  ├─ story_ui.py               # AI 劇情模式分頁（WASD 選項）
+│  ├─ chat_ui.py                # 對話頁：人設標頭、共用對話紀錄、角色畫面
+│  ├─ story_ui.py               # 選項模式（WASD 選項）
 │  ├─ text.py                   # 文字 normalization / validation
 │  ├─ ui.py                     # Tkinter UI
 │  └─ tts/
@@ -167,8 +170,10 @@ SilentTalkUI.shutdown
 - 顯示狀態。
 - 提供停止播放與退出按鈕。
 - 接收 GlobalHotkeys 產生的 UI action。
-- 用 `ttk.Notebook` 分成「手動輸入」與「AI 劇情模式」兩個分頁；上次使用的分頁記在 `ui_preferences.json` 的 `ui_mode`。
-- 劇情模式時，popup 層級的 `<KeyPress>` 轉交 `StoryPanel.handle_key()`；手動模式完全不攔截按鍵，所以打字不受 WASD 影響。
+- 左側只有三個入口（對話、人設、設定），其他東西都在這三頁裡再往下一層：對話頁的三種模式（角色／選項／打字）共用一段對話紀錄，設定頁不常用的群組收進「進階」，人設頁除了「基本」都預設收起。`show_page()` 仍接受舊頁名（story、manual、voice），會對應到新位置。
+- 上次用的是「選項」還是「打字」記在 `ui_preferences.json` 的 `ui_mode`；「角色」每次都從暫停開始。
+- 選項模式時，popup 層級的 `<KeyPress>` 轉交 `StoryPanel.handle_key()`；打字模式完全不攔截按鍵，所以打字不受 WASD 影響。
+- 固定像素的尺寸一律經過 `theme.px()`，文字換行用 `wrap_to_width()` 跟著實際寬度：Windows 125–150% 縮放時字型會變大，寫死的像素會把字切掉。
 
 UI 透過 callback 與 backend 溝通：
 

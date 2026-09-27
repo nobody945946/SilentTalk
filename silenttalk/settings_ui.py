@@ -14,7 +14,16 @@ from typing import Any
 from silenttalk import theme
 from silenttalk.settings_schema import PAGES, Page, Setting
 from silenttalk.settings_store import SettingsError, SettingsStore
-from silenttalk.widgets import Chip, ScrollArea, Segmented, Stepper, Toggle, card
+from silenttalk.widgets import (
+    Chip,
+    Disclosure,
+    ScrollArea,
+    Segmented,
+    Stepper,
+    Toggle,
+    card,
+    wrap_to_width,
+)
 
 StatusCallback = Callable[[str], None]
 # Called with the merged section tables after a successful save, so the app
@@ -41,38 +50,51 @@ class SettingsPanel(tk.Frame):
         self._editors: dict[tuple[str, str], Any] = {}
         self._reset_chips: dict[tuple[str, str], Chip] = {}
         self._page_bodies: dict[str, tk.Frame] = {}
-        self._page_chips: dict[str, Chip] = {}
+        self._page_items: dict[str, tuple[tk.Frame, tk.Label]] = {}
+        self._custom_slots: dict[str, tk.Frame] = {}
+        self._settings: dict[tuple[str, str], Setting] = {}
         self._restart_pending = False
 
-        left = tk.Frame(self, bg=theme.SURFACE, width=150)
+        # A list of categories on the left, as in macOS System Settings and
+        # Windows 11 Settings; one category's settings on the right.
+        left = tk.Frame(self, bg=theme.SURFACE)
         left.pack(side="left", fill="y")
-        left.pack_propagate(False)
         tk.Label(
             left, text="設定", bg=theme.SURFACE, fg=theme.TEXT,
-            font=theme.font(14, "bold"),
-        ).pack(anchor="w", padx=16, pady=(14, 2))
+            font=theme.font(15, "bold"),
+        ).pack(anchor="w", padx=theme.px(18), pady=(theme.px(18), 0))
         tk.Label(
-            left, text="改完會自動存檔", bg=theme.SURFACE, fg=theme.DIM,
+            left, text="改完自動存檔", bg=theme.SURFACE, fg=theme.DIM,
             font=theme.font(9),
-        ).pack(anchor="w", padx=16, pady=(0, 10))
+        ).pack(anchor="w", padx=theme.px(18), pady=(0, theme.px(12)))
         self._nav = tk.Frame(left, bg=theme.SURFACE)
-        self._nav.pack(fill="x")
+        self._nav.pack(fill="x", padx=theme.px(8))
         self._restart_note = tk.Label(
-            left, text="", bg=theme.SURFACE, fg=theme.WARN, font=theme.font(8),
-            wraplength=118, justify="left",
+            left, text="", bg=theme.SURFACE, fg=theme.WARN, font=theme.font(9),
+            justify="left", anchor="w",
         )
-        self._restart_note.pack(side="bottom", anchor="w", padx=16, pady=12)
+        self._restart_note.pack(side="bottom", fill="x", padx=theme.px(18), pady=theme.px(14))
+        wrap_to_width(self._restart_note)
 
         right = tk.Frame(self, bg=theme.BG)
         right.pack(side="left", fill="both", expand=True)
         self._scroll = ScrollArea(right)
-        self._scroll.pack(fill="both", expand=True, padx=(18, 0))
+        self._scroll.pack(fill="both", expand=True, padx=(theme.px(24), 0), pady=(theme.px(18), 0))
 
         for page in PAGES:
-            chip = Chip(self._nav, page.label, lambda key=page.key: self.show(key), size=10)
-            chip.pack(fill="x", padx=10, pady=2)
-            self._page_chips[page.key] = chip
+            item = tk.Frame(self._nav, bg=theme.SURFACE, cursor="hand2")
+            item.pack(fill="x", pady=1)
+            label = tk.Label(
+                item, text=page.label, bg=theme.SURFACE, fg=theme.MUTED,
+                font=theme.font(10), anchor="w", padx=theme.px(12), pady=theme.px(6),
+            )
+            label.pack(fill="x")
+            for widget in (item, label):
+                widget.bind("<Button-1>", lambda _, key=page.key: self.show(key))
+            self._page_items[page.key] = (item, label)
             self._page_bodies[page.key] = self._build_page(page)
+        # Widest label + padding, measured instead of a fixed pixel width.
+        left.configure(width=max(theme.px(150), left.winfo_reqwidth()))
 
         self.reload()
         self.show(PAGES[0].key)
@@ -91,35 +113,79 @@ class SettingsPanel(tk.Frame):
             self._render_reset(section, key)
 
     def show(self, page_key: str) -> None:
+        if page_key not in self._page_bodies:
+            return
         for key, body in self._page_bodies.items():
             body.pack_forget()
-            self._page_chips[key].set_selected(key == page_key)
-        self._page_bodies[page_key].pack(fill="x")
-        self._scroll._canvas.yview_moveto(0.0)
+            item, label = self._page_items[key]
+            selected = key == page_key
+            item.configure(bg=theme.PANEL if selected else theme.SURFACE)
+            label.configure(
+                bg=theme.PANEL if selected else theme.SURFACE,
+                fg=theme.TEXT if selected else theme.MUTED,
+            )
+        self._page_bodies[page_key].pack(fill="x", padx=(0, theme.px(18)))
+        self._scroll.scroll_to_top()
+
+    def add_custom_group(self, page_key: str, build: Callable[[tk.Frame], None]) -> None:
+        """Settings kept outside config.toml (the voice picker, what the model
+        runs on) at the top of a page, built by the owner."""
+        build(self._custom_slots[page_key])
+
+    def value(self, section: str, key: str) -> Any:
+        return self._value_of(section, key)
+
+    def set_value(self, section: str, key: str, value: Any) -> None:
+        """Change a setting from elsewhere in the UI, exactly as its editor
+        here would: shown, saved and applied."""
+        setting = self._settings.get((section, key))
+        if setting is None:
+            return
+        self._editors[(section, key)].set(value)
+        self._changed(setting, value)
 
     # ---- building --------------------------------------------------------------
 
     def _build_page(self, page: Page) -> tk.Frame:
         body = tk.Frame(self._scroll.body, bg=theme.BG)
-        for group in page.groups:
+        tk.Label(
+            body, text=page.label, bg=theme.BG, fg=theme.TEXT, font=theme.font(15, "bold")
+        ).pack(anchor="w", pady=(0, theme.px(12)))
+        self._custom_slots[page.key] = tk.Frame(body, bg=theme.BG)
+        self._custom_slots[page.key].pack(fill="x")
+        everyday = [group for group in page.groups if not group.advanced]
+        advanced = [group for group in page.groups if group.advanced]
+        for group in everyday:
             box = card(body)
-            box.outer.pack(fill="x", pady=(0, 12), padx=(0, 14))
-            tk.Label(
-                box, text=group.title, bg=theme.PANEL, fg=theme.TEXT,
-                font=theme.font(11, "bold"),
-            ).pack(anchor="w")
-            if group.subtitle:
-                tk.Label(
-                    box, text=group.subtitle, bg=theme.PANEL, fg=theme.DIM,
-                    font=theme.font(9), wraplength=540, justify="left",
-                ).pack(anchor="w", pady=(0, 6))
-            for setting in group.settings:
-                self._build_row(box, setting)
+            box.outer.pack(fill="x", pady=(0, theme.px(12)))
+            self._build_group(box, group)
+        if advanced:
+            # Rarely touched: one click deeper.
+            more = Disclosure(body, "進階", "、".join(group.title for group in advanced))
+            more.pack(fill="x", pady=(0, theme.px(12)))
+            for group in advanced:
+                self._build_group(more.body, group)
         return body
 
+    def _build_group(self, box: tk.Frame, group: Any) -> None:
+        tk.Label(
+            box, text=group.title, bg=theme.PANEL, fg=theme.TEXT,
+            font=theme.font(11, "bold"),
+        ).pack(anchor="w", pady=(theme.px(4), 0))
+        if group.subtitle:
+            wrap_to_width(
+                tk.Label(
+                    box, text=group.subtitle, bg=theme.PANEL, fg=theme.DIM,
+                    font=theme.font(9), justify="left", anchor="w",
+                )
+            ).pack(anchor="w", fill="x", pady=(0, theme.px(4)))
+        for setting in group.settings:
+            self._build_row(box, setting)
+
     def _build_row(self, parent: tk.Frame, setting: Setting) -> None:
+        self._settings[(setting.section, setting.key)] = setting
         row = tk.Frame(parent, bg=theme.PANEL)
-        row.pack(fill="x", pady=(6, 0))
+        row.pack(fill="x", pady=(theme.px(8), 0))
         head = tk.Frame(row, bg=theme.PANEL)
         head.pack(fill="x")
         tk.Label(
@@ -128,20 +194,22 @@ class SettingsPanel(tk.Frame):
         ).pack(side="left")
         if setting.restart:
             tk.Label(
-                head, text="需重開", bg=theme.PANEL, fg=theme.WARN, font=theme.font(8)
-            ).pack(side="left", padx=(6, 0))
-        reset = Chip(head, "回預設", lambda s=setting: self._reset(s), size=8)
+                head, text="需重開", bg=theme.PANEL, fg=theme.WARN, font=theme.font(9)
+            ).pack(side="left", padx=(theme.px(6), 0))
+        reset = Chip(head, "回預設", lambda s=setting: self._reset(s), size=9)
         self._reset_chips[(setting.section, setting.key)] = reset
 
         editor = self._build_editor(row, setting)
-        editor.pack(anchor="w", pady=(4, 0))
+        editor.pack(anchor="w", pady=(theme.px(6), 0))
         self._editors[(setting.section, setting.key)] = editor
         if setting.help:
-            tk.Label(
-                row, text=setting.help, bg=theme.PANEL, fg=theme.DIM,
-                font=theme.font(8), wraplength=540, justify="left",
-            ).pack(anchor="w", pady=(3, 0))
-        tk.Frame(row, bg=theme.LINE, height=1).pack(fill="x", pady=(8, 0))
+            wrap_to_width(
+                tk.Label(
+                    row, text=setting.help, bg=theme.PANEL, fg=theme.DIM,
+                    font=theme.font(9), justify="left", anchor="w",
+                )
+            ).pack(anchor="w", fill="x", pady=(theme.px(4), 0))
+        tk.Frame(row, bg=theme.LINE, height=1).pack(fill="x", pady=(theme.px(10), 0))
 
     def _build_editor(self, row: tk.Frame, setting: Setting) -> Any:
         change = lambda value, s=setting: self._changed(s, value)  # noqa: E731
@@ -271,20 +339,20 @@ class _TextEditor(tk.Frame):
         super().__init__(master, bg=theme.PANEL)
         self._command = command
         self._var = tk.StringVar()
-        border = tk.Frame(self, bg=theme.LINE, padx=1, pady=1)
+        border = tk.Frame(self, bg=theme.PANEL_HI, padx=1, pady=1)
         border.pack(fill="x")
         entry = tk.Entry(
             border, textvariable=self._var, width=34, bg=theme.PANEL_HI,
             fg=theme.TEXT, insertbackground=theme.TEXT, relief="flat",
-            font=theme.font(10),
+            highlightthickness=0, font=theme.font(10),
         )
-        entry.pack(fill="x", ipady=3)
+        entry.pack(fill="x", ipady=theme.px(5), ipadx=theme.px(6))
         entry.bind("<FocusIn>", lambda _: border.configure(bg=theme.ACCENT))
         entry.bind("<FocusOut>", lambda _: self._commit(border))
         entry.bind("<Return>", lambda _: self._commit(border))
 
     def _commit(self, border: tk.Frame) -> None:
-        border.configure(bg=theme.LINE)
+        border.configure(bg=theme.PANEL_HI)
         self._command(self._var.get().strip())
 
     def get(self) -> str:

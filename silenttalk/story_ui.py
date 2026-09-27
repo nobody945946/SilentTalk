@@ -1,4 +1,9 @@
-"""AI 劇情模式: the conversation as a visual-novel scene with W/A/S/D choices."""
+"""選項模式: the latest line as a visual-novel dialogue box with W/A/S/D choices.
+
+The running transcript is not here: the chat page shows one transcript for
+every mode (silenttalk/chat_ui.py). Mood and the key reference live in the
+chat page header, so this panel is only the choice itself.
+"""
 
 from __future__ import annotations
 
@@ -13,9 +18,7 @@ from silenttalk.copilot.types import (
     ReplyLane,
     ReplySuggestions,
 )
-from silenttalk.widgets import Chip, card, hint_row
-
-MAX_LOG_TURNS = 60
+from silenttalk.widgets import hint_row, wrap_to_width
 
 _KEY_ALIASES = {"up": "w", "left": "a", "down": "s", "right": "d"}
 _CONFIRM_KEYS = {"return", "kp_enter", "space"}
@@ -57,78 +60,18 @@ class StoryPanel(tk.Frame):
         self._thinking_tick = 0
         self._thinking_about = ("", "")
         self._round = 0
-        self._speaker_tags: dict[int, str] = {}
-        self._log_turns = 0
         self._mood = MOODS[0]
 
-        # ---- scene header --------------------------------------------------
-        header = tk.Frame(self, bg=theme.BG)
-        header.pack(fill="x", padx=18, pady=(14, 8))
-        tk.Label(
-            header,
-            text="劇情模式",
-            bg=theme.BG,
-            fg=theme.TEXT,
-            font=theme.font(14, "bold"),
-        ).pack(side="left")
-        self._round_var = tk.StringVar(value="序章")
-        self._round_label = tk.Label(
-            header,
-            textvariable=self._round_var,
-            bg=theme.PANEL_TOP,
-            fg=theme.MUTED,
-            font=theme.font(9, "bold"),
-            padx=8,
-        )
-        self._round_label.pack(side="left", padx=(10, 0), pady=(3, 0))
-
-        moods = tk.Frame(header, bg=theme.BG)
-        moods.pack(side="right")
-        tk.Label(
-            moods, text="心情", bg=theme.BG, fg=theme.DIM, font=theme.font(9)
-        ).pack(side="left", padx=(0, 6))
-        self._mood_chips: dict[str, Chip] = {}
-        for mood in MOODS:
-            chip = Chip(moods, mood, lambda m=mood: self._pick_mood(m), size=8)
-            chip.pack(side="left", padx=(0, 3))
-            self._mood_chips[mood] = chip
-        self._render_moods()
-
-        # ---- transcript ----------------------------------------------------
-        log_card = card(self, bg=theme.SURFACE, padx=0, pady=0)
-        log_card.outer.pack(fill="x", padx=18)
-        self._log = tk.Text(
-            log_card,
-            height=6,
-            wrap="word",
-            bg=theme.SURFACE,
-            fg=theme.MUTED,
-            relief="flat",
-            padx=12,
-            pady=8,
-            font=theme.font(10),
-            cursor="arrow",
-            takefocus=0,
-            spacing1=2,
-            spacing3=2,
-        )
-        self._log.pack(fill="x")
-        self._log.tag_configure(
-            "self", foreground=theme.SELF_COLOR, font=theme.font(10, "bold")
-        )
-        self._log.tag_configure("muted", foreground=theme.DIM)
-        for index, color in enumerate(theme.SPEAKER_COLORS):
-            self._log.tag_configure(
-                f"speaker{index}", foreground=color, font=theme.font(10, "bold")
-            )
-        self._log.insert("end", "等待 Discord 語音裡有人開口…\n", "muted")
-        self._log.configure(state="disabled")
-
+        self._round = 0
         # ---- dialogue box (visual-novel style) -------------------------------
         dialogue_outer = tk.Frame(self, bg=theme.ACCENT, padx=0, pady=0)
-        dialogue_outer.pack(fill="x", padx=18, pady=(12, 0))
-        tk.Frame(dialogue_outer, bg=theme.ACCENT, width=4).pack(side="left", fill="y")
-        dialogue = tk.Frame(dialogue_outer, bg=theme.PANEL, padx=14, pady=10)
+        dialogue_outer.pack(fill="x", pady=(theme.px(12), 0))
+        tk.Frame(dialogue_outer, bg=theme.ACCENT, width=theme.px(3)).pack(
+            side="left", fill="y"
+        )
+        dialogue = tk.Frame(
+            dialogue_outer, bg=theme.PANEL, padx=theme.px(16), pady=theme.px(12)
+        )
         dialogue.pack(side="left", fill="both", expand=True)
         self._speaker_var = tk.StringVar(value="　")
         self._speaker_label = tk.Label(
@@ -140,16 +83,17 @@ class StoryPanel(tk.Frame):
         )
         self._speaker_label.pack(anchor="w")
         self._line_var = tk.StringVar(value="……")
-        tk.Label(
-            dialogue,
-            textvariable=self._line_var,
-            bg=theme.PANEL,
-            fg=theme.TEXT,
-            font=theme.font(14),
-            justify="left",
-            anchor="w",
-            wraplength=600,
-        ).pack(fill="x", pady=(2, 0))
+        wrap_to_width(
+            tk.Label(
+                dialogue,
+                textvariable=self._line_var,
+                bg=theme.PANEL,
+                fg=theme.TEXT,
+                font=theme.font(14),
+                justify="left",
+                anchor="w",
+            )
+        ).pack(fill="x", pady=(theme.px(2), 0))
 
         self._status_var = tk.StringVar(value="選項會在對方說完話後出現")
         self._status_label = tk.Label(
@@ -157,24 +101,29 @@ class StoryPanel(tk.Frame):
             textvariable=self._status_var,
             bg=theme.BG,
             fg=theme.MUTED,
-            font=theme.font(9),
+            font=theme.font(10),
             anchor="w",
             justify="left",
-            wraplength=640,
         )
-        self._status_label.pack(fill="x", padx=18, pady=(8, 6))
+        self._status_label.pack(fill="x", pady=(theme.px(10), theme.px(6)))
+        wrap_to_width(self._status_label)
 
         # ---- choices ---------------------------------------------------------
         cross = tk.Frame(self, bg=theme.BG)
-        cross.pack(fill="x", padx=15)
+        cross.pack(fill="x", padx=(0, 0))
         cross.columnconfigure(0, weight=1, uniform="choice")
         cross.columnconfigure(1, weight=1, uniform="choice")
         self._cards: dict[str, _ChoiceCard] = {}
         for lane in REPLY_LANES:
             row, column, span = _PLACEMENT.get(lane.key, (3, 0, 2))
-            choice = _ChoiceCard(cross, lane, wraplength=560 if span == 2 else 250)
+            choice = _ChoiceCard(cross, lane)
             choice.grid(
-                row=row, column=column, columnspan=span, sticky="nsew", padx=3, pady=3
+                row=row,
+                column=column,
+                columnspan=span,
+                sticky="nsew",
+                padx=(0 if column == 0 else theme.px(3), 0 if column + span == 2 else theme.px(3)),
+                pady=theme.px(3),
             )
             choice.bind_all_parts(
                 "<Button-1>", lambda _, key=lane.key: self._select(key)
@@ -184,7 +133,17 @@ class StoryPanel(tk.Frame):
             )
             self._cards[lane.key] = choice
 
-        hint_row(
+        # The key reference folds away: after a few rounds nobody reads it.
+        keys = tk.Label(
+            self,
+            text="⌨ 快捷鍵",
+            bg=theme.BG,
+            fg=theme.DIM,
+            font=theme.font(9),
+            cursor="hand2",
+        )
+        keys.pack(anchor="w", pady=(theme.px(10), 0))
+        self._hints = hint_row(
             self,
             (
                 ("W A S D", "選擇"),
@@ -195,7 +154,8 @@ class StoryPanel(tk.Frame):
                 ("M", "換心情"),
                 ("Esc", "收起"),
             ),
-        ).pack(fill="x", padx=18, pady=(10, 14))
+        )
+        keys.bind("<Button-1>", lambda _: self._toggle_hints())
 
         self._render_cards()
 
@@ -208,7 +168,12 @@ class StoryPanel(tk.Frame):
 
     def set_mood(self, mood: str) -> None:
         self._mood = mood
-        self._render_moods()
+
+    def _toggle_hints(self) -> None:
+        if self._hints.winfo_ismapped():
+            self._hints.pack_forget()
+        else:
+            self._hints.pack(fill="x", pady=(theme.px(6), 0))
 
     def handle_key(self, keysym: str) -> bool:
         key = keysym.lower()
@@ -243,29 +208,10 @@ class StoryPanel(tk.Frame):
         return False
 
     def add_turn(self, turn: ConversationTurn) -> None:
-        self._log.configure(state="normal")
-        if self._log_turns == 0:
-            self._log.delete("1.0", "end")
-        if turn.is_self:
-            # "你" in copilot mode; the character's name in character mode.
-            name, tag = turn.speaker_name or "你", "self"
-        else:
-            name, tag = turn.speaker_name, self._speaker_tag(turn.speaker_id)
-        self._log.insert("end", f"{name}  ", tag)
-        self._log.insert("end", turn.text + "\n")
-        self._log_turns += 1
-        if self._log_turns > MAX_LOG_TURNS:
-            self._log.delete("1.0", "2.0")
-            self._log_turns -= 1
-        self._log.see("end")
-        self._log.configure(state="disabled")
-
+        """The newest line from someone else becomes the dialogue box."""
         if not turn.is_self:
-            color = theme.SPEAKER_COLORS[
-                int(self._speaker_tag(turn.speaker_id)[7:]) % len(theme.SPEAKER_COLORS)
-            ]
             self._speaker_var.set(turn.speaker_name)
-            self._speaker_label.configure(fg=color)
+            self._speaker_label.configure(fg=theme.speaker_color(turn.speaker_id))
             self._line_var.set(turn.text)
 
     def set_thinking(self, speaker: str, text: str) -> None:
@@ -299,8 +245,6 @@ class StoryPanel(tk.Frame):
 
         if fresh:
             self._round += 1
-            self._round_var.set(f"第 {self._round} 回合")
-            self._round_label.configure(bg=theme.ACCENT, fg=theme.ACCENT_INK)
         self._choices = {lane.key: suggestions.text_for(lane) for lane in REPLY_LANES}
         if self._selected is None or not self._choices.get(self._selected):
             self._selected = None
@@ -330,17 +274,6 @@ class StoryPanel(tk.Frame):
         if self._on_mood is not None:
             self._on_mood(mood)
         self._set_status(f"心情換成「{mood}」，下一次的選項會帶這個語氣　R＝現在就重想")
-
-    def _render_moods(self) -> None:
-        for mood, chip in self._mood_chips.items():
-            chip.set_selected(mood == self._mood)
-
-    def _speaker_tag(self, speaker_id: int) -> str:
-        tag = self._speaker_tags.get(speaker_id)
-        if tag is None:
-            tag = f"speaker{len(self._speaker_tags) % len(theme.SPEAKER_COLORS)}"
-            self._speaker_tags[speaker_id] = tag
-        return tag
 
     def _select(self, key: str) -> None:
         self.focus_set()
@@ -413,7 +346,7 @@ class StoryPanel(tk.Frame):
         if enabled:
             self._choices = {lane.key: "" for lane in REPLY_LANES}
             self._selected = None
-            self._set_status(f"角色模式：{name or '角色'} 會自己接話（F9 停止播放；再按一次頂部開關回到選項模式）")
+            self._set_status(f"{name or '角色'} 正在自己聊天")
         else:
             self._set_status("回到選項模式：下一句開始會出現四個選項")
         self._render_cards()
@@ -441,14 +374,14 @@ class StoryPanel(tk.Frame):
 class _ChoiceCard(tk.Frame):
     """One lane: colored stripe, keycap, lane name, reply text."""
 
-    def __init__(self, master: tk.Misc, lane: ReplyLane, *, wraplength: int) -> None:
+    def __init__(self, master: tk.Misc, lane: ReplyLane) -> None:
         super().__init__(
-            master, bg=theme.PANEL, highlightthickness=1, highlightbackground=theme.LINE
+            master, bg=theme.PANEL, highlightthickness=1, highlightbackground=theme.PANEL
         )
         self._color = theme.lane_color(lane.code)
         self._tint = theme.mix(theme.PANEL, self._color, 0.16)
         self._stripe = tk.Frame(
-            self, bg=theme.mix(theme.PANEL, self._color, 0.45), width=4
+            self, bg=theme.mix(theme.PANEL, self._color, 0.45), width=theme.px(3)
         )
         self._stripe.grid(row=0, column=0, rowspan=2, sticky="ns")
         self._keycap = tk.Label(
@@ -461,17 +394,22 @@ class _ChoiceCard(tk.Frame):
             pady=2,
         )
         self._keycap.grid(
-            row=0, column=1, rowspan=2, sticky="n", padx=(10, 10), pady=10
+            row=0,
+            column=1,
+            rowspan=2,
+            sticky="n",
+            padx=(theme.px(12), theme.px(12)),
+            pady=theme.px(12),
         )
         self._label = tk.Label(
             self,
             text=lane.label,
             bg=theme.PANEL,
             fg=self._color,
-            font=theme.font(9, "bold"),
+            font=theme.font(9),
             anchor="w",
         )
-        self._label.grid(row=0, column=2, sticky="w", pady=(8, 0))
+        self._label.grid(row=0, column=2, sticky="w", pady=(theme.px(10), 0))
         self._text = tk.Label(
             self,
             text="",
@@ -480,9 +418,11 @@ class _ChoiceCard(tk.Frame):
             font=theme.font(12),
             anchor="w",
             justify="left",
-            wraplength=wraplength,
         )
-        self._text.grid(row=1, column=2, sticky="w", padx=(0, 12), pady=(0, 10))
+        self._text.grid(
+            row=1, column=2, sticky="ew", padx=(0, theme.px(14)), pady=(0, theme.px(12))
+        )
+        wrap_to_width(self._text)
         self.columnconfigure(2, weight=1)
 
     def bind_all_parts(
@@ -503,7 +443,7 @@ class _ChoiceCard(tk.Frame):
         live = selected and bool(text) and not spent
         self.configure(
             bg=background,
-            highlightbackground=self._color if selected else theme.LINE,
+            highlightbackground=self._color if selected else theme.PANEL,
         )
         self._stripe.configure(
             bg=self._color if selected else theme.mix(theme.PANEL, self._color, 0.45)

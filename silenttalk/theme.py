@@ -1,7 +1,10 @@
-"""Design tokens for the Tk UI: one dark palette, one type scale.
+"""Design tokens for the Tk UI: one dark palette, one type scale, one spacing
+scale that follows the display's scaling.
 
-Every widget reads colors from here and fonts through `font()`, so a palette
-change is a one-file edit. `init_fonts()` must run after the Tk root exists.
+Every widget reads colors from here, fonts through `font()` and fixed pixel
+sizes through `px()`, so a palette change is a one-file edit and nothing is
+clipped at 125-150% Windows scaling. `init_fonts()` must run after the Tk
+root exists.
 """
 
 from __future__ import annotations
@@ -22,21 +25,25 @@ FONT_CANDIDATES = (
 FONT = FONT_CANDIDATES[0]
 MONO = "Consolas"
 
-# Surfaces, darkest to lightest.
-BG = "#0e1016"
-SURFACE = "#141720"
-PANEL = "#1a1e29"
-PANEL_HI = "#222736"
-PANEL_TOP = "#2a3042"
-LINE = "#2c3244"
+# Surfaces, darkest to lightest. Neutral greys with a hint of blue, close to
+# the Windows 11 / macOS dark themes: depth comes from surface steps, not
+# outlines.
+BG = "#16171c"
+SURFACE = "#1c1d23"
+PANEL = "#23242b"
+PANEL_HI = "#2b2c34"
+PANEL_TOP = "#35363f"
+LINE = "#2e2f37"
+# The raised segment of a segmented control, the chosen item of a list.
+SELECTED = "#484a55"
 
-TEXT = "#e9ecf4"
-MUTED = "#9aa2b6"
-DIM = "#646c80"
+TEXT = "#ececf1"
+MUTED = "#a5a8b3"
+DIM = "#727682"
 
 ACCENT = "#8b7cff"
-ACCENT_HI = "#a699ff"
-ACCENT_INK = "#0f0c26"
+ACCENT_HI = "#aa9fff"
+ACCENT_INK = "#14112e"
 
 OK = "#5fd38d"
 WARN = "#f5b94f"
@@ -54,8 +61,22 @@ LANE_COLORS = {
 }
 
 
+def speaker_color(speaker_id: int) -> str:
+    """The same person keeps the same color everywhere (transcript, dialogue)."""
+    return SPEAKER_COLORS[speaker_id % len(SPEAKER_COLORS)]
+
+
 def lane_color(code: str) -> str:
     return LANE_COLORS.get(code, ACCENT)
+
+
+# Pixels per logical pixel: 1.0 at 96 DPI, 1.5 at Windows' 150%. Fonts are in
+# points and scale by themselves; anything sized in pixels goes through px().
+SCALE = 1.0
+
+
+def px(value: float) -> int:
+    return max(1, round(value * SCALE))
 
 
 def font(size: int = 10, weight: str = "normal") -> tuple:
@@ -76,7 +97,8 @@ def mix(color: str, other: str, amount: float) -> str:
 
 
 def init_fonts(root: tk.Misc, override: str | None = None) -> str:
-    global FONT, MONO
+    global FONT, MONO, SCALE
+    SCALE = max(1.0, root.winfo_fpixels("1i") / 96.0)
     families = set(tkfont.families(root))
     if override:
         FONT = override

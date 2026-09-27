@@ -1,12 +1,21 @@
 """Screenshot the F8 popup in each page/state with fake data (no Discord).
 
 Usage (from the repo root):
-    Windows: python scripts/dev/ui_preview.py
-    Linux:   xvfb-run -a python scripts/dev/ui_preview.py --font "Noto Sans CJK TC"
-Needs Pillow (pip install pillow). PNGs land in .runtime/dev/ui_preview/;
-open them and check the layout after any change to ui.py, story_ui.py,
-persona_ui.py or widgets.py. The script also asserts the key flow (double-press
-sends, R regenerates, M changes mood) and exits non-zero if it breaks.
+    Windows: python scripts/dev/ui_preview.py [--scale 1.5]
+    Linux:   xvfb-run -a -s "-screen 0 2400x1600x24" \
+                 .runtime/tools/ui-preview-env/bin/python scripts/dev/ui_preview.py \
+                 --font "Noto Sans CJK TC" [--scale 1.5]
+
+On Linux use the ui-preview-env interpreter (conda-forge Tk built with Xft):
+the project venv's Tk has no Xft, draws Chinese with X bitmap fonts and turns
+bold text into boxes, so its screenshots say nothing about the real look.
+--scale emulates Windows display scaling (fonts grow, fixed pixels do not),
+which is where clipped text shows up.
+
+Needs Pillow. PNGs land in .runtime/dev/ui_preview/; open them and check the
+layout after any UI change. The script also asserts the key flow
+(double-press sends, R regenerates, M changes mood, the character view starts
+and pauses) and exits non-zero if it breaks.
 """
 
 from __future__ import annotations
@@ -27,7 +36,25 @@ OUT_DIR = PROJECT_DIR / ".runtime" / "dev" / "ui_preview"
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--font", help="override the UI font (Linux has no JhengHei)")
+    parser.add_argument(
+        "--scale",
+        type=float,
+        default=1.0,
+        help="emulate Windows display scaling (1.25, 1.5): fonts grow, pixels do not",
+    )
     args = parser.parse_args()
+    if args.scale != 1.0:
+        import tkinter as tk
+
+        original_init = tk.Tk.__init__
+
+        def scaled_init(self, *a, **k):  # type: ignore[no-untyped-def]
+            original_init(self, *a, **k)
+            # Tk's points-to-pixels factor at 96 DPI is 96/72; Windows at
+            # 150% reports 144 DPI.
+            self.tk.call("tk", "scaling", 96 * args.scale / 72)
+
+        tk.Tk.__init__ = scaled_init  # type: ignore[method-assign]
 
     from PIL import ImageGrab
 
@@ -167,6 +194,9 @@ def main() -> int:
     shot("7_manual")
     ui.show_page("persona")
     shot("8_persona")
+    for section in ui.persona_panel._sections:
+        section.set_open(True)
+    pump()
     ui.persona_panel._scroll._canvas.yview_moveto(0.55)
     shot("9_persona_scrolled")
     ui.persona_panel._scroll._canvas.yview_moveto(0.8)
@@ -187,12 +217,13 @@ def main() -> int:
     )
     ui.settings_panel.show("chat")
     shot("15_settings_changed")
-    ui.show_page("story")
-    ui._toggle_character()
+    ui.show_page("character")
+    shot("12a_character_paused")
+    ui._character_view._toggle()  # 開始
     ui.add_conversation_turn(ConversationTurn(12, "小雨", "凱哥你晚餐要吃什麼"))
     ui.add_conversation_turn(ConversationTurn(0, "凱哥", "欸我都可以啦，拉麵？", is_self=True))
     shot("12_character")
-    ui._toggle_character()
+    ui.show_page("story")  # speaking for you again pauses the character
     ui.root.destroy()
 
     expected = "上一把就是這樣被架，我覺得先丟煙再進比較穩"

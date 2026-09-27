@@ -79,7 +79,7 @@ def voice_style_label(key: str) -> str:
 # Chinese EdgeTTS voices a persona can speak with (verified against
 # edge_tts.list_voices() on 2026-09-27). "" = follow the voice page.
 PERSONA_VOICES: tuple[tuple[str, str], ...] = (
-    ("", "跟隨「聲音」頁"),
+    ("", "跟隨預設聲音"),
     ("zh-TW-HsiaoChenNeural", "台灣｜女聲・溫和"),
     ("zh-TW-HsiaoYuNeural", "台灣｜女聲・年輕"),
     ("zh-TW-YunJheNeural", "台灣｜男聲"),

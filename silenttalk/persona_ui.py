@@ -31,11 +31,12 @@ from silenttalk.widgets import (
     Avatar,
     Button,
     Chip,
+    Disclosure,
     Field,
     ScrollArea,
     Segmented,
     TraitSlider,
-    card,
+    wrap_to_width,
 )
 
 ApplyCallback = Callable[[Persona], None]
@@ -44,46 +45,41 @@ PreviewCallback = Callable[[Persona, str], None]
 
 NONE_ID = "none"
 
-# (section title, subtitle, fields). Fields are keys of TEXT_FIELDS, or the
-# special "traits" / "reply_length" / "relationships" editors.
-SECTIONS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+# (section title, subtitle, fields, open at first). Fields are keys of
+# TEXT_FIELDS, or the special "traits" / "reply_length" / "relationships" /
+# "voice" editors. Ordered by how often people come back to them: who the
+# character is to whom stays open, the rest is one click deeper.
+SECTIONS: tuple[tuple[str, str, tuple[str, ...], bool], ...] = (
     (
-        "基本資料",
-        "你是誰。名字會讓 AI 用第一人稱代入。",
-        ("nickname", "identity", "background"),
+        "基本",
+        "別人怎麼叫你、你是誰，以及你和頻道裡每個人的關係。",
+        ("nickname", "identity", "relationships"),
+        True,
     ),
-    ("個性", "點圓點調整；正中間＝不特別強調，不會寫進 prompt。", ("traits",)),
     (
-        "內心",
+        "個性與說話方式",
+        "代表台詞最能讓 AI 抓到語氣，建議至少寫兩句。",
+        ("traits", "speech_style", "catchphrases", "humor_style", "reply_length", "sample_lines"),
+        False,
+    ),
+    (
+        "背景與內心",
         "慾望決定你會想把話題帶去哪；雷點決定你什麼時候會反對。",
-        ("desires", "fears", "values", "pet_peeves", "secret"),
+        ("background", "desires", "fears", "values", "pet_peeves", "recent", "knowledge", "secret"),
+        False,
     ),
-    (
-        "說話方式",
-        "代表台詞是小模型最能抓住語氣的線索，建議至少寫兩句。",
-        ("speech_style", "catchphrases", "humor_style", "reply_length", "sample_lines"),
-    ),
-    (
-        "近況與專長",
-        "讓回覆有料可聊，也避免 AI 假裝懂你不懂的東西。",
-        ("recent", "knowledge"),
-    ),
-    (
-        "人際關係",
-        "寫 Discord 顯示名稱，包括你自己：例如「你的名字：我老公」就會讓角色把你當老公。",
-        ("relationships",),
-    ),
-    ("底線", "無論如何都不能說出口的話。", ("boundaries",)),
+    ("底線", "無論如何都不能說出口的話。", ("boundaries",), False),
     (
         "聲音",
-        "這個角色講話的聲音。設定後，Bot 說的每句話（手動、選項、角色模式）都用它；不會影響 AI 想出來的內容。",
+        "這個角色講話的聲音；Bot 說的每句話都會用它，不影響 AI 想出來的內容。",
         ("voice",),
+        False,
     ),
 )
 MULTILINE = {"background": 3, "sample_lines": 3, "speech_style": 2, "desires": 2}
 HINTS = {
     "catchphrases": "例：穩啦、笑死。AI 只會偶爾帶到，不會每句都用。",
-    "nickname": "角色模式靠這些字判斷有沒有人在叫它。語音常被聽錯的寫法也一起寫進來（例：凱哥、開哥）。",
+    "nickname": "用「、」分隔。語音常被聽錯的寫法也可以寫進來（例：凱哥、開哥）。",
     "sample_lines": "一行一句，最多取前 4 句。",
     "secret": "AI 知道但不會主動講，會影響迴避或轉移話題的方式。",
 }
@@ -115,7 +111,7 @@ class PersonaPanel(tk.Frame):
         self._relation_rows: list[tuple[tk.Frame, tk.StringVar, tk.StringVar]] = []
 
         # ---- left: persona list ----------------------------------------------
-        left = tk.Frame(self, bg=theme.SURFACE, width=210)
+        left = tk.Frame(self, bg=theme.SURFACE, width=theme.px(230))
         left.pack(side="left", fill="y")
         left.pack_propagate(False)
         tk.Label(
@@ -123,19 +119,19 @@ class PersonaPanel(tk.Frame):
             text="人設",
             bg=theme.SURFACE,
             fg=theme.TEXT,
-            font=theme.font(14, "bold"),
-        ).pack(anchor="w", padx=16, pady=(14, 2))
+            font=theme.font(15, "bold"),
+        ).pack(anchor="w", padx=theme.px(18), pady=(theme.px(18), 0))
         tk.Label(
             left,
-            text="AI 會用這個身分替你想回覆",
+            text="Bot 扮演或替你說話時的身分",
             bg=theme.SURFACE,
             fg=theme.DIM,
             font=theme.font(9),
-        ).pack(anchor="w", padx=16, pady=(0, 10))
+        ).pack(anchor="w", padx=theme.px(18), pady=(0, theme.px(12)))
         self._list = tk.Frame(left, bg=theme.SURFACE)
         self._list.pack(fill="x")
         actions = tk.Frame(left, bg=theme.SURFACE)
-        actions.pack(fill="x", side="bottom", padx=12, pady=12)
+        actions.pack(fill="x", side="bottom", padx=theme.px(12), pady=theme.px(14))
         Button(actions, "＋ 新人設", self._new, kind="secondary", size=9).pack(
             side="left", fill="x", expand=True
         )
@@ -148,7 +144,7 @@ class PersonaPanel(tk.Frame):
         right.pack(side="left", fill="both", expand=True)
 
         bar = tk.Frame(right, bg=theme.BG)
-        bar.pack(fill="x", padx=18, pady=(14, 8))
+        bar.pack(fill="x", padx=theme.px(24), pady=(theme.px(18), theme.px(12)))
         self._avatar = Avatar(bar, 40, bg=theme.BG)
         self._avatar.pack(side="left")
         name_box = tk.Frame(bar, bg=theme.BG)
@@ -161,10 +157,20 @@ class PersonaPanel(tk.Frame):
             fg=theme.TEXT,
             insertbackground=theme.TEXT,
             relief="flat",
+            highlightthickness=1,
+            highlightbackground=theme.BG,
+            highlightcolor=theme.ACCENT,
             font=theme.font(15, "bold"),
             width=14,
         )
         self._name_entry.pack(anchor="w", fill="x")
+        # Looks like a title until you hover it; then it shows it is editable.
+        self._name_entry.bind(
+            "<Enter>", lambda _: self._name_entry.configure(highlightbackground=theme.LINE)
+        )
+        self._name_entry.bind(
+            "<Leave>", lambda _: self._name_entry.configure(highlightbackground=theme.BG)
+        )
         self._name_var.trace_add("write", lambda *_: self._changed())
         self._subtitle = tk.Label(
             name_box, text="", bg=theme.BG, fg=theme.DIM, font=theme.font(9), anchor="w"
@@ -186,7 +192,7 @@ class PersonaPanel(tk.Frame):
         self._use_button.pack(side="left", padx=(6, 0))
 
         self._scroll = ScrollArea(right)
-        self._scroll.pack(fill="both", expand=True, padx=(18, 0))
+        self._scroll.pack(fill="both", expand=True, padx=(theme.px(24), 0))
         body = self._scroll.body
         self._blank_note = tk.Label(
             body,
@@ -200,8 +206,9 @@ class PersonaPanel(tk.Frame):
             justify="left",
         )
         self._editor = tk.Frame(body, bg=theme.BG)
-        for title, subtitle, keys in SECTIONS:
-            self._build_section(self._editor, title, subtitle, keys)
+        self._sections: list[Disclosure] = []
+        for title, subtitle, keys, opened in SECTIONS:
+            self._build_section(self._editor, title, subtitle, keys, opened)
         self._build_preview(self._editor)
 
         self.reload()
@@ -238,33 +245,28 @@ class PersonaPanel(tk.Frame):
     # ---- building --------------------------------------------------------------
 
     def _build_section(
-        self, parent: tk.Frame, title: str, subtitle: str, keys: tuple[str, ...]
+        self,
+        parent: tk.Frame,
+        title: str,
+        subtitle: str,
+        keys: tuple[str, ...],
+        opened: bool,
     ) -> None:
-        box = card(parent)
-        box.outer.pack(fill="x", pady=(0, 12), padx=(0, 14))
-        tk.Label(
-            box, text=title, bg=theme.PANEL, fg=theme.TEXT, font=theme.font(11, "bold")
-        ).pack(anchor="w")
-        tk.Label(
-            box,
-            text=subtitle,
-            bg=theme.PANEL,
-            fg=theme.DIM,
-            font=theme.font(9),
-            wraplength=560,
-            justify="left",
-        ).pack(anchor="w", pady=(0, 8))
+        section = Disclosure(parent, title, subtitle, opened=opened)
+        section.pack(fill="x", pady=(0, theme.px(12)), padx=(0, theme.px(18)))
+        self._sections.append(section)
+        box = section.body
         for key in keys:
             if key == "traits":
                 for axis in TRAIT_AXES:
                     slider = TraitSlider(
                         box, axis.low, axis.high, lambda _v: self._changed()
                     )
-                    slider.pack(anchor="w", pady=3)
+                    slider.pack(anchor="w", pady=theme.px(3))
                     self._sliders[axis.key] = slider
             elif key == "reply_length":
                 row = tk.Frame(box, bg=theme.PANEL)
-                row.pack(fill="x", pady=(2, 8))
+                row.pack(fill="x", pady=(theme.px(4), theme.px(10)))
                 tk.Label(
                     row,
                     text="回覆長度",
@@ -285,11 +287,28 @@ class PersonaPanel(tk.Frame):
             elif key == "voice":
                 self._build_voice(box)
             elif key == "relationships":
+                tk.Label(
+                    box, text="人際關係", bg=theme.PANEL, fg=theme.MUTED, font=theme.font(9)
+                ).pack(anchor="w")
+                wrap_to_width(
+                    tk.Label(
+                        box,
+                        text=(
+                            "左邊填 Discord 顯示名稱（也填你自己），右邊從角色的角度寫這個人是誰。"
+                            "例：「阿明」「我老公，結婚三年」→ 角色會把阿明當老公。"
+                        ),
+                        bg=theme.PANEL,
+                        fg=theme.DIM,
+                        font=theme.font(9),
+                        justify="left",
+                        anchor="w",
+                    )
+                ).pack(anchor="w", fill="x", pady=(0, theme.px(6)))
                 self._relations = tk.Frame(box, bg=theme.PANEL)
                 self._relations.pack(fill="x")
                 Button(
                     box, "＋ 新增一位", self._add_relation_row, kind="ghost", size=9
-                ).pack(anchor="w", pady=(6, 0))
+                ).pack(anchor="w", pady=(theme.px(6), 0))
             else:
                 label, _, limit = TEXT_FIELDS[key]
                 field = Field(
@@ -300,7 +319,7 @@ class PersonaPanel(tk.Frame):
                     hint=HINTS.get(key, ""),
                     on_change=self._changed,
                 )
-                field.pack(fill="x", pady=(0, 8))
+                field.pack(fill="x", pady=(0, theme.px(10)))
                 self._fields[key] = field
 
     def _build_voice(self, box: tk.Frame) -> None:
@@ -353,23 +372,24 @@ class PersonaPanel(tk.Frame):
         self._on_preview(draft, text)
 
     def _build_preview(self, parent: tk.Frame) -> None:
-        box = card(parent, bg=theme.SURFACE)
-        box.outer.pack(fill="x", pady=(0, 16), padx=(0, 14))
+        section = Disclosure(
+            parent,
+            "AI 實際看到的人設",
+            "上面寫的東西整理後給模型的樣子，以及長度。",
+            bg=theme.SURFACE,
+        )
+        section.pack(fill="x", pady=(0, theme.px(18)), padx=(0, theme.px(18)))
+        box = section.body
         top = tk.Frame(box, bg=theme.SURFACE)
         top.pack(fill="x")
-        tk.Label(
-            top,
-            text="AI 實際看到的人設",
-            bg=theme.SURFACE,
-            fg=theme.TEXT,
-            font=theme.font(11, "bold"),
-        ).pack(side="left")
         self._meter_text = tk.Label(
             top, text="", bg=theme.SURFACE, fg=theme.MUTED, font=theme.font(9)
         )
-        self._meter_text.pack(side="right")
-        self._meter = tk.Canvas(box, height=6, bg=theme.SURFACE, highlightthickness=0)
-        self._meter.pack(fill="x", pady=(6, 8))
+        self._meter_text.pack(side="left")
+        self._meter = tk.Canvas(
+            box, height=theme.px(6), bg=theme.SURFACE, highlightthickness=0
+        )
+        self._meter.pack(fill="x", pady=(theme.px(6), theme.px(8)))
         self._preview = tk.Text(
             box,
             height=8,
@@ -381,7 +401,7 @@ class PersonaPanel(tk.Frame):
             takefocus=0,
         )
         self._preview.pack(fill="x")
-        tk.Label(
+        note = tk.Label(
             box,
             text=(
                 f"建議控制在 {RECOMMENDED_PROMPT_CHARS} 字內：太長的人設會讓本機小模型"
@@ -389,10 +409,11 @@ class PersonaPanel(tk.Frame):
             ),
             bg=theme.SURFACE,
             fg=theme.DIM,
-            font=theme.font(8),
-            wraplength=560,
+            font=theme.font(9),
             justify="left",
-        ).pack(anchor="w", pady=(6, 0))
+            anchor="w",
+        )
+        wrap_to_width(note).pack(anchor="w", fill="x", pady=(theme.px(6), 0))
 
     # ---- list --------------------------------------------------------------------
 
@@ -412,7 +433,7 @@ class PersonaPanel(tk.Frame):
         bg = theme.PANEL_HI if editing else theme.SURFACE
         row = tk.Frame(self._list, bg=bg, cursor="hand2")
         row.pack(fill="x", padx=8, pady=1)
-        marker = tk.Frame(row, bg=theme.ACCENT if editing else bg, width=3)
+        marker = tk.Frame(row, bg=theme.ACCENT if editing else bg, width=theme.px(3))
         marker.pack(side="left", fill="y")
         avatar = Avatar(row, 28, bg=bg)
         avatar.set_name("" if persona_id == NONE_ID else name)
@@ -537,9 +558,10 @@ class PersonaPanel(tk.Frame):
                 fg=theme.TEXT,
                 insertbackground=theme.TEXT,
                 relief="flat",
+                highlightthickness=0,
                 font=theme.font(10),
             )
-            entry.pack(fill="x", ipady=3)
+            entry.pack(fill="x", ipady=theme.px(5), ipadx=theme.px(6))
             var.trace_add("write", lambda *_: self._changed())
         remove = tk.Label(
             frame,
