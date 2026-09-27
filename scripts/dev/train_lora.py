@@ -41,6 +41,9 @@ def main() -> int:
     parser.add_argument("--holdout", type=float, default=0.03)
     parser.add_argument("--max-steps", type=int, default=-1, help="dry runs only")
     parser.add_argument(
+        "--max-length", type=int, default=2048, help="tokens; longer rows are truncated"
+    )
+    parser.add_argument(
         "--check",
         action="store_true",
         help="build everything, show which tokens are trained on, one short forward; no training",
@@ -111,7 +114,7 @@ def main() -> int:
         save_strategy="no",
         report_to=[],
         completion_only_loss=True,
-        max_length=2048,
+        max_length=args.max_length,
     )
     trainer = SFTTrainer(
         model=model,

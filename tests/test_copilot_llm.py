@@ -317,11 +317,11 @@ class _Scripted(LocalReplyModel):
         self.gate, self.line = gate, line
         self.requests: list[tuple[str, list[dict[str, str]]]] = []
 
-    def _request_gate(self, messages):
+    def _request_gate(self, messages, character=True):
         self.requests.append(("gate", messages))
         return self.gate
 
-    def _request_messages(self, messages, on_lines=None, max_tokens=240):
+    def _request_messages(self, messages, on_lines=None, max_tokens=240, character=False):
         self.requests.append(("line", messages))
         return self.line
 
@@ -403,3 +403,11 @@ def test_a_line_that_mostly_repeats_what_was_said_is_dropped() -> None:
     # Sharing a phrase is not echoing.
     assert model._parse_character_line("好啦好啦，油錢我們分吧", "讚喔 那油錢我們分")
     assert model._parse_character_line("穩啦", "穩") == "穩啦"
+
+
+def test_only_character_requests_use_the_lora() -> None:
+    model = LocalReplyModel(Path("unused.gguf"), lora_path=Path("adapter.gguf"))
+    assert model._lora_field(True) == {}  # not loaded until the server starts with it
+    model._lora_loaded = True
+    assert model._lora_field(True) == {"lora": [{"id": 0, "scale": 1.0}]}
+    assert model._lora_field(False) == {"lora": [{"id": 0, "scale": 0.0}]}

@@ -101,6 +101,11 @@ class CopilotRuntime:
             low_vram=config.llm_low_vram,
             can_type=can_type,
             ai_honesty=config.character_ai_honesty,
+            lora_path=(
+                runtime_dir / "models" / "llm" / config.character_lora
+                if config.character_lora
+                else None
+            ),
         )
         self._stt = transcriber(
             asr_dir,

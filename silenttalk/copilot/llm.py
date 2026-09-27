@@ -215,8 +215,12 @@ class LocalReplyModel:
         low_vram: bool = True,
         can_type: bool = False,
         ai_honesty: str = "in_character",
+        lora_path: Path | None = None,
     ) -> None:
         self._model_path = model_path
+        self._lora_path = lora_path
+        # Set once the adapter is on llama-server's command line.
+        self._lora_loaded = False
         self._port = port
         self._context_size = context_size
         self._max_reply_chars = max(24, max_reply_chars)
@@ -276,6 +280,13 @@ class LocalReplyModel:
             # Needed so chat_template_kwargs.enable_thinking reaches Qwen3's template.
             "--jinja",
         ]
+        self._lora_loaded = False
+        if self._lora_path is not None:
+            if self._lora_path.is_file():
+                args += ["--lora", str(self._lora_path)]
+                self._lora_loaded = True
+            else:
+                _LOG.warning("copilot_lora_missing file=%s", self._lora_path.name)
         _LOG.info(
             "copilot_llm_start model=%s context=%d threads=%d gpu_layers=%d low_vram=%s",
             self._model_path.name,
@@ -401,7 +412,10 @@ class LocalReplyModel:
                 gate = self.gate_messages(
                     turns=turns, summary=summary, engagement=engagement, question=question
                 )
-                if gate is not None and await asyncio.to_thread(self._request_gate, gate) == "是":
+                if (
+                    gate is not None
+                    and await asyncio.to_thread(self._request_gate, gate, True) == "是"
+                ):
                     break
             else:
                 return ""
@@ -411,7 +425,7 @@ class LocalReplyModel:
         )
         if messages[-1]["role"] != "user":
             return ""
-        raw = await asyncio.to_thread(self._request_messages, messages, None, 90)
+        raw = await asyncio.to_thread(self._request_messages, messages, None, 90, True)
         newest = next((turn.text for turn in reversed(turns) if not turn.is_self), "")
         line = self._parse_character_line(raw, newest)
         if line:
@@ -698,7 +712,7 @@ class LocalReplyModel:
         ]
         return self._request_messages(messages, on_lines, max_tokens)
 
-    def _request_gate(self, messages: list[dict[str, str]]) -> str:
+    def _request_gate(self, messages: list[dict[str, str]], character: bool = True) -> str:
         payload = {
             "model": "local",
             "messages": messages,
@@ -707,6 +721,7 @@ class LocalReplyModel:
             "grammar": _GATE_GRAMMAR,
             "temperature": 0.0,
             "max_tokens": 1,
+            **self._lora_field(character),
         }
         body = self._post(payload)
         try:
@@ -727,14 +742,23 @@ class LocalReplyModel:
         except (OSError, urllib.error.URLError, json.JSONDecodeError) as exc:
             raise LocalLLMError(f"本機回覆模型失敗：{exc}") from exc
 
+    def _lora_field(self, character: bool) -> dict[str, object]:
+        """The adapter is trained for character mode only: every other request
+        (Copilot suggestions, summaries) runs the plain model."""
+        if not self._lora_loaded:
+            return {}
+        return {"lora": [{"id": 0, "scale": 1.0 if character else 0.0}]}
+
     def _request_messages(
         self,
         messages: list[dict[str, str]],
         on_lines: Callable[[str], None] | None = None,
         max_tokens: int = 240,
+        character: bool = False,
     ) -> str:
         payload = {
             "model": "local",
+            **self._lora_field(character),
             "messages": messages,
             # The system prompt is identical across requests; reuse its KV cache.
             "cache_prompt": True,

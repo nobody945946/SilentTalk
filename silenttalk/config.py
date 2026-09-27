@@ -72,10 +72,12 @@ class CopilotConfig:
     llm_model: str = DEFAULT_LLM_MODEL
     llm_gpu_layers: int = 99
     llm_low_vram: bool = True
-    # Character mode: seconds of quiet after the bot spoke, and lines from
-    # others, before it joins in without being called by name.
-    # "called": answer when named (@mention / reply in text, the name in
-    # voice) plus a short follow-up window. "active": also join in by itself.
+    # Character-mode LoRA adapter in .runtime/models/llm/ ("" = none). Only
+    # character requests use it; Copilot suggestions and summaries run on the
+    # plain model.
+    character_lora: str = ""
+    # "called": answer only when the model judges a line is for the
+    # character. "active": also join in by itself after a quiet stretch.
     # Auto-compaction: older turns are folded into a short summary by the
     # local model, so a long session keeps its thread at a fixed prompt size.
     compact_context: bool = True
@@ -131,6 +133,10 @@ def _model_filename(value: object) -> str:
     if not name.lower().endswith(".gguf") or Path(name).name != name:
         raise ConfigError("copilot.llm_model 必須是 .runtime/models/llm/ 內的 .gguf 檔名。")
     return name
+
+
+def _optional_model_filename(value: object) -> str:
+    return _model_filename(value) if str(value).strip() else ""
 
 
 def config_defaults(project_dir: Path) -> dict[str, dict[str, object]]:
@@ -270,6 +276,7 @@ def load_settings(project_dir: Path) -> Settings:
             ),
             llm_gpu_layers=max(0, min(999, int(copilot.get("llm_gpu_layers", 99)))),
             llm_low_vram=bool(copilot.get("llm_low_vram", True)),
+            character_lora=_optional_model_filename(copilot.get("character_lora", "")),
             compact_context=bool(copilot.get("compact_context", True)),
             compact_keep_turns=max(8, min(200, int(copilot.get("compact_keep_turns", 20)))),
             compact_batch_turns=max(4, min(200, int(copilot.get("compact_batch_turns", 12)))),
