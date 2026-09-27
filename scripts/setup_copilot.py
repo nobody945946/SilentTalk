@@ -70,7 +70,7 @@ SENSEVOICE_ASSETS = (
 # Qwen3-0.6B is deliberately absent: in benchmarks it ignored the four-line
 # format on 29 of 32 lanes and mostly parroted the transcript back.
 # Default since 2026-09-27: Gemma 4 E2B (Apache-2.0) matched Qwen3.5-4B on
-# scripts/dev/persona_eval.py (voice 3.54 / stance 3.25 / natural 3.01) while
+# the persona eval of the time (voice 3.54 / stance 3.25 / natural 3.01) while
 # needing ~1.4 GB of VRAM like Qwen3-1.7B; its per-layer embeddings stay in RAM.
 LLM_MODELS = {
     "gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf": (

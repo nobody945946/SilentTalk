@@ -156,15 +156,6 @@ class Persona:
             lines.extend(f"「{sample}」" for sample in samples[:4])
         return "\n".join(lines)
 
-    def relationship_notes(self, text: str) -> list[str]:
-        """Relationships for people whose name appears in `text` (the prompt context)."""
-        folded = text.casefold()
-        return [
-            f"{rel.name}：{rel.relation}"
-            for rel in self.relationships
-            if rel.name and rel.relation and rel.name.casefold() in folded
-        ]
-
     def reminder_line(self, what: str = "四句都要是", *, list_catchphrases: bool = True) -> str:
         """One line restating who is talking, placed right before the answer.
 

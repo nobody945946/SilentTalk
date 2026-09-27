@@ -44,12 +44,15 @@ class ReplyLane:
     field: str
 
 
-# Order is the order shown in lists and asked of the LLM.
+# Order is the order shown in lists and asked of the LLM. The label is also
+# the tag the LLM writes each line under. Codes and fields are identifiers
+# from the first design (agree / ask / disagree / joke); what each lane asks
+# for now is _LANE_ASKS in llm.py: say what you think, ask, take a stand, joke.
 REPLY_LANES: tuple[ReplyLane, ...] = (
-    ReplyLane("AGREE", "w", "同意", "agree"),
+    ReplyLane("AGREE", "w", "接話", "agree"),
     ReplyLane("ASK", "a", "追問", "ask"),
-    ReplyLane("DISAGREE", "d", "反對", "disagree"),
-    ReplyLane("HUMOR", "s", "玩笑／打圓場", "humor"),
+    ReplyLane("DISAGREE", "d", "表態", "disagree"),
+    ReplyLane("HUMOR", "s", "玩笑", "humor"),
 )
 
 
@@ -64,6 +67,8 @@ class ReplySuggestions:
     error: str = ""
     # True while the model is still writing; the remaining lanes will follow.
     partial: bool = False
+    # The character's own view of the moment, written before the lanes.
+    thought: str = ""
 
     def text_for(self, lane: ReplyLane) -> str:
         return str(getattr(self, lane.field))

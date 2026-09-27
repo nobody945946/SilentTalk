@@ -19,7 +19,8 @@ class SlowFakeLLM:
         self.character_line = "收到"
 
     async def suggest(
-        self, *, context: str, trigger_speaker: str, trigger_text: str, on_partial=None
+        self, *, turns, summary: str = "", trigger_speaker: str, trigger_text: str,
+        on_partial=None,
     ) -> ReplySuggestions:
         self.calls.append(trigger_text)
         await self.release.wait()

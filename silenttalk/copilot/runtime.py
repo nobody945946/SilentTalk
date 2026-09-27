@@ -361,11 +361,11 @@ class CopilotRuntime:
     async def _generate(self, trigger: _Trigger) -> None:
         if self._on_thinking is not None:
             self._on_thinking(trigger.speaker_name, trigger.text)
-        context = self._context.render_for_prompt()
         started = time.perf_counter()
         try:
             suggestions = await self._llm.suggest(
-                context=context,
+                turns=self._context.snapshot(),
+                summary=self._context.summary,
                 trigger_speaker=trigger.speaker_name,
                 trigger_text=trigger.text,
                 on_partial=self._on_suggestions,

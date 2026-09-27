@@ -89,16 +89,6 @@ PAGES: tuple[Page, ...] = (
                     minimum=4, maximum=200, step=2,
                 ),
                 Setting(
-                    "copilot", "recent_turns", "送進模型的最近句數", "int",
-                    "每次生成時模型看得到的最近對話句數。",
-                    minimum=4, maximum=60, step=2,
-                ),
-                Setting(
-                    "copilot", "context_char_budget", "對話字數上限", "int",
-                    "送進模型的對話最多這麼多字，超過會從最舊的開始捨棄。",
-                    minimum=600, maximum=8000, step=200, unit="字",
-                ),
-                Setting(
                     "copilot", "max_session_turns", "記憶體保留句數", "int",
                     "這次執行最多留這麼多句在記憶體；不會寫進硬碟。",
                     minimum=20, maximum=500, step=10,

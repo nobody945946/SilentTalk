@@ -26,7 +26,7 @@ from silenttalk.copilot.llm import (
 from silenttalk.copilot.script import to_taiwan_traditional
 from silenttalk.copilot.stt import StreamingTranscriber
 from silenttalk.copilot.stt_offline import OfflineTranscriber
-from silenttalk.copilot.types import REPLY_LANES, ReplySuggestions
+from silenttalk.copilot.types import REPLY_LANES, ConversationTurn, ReplySuggestions
 from silenttalk.tts.edge import EdgeTTSEngine
 
 DISCORD_FRAME_BYTES = 3840  # 20 ms of 48 kHz stereo s16le, what voice_recv delivers
@@ -86,7 +86,7 @@ LLM_SCENES: tuple[tuple[tuple[str, str], ...], ...] = (
 # Qwen3-1.7B Q4_K_M: ~0.35 s on an RTX 3090, estimated 1-1.5 s on a 3050 Ti
 # Laptop, ~3 s CPU-only. Above this the story-mode choices feel laggy.
 LLM_MAX_MEDIAN_SECONDS = 3.0
-# HUMOR may legitimately SKIP, so three of four lanes is the floor.
+# The joke lane may legitimately SKIP, so three of four lanes is the floor.
 LLM_MIN_LANES = 3
 
 
@@ -197,8 +197,10 @@ def build_transcriber(
     return transcriber, collector
 
 
-def scene_prompt_inputs(scene: tuple[tuple[str, str], ...]) -> tuple[str, str, str]:
-    """Returns (rendered context, trigger speaker, trigger text) exactly as runtime does."""
+def scene_prompt_inputs(
+    scene: tuple[tuple[str, str], ...],
+) -> tuple[list[ConversationTurn], str, str]:
+    """Returns (turns, trigger speaker, trigger text) exactly as runtime does."""
     store = ConversationStore()
     for index, (speaker, text) in enumerate(scene):
         if speaker == "你":
@@ -206,7 +208,7 @@ def scene_prompt_inputs(scene: tuple[tuple[str, str], ...]) -> tuple[str, str, s
         else:
             store.append_external(100 + index, speaker, text)
     speaker, text = next((s, t) for s, t in reversed(scene) if s != "你")
-    return store.render_for_prompt(), speaker, text
+    return store.snapshot(), speaker, text
 
 
 def build_reply_model(
@@ -228,10 +230,10 @@ async def run_scenes(
 ) -> list[SceneResult]:
     results: list[SceneResult] = []
     for scene in scenes:
-        context, speaker, text = scene_prompt_inputs(scene)
+        turns, speaker, text = scene_prompt_inputs(scene)
         started = time.perf_counter()
         suggestions = await model.suggest(
-            context=context, trigger_speaker=speaker, trigger_text=text
+            turns=turns, trigger_speaker=speaker, trigger_text=text
         )
         results.append(SceneResult(text, time.perf_counter() - started, suggestions))
     return results

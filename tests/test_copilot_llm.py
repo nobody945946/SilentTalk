@@ -9,19 +9,21 @@ from silenttalk.copilot.persona import PRESET_PERSONAS
 from silenttalk.copilot.types import ConversationTurn
 
 
-def test_four_lane_parser_strips_thinking_and_keeps_fixed_intents() -> None:
+def test_options_parser_reads_the_thought_and_four_lanes() -> None:
     model = LocalReplyModel(Path("unused.gguf"))
     parsed = model._parse_suggestions(
         """<think>不要顯示這段</think>
-AGREE|可以啊，這樣打比較穩。
-ASK|你說的直接衝是走哪條路？
-DISAGREE|我倒覺得先守一下比較好。
-HUMOR|再衝一次我們就可以直接改行送頭了。""",
+心裡|（阿傑又想硬衝，我覺得先丟煙比較穩）
+接話|可以啊，丟完煙再進比較穩。
+追問|你說的直接衝是走哪條路？
+表態|我倒覺得先守一下比較好。
+玩笑|再衝一次我們就可以直接改行送頭了。""",
         "A",
         "要不要直接衝？",
     )
 
-    assert parsed.agree == "可以啊，這樣打比較穩。"
+    assert parsed.thought == "阿傑又想硬衝，我覺得先丟煙比較穩"
+    assert parsed.agree == "可以啊，丟完煙再進比較穩。"
     assert parsed.ask == "你說的直接衝是走哪條路？"
     assert parsed.disagree == "我倒覺得先守一下比較好。"
     assert parsed.humor == "再衝一次我們就可以直接改行送頭了。"
@@ -30,40 +32,45 @@ HUMOR|再衝一次我們就可以直接改行送頭了。""",
 def test_parser_tolerates_small_model_decoration() -> None:
     model = LocalReplyModel(Path("unused.gguf"))
     parsed = model._parse_suggestions(
-        """1. **AGREE**｜好，那我跟你一起。
-- ASK: 你要幾點開始？
-DISAGREE：「我覺得不太行」""",
+        """1. **接話**｜好，那我跟你一起。
+- 追問: 你要幾點開始？
+表態：「我覺得不太行」
+AGREE|舊的代號也認得""",
         "A",
         "我們等等開",
     )
 
-    assert parsed.agree == "好，那我跟你一起。"
+    assert parsed.agree == "舊的代號也認得"
     assert parsed.ask == "你要幾點開始？"
     assert parsed.disagree == "我覺得不太行"
     assert parsed.humor == ""
 
 
-def test_parser_drops_echo_and_template_placeholders() -> None:
+def test_parser_drops_echoes_of_the_line_or_the_thought() -> None:
     model = LocalReplyModel(Path("unused.gguf"))
     parsed = model._parse_suggestions(
-        """AGREE|要不要直接衝？
-ASK|...
-DISAGREE|先守一下吧""",
+        """心裡|阿豪說公司在裁員，我有點擔心他
+接話|阿豪說公司在裁員，我有點擔心他。
+追問|...
+表態|要不要直接衝
+玩笑|先守一下吧""",
         "A",
         "要不要直接衝",
     )
 
+    assert parsed.thought
     assert parsed.agree == ""
     assert parsed.ask == ""
-    assert parsed.disagree == "先守一下吧"
+    assert parsed.disagree == ""
+    assert parsed.humor == "先守一下吧"
 
 
-def test_humor_lane_can_abstain_instead_of_forcing_a_bad_joke() -> None:
+def test_joke_lane_can_abstain_instead_of_forcing_a_bad_joke() -> None:
     model = LocalReplyModel(Path("unused.gguf"))
     parsed = model._parse_suggestions(
-        """AGREE|好，我知道了。
-DISAGREE|我想法不太一樣。
-HUMOR|SKIP""",
+        """接話|好，我知道了。
+表態|我想法不太一樣。
+玩笑|SKIP""",
         "B",
         "這件事先這樣。",
     )
@@ -75,11 +82,7 @@ HUMOR|SKIP""",
 
 def test_reply_length_is_hard_capped() -> None:
     model = LocalReplyModel(Path("unused.gguf"), max_reply_chars=24)
-    parsed = model._parse_suggestions(
-        "AGREE|" + ("很" * 100),
-        "A",
-        "test",
-    )
+    parsed = model._parse_suggestions("接話|" + ("很" * 100), "A", "test")
 
     assert len(parsed.agree) == 25
     assert parsed.agree.endswith("…")
@@ -87,9 +90,12 @@ def test_reply_length_is_hard_capped() -> None:
 
 def test_simplified_model_output_is_shown_in_traditional() -> None:
     model = LocalReplyModel(Path("unused.gguf"))
-    parsed = model._parse_suggestions("AGREE|这个视频我也看过", "A", "昨天那部片")
+    parsed = model._parse_suggestions(
+        "心裡|这个视频我看过\n接話|那个视频超好笑", "A", "昨天那部片"
+    )
 
-    assert parsed.agree == "這個影片我也看過"
+    assert parsed.thought == "這個影片我看過"
+    assert parsed.agree == "那個影片超好笑"
 
 
 def test_stream_reports_each_completed_line() -> None:
@@ -111,12 +117,68 @@ def test_stream_reports_each_completed_line() -> None:
 def test_ask_lane_gets_a_question_mark_for_tts() -> None:
     model = LocalReplyModel(Path("unused.gguf"))
     parsed = model._parse_suggestions(
-        "AGREE|好啊\nASK|你買錯的是哪一款\nDISAGREE|不要吧！\nHUMOR|笑死", "Ken", "退款"
+        "接話|好啊\n追問|你買錯的是哪一款\n表態|不要吧！\n玩笑|笑死", "Ken", "退款"
     )
 
     assert parsed.ask == "你買錯的是哪一款？"
     assert parsed.disagree == "不要吧！"
     assert parsed.humor == "笑死"
+
+
+def test_options_are_asked_on_the_end_of_the_character_chat() -> None:
+    """Same chat as character mode, so the prompt cache holds from round to
+    round; the thought comes first so the four lanes share it."""
+    model = LocalReplyModel(Path("unused.gguf"))
+    model.set_persona(PRESET_PERSONAS[0])
+    turns = _chat(CHAT)
+    messages = model.option_messages(turns=turns)
+    chat = model.character_messages(turns=turns, engagement="options", gate=True)
+
+    assert messages[:-1] == chat[:-1]
+    assert messages[-1]["content"].startswith(chat[-1]["content"] + "\n\n（記住：你是凱哥")
+    ask = messages[-1]["content"]
+    assert ask.index("心裡|") < ask.index("接話|") < ask.index("追問|")
+    assert ask.index("追問|") < ask.index("表態|") < ask.index("玩笑|")
+    assert "不要輸出 SKIP" in messages[0]["content"]
+    # Next round: everything but the tail is unchanged.
+    later = model.option_messages(turns=turns + [ConversationTurn(2, "阿傑", "再一場")])
+    assert later[:-1] == messages[:-1]
+    assert later[-1]["content"].startswith(chat[-1]["content"])
+
+
+def test_options_after_your_own_line_get_their_own_request_turn() -> None:
+    model = LocalReplyModel(Path("unused.gguf"))
+    messages = model.option_messages(turns=_chat(CHAT[:4]))
+
+    assert [m["role"] for m in messages] == ["system", "user", "assistant", "user"]
+    assert messages[-1]["content"].startswith("（換你說話了")
+
+
+def test_streamed_options_show_the_thought_then_each_lane() -> None:
+    import asyncio
+
+    model = LocalReplyModel(Path("unused.gguf"))
+    text = "心裡|想先丟煙\n接話|丟完煙再進\n追問|誰有煙？\n表態|硬衝會被架\n玩笑|我的煙比我還準"
+
+    def fake(messages, on_lines=None, max_tokens=240, character=False):
+        lines = text.split("\n")
+        for n in range(1, len(lines)):
+            on_lines("\n".join(lines[:n]))
+        return text
+
+    model._request_messages = fake  # type: ignore[method-assign]
+    seen = []
+    final = asyncio.run(
+        model.suggest(
+            turns=_chat(CHAT), trigger_speaker="阿傑", trigger_text="對啊打野一直送",
+            on_partial=seen.append,
+        )
+    )
+
+    assert [s.thought for s in seen] == ["想先丟煙"] * 4
+    assert [s.has_any() for s in seen] == [False, True, True, True]
+    assert all(s.partial for s in seen) and not final.partial
+    assert final.humor == "我的煙比我還準"
 
 
 def test_character_line_parsing() -> None:
@@ -133,13 +195,13 @@ def test_character_line_parsing() -> None:
 
 
 def test_character_keeps_the_act_by_default_and_can_be_told_to_own_up() -> None:
-    from silenttalk.copilot.persona import PRESET_PERSONAS
-
     carry = PRESET_PERSONAS[0]
-    in_character = LocalReplyModel(Path("unused.gguf"))._build_character_system_prompt(carry)
+    in_character = LocalReplyModel(Path("unused.gguf"))._build_turn_system_prompt(
+        carry, "called"
+    )
     admitting = LocalReplyModel(
         Path("unused.gguf"), ai_honesty="admit"
-    )._build_character_system_prompt(carry)
+    )._build_turn_system_prompt(carry, "called")
 
     assert "不要承認自己是程式" in in_character
     assert "誠實承認你是 AI 角色" not in in_character
@@ -148,14 +210,7 @@ def test_character_keeps_the_act_by_default_and_can_be_told_to_own_up() -> None:
 
 
 def test_the_nudge_follows_the_chosen_policy() -> None:
-    from silenttalk.copilot.persona import PRESET_PERSONAS
-
-    kwargs = {
-        "context": "最近對話：\nKen：欸你是不是AI啊",
-        "trigger_speaker": "Ken",
-        "trigger_text": "欸你是不是AI啊",
-        "addressed": True,
-    }
+    turns = [ConversationTurn(2, "Ken", "欸你是不是AI啊")]
     in_character = LocalReplyModel(Path("unused.gguf"))
     admitting = LocalReplyModel(Path("unused.gguf"), ai_honesty="admit")
     for model in (in_character, admitting):
@@ -163,31 +218,22 @@ def test_the_nudge_follows_the_chosen_policy() -> None:
 
     # Staying in character is what the model does anyway (A/B: 0/18 broke
     # character with or without a nudge), so the default path adds nothing.
-    assert "承認" not in in_character._build_character_prompt(**kwargs)
-    assert "要老實承認" in admitting._build_character_prompt(**kwargs)
+    assert "承認" not in in_character.character_messages(turns=turns, addressed=True)[-1]["content"]
+    assert "要老實承認" in admitting.character_messages(turns=turns, addressed=True)[-1]["content"]
 
 
 def test_character_is_told_not_to_repeat_a_recent_catchphrase() -> None:
-    import asyncio
-
-    from silenttalk.copilot.persona import PRESET_PERSONAS
-
     model = LocalReplyModel(Path("unused.gguf"))
     model.set_persona(PRESET_PERSONAS[2])  # 黑焰
-    prompts: list[str] = []
+    turns = [ConversationTurn(2, "Ken", "打團嗎")]
 
-    def fake(system: str, prompt: str, on_lines=None, max_tokens: int = 240) -> str:
-        prompts.append(prompt)
-        return "哼，吾之右手尚未解放"
+    first = model.character_messages(turns=turns, addressed=True)[-1]["content"]
+    model._recent_character_lines.append("哼，吾之右手尚未解放")
+    second = model.character_messages(turns=turns, addressed=True)[-1]["content"]
 
-    model._request_completion = fake  # type: ignore[method-assign]
-    kwargs = {"context": "最近對話：\nKen：打團嗎", "trigger_speaker": "Ken", "trigger_text": "打團嗎"}
-    asyncio.run(model.character_reply(**kwargs))
-    asyncio.run(model.character_reply(**kwargs))
-
-    assert "你最近已經說過" not in prompts[0]
-    assert "吾之右手" in prompts[1].split("你最近已經說過")[1]
-    assert "口頭禪偶爾用" not in prompts[0]
+    assert "你最近已經說過" not in first
+    assert "吾之右手" in second.split("你最近已經說過")[1]
+    assert "口頭禪偶爾用" not in first
 
 
 def test_llama_server_found_in_winget_package_without_links_shim(

@@ -577,7 +577,8 @@ RELATION_RULE = (
 
 
 def run_judge(prompt: str, model: str) -> list[dict[str, Any]]:
-    """Same call as scripts/dev/persona_eval.py's run_judge."""
+    """The judge is `claude -p` (dev only; the test set is synthetic, never
+    real conversations). Expects a JSON list back."""
     with tempfile.TemporaryDirectory() as cwd:
         result = subprocess.run(
             ["claude", "-p", "--model", model],

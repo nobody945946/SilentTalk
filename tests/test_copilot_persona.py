@@ -16,6 +16,7 @@ from silenttalk.copilot.persona import (
     persona_to_dict,
     validate_persona,
 )
+from silenttalk.copilot.types import ConversationTurn
 
 
 def test_blank_persona_adds_nothing_to_the_prompt() -> None:
@@ -24,7 +25,7 @@ def test_blank_persona_adds_nothing_to_the_prompt() -> None:
 
     assert blank.is_blank
     assert blank.render_system_block() == ""
-    assert "人設" not in model._build_system_prompt(blank)
+    assert "【你的人設】" not in model._build_turn_system_prompt(blank, "options")
 
 
 def test_persona_sheet_reaches_the_system_prompt() -> None:
@@ -36,7 +37,7 @@ def test_persona_sheet_reaches_the_system_prompt() -> None:
         traits={"tongue": 5, "energy": 2, "warmth": 3},
         mood="累",
     )
-    system = LocalReplyModel(Path("unused.gguf"))._build_system_prompt(persona)
+    system = LocalReplyModel(Path("unused.gguf"))._build_turn_system_prompt(persona, "options")
 
     assert "名字：凱哥" in system
     assert "你想要：想帶大家贏" in system
@@ -52,37 +53,17 @@ def test_system_prompt_is_stable_so_the_kv_cache_is_reused() -> None:
     model = LocalReplyModel(Path("unused.gguf"))
     persona = PRESET_PERSONAS[0]
 
-    assert model._build_system_prompt(persona) == model._build_system_prompt(persona)
-
-
-def test_only_people_in_the_conversation_get_relationship_notes() -> None:
-    persona = Persona(
-        id="p1",
-        name="我",
-        relationships=(
-            Relationship("阿傑", "國中同學，互嗆但感情好"),
-            Relationship("小雨", "暗戀對象"),
-        ),
+    assert model._build_turn_system_prompt(persona, "options") == model._build_turn_system_prompt(
+        persona, "options"
     )
-    notes = persona.relationship_notes("最近對話：\n阿傑：衝B啦")
-    prompt = LocalReplyModel(Path("unused.gguf"))._build_prompt(
-        context="阿傑：衝B啦",
-        trigger_speaker="阿傑",
-        trigger_text="衝B啦",
-        relationships=notes,
-    )
-
-    assert notes == ["阿傑：國中同學，互嗆但感情好"]
-    assert "小雨" not in prompt
-    assert "- 阿傑：國中同學" in prompt
 
 
 def test_reply_length_preference_changes_the_length_rule() -> None:
     model = LocalReplyModel(Path("unused.gguf"))
     short = Persona(id="p", name="", reply_length="short")
 
-    assert "4～12 字" in model._build_system_prompt(short)
-    assert "8～30 字" in model._build_system_prompt(blank_persona())
+    assert "4～12 字" in model._build_turn_system_prompt(short, "options")
+    assert "8～30 字" in model._build_turn_system_prompt(blank_persona(), "options")
 
 
 def test_validation_rejects_overlong_fields_and_half_relationships() -> None:
@@ -153,16 +134,19 @@ def test_store_forgets_an_active_id_that_no_longer_exists(tmp_path: Path) -> Non
     assert state.active_persona().is_blank
 
 
-def test_persona_reminder_sits_right_before_the_answer() -> None:
+def test_persona_reminder_sits_right_before_the_options_request() -> None:
     model = LocalReplyModel(Path("unused.gguf"))
-    kwargs = {"context": "阿傑：衝B啦", "trigger_speaker": "阿傑", "trigger_text": "衝B啦"}
+    turns = [ConversationTurn(2, "阿傑", "衝B啦")]
 
-    assert "記住" not in model._build_prompt(**kwargs)
+    assert "記住" not in model.option_messages(turns=turns)[-1]["content"]
     model.set_persona(PRESET_PERSONAS[0])
-    prompt = model._build_prompt(**kwargs)
+    tail = model.option_messages(turns=turns)[-1]["content"]
 
-    assert prompt.endswith("（記住：你是凱哥；句子短、節奏快；口頭禪偶爾用：穩啦、我的我的、笑死。四句都要是這個人會說的話。）\n輸出四行：")
-    assert "【你的人設】" in model._build_system_prompt(PRESET_PERSONAS[0])
+    assert tail.startswith(
+        "阿傑：衝B啦\n\n（記住：你是凱哥；句子短、節奏快；口頭禪和代表台詞少用，大約四五句才一次。"
+        "說出口的話要是這個人會說的話。）\n（換你說話了"
+    )
+    assert "【你的人設】" in model._build_turn_system_prompt(PRESET_PERSONAS[0], "options")
 
 
 def test_persona_voice_is_tts_only_and_validated() -> None:
@@ -173,7 +157,9 @@ def test_persona_voice_is_tts_only_and_validated() -> None:
 
     assert style is not None and style.voice == "zh-CN-YunjianNeural"
     assert style.pitch == "-15Hz" and style.ffmpeg_filter
-    assert "Yunjian" not in LocalReplyModel(Path("unused.gguf"))._build_system_prompt(chuuni)
+    assert "Yunjian" not in LocalReplyModel(Path("unused.gguf"))._build_turn_system_prompt(
+        chuuni, "options"
+    )
     assert persona_from_dict(persona_to_dict(chuuni)).voice_style() == style
     # No voice settings: the voice page decides.
     assert Persona(id="p", name="x").voice_style() is None

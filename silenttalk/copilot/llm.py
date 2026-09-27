@@ -24,76 +24,6 @@ from silenttalk.copilot.types import REPLY_LANES, ConversationTurn, ReplySuggest
 
 _LOG = logging.getLogger(__name__)
 
-# One worked example teaches the four-line format and keeps AGREE from
-# drifting into questions (0.50 -> 0.00 on scripts/dev/llm_eval.py). It must not
-# resemble LLM_SCENES, and its lines must not have a reusable sentence pattern:
-# a "你這不是X，是Y吧" joke got copied into 15 of 24 HUMOR replies.
-PROMPT_EXAMPLE_LINES = (
-    ("AGREE", "熬到四點真的會廢，今天一定要早點睡"),
-    ("ASK", "什麼劇這麼好看，能讓你撐到四點？"),
-    ("DISAGREE", "上班日還熬到四點，這樣身體會撐不住啦"),
-    ("HUMOR", "今天的咖啡應該要直接點特大杯了"),
-)
-PROMPT_EXAMPLE = "對話：\n阿明：我昨天熬夜追劇追到四點\n阿明：今天上班整個廢掉\n輸出：\n" + "\n".join(
-    f"{code}|{text}" for code, text in PROMPT_EXAMPLE_LINES
-)
-
-_NEUTRAL_SYSTEM = """你是 Discord 語音聊天的回覆 Copilot，替「你」（使用者本人）想四個可以直接說出口的候選回覆，候選不會自動送出。
-
-規則：
-- 只根據提供的真實對話回應，不得杜撰對方的身分、經歷、情緒或事實。
-- 台灣繁體中文口語，每個候選只有一句話，長度{length}，最長不得超過 {max_chars} 字。
-- 四個方向固定，內容要彼此不同：
-AGREE：同意／順著聊。接受對方的觀點或自然延伸。必須是肯定句，不可以是問句，不可以用問號結尾；不要只說「嗯嗯」「對啊」。
-ASK：追問。針對對方剛說的內容問一個具體、自然的問題，必須是問句。
-DISAGREE：反對／挑戰。提出不同看法，但不要吵架、羞辱或人身攻擊。
-HUMOR：開玩笑／打圓場。用對話裡已有的梗、自嘲或情境反差緩和氣氛。禁止拿外貌、疾病、性別、種族、家庭、收入開玩笑，禁止捏造對方的事。沒有自然又安全的笑點就輸出 SKIP。
-
-範例（範例只示範格式與方向）：
-{example}
-
-只准輸出 AGREE、ASK、DISAGREE、HUMOR 四行，格式「代號|句子」，不要解釋。"""
-
-# With a persona every lane is taken from the character's own stance: AGREE may
-# not endorse what the character would never say, and any lane may SKIP. The
-# sheet comes last, closest to the answer, where a small model attends most.
-_PERSONA_SYSTEM = """你是 Discord 語音聊天的回覆 Copilot，替「你」想四個可以直接說出口的候選回覆，候選不會自動送出。「你」是下面人設裡的這個人，四句都要是這個人真的會說的話。
-
-規則：
-- 只根據提供的真實對話回應，不得杜撰對方的身分、經歷、情緒或事實。關於「你」自己，只能用人設裡寫到的事，不要編新的經歷，也不要說自己是 AI。
-- 台灣繁體中文口語，每個候選只有一句話，長度{length}，最長不得超過 {max_chars} 字。
-- 四個方向固定，內容要彼此不同，而且都站在「你」的立場：
-AGREE：順著聊。用你的立場接住對方的話或自然延伸，必須是肯定句，不可以用問號結尾。對方的話違反你的價值觀或底線時，只同意你真的能同意的部分。
-ASK：追問。針對對方剛說的內容問一個具體、自然的問題，必須是問句。
-DISAGREE：反對／挑戰。依你的價值觀提出不同看法，但不要吵架、羞辱或人身攻擊。
-HUMOR：開玩笑／打圓場。用你的幽默風格和對話裡已有的梗緩和氣氛。禁止拿外貌、疾病、性別、種族、家庭、收入開玩笑，禁止捏造對方的事。
-- 任何一個方向，如果你這個人設不會這樣說，就輸出 SKIP。
-
-範例（只示範格式與方向，語氣要照你的人設）：
-{example}
-
-【你的人設】口吻、用詞、句長、立場都照這裡：
-{sheet}
-
-只准輸出 AGREE、ASK、DISAGREE、HUMOR 四行，格式「代號|句子」，不要解釋。"""
-
-# Character mode: the bot itself is the character and speaks one line aloud
-# with nobody approving it first, so it may stay silent (SKIP) and must not
-# pretend to be human when sincerely asked.
-_CHARACTER_SYSTEM = """你是 Discord 語音頻道裡的一個角色 Bot，由 AI 扮演{who}，和大家一起用語音聊天。你說的話會直接用語音播出來。
-
-規則：
-- 只根據真實對話回應，不得杜撰別人的身分、經歷、情緒或事實。關於你自己，只用人設裡寫到的事，不要編新的經歷。
-- {ai_rule}
-- {abilities}
-- 你不是百科全書：超出你人設會懂的問題，就用這個人真實的程度回答，可以說不知道。
-- 台灣繁體中文口語，只說一句話，長度{length}，最長不得超過 {max_chars} 字。
-- 像朋友聊天一樣自然接話：附和、追問、吐槽或開玩笑，選這個角色此刻最可能的反應。不要重複別人的話，不要說教，不要每句都叫對方名字。
-- 不羞辱、不人身攻擊，不拿外貌、疾病、性別、種族、家庭、收入開玩笑。
-- 這時候插話不自然（別人在私下聊、話題跟你無關、你剛說過類似的話）就輸出 SKIP。
-{sheet}
-只輸出一行：你要說的話，或 SKIP。不要加引號、名字或解釋。"""
-
 # Asked whether it is an AI, the character either steps out of the fiction
 # or keeps it. Default is keeping it: a character that announces it is a
 # program stops being a character.
@@ -155,6 +85,36 @@ _ENGAGEMENT_RULES = {
         "別人在私下聊、你剛說過話、或沒什麼好補充時輸出 SKIP。"
     ),
 }
+
+# Options mode (選項) asks the same chat for what "you" could say next; the
+# owner picks one, so the character never decides whether to speak.
+_ENGAGEMENT_RULES["options"] = (
+    "每次你會被要求先寫下心裡的想法，再想幾句現在可以說出口的話，由你挑一句說；不要輸出 SKIP。"
+)
+
+# The four options come from one thought, in one request. Asked for four
+# stock reactions to the last line (agree / ask / disagree / joke), Gemma 4
+# E2B answered the wrong line, disagreed for the sake of it and repeated one
+# persona trait in every round (laptop test, 2026-09-28: "敷衍、過度跟隨每一
+# 句話，缺乏角色自己的中心想法"). Writing its own view of the moment first
+# gives the four a shared point of view; asked as separate requests they
+# came out near-identical, and shown each other's lines they copied them.
+_THOUGHT_TAG = "心裡"
+_LANE_ASKS = {
+    "AGREE": "把你心裡想說的說出來",
+    "ASK": "問一個你真的想知道的問題",
+    "DISAGREE": "你自己的立場、提醒或想法；不同意就直說，但不要為反對而反對",
+    "HUMOR": "用你的幽默方式鬧一下或打圓場；沒有自然的笑點就寫 SKIP",
+}
+_OPTIONS_ASK = (
+    "（換你說話了。先寫你心裡現在的想法：大家在聊什麼、你怎麼看、你最想說或想做什麼。"
+    "再照這個想法替自己想四句現在可以說出口的話，每句都要是你這個人會說的，四句的意思要不一樣：\n"
+    + f"{_THOUGHT_TAG}|你現在的想法，一兩句\n"
+    + "".join(f"{lane.label}|{_LANE_ASKS[lane.code]}\n" for lane in REPLY_LANES)
+    + "只輸出這五行，格式「標籤|內容」）"
+)
+_OPTIONS_MAX_TOKENS = 260
+_THOUGHT_CHARS = 100
 
 # Asked on the same chat (same prompt cache) before writing a line, answered
 # with one grammar-constrained token. A small model told to "answer or SKIP"
@@ -355,24 +315,22 @@ class LocalReplyModel:
     async def suggest(
         self,
         *,
-        context: str,
+        turns: Sequence[ConversationTurn],
+        summary: str = "",
         trigger_speaker: str,
         trigger_text: str,
         on_partial: Callable[[ReplySuggestions], None] | None = None,
     ) -> ReplySuggestions:
-        """Four reply lanes. With `on_partial`, each lane is also reported as
-        soon as its line is complete (called from a worker thread), so a slow
-        laptop GPU shows the first choice long before the fourth is written."""
-        persona = self._persona
-        system = self._build_system_prompt(persona)
-        prompt = self._build_prompt(
-            context=context,
-            trigger_speaker=trigger_speaker,
-            trigger_text=trigger_text,
-            relationships=persona.relationship_notes(context + "\n" + trigger_speaker),
-        )
+        """What "you" could say next: the character's own thought about the
+        moment, then one line per lane written from it. With `on_partial`,
+        the thought and each lane are also reported as soon as they are
+        complete (called from a worker thread), so the first choice shows up
+        long before the fourth is written."""
+        messages = self.option_messages(turns=turns, summary=summary)
         if on_partial is None:
-            raw = await asyncio.to_thread(self._request_completion, system, prompt)
+            raw = await asyncio.to_thread(
+                self._request_messages, messages, None, _OPTIONS_MAX_TOKENS
+            )
             return self._parse_suggestions(raw, trigger_speaker, trigger_text)
 
         shown = 0
@@ -380,13 +338,33 @@ class LocalReplyModel:
         def on_lines(text: str) -> None:
             nonlocal shown
             partial = self._parse_suggestions(text, trigger_speaker, trigger_text)
-            filled = sum(bool(value) for _, value in partial.items())
+            filled = bool(partial.thought) + sum(bool(value) for _, value in partial.items())
             if filled > shown:
                 shown = filled
                 on_partial(dataclasses.replace(partial, partial=True))
 
-        raw = await asyncio.to_thread(self._request_completion, system, prompt, on_lines)
+        raw = await asyncio.to_thread(
+            self._request_messages, messages, on_lines, _OPTIONS_MAX_TOKENS
+        )
         return self._parse_suggestions(raw, trigger_speaker, trigger_text)
+
+    def option_messages(
+        self, *, turns: Sequence[ConversationTurn], summary: str = ""
+    ) -> list[dict[str, str]]:
+        """The character chat (character mode's format, "你" as the assistant)
+        with the options request on the end. Only that tail changes between
+        rounds, so llama-server prefills just the new lines."""
+        messages = self.character_messages(
+            turns=turns, summary=summary, engagement="options", gate=True
+        )
+        ask = _OPTIONS_ASK
+        if not self._persona.is_blank:
+            ask = self._persona.reminder_line("說出口的話要是", list_catchphrases=False) + "\n" + ask
+        if messages[-1]["role"] == "user":
+            messages[-1] = {"role": "user", "content": messages[-1]["content"] + "\n\n" + ask}
+        else:
+            messages.append({"role": "user", "content": ask})
+        return messages
 
     async def character_turn(
         self,
@@ -558,93 +536,6 @@ class LocalReplyModel:
             sheet=f"\n【你的人設】口吻、用詞、句長、立場都照這裡：\n{sheet}\n" if sheet else "",
         )
 
-    async def character_reply(
-        self,
-        *,
-        context: str,
-        trigger_speaker: str,
-        trigger_text: str,
-        addressed: bool = False,
-    ) -> str:
-        """One line the character says aloud, or "" when it should stay quiet."""
-        system = self._build_character_system_prompt(self._persona)
-        prompt = self._build_character_prompt(
-            context=context,
-            trigger_speaker=trigger_speaker,
-            trigger_text=trigger_text,
-            addressed=addressed,
-        )
-        raw = await asyncio.to_thread(
-            self._request_completion, system, prompt, None, 90
-        )
-        line = self._parse_character_line(raw, trigger_text)
-        if line:
-            self._recent_character_lines.append(line)
-        return line
-
-    def _build_character_prompt(
-        self,
-        *,
-        context: str,
-        trigger_speaker: str,
-        trigger_text: str,
-        addressed: bool,
-    ) -> str:
-        persona = self._persona
-        relationships = persona.relationship_notes(context + "\n" + trigger_speaker)
-        relation_part = ""
-        if relationships:
-            relation_part = "\n你和在場的人的關係：\n" + "\n".join(
-                f"- {note}" for note in relationships
-            ) + "\n"
-        # Said only when the call is unmistakable. When the name merely turned
-        # up in the line, the model gets the sentence and decides for itself.
-        addressed_part = "（對方是在跟你說話，要回應）\n" if addressed else ""
-        reminder = ""
-        if not persona.is_blank:
-            reminder = persona.reminder_line("這句要是", list_catchphrases=False) + "\n"
-        used = [
-            phrase
-            for phrase in persona.signature_phrases()
-            if any(_signature_used(phrase, line) for line in self._recent_character_lines)
-        ]
-        if used:
-            reminder += (
-                "（你最近已經說過" + "、".join(f"「{p}」" for p in used[:3])
-                + "，這句換個說法，不要再用）\n"
-            )
-        # Small models ignore the honesty rule under persona pressure ("欸我不
-        # 是AI啦"); when the chat is actually asking, say so right here.
-        # Only the "admit" policy needs this keyword check, and it is the one
-        # place it earns its keep: told to own up, the small model otherwise
-        # denies it anyway. Staying in character is what it does naturally, so
-        # the default path never runs it (A/B: 0/18 broke character either way).
-        if self._ai_honesty == "admit":
-            recent = "\n".join(context.splitlines()[-3:] + [trigger_text])
-            if asks_if_ai(recent):
-                reminder += (
-                    "（有人在問你是不是 AI 或真人：要老實承認你是 AI 扮演的角色，用你的口吻說）\n"
-                )
-        return f"""下面是真實 Discord 語音對話（語音辨識結果，可能有錯字、沒有標點）。「你」是你自己之前說過的話。
-
-{context}
-{relation_part}
-最後一句：
-{trigger_speaker}：{trigger_text}
-{addressed_part}
-{reminder}你要說："""
-
-    def _build_character_system_prompt(self, persona: Persona) -> str:
-        sheet = persona.render_system_block()
-        return _CHARACTER_SYSTEM.format(
-            ai_rule=_AI_ADMIT if self._ai_honesty == "admit" else _AI_IN_CHARACTER,
-            abilities=_CAN_TYPE if self._can_type else _VOICE_ONLY,
-            who="下面人設裡的人" if sheet else "一個友善、好聊的朋友",
-            length=persona.length_rule(),
-            max_chars=self._max_reply_chars,
-            sheet=f"\n【你的人設】口吻、用詞、句長、立場都照這裡：\n{sheet}\n" if sheet else "",
-        )
-
     def _parse_character_line(self, raw: str, trigger_text: str) -> str:
         cleaned = raw.strip()
         close_index = cleaned.lower().rfind(_THINK_CLOSE)
@@ -804,56 +695,6 @@ class LocalReplyModel:
         except (KeyError, IndexError, TypeError) as exc:
             raise LocalLLMError("本機回覆模型回傳格式異常。") from exc
 
-    def _build_system_prompt(self, persona: Persona) -> str:
-        """Everything that does not change between requests: role, persona, rules.
-
-        Kept byte-stable so llama-server reuses its KV cache; on a 4 GB laptop
-        GPU that turns a long persona into a one-time cost.
-        """
-        sheet = persona.render_system_block()
-        if not sheet:
-            return _NEUTRAL_SYSTEM.format(
-                length=persona.length_rule(),
-                max_chars=self._max_reply_chars,
-                example=PROMPT_EXAMPLE,
-            )
-        return _PERSONA_SYSTEM.format(
-            length=persona.length_rule(),
-            max_chars=self._max_reply_chars,
-            example=PROMPT_EXAMPLE,
-            sheet=sheet,
-        )
-
-    def _build_prompt(
-        self,
-        *,
-        context: str,
-        trigger_speaker: str,
-        trigger_text: str,
-        relationships: list[str] | None = None,
-    ) -> str:
-        relation_part = ""
-        if relationships:
-            relation_part = (
-                "\n你和在場的人的關係：\n"
-                + "\n".join(f"- {note}" for note in relationships)
-                + "\n"
-            )
-        reminder = ""
-        if not self._persona.is_blank:
-            # Small models drift toward a neutral voice over a long transcript;
-            # restating who is talking right before the answer holds the
-            # character (persona_eval.py: voice 3.31 -> 3.64 on Qwen3-4B-2507).
-            reminder = self._persona.reminder_line() + "\n"
-        return f"""下面是真實 Discord 語音對話（語音辨識結果，可能有錯字、沒有標點）。
-
-{context}
-{relation_part}
-最後一句：
-{trigger_speaker}：{trigger_text}
-
-{reminder}輸出四行："""
-
     def _parse_suggestions(
         self,
         raw: str,
@@ -869,31 +710,50 @@ class LocalReplyModel:
                 cleaned[:open_index] + cleaned[close_index + len(_THINK_CLOSE) :]
             ).strip()
 
-        echo = _compact(trigger_text)
+        tags = {lane.label: lane for lane in REPLY_LANES} | {
+            lane.code: lane for lane in REPLY_LANES
+        }
+        thought = ""
         values: dict[str, str] = {lane.field: "" for lane in REPLY_LANES}
         for line in cleaned.splitlines():
-            # Small models like to decorate: "1. **AGREE**｜…", "- ASK: …".
+            # Small models like to decorate: "1. **接話**｜…", "- 追問: …".
             stripped = line.strip().lstrip("-*•#>0123456789.、) ").strip()
-            upper = stripped.upper()
-            for lane in REPLY_LANES:
-                if not upper.startswith(lane.code):
-                    continue
-                remainder = stripped[len(lane.code) :].lstrip(" *|｜:：").strip()
-                value = self._clean_reply(remainder)
-                if value.upper() == "SKIP" or _compact(value) == echo:
-                    value = ""
-                elif lane.code == "ASK" and value and value[-1] not in _END_PUNCTUATION:
-                    # Gemma often drops the question mark; TTS needs it to
-                    # say the line with a rising, questioning tone.
-                    value += "？"
-                values[lane.field] = value
-                break
+            parts = re.split(r"[|｜:：]", stripped, maxsplit=1)
+            if len(parts) != 2:
+                continue
+            tag = parts[0].strip(" *【】[]「」").upper()
+            if tag == _THOUGHT_TAG:
+                thought = self._clean_thought(parts[1])
+                continue
+            lane = tags.get(tag)
+            if lane is None:
+                continue
+            value = self._clean_reply(parts[1].lstrip(" *"))
+            if (
+                value.upper().startswith("SKIP")
+                or _echoes(value, trigger_text)
+                # Now and then the first lane is the thought read out.
+                or (thought and _echoes(value, thought))
+            ):
+                value = ""
+            elif lane.code == "ASK" and value and value[-1] not in _END_PUNCTUATION:
+                # Gemma often drops the question mark; TTS needs it to
+                # say the line with a rising, questioning tone.
+                value += "？"
+            values[lane.field] = value
 
         return ReplySuggestions(
             trigger_speaker=trigger_speaker,
             trigger_text=trigger_text,
+            thought=thought,
             **values,
         )
+
+    def _clean_thought(self, value: str) -> str:
+        value = to_taiwan_traditional(" ".join(value.split())).strip("（）()「」*")
+        if len(value) > _THOUGHT_CHARS:
+            value = value[:_THOUGHT_CHARS].rstrip() + "…"
+        return value
 
     def _clean_reply(self, value: str) -> str:
         value = value.strip().strip("\"'「」『』*")

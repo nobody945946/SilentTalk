@@ -53,9 +53,9 @@ speech_queue.py            FIFO / cancel / job lifecycle
 | 設定頁有哪些項目、分在哪一類 | `silenttalk/settings_schema.py` | `silenttalk/settings_ui.py` |
 | 使用者改過的設定存哪裡 | `silenttalk/settings_store.py`（`settings.json`） | `silenttalk/config.py` 的 `merge` |
 | 語音頻道文字聊天的讀寫 | `silenttalk/discord_voice.py`（`on_message` / `send_text`） | `config.toml [discord] text_chat`, `controller.py` |
-| 角色模式何時開口（冷卻、點名、問句） | `silenttalk/copilot/character.py` | `copilot/runtime.py`, `config.toml` |
+| 角色模式何時開口 | `silenttalk/copilot/llm.py` 的 `character_turn`、`_GATE_QUESTION` | `copilot/runtime.py`, `copilot/character.py`（設定選項） |
 | 人設欄位、預設人設 | `silenttalk/copilot/persona.py` | `silenttalk/persona_ui.py` |
-| 回覆方向（同意／追問／反對／玩笑）與按鍵對應 | `silenttalk/copilot/types.py` 的 `REPLY_LANES` | `silenttalk/copilot/llm.py` prompt |
+| 選項（接話／追問／表態／玩笑）與按鍵對應 | `silenttalk/copilot/types.py` 的 `REPLY_LANES` | `silenttalk/copilot/llm.py` 的 `_LANE_ASKS`、`_OPTIONS_ASK` |
 | Copilot 模型檔、GPU layers | `config.toml` `[copilot]` | `scripts/setup_copilot.py` |
 | 文字長度、空白、換行規則 | `silenttalk/text.py` | `silenttalk/config.py` |
 | TTS 聲音、速度、音高、音量 | `config.toml` | `silenttalk/tts/edge.py` |
@@ -248,15 +248,18 @@ copilot/context.py
 bounded session context
         │
         ▼
-copilot/llm.py
+copilot/llm.py  LocalReplyModel.suggest()
 Gemma 4 E2B（config 可換）/ persistent llama-server
+和角色模式同一段 chat（別人＝user「名字：內容」、你說過的＝assistant、人設與關係在 system），
+尾端請模型一次寫五行：心裡|… 再四句
         │
         ▼
-ReplySuggestions（欄位與按鍵由 REPLY_LANES 定義）
-  ├─ W 同意
+ReplySuggestions（thought＋四格；欄位與按鍵由 REPLY_LANES 定義）
+  ├─ 心裡想（顯示在選項上方）
+  ├─ W 接話
   ├─ A 追問
-  ├─ D 反對
-  └─ S 玩笑／打圓場（可 SKIP）
+  ├─ D 表態
+  └─ S 玩笑（可 SKIP）
         │
         ▼
 ui.py / story_ui.py
@@ -267,18 +270,23 @@ ui.py / story_ui.py
 原本 Controller → SpeechQueue → EdgeTTS → Discord
 ```
 
-**角色模式（`copilot/character.py`）**：同一條 STT → context → LLM 管線，但 Bot 自己就是人設角色。`CopilotRuntime.set_character_mode(True)` 之後：
+**角色模式**：同一條 STT → context → LLM 管線，但 Bot 自己就是人設角色。`CopilotRuntime.set_character_mode(True)` 之後：
 
 ```text
 final transcript（含 Owner 自己的麥克風）
-  → character.should_reply()   叫到名字一定回；否則冷卻＋（問句 或 別人講了 N 句）
-  → LocalReplyModel.character_reply()   一句話或 SKIP；記住最近 4 句，避免口頭禪重複
-  → 生成期間對話又走了 ≥2 句且不是被點名 → 丟掉
+  → LocalReplyModel.character_turn()
+      整場聊天是一段只往後接的 chat（和選項模式同一個格式），每句只 prefill 新的那句
+      → 先問「最後一句是不是在對你說話」，文法限定只答 是／否（3050 Ti 約 80–90 ms）；
+        Discord @提及或回覆直接算是
+      → 「會主動加入」模式：角色已經安靜 4 句以上，再問「現在插一句自然嗎」
+      → 是：同一段 chat 尾端加提示寫一句；幾乎重複對方的話就丟掉；
+        記住最近 4 句，避免口頭禪重複
+  → 生成期間對話又走了 ≥ stale_turns（2）句且不是被叫 → 丟掉
   → Controller._speak_as_character()   SpeechQueue 不閒置就丟掉（不搶話）
-  → SpeechQueue → EdgeTTS → Discord；播放完成才 record_self（以角色名顯示）
+  → SpeechQueue → EdgeTTS（串流）→ Discord；播放完成才 record_self（以角色名顯示）
 ```
 
-角色模式的 system prompt 允許角色承認自己是 AI（Copilot 模式則相反：說話的是真人，不能說自己是 AI）。
+被問「你是不是 AI」時怎麼回，由設定 `character_ai_honesty` 決定：預設 `in_character` 不出戲，`admit` 則老實承認是 AI 扮演的角色。App 只用到 `copilot/character.py` 的設定選項和 `asks_if_ai`；裡面舊的關鍵字規則（`should_reply` 等）已不再使用。
 
 **文字聊天（`text_chat = true`）**：`DiscordVoiceClient.on_message` 只收「Bot 目前所在語音頻道」的內建聊天，過濾 Bot 自己與其他 Bot、空訊息；`CopilotRuntime.accept_text()` 產生 `via="text"` 的 turn，之後和語音走同一條路。輸出依 `trigger.via` 決定：打字來的用 `channel.send()` 回，語音來的走 SpeechQueue；文字送出成功後才 `record_self`。`message_content` 是特權 intent，只有開啟設定時才要求，否則 gateway 會拒絕連線。
 

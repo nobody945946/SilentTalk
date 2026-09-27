@@ -110,6 +110,20 @@ class StoryPanel(tk.Frame):
             )
         ).pack(fill="x", pady=(theme.px(2), 0))
 
+        # The character's own view of the moment: the four choices are
+        # written from it, so it is what makes them hang together.
+        self._thought_var = tk.StringVar(value="")
+        self._thought_label = tk.Label(
+            self,
+            textvariable=self._thought_var,
+            bg=theme.BG,
+            fg=theme.ACCENT_HI,
+            font=theme.font(10),
+            anchor="w",
+            justify="left",
+        )
+        wrap_to_width(self._thought_label)
+
         self._status_var = tk.StringVar(value="選項會在對方說完話後出現")
         self._status_label = tk.Label(
             self,
@@ -273,6 +287,8 @@ class StoryPanel(tk.Frame):
             self._sent = False
             self._selected = None
         self._failed = bool(suggestions.error)
+        if fresh or suggestions.thought:
+            self._show_thought(suggestions.thought)
         if suggestions.error:
             self._choices = {lane.key: "" for lane in REPLY_LANES}
             self._selected = None
@@ -347,6 +363,15 @@ class StoryPanel(tk.Frame):
         if self._thinking and not was_thinking:
             self._thinking_tick = 0
             self._tick_thinking()
+
+    def _show_thought(self, thought: str) -> None:
+        self._thought_var.set(f"心裡想：{thought}" if thought else "")
+        if thought and not self._thought_label.winfo_manager():
+            self._thought_label.pack(
+                fill="x", pady=(theme.px(8), 0), before=self._status_label
+            )
+        elif not thought and self._thought_label.winfo_manager():
+            self._thought_label.pack_forget()
 
     def _show_line(self, speaker: str, text: str) -> None:
         self._speaker_var.set(speaker)
@@ -435,6 +460,7 @@ class StoryPanel(tk.Frame):
         if enabled:
             self._choices = {lane.key: "" for lane in REPLY_LANES}
             self._selected = None
+            self._show_thought("")
             self._set_status(f"{name or '角色'} 正在自己聊天")
         else:
             self._set_status("回到選項模式：下一句開始會出現四個選項")

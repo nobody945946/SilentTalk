@@ -1,4 +1,4 @@
-"""Fine-tune a small reply model on distill_data.py output (LoRA, one GPU).
+"""Fine-tune a small reply model on character_data.py output (LoRA, one GPU).
 
 Usage (needs the separate training venv, see handoff/dev-box.md):
     .runtime/train-venv/bin/python scripts/dev/train_lora.py \
