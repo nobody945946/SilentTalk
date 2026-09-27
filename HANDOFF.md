@@ -339,6 +339,23 @@ while not vad.empty():
 
 ---
 
+### T6｜Discord 文字聊天（使用者 9/27 10:10 要求，下一個要做的）
+
+**需求原話：** 「我要加入DC打字功能，讓模型除了語音也能文字回復」。
+
+**設計（已決定，照做）：**
+- **讀哪裡：** Bot 所在語音頻道**內建的文字聊天**（不是整個伺服器的文字頻道）。`config.toml [discord] text_chat = true`。
+- **前置條件（要請使用者做一次）：** Discord Developer Portal → Bot → 開啟 **Message Content Intent**；Bot 需要該頻道的「讀取訊息／傳送訊息」權限。沒開時 log 要寫清楚原因，程式照常只走語音。
+- **輸入：** 真人（非 Bot）在該聊天打的字 → `ConversationTurn`（加 `via="text"` 欄位）→ 和語音一樣進 context、觸發生成。**內容只在 RAM，不落地（規則 2 不變）**。
+- **角色模式輸出：** 用什麼問就用什麼答——文字觸發 → 回文字（不唸 TTS）；語音觸發 → 講話（`character_text_mirror = false` 可選同步貼文字）。
+- **Copilot 模式輸出：** 選項一樣出現；劇情頁加一個鍵（`T`）＝把選中的選項**打字送出**，原本的同鍵兩下／Enter 仍是用講的。
+- **人格規則要跟著改：** 角色「只能用嘴巴聊天」那條改成「能在頻道裡打短訊息，但你還是這個人，不是助理：不寫長 code／長文、不幫人寫作業；打字長度上限約 200 字」。`persona_eval --probes assistant` 要在文字情境下重跑，確認不會因為「能打字」就變成填空機。
+- **測試：** 假的 Discord message 物件→turn；角色模式 via=text → 走文字而非 SpeechQueue；Copilot T 鍵送文字；沒有 intent 時降級。無法在開發機實測 Discord，最後要請使用者實機確認一次。
+
+**9/27 10:08 的人格實測（`--probes assistant`，Gemma，角色模式）：** 修 prompt 後「答應做不到的事」約 7/24 → 4/24；凱哥、小晴會承認是 AI，黑焰仍會用「高二學生」帶過（未完全解決，看 LoRA 或更大模型）。
+
+---
+
 ### T4｜修補 discord-ext-voice-recv fork（需要使用者的 GitHub 帳號，先問）
 
 **為什麼：** 目前 `requirements.txt` 釘的是 `rdphillips7/discord-ext-voice-recv@ddd2860`（上游 PR #54，支援 DAVE 解密）。我們在 `discord_voice.py` 已經繞過它的兩個 bug，但從源頭修最乾淨。
