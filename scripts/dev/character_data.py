@@ -22,7 +22,7 @@ Steps (each appends to .runtime/dev/chardata/*.jsonl and resumes):
     python scripts/dev/character_data.py render
 
 The teacher must be an open-weight model whose license allows training on
-its outputs; never Claude, which may only evaluate (HANDOFF rule 8). Names,
+its outputs; never Claude, which may only evaluate (handoff/dev-box.md rule 2). Names,
 personas and scenes of the M1 test set (scripts/dev/turn_eval_data.jsonl)
 are excluded. Everything is synthetic; no real conversation is involved.
 """

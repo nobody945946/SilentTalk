@@ -4,7 +4,7 @@ Windows 本機 SilentTalk：可手動輸入文字，也可在 Discord 語音中�
 
 ## 開發者導覽
 
-如果你要修改程式而不是只使用它，先看 [ARCHITECTURE.md](ARCHITECTURE.md)。要接手 Copilot 後續工作，照 [HANDOFF.md](HANDOFF.md) 的任務清單做。裡面有「想改什麼 → 去哪個檔案」、核心資料流、執行緒模型與測試對照表。
+如果你要修改程式而不是只使用它，先看 [ARCHITECTURE.md](ARCHITECTURE.md)，裡面有「想改什麼 → 去哪個檔案」、核心資料流、執行緒模型與測試對照表。給接手的 agent（Codex、Claude Code）：入口只有 [AGENTS.md](AGENTS.md)。
 
 ## 最快使用方式
 

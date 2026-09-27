@@ -3,7 +3,7 @@
 EdgeTTS delivers the first MP3 chunk well before the whole line (3050 Ti
 laptop: ~0.45 s vs ~0.66 s for 16 characters), so playback can start on
 the first chunk instead of on a finished file. The audio never touches the
-disk (HANDOFF rule 1).
+disk (AGENTS.md rule 1).
 """
 
 from __future__ import annotations

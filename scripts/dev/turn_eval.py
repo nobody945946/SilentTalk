@@ -1,4 +1,4 @@
-"""Character-mode turn-taking eval (HANDOFF M1): speak or stay silent, and what.
+"""Character-mode turn-taking eval (handoff/dev-box.md §5.2): speak or stay silent, and what.
 
 Usage (from the repo root; llama-server is found on PATH or in .runtime/tools):
     python scripts/dev/turn_eval.py --stats                  # test-set stats only
@@ -11,8 +11,8 @@ with teacher forcing: the character's scripted lines always enter the history,
 whatever the model said. At every other line (a decision point) we record
 whether the character spoke, what it said and how long that took, then report:
 
-  recall       share of `speak` lines where it spoke        (HANDOFF 3.3: >= 95%)
-  false speak  share of `silent` lines where it spoke       (HANDOFF 3.3: <= 10%)
+  recall       share of `speak` lines where it spoke        (target >= 95%)
+  false speak  share of `silent` lines where it spoke       (target <= 10%)
   ...per tag and per engagement mode; `either` lines count for neither.
 
 Policies:
@@ -26,7 +26,7 @@ Policies:
 
 --judge rates every generated reply (blind to the policy) with the claude CLI,
 exactly like persona_eval.py: natural / voice / fit 1-5 and breaks_character.
-Claude is only an evaluator here (HANDOFF rule 8). The test set is synthetic;
+Claude is only an evaluator here (handoff/dev-box.md rule 2). The test set is synthetic;
 results go to .runtime/dev/turn_eval/<tag>.json. Nothing but numbers and ids is
 printed.
 """

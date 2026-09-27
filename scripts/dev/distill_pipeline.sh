@@ -14,7 +14,7 @@
 #
 # Needs (Linux dev box): .runtime/tools/env.sh (llama-server b11179 on PATH),
 # the teacher GGUF, .runtime/train-venv, .runtime/hf/gemma-4-E2B-it-qat and
-# the `claude` CLI for the judge. See HANDOFF.md section 3.6.
+# the `claude` CLI for the judge. Superseded by character_pipeline.sh.
 set -u
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$REPO" || exit 1

@@ -1,6 +1,6 @@
 """Fine-tune a small reply model on distill_data.py output (LoRA, one GPU).
 
-Usage (needs the separate training venv, see HANDOFF.md):
+Usage (needs the separate training venv, see handoff/dev-box.md):
     .runtime/train-venv/bin/python scripts/dev/train_lora.py \
         --base .runtime/hf/gemma-4-E2B-it-qat --out .runtime/dev/lora/gemma4-e2b
 

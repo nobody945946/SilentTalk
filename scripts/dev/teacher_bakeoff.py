@@ -6,7 +6,7 @@ sends once the gate said 是 (LocalReplyModel.character_messages, addressed).
 Teacher candidates also get a "+pick" variant: four samples, then the same
 model picks the most natural one, which is how training data would be made.
 Claude then ranks the candidates blind, point by point. Claude only
-evaluates here; its output never becomes training data (HANDOFF rule 8).
+evaluates here; its output never becomes training data (handoff/dev-box.md rule 2).
 
     .venv/bin/python scripts/dev/teacher_bakeoff.py generate [--only NAME,...]
     .venv/bin/python scripts/dev/teacher_bakeoff.py judge [--passes 2]

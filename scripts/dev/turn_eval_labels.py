@@ -1,4 +1,4 @@
-"""Cross-check turn_eval_data.jsonl labels with a local open-weight model (HANDOFF M1).
+"""Cross-check turn_eval_data.jsonl labels with a local open-weight model (handoff/dev-box.md §5.2).
 
 Usage (from the repo root; starts and stops its own llama-server):
     python scripts/dev/turn_eval_labels.py                       # Qwen3-30B-A3B, port 18400
