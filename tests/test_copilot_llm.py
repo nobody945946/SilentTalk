@@ -146,6 +146,21 @@ def test_options_are_asked_on_the_end_of_the_character_chat() -> None:
     assert later[-1]["content"].startswith(chat[-1]["content"])
 
 
+def test_the_last_thought_carries_into_the_next_round() -> None:
+    import asyncio
+
+    model = LocalReplyModel(Path("unused.gguf"))
+    model._request_messages = lambda *a, **k: "心裡|想先丟煙\n接話|丟完煙再進"  # type: ignore[method-assign]
+    turns = _chat(CHAT)
+
+    assert "剛才心裡想" not in model.option_messages(turns=turns)[-1]["content"]
+    asyncio.run(model.suggest(turns=turns, trigger_speaker="阿傑", trigger_text="對啊打野一直送"))
+    assert "（你剛才心裡想的是：想先丟煙）" in model.option_messages(turns=turns)[-1]["content"]
+    # Another character starts from its own head.
+    model.set_persona(PRESET_PERSONAS[0])
+    assert "剛才心裡想" not in model.option_messages(turns=turns)[-1]["content"]
+
+
 def test_options_after_your_own_line_get_their_own_request_turn() -> None:
     model = LocalReplyModel(Path("unused.gguf"))
     messages = model.option_messages(turns=_chat(CHAT[:4]))
