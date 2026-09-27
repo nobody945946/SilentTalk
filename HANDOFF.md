@@ -204,33 +204,7 @@ source .runtime/tools/env.sh     # llama-server b11179 (Vulkan) 進 PATH
 
 ### 需要使用者本人的驗收（等他有空，不要催）
 
-**Discord 實機測試**是目前最缺的一塊。使用者在 3050 Ti 筆電上用 SSH 連開發機，筆電上有自己的 agent，給他下面這段 prompt 就好（使用者不想做雜事，**只請他講話和聽**）：
-
-```text
-在 C:\Users\A8fm0\Downloads\SilentTalk（Windows 11、RTX 3050 Ti）：
-1. git fetch origin，git checkout copilot-story-mode，git pull。
-2. .venv\Scripts\python.exe -m pip install -r requirements.txt，
-   .venv\Scripts\python.exe scripts\setup_copilot.py（已下載的會跳過）。
-3. 確認 .env 有 DISCORD_BOT_TOKEN、OWNER_USER_ID（沒有就停下來問使用者，不要自己填）。
-4. .venv\Scripts\python.exe app.py --copilot-smoke，把輸出貼回來。
-5. 用「啟動 SilentTalk.cmd」開 App，跟使用者說可以進語音頻道了。
-6. 使用者測完後，從 silenttalk.log 抓這幾種行的數字（log 裡沒有對話內容）：
-   copilot_turn_final、copilot_character_line（latency_ms、since_heard_ms、spoke）、
-   job_done（synthesis_ms、streamed）、character_line_dropped、任何 error／failed。
-   整理成表貼回來，並附上使用者說哪裡怪。
-不要 commit、不要改 repo 的檔案、不要動 .env 和 settings.json。
-```
-
-使用者要做的（約 10 分鐘）：人設頁選或建一個人設，「人際關係」加一行「自己的 Discord 名字：我老公（或我兒子、我兄弟…）」→ 開角色模式 → 在語音頻道：
-1. 叫它名字問一句 → 要回，感覺延遲
-2. 跟朋友聊別的、不叫它 → 不能插嘴
-3. 「我剛剛跟○○講過」（講到它但不是對它說）→ 不能回
-4. 它回完話後直接接它的話（不叫名字）→ 要回
-5. 故意叫錯一個同音字 → 最好要回
-6. 「你是不是 AI」→ 不承認、自然帶過
-7. 叫它寫程式或查天氣 → 用角色的方式推掉
-8. 聽聲音：音色合不合、有沒有斷音或爆音（TTS 串流是新的）
-9. 有沒有把你當成人際關係裡寫的那個人
+**Discord 實機測試**是目前最缺的一塊，步驟全部在 **`LAPTOP_TODO.md`**（筆電 agent 的唯一入口，自足、不必讀這份）。使用者 pull 後叫筆電的 agent 照做；結果會推到 `laptop-report` 分支的 `LAPTOP_REPORT.md`，開發機用 `git fetch origin laptop-report && git show origin/laptop-report:LAPTOP_REPORT.md` 讀。log 的數字用 `scripts/dev/log_summary.py` 整理（只輸出數字和事件名稱）。要改測試內容就改 `LAPTOP_TODO.md`，不要在這裡另寫一份。
 
 其他：
 
