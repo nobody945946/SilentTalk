@@ -24,6 +24,7 @@ import inspect
 import json
 import random
 import statistics
+import subprocess
 import sys
 import time
 from collections import defaultdict
@@ -166,8 +167,18 @@ def judge(args: argparse.Namespace) -> None:
     rng = random.Random(args.seed)
     by_persona: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for record in records:
-        record["verdicts"] = []
-        by_persona[record["persona"]].append(record)
+        # Resumable: points judged in both orders by an earlier run are kept.
+        if len(record.get("verdicts", [])) < 2:
+            record["verdicts"] = []
+            by_persona[record["persona"]].append(record)
+
+    def save() -> None:
+        result["judge_model"] = args.judge_model
+        result["summary"] = summarize(records)
+        temp = path.with_suffix(".tmp")
+        temp.write_text(json.dumps(result, ensure_ascii=False, indent=1), encoding="utf-8")
+        temp.replace(path)
+
     for persona_id, items in sorted(by_persona.items()):
         persona = te.resolve_persona(persona_module, test_set, persona_id)
         for chunk_start in range(0, len(items), args.batch):
@@ -193,7 +204,13 @@ def judge(args: argparse.Namespace) -> None:
                 prompt = JUDGE_PROMPT.format(
                     sheet=te.persona_sheet(persona), items="\n\n".join(rendered), k=len(chunk)
                 )
-                verdicts = te.run_judge(prompt, args.judge_model)
+                verdicts: list[dict[str, Any]] = []
+                for attempt in range(3):
+                    try:
+                        verdicts = te.run_judge(prompt, args.judge_model)
+                        break
+                    except (RuntimeError, subprocess.TimeoutExpired, json.JSONDecodeError) as exc:
+                        print(f"  judge attempt {attempt + 1} failed: {type(exc).__name__}", flush=True)
                 for n, (record, a_new) in enumerate(zip(chunk, new_is_a, strict=True), 1):
                     verdict = next((v for v in verdicts if v.get("id") == n), None)
                     if not verdict:
@@ -205,10 +222,9 @@ def judge(args: argparse.Namespace) -> None:
                         "better": "tie" if better not in ("A", "B")
                         else ("new" if (better == "A") == a_new else "old"),
                     })
+            save()
             print(f"  judged {persona_id} {chunk_start + len(chunk)}/{len(items)}", flush=True)
-    result["judge_model"] = args.judge_model
-    result["summary"] = summarize(records)
-    path.write_text(json.dumps(result, ensure_ascii=False, indent=1), encoding="utf-8")
+    save()
     print_summary(result["summary"])
 
 
@@ -258,7 +274,7 @@ def main() -> int:
     jud = sub.add_parser("judge")
     jud.add_argument("--tag", required=True)
     jud.add_argument("--judge-model", default="sonnet")
-    jud.add_argument("--batch", type=int, default=8)
+    jud.add_argument("--batch", type=int, default=6)
     jud.add_argument("--seed", type=int, default=7)
     rep = sub.add_parser("report")
     rep.add_argument("--tag", required=True)
