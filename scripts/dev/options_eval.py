@@ -79,7 +79,8 @@ async def generate(args: argparse.Namespace) -> None:
     llm_dir = te.PROJECT_DIR / ".runtime" / "models" / "llm"
     model_path = llm_dir / (args.model or config["llm_model"])
     old_path = llm_dir / args.old_model if args.old_model else model_path
-    te.EVAL_PORT = PORT
+    port = args.port or PORT
+    te.EVAL_PORT = port
     lora = llm_dir / args.lora if args.lora else None
     new_model = te.make_model(llm_module, model_path, config, lora)
     if lora is not None:
@@ -90,7 +91,7 @@ async def generate(args: argparse.Namespace) -> None:
     # scale, which the old client never does.
     own_server = old_path != model_path or lora is not None
     if own_server:
-        te.EVAL_PORT = PORT + 1
+        te.EVAL_PORT = port + 1
     old_model = te.make_model(old.llm, old_path, config)
     # The app's 15 s limit is for a live chat; a shared or CPU-only eval box
     # can be slower, and one timeout should not cost the whole run.
@@ -287,6 +288,7 @@ def main() -> int:
     gen.add_argument("--model", help="gguf in .runtime/models/llm/ (default: config.toml)")
     gen.add_argument("--old-model", help="the old side runs this gguf instead (own server)")
     gen.add_argument("--lora", help="adapter gguf for the new side's options")
+    gen.add_argument("--port", type=int, help=f"llama-server port (default {PORT}; +1 for an own old server)")
     gen.add_argument("--every", type=int, default=2, help="options at every Nth line of others")
     gen.add_argument("--only", help="comma-separated conversation ids")
     gen.add_argument("--cpu", action="store_true", help="no GPU layers (GPU busy)")
