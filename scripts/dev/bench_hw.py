@@ -111,6 +111,9 @@ def main() -> int:
     parser.add_argument("--skip-tts", action="store_true", help="no internet")
     parser.add_argument("--llama-server", help="path to llama-server(.exe)")
     args = parser.parse_args()
+    # Redirected output on a zh-TW Windows is cp950, which has no Simplified
+    # characters; the STT line would crash the whole report.
+    sys.stdout.reconfigure(errors="replace")
 
     rows: list[tuple[str, str]] = []
     print_system(rows)

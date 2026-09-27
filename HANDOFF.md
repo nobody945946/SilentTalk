@@ -15,7 +15,7 @@
 
 **使用者的目標是 2，而且要做到「頂級電子人，講話無違和」。** 1 維持現狀，這一輪不動。
 
-**硬體底線（2026-09-27 改）：一般文書機，只有 CPU、沒有獨顯，也要能跑。** 3050 Ti 筆電、3090 開發機只是比較快的等級。**不用任何付費 API**（這是玩具專案）。
+**硬體標準：RTX 3050 Ti Laptop（4 GB VRAM）。** 使用者最差的機器就是這個等級，開發以它為準；純 CPU 只是退路（能用就好）。**不用任何付費 API**（這是玩具專案）。使用者的 3050 Ti 筆電是 Windows 11、Intel 11 代 8 執行緒，**實測數字見 5.1**。
 
 **這一輪在做什麼：** 使用者同意把角色模式整個重蓋，舊的蒸餾資料和 LoRA 已停用、封存在 `archive/distill-v1/`（原因見那裡的 README，第 3 節也有摘要）。
 
@@ -49,7 +49,7 @@ source .runtime/tools/env.sh     # llama-server b11179 (Vulkan) 進 PATH
 
 開發機的 GPU 和別的專案共用（ComfyUI、whisper-api 常駐約 9 GB），**不要動它們的程序**。
 
-**模擬文書機：** `CUDA_VISIBLE_DEVICES= GGML_VK_VISIBLE_DEVICES= llama-server ... -ngl 0 -t 4`。開發機是 i9-12900，真的文書機大約再慢 1.5–2 倍，數字要打這個折扣。
+**3090 的數字不能換算成 3050 Ti。** 用規格比例（×5）推估錯很多：實測 3050 Ti 生成速度是 3090 的 57%，不是 20%。要 3050 Ti 的數字就請使用者在筆電上跑 `scripts/dev/bench_hw.py`（見第 6 節），或給他一段 prompt 讓筆電上的 agent 跑。
 
 ### 1.3 每個任務結束都要跑
 
@@ -74,7 +74,7 @@ source .runtime/tools/env.sh     # llama-server b11179 (Vulkan) 進 PATH
 7. **不要在 `main` 直接 commit。** 目前分支是 `copilot-story-mode`。commit 前跑 1.3。
 8. **Claude 的輸出不能用來訓練模型，也不能用來挑選訓練資料**（Anthropic 條款）。老師和資料篩選只能用開源權重模型；Claude 只能當**評估**用的評審。
 9. **不要叫使用者標註資料、評判樣本。** 標籤要在出題時就決定（by construction），或用兩個以上互相獨立的評審交叉確認，意見不一致的題目丟掉或標成「兩種都算對」。使用者只負責做決定和實機驗收。
-10. **每個設計都先用文書機（CPU、4 執行緒）的數字判斷**，GPU 數字只當參考。
+10. **每個設計都用 3050 Ti 實測數字判斷**，3090 數字只能看相對快慢。VRAM 預算：模型＋KV 要留空間給遊戲（使用者可能邊玩邊用）。
 11. **不用付費 API。** 老師模型只能在開發機本機跑。
 12. **不要用 `archive/distill-v1/` 的任何資料訓練。**
 
@@ -103,7 +103,7 @@ source .runtime/tools/env.sh     # llama-server b11179 (Vulkan) 進 PATH
 
 **B. 對話改成「只往後接」的多輪格式。** 別人說的話是 user 訊息（`名字：內容`），角色自己說的是 assistant 訊息，system 放人設。新的一句只要接在最後，前面的 KV 快取整段沿用。
 - 對話太長要濃縮時才重建一次快取（`summarize` 已有）。
-- 實測見 5.1：文書機模擬下每次判斷 **0.15–0.19 s**，舊格式 0.65–1.65 s。
+- 實測見 5.1：3050 Ti 上每次判斷 93 ms（舊格式 118 ms），在 GPU 上差距不大；純 CPU 時差距很大（0.15 s vs 0.65–1.65 s）。主要好處是 CPU 退路和長對話時不用重算。
 
 **C. 從講完到出聲的整條路提速：**
 - TTS 串流：`edge_tts.Communicate.stream()` 邊收邊送 Discord，不寫完整檔再播（現在是先存 MP3 再播）。
@@ -117,7 +117,7 @@ source .runtime/tools/env.sh     # llama-server b11179 (Vulkan) 進 PATH
 
 | 面向 | 指標 | 目標 |
 |---|---|---|
-| 反應 | 對方講完 → Bot 開始出聲 | 文書機 ≤ 2.0 s，3050 Ti ≤ 1.5 s |
+| 反應 | 對方講完 → Bot 開始出聲 | 3050 Ti ≤ 1.5 s（純 CPU 退路 ≤ 3 s） |
 | 時機 | 真的在叫它時有回（recall） | ≥ 95% |
 | 時機 | 不是對它說卻插嘴（false speak） | ≤ 10%（「健談」設定另外量） |
 | 內容 | 盲測：評審猜哪個參與者是 Bot | 猜中率越接近 50% 越好；先求比現況低 |
@@ -133,8 +133,8 @@ source .runtime/tools/env.sh     # llama-server b11179 (Vulkan) 進 PATH
 ### M0｜量現況基準 ✅ 部分完成
 
 - [x] 停掉舊蒸餾流程、刪 cron 看門狗、資料封存到 `archive/distill-v1/`
-- [x] 文書機模擬的格式延遲（5.1）
-- [ ] 端到端延遲分段：STT 斷句 → 最終文字、LLM 判斷、LLM 生成、TTS 首個音訊、Discord 開始播放。用 `app.py --copilot-smoke` 或寫 dev 腳本量，CPU 和 GPU 各一份
+- [x] 3050 Ti 實機分段延遲（5.1，`bench_hw.py`）
+- [ ] 補上還沒量的兩段：STT 從最後一個字到判定講完的實際等待時間（Paraformer 每 ~0.6 s 才吐字，加上 0.8 s 靜音規則）、Discord 從拿到音訊到對方聽到聲音
 - [ ] 現況（舊架構、Gemma 4 E2B、無 LoRA）在 M1 測試集上的時機指標和內容分數
 
 ### M1｜測試集與指標
@@ -144,19 +144,19 @@ source .runtime/tools/env.sh     # llama-server b11179 (Vulkan) 進 PATH
 - 用兩個互相獨立的評審交叉確認標籤（例：本機 Qwen3-30B-A3B 和 Claude Sonnet；**Claude 只在測試集用**）。不一致的丟掉或標「兩種都算對」。
 - 人設和情境種子要和之後的訓練資料完全分開（用內建 `PRESET_PERSONAS` 加另外手寫的幾個）。
 - 寫一個評估腳本：餵整場對話、逐句記錄模型講不講、講什麼、花多久，輸出 3.3 的所有數字。
-- **過關：** 測試集 ≥ 300 個判斷點；評估腳本能在 CPU 模式跑完；兩個評審的一致率要寫進第 5 節。
+- **過關：** 測試集 ≥ 300 個判斷點；評估腳本在開發機上跑得完；兩個評審的一致率要寫進第 5 節。
 
 ### M2｜新架構 A＋B，先不訓練
 
 - 在 `llm.py`／`runtime.py` 實作只往後接的多輪格式和「第一個輸出決定講不講」。
 - `address_of()`／`is_question()`／`asks_if_ai()` 從預設路徑拿掉，只留當逾時的後備規則。
 - 用 Gemma 4 E2B 原模型直接跑 M1。
-- **過關：** 時機指標比 M0 好、內容分數不退步、文書機模擬下每句判斷 < 300 ms；`pytest -q` 全過，而且有「模型逾時 → 退回規則」的測試。
+- **過關：** 時機指標比 M0 好、內容分數不退步、3050 Ti 上每句判斷 < 150 ms；`pytest -q` 全過，而且有「模型逾時 → 退回規則」的測試。
 - 不過關就把數字寫進第 5 節，停下來跟使用者報告。
 
 ### M5｜整條路提速（架構 C，不用 GPU，可以和 M3、M4 並行）
 
-- 依 M0 量到的分段，從最大的那一段開始改。
+- **3050 Ti 實測顯示 LLM 不是瓶頸**（判斷＋一句話約 0.3 s），大頭是「等對方講完」（0.8 s 靜音規則＋STT 出字粒度）和 TTS（整句合成完 0.66 s、第一段聲音 0.45–0.53 s）。從這兩段開始改。
 - **過關：** 端到端延遲達到 3.3 的目標，或者清楚寫出還差多少、卡在哪。
 
 ### M3｜挑老師（只能用本機免費模型）
@@ -172,7 +172,7 @@ source .runtime/tools/env.sh     # llama-server b11179 (Vulkan) 進 PATH
 - 別人的台詞加上 STT 雜訊（拿掉標點、同音錯字、聽錯名字），角色的台詞保持乾淨。
 - 用開源模型和規則篩資料（**不能用 Claude**）。
 - 訓練：多輪對話，每一個 assistant 位置（講或沉默）都算 loss。舊的 `scripts/dev/distill_data.py`、`distill_pipeline.sh`、`train_lora.py` 是舊格式，**要重寫，不要直接跑**；無人值守、斷點續跑、看門狗的做法可以沿用（見 6.1）。
-- **過關：** M1 上所有指標贏過 M2，而且差距超出評審誤差；文書機速度不退步。過關才上線（adapter 量化成 q8_0 放進 repo、`setup_copilot.py` 加下載項）。
+- **過關：** M1 上所有指標贏過 M2，而且差距超出評審誤差；3050 Ti 速度不退步。過關才上線（adapter 量化成 q8_0 放進 repo、`setup_copilot.py` 加下載項）。
 
 ### 需要使用者本人的驗收（等他有空，不要催）
 
@@ -180,7 +180,7 @@ source .runtime/tools/env.sh     # llama-server b11179 (Vulkan) 進 PATH
 |---|---|
 | Discord 文字聊天 | Developer Portal → Bot → 打開 **Message Content Intent**；設定頁 → Discord → 打開「讀寫文字聊天」；在語音頻道聊天室 @Bot。預期 log 有 `text_message_received ... addressed=True`。PrivilegedIntentsRequired＝沒開 intent；`text_send_failed reason=forbidden`＝沒發言權限 |
 | 人設聲音 | 人設頁最下面「聲音」→「▶ 試聽」，主觀判斷合不合角色 |
-| 實機速度 | 筆電／文書機上 `.venv\Scripts\python.exe app.py --copilot-smoke`，看 GPU 列表和延遲中位數 |
+| 實機速度 | 筆電上 `.venv\Scripts\python.exe scripts\dev\bench_hw.py`，貼回最後那張表。**開著遊戲再跑一次**才知道 VRAM 被搶時的情況（還沒量） |
 | voice-recv fork 修補 | 需要使用者的 GitHub，先問。要改 fork 的 `discord/ext/voice_recv/opus.py` 三處：`dave_session` 為 None 時不呼叫 `set_passthrough_mode`；`decrypt` 改用 `self._cached_id`；DAVE 還沒 ready 就丟掉封包。`discord_voice.py` 現有的防護不要刪 |
 | 不切視窗選選項（可選） | 只能用「修飾鍵＋數字」這類組合，**絕不能註冊單獨的 W/A/S/D 全域熱鍵**。先問使用者要哪組按鍵 |
 
@@ -188,15 +188,25 @@ source .runtime/tools/env.sh     # llama-server b11179 (Vulkan) 進 PATH
 
 ## 5. 量過的數字
 
-### 5.1 文書機模擬：prompt 格式 vs 延遲（2026-09-27，i9-12900 CPU 4 執行緒，Gemma 4 E2B，凱哥人設）
+### 5.1 3050 Ti 實機（2026-09-27，使用者筆電，`scripts/dev/bench_hw.py`，Gemma 4 E2B，App 的 low-VRAM 參數）
 
-| 格式 | 每句判斷（1 token） | 每句要重算的 token |
-|---|---|---|
-| 舊：每次重組「最近 N 句」 | **650–1650 ms** | 74–183 |
-| 新：只往後接的多輪對話 | **150–190 ms** | 12–16 |
+| 項目 | 3050 Ti（GPU） | 同一台純 CPU（`--gpu-layers 0`） | 3090 參考 |
+|---|---|---|---|
+| 模型佔用 VRAM | 1370 MiB（4 GB 裡還剩一半以上） | 122 MiB | — |
+| 判斷一句：舊格式 | 118 ms | 615 ms | 77 ms |
+| 判斷一句：新格式 | 93 ms | 644 ms | 49 ms |
+| 生成速度 | 78.6 token/s | 8.8 token/s | 138 token/s |
+| 回一句話（7 token） | 101 ms | 778 ms | — |
+| TTS 第一段聲音 | 421–529 ms | | 257 ms |
+| TTS 整句合成完 | 569–664 ms | | 395 ms |
+| STT 解碼 | 0.14–0.18 × 即時 | | 0.09 × 即時 |
+| STT 句尾收尾 | 44–70 ms，另外固定等 0.8 s 靜音 | | 44 ms |
 
-生成速度約 20 token/s，一句短回覆（10–15 token）約 0.5–0.8 s。真的文書機再慢 1.5–2 倍。
-同一個獨立 gate prompt 在 CPU（8 執行緒）上約 1 s／句、15 題對 14 題，所以**不能另外加一次 gate 呼叫**，要併進生成。
+- llama.cpp 在筆電上看到兩張卡：Vulkan0 是 Intel Iris Xe 內顯、Vulkan1 是 3050 Ti。依 nvidia-smi 的 VRAM 用量，模型是在 3050 Ti 上。**如果之後遇到速度異常，先檢查是不是跑到內顯**（可用 `--device Vulkan1` 或 `GGML_VK_VISIBLE_DEVICES=1` 固定）。
+- 筆電的 llama-server 是 winget 的 b11193（開發機 b11179），winget 沒建 Links 捷徑，檔案在 `%LOCALAPPDATA%\Microsoft\WinGet\Packages\ggml.llamacpp_*\`。**App 的 `find_llama_server()` 目前只找 PATH**，在這台筆電上會找不到，要修。
+- 純 CPU 的判斷時間新舊格式差不多，推測是 `-ngl 0` 時較長的 prompt 仍會被丟到 GPU 算，不是新格式沒用。開發機純 CPU（i9-12900，4 執行緒）：新格式 150–190 ms、舊格式 650–1650 ms、生成約 20 token/s。
+- 同一個獨立 gate prompt 在 CPU 上約 1 s／句、15 題對 14 題，所以**不要另外加一次 gate 呼叫**，要併進生成。
+- 結論：**3050 Ti 上 LLM 很快，VRAM 也還有空間**；使用者感受到的延遲主要來自 STT 斷句和 TTS。
 
 ### 5.2 模型比較（舊 persona_eval，四選項，3 人設 × 14 情境，Claude Sonnet 評審）
 
@@ -236,6 +246,7 @@ source .runtime/tools/env.sh     # llama-server b11179 (Vulkan) 進 PATH
 |---|---|---|
 | `python app.py --copilot-smoke` | 本機 STT＋LLM 一鍵驗收，exit 0＝通過 | 可用 |
 | `scripts/dev/persona_eval.py` | 單句人格評分（盲測＋評分表），`--mode character`、`--probes assistant`、`--judge none`、`--rejudge` | 可用，但只量單句；M1 會加整場對話的評估 |
+| `scripts/dev/bench_hw.py [--gpu-layers 0] [--llama-server PATH] [--skip-tts]` | 這台機器每一段各花多久；不 import silenttalk，舊安裝也能跑；需要 llama-server、模型、網路（TTS） | 可用 |
 | `scripts/dev/llm_eval.py` | 四選項格式／方向／速度 | 可用 |
 | `scripts/dev/stt_eval.py [--engine sensevoice]` | STT 準確度 | 可用 |
 | `scripts/dev/ui_preview.py` | UI 截圖＋按鍵流程 | 可用 |
