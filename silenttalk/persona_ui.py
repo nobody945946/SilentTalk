@@ -83,6 +83,7 @@ SECTIONS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
 MULTILINE = {"background": 3, "sample_lines": 3, "speech_style": 2, "desires": 2}
 HINTS = {
     "catchphrases": "例：穩啦、笑死。AI 只會偶爾帶到，不會每句都用。",
+    "nickname": "角色模式靠這些字判斷有沒有人在叫它。語音常被聽錯的寫法也一起寫進來（例：凱哥、開哥）。",
     "sample_lines": "一行一句，最多取前 4 句。",
     "secret": "AI 知道但不會主動講，會影響迴避或轉移話題的方式。",
 }

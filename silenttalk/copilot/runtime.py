@@ -11,7 +11,7 @@ from silenttalk.config import CopilotConfig
 from silenttalk.copilot.character import (
     CharacterPolicy,
     CharacterState,
-    is_addressed,
+    address_of,
     should_reply,
 )
 from silenttalk.copilot.context import ConversationStore
@@ -272,18 +272,23 @@ class CopilotRuntime:
 
         trigger = _Trigger(speaker_name, text, self._turn_seq, via=via)
         if self._character_mode:
-            addressed = mentioned or is_addressed(text, self._persona)
+            address = address_of(text, self._persona, mention=mentioned)
             if not should_reply(
                 self._character_policy,
                 self._character_state,
                 text,
-                addressed=addressed,
+                addressed=address.worth_reading,
                 now=time.monotonic(),
             ):
                 return
-            if not addressed:
+            if not address.worth_reading:
                 self._character_state.follow_ups += 1
-            trigger = _Trigger(speaker_name, text, self._turn_seq, addressed, via)
+            # Only an unmistakable call makes the prompt insist on an answer.
+            # A name that merely turned up in the line is handed to the model
+            # with the whole sentence; it can still answer SKIP.
+            trigger = _Trigger(
+                speaker_name, text, self._turn_seq, address.called, via
+            )
 
         # Latest wins: while a generation is running, newer lines replace the
         # queued trigger instead of stacking requests on a small GPU.

@@ -114,13 +114,55 @@ def talks_to_you(text: str) -> bool:
     return bool(re.search(r"你(?!們)", text))
 
 
-def is_addressed(text: str, persona: Persona) -> bool:
-    folded = text.casefold()
+@dataclass(frozen=True, slots=True)
+class Address:
+    """How sure we are that a line is aimed at the character.
+
+    `called` is unmistakable - an @mention, a reply to it, or its name
+    opening the line ("凱哥你覺得呢"). `mentioned` only says the name turned
+    up somewhere, which is as likely to be *about* it as *to* it ("我剛才跟
+    阿凱講話"). Those go to the model, which sees the whole line and can
+    answer SKIP; names come up in 0.03% of lines, so that costs nothing.
+    """
+
+    called: bool = False
+    mentioned: bool = False
+
+    @property
+    def worth_reading(self) -> bool:
+        return self.called or self.mentioned
+
+
+# Openers people put before a name when calling someone.
+_VOCATIVE_LEAD = "欸喂齁唉诶@ 　,，.。!！?？~～"
+
+
+def persona_names(persona: Persona) -> list[str]:
+    """What this character answers to. One-character names are skipped: they
+    would match inside half the words in the language."""
     names = [persona.name, *persona.nickname.split("、")]
-    names = [name.strip().casefold() for name in names if len(name.strip()) >= 2]
-    if not names:
-        names = list(_GENERIC_NAMES)
-    return any(name in folded for name in names)
+    names = [name.strip() for name in names if len(name.strip()) >= 2]
+    return names or list(_GENERIC_NAMES)
+
+
+def address_of(text: str, persona: Persona, *, mention: bool = False) -> Address:
+    """Read who a line is aimed at. `mention` is Discord's own signal."""
+    if mention:
+        return Address(called=True, mentioned=True)
+    folded = text.casefold()
+    for name in persona_names(persona):
+        index = folded.find(name.casefold())
+        if index < 0:
+            continue
+        # At the start, or after nothing but an opener ("欸 凱哥…").
+        opening = not text[:index].strip(_VOCATIVE_LEAD)
+        return Address(called=opening, mentioned=True)
+    return Address()
+
+
+def is_addressed(text: str, persona: Persona) -> bool:
+    """Kept for callers that only need a yes/no (eval, data generation)."""
+    return address_of(text, persona).worth_reading
 
 
 MAX_FOLLOW_UPS = 1

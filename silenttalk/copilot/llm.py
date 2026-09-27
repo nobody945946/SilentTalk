@@ -352,6 +352,8 @@ class LocalReplyModel:
             relation_part = "\n你和在場的人的關係：\n" + "\n".join(
                 f"- {note}" for note in relationships
             ) + "\n"
+        # Said only when the call is unmistakable. When the name merely turned
+        # up in the line, the model gets the sentence and decides for itself.
         addressed_part = "（對方是在跟你說話，要回應）\n" if addressed else ""
         reminder = ""
         if not persona.is_blank:
@@ -368,13 +370,16 @@ class LocalReplyModel:
             )
         # Small models ignore the honesty rule under persona pressure ("欸我不
         # 是AI啦"); when the chat is actually asking, say so right here.
-        recent = "\n".join(context.splitlines()[-3:] + [trigger_text])
-        if asks_if_ai(recent):
-            reminder += (
-                "（有人在問你是不是 AI 或真人：要老實承認你是 AI 扮演的角色，用你的口吻說）\n"
-                if self._ai_honesty == "admit"
-                else "（有人在試探你是不是 AI：用這個角色的方式輕鬆帶過或反問回去，別承認、也別認真辯解）\n"
-            )
+        # Only the "admit" policy needs this keyword check, and it is the one
+        # place it earns its keep: told to own up, the small model otherwise
+        # denies it anyway. Staying in character is what it does naturally, so
+        # the default path never runs it (A/B: 0/18 broke character either way).
+        if self._ai_honesty == "admit":
+            recent = "\n".join(context.splitlines()[-3:] + [trigger_text])
+            if asks_if_ai(recent):
+                reminder += (
+                    "（有人在問你是不是 AI 或真人：要老實承認你是 AI 扮演的角色，用你的口吻說）\n"
+                )
         return f"""下面是真實 Discord 語音對話（語音辨識結果，可能有錯字、沒有標點）。「你」是你自己之前說過的話。
 
 {context}

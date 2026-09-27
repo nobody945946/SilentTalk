@@ -156,7 +156,9 @@ def test_the_nudge_follows_the_chosen_policy() -> None:
     for model in (in_character, admitting):
         model.set_persona(PRESET_PERSONAS[0])
 
-    assert "別承認" in in_character._build_character_prompt(**kwargs)
+    # Staying in character is what the model does anyway (A/B: 0/18 broke
+    # character with or without a nudge), so the default path adds nothing.
+    assert "承認" not in in_character._build_character_prompt(**kwargs)
     assert "要老實承認" in admitting._build_character_prompt(**kwargs)
 
 

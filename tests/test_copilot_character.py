@@ -18,6 +18,26 @@ def test_questions_without_punctuation_are_detected() -> None:
     assert not is_question("我先下線了")
 
 
+def test_being_called_is_told_apart_from_being_talked_about() -> None:
+    from silenttalk.copilot.character import address_of
+
+    carry = PRESET_PERSONAS[0]  # 凱哥, nicknames 凱哥、阿凱
+
+    # Unmistakable: the name opens the line, or Discord says so.
+    assert address_of("凱哥你覺得呢", carry).called
+    assert address_of("欸 凱哥等等衝B", carry).called
+    assert address_of("任何一句", carry, mention=True).called
+
+    # The name turned up, but this is about him, not to him. The model gets
+    # the line and can answer SKIP instead of barging in.
+    about_him = address_of("我剛才跟阿凱講話好像在做任務對話", carry)
+    assert about_him.mentioned and not about_him.called
+    assert address_of("等一下叫凱哥來", carry).mentioned
+
+    # Not his business at all: no model call.
+    assert not address_of("我們衝B啦", carry).worth_reading
+
+
 def test_calling_the_character_by_name_or_nickname() -> None:
     carry = PRESET_PERSONAS[0]  # 凱哥, nicknames 凱哥、阿凱
 
