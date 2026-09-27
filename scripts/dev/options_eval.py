@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import inspect
 import json
 import random
 import statistics
@@ -106,19 +107,22 @@ async def generate(args: argparse.Namespace) -> None:
                     model._last_thought = ""
             ids = te.speaker_ids(conv)
             new_turns: list[Any] = []
+            old_turns: list[Any] = []
             old_store = old.context.ConversationStore()
             others = 0
             for index, line in enumerate(conv.lines):
                 if line.get("self"):
                     new_turns.append(ConversationTurn(0, new_persona.name, line["text"], is_self=True))
-                    old_store.append(old.types.ConversationTurn(
+                    old_turns.append(old.types.ConversationTurn(
                         0, old_persona.name, line["text"], is_self=True
                     ))
+                    old_store.append(old_turns[-1])
                     continue
                 new_turns.append(ConversationTurn(ids[line["speaker"]], line["speaker"], line["text"]))
-                old_store.append(old.types.ConversationTurn(
+                old_turns.append(old.types.ConversationTurn(
                     ids[line["speaker"]], line["speaker"], line["text"]
                 ))
+                old_store.append(old_turns[-1])
                 others += 1
                 if others % args.every:
                     continue
@@ -128,10 +132,15 @@ async def generate(args: argparse.Namespace) -> None:
                 )
                 new_ms = (time.perf_counter() - started) * 1000
                 started = time.perf_counter()
+                # Before 5f6bb87 suggest() took the rendered context; since
+                # then it takes the turns.
+                history = (
+                    {"turns": list(old_turns)}
+                    if "turns" in inspect.signature(old_model.suggest).parameters
+                    else {"context": old_store.render_for_prompt()}
+                )
                 before = await old_model.suggest(
-                    context=old_store.render_for_prompt(),
-                    trigger_speaker=line["speaker"],
-                    trigger_text=line["text"],
+                    **history, trigger_speaker=line["speaker"], trigger_text=line["text"]
                 )
                 old_ms = (time.perf_counter() - started) * 1000
                 records.append({
