@@ -160,7 +160,8 @@ async def generate(args: argparse.Namespace) -> None:
                 old_ms = (time.perf_counter() - started) * 1000
                 records.append({
                     "conv": conv.id, "index": index, "persona": conv.persona_id,
-                    "old": lanes_of(before), "new": lanes_of(new), "thought": new.thought,
+                    "old": lanes_of(before), "new": lanes_of(new),
+                    "thought": getattr(new, "thought", ""),
                     "old_ms": round(old_ms), "new_ms": round(new_ms),
                 })
             save()
