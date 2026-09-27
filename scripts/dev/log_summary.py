@@ -20,6 +20,7 @@ from pathlib import Path
 
 PROJECT_DIR = Path(__file__).resolve().parents[2]
 FIELD = re.compile(r"(\w+)=(\S+)")
+EVENT_NAME = re.compile(r"[a-z][a-z0-9_]*")
 
 
 def _exception_type(record: dict) -> str:
@@ -30,6 +31,18 @@ def _exception_type(record: dict) -> str:
         return ""
     name = trace[-1].split(":", 1)[0].strip()
     return f"（{name}）" if re.fullmatch(r"[\w.]+", name) else ""
+
+
+def _problem_name(record: dict) -> str:
+    """Our own events start with a snake_case name. A library's message does
+    not ("1 packets were lost being flushed in decoder-5"), so show which
+    logger it came from and its first words with numbers masked."""
+    text = str(record.get("event", ""))
+    name = text.split(" ", 1)[0]
+    if EVENT_NAME.fullmatch(name):
+        return name
+    shape = re.sub(r"\d+", "N", " ".join(text.split()[:7]))[:60]
+    return f"{record.get('logger', '?')}：{shape}"
 
 
 def main() -> int:
@@ -65,7 +78,7 @@ def main() -> int:
         name = text.split(" ", 1)[0]
         events.setdefault(name, []).append(dict(FIELD.findall(text)))
         if record.get("level") in ("WARNING", "ERROR", "CRITICAL"):
-            problems[f"{record['level']} {name}{_exception_type(record)}"] += 1
+            problems[f"{record['level']} {_problem_name(record)}{_exception_type(record)}"] += 1
 
     def ms(rows: list[dict[str, str]], key: str) -> str:
         values = [
@@ -96,8 +109,10 @@ def main() -> int:
         ),
         (
             "連上 Discord（ready／resumed）",
-            f"{len(events.get('discord_ready', []))}"
-            f"／{len(events.get('discord_gateway_resumed', []))}",
+            (
+                f"{len(events.get('discord_ready', []))}"
+                f"／{len(events.get('discord_gateway_resumed', []))}"
+            ),
         ),
         (
             "語音接收",

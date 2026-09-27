@@ -58,6 +58,7 @@ def main() -> int:
 
     from PIL import ImageGrab
 
+    from silenttalk import story_ui
     from silenttalk.config import config_defaults
     from silenttalk.copilot.persona import PRESET_PERSONAS, PersonaState, PersonaStore
     from silenttalk.copilot.types import ConversationTurn, ReplySuggestions
@@ -192,6 +193,33 @@ def main() -> int:
         )
     )
     shot("7_manual")
+    # Choices being read stay put: a newer round waits (R shows it), and
+    # takes over by itself once nobody has touched the keys for a while.
+    ui.show_page("story")
+    held_text = ui.story._choices["w"]
+    newer = "那我先丟煙你們跟"
+    ui.add_conversation_turn(ConversationTurn(12, "小雨", newer))
+    ui.set_suggestions_thinking("小雨", newer)
+    pump()
+    ui.set_suggestions(ReplySuggestions("小雨", newer, agree="好，煙丟完我第一個進", partial=True))
+    pump()
+    ui.set_suggestions(
+        ReplySuggestions("小雨", newer, agree="好，煙丟完我第一個進", ask="煙要丟哪裡？")
+    )
+    pump()
+    held = (ui.story._choices["w"], ui.story._line_var.get())
+    shot("16_held")
+    press("r")
+    revealed = (ui.story._choices["w"], ui.story._line_var.get(), len(regenerated))
+    shot("17_revealed")
+    story_ui.HOLD_SECONDS = 1.0
+    press("s")  # reading again (a second press on the selected lane would send)
+    ui.set_suggestions_thinking("阿傑", "好啦走")
+    ui.set_suggestions(ReplySuggestions("阿傑", "好啦走", agree="走走走", ask="誰先進？"))
+    pump(0.3)
+    still_held = ui.story._choices["w"]
+    pump(1.5)
+    auto = ui.story._choices["w"]
     ui.show_page("persona")
     shot("8_persona")
     for section in ui.persona_panel._sections:
@@ -237,6 +265,14 @@ def main() -> int:
 
     expected = "上一把就是這樣被架，我覺得先丟煙再進比較穩"
     problems = []
+    if held != (held_text, trigger):
+        problems.append(f"a newer round must not replace choices being read, got {held}")
+    if revealed != ("好，煙丟完我第一個進", newer, 1):
+        problems.append(f"R should show the waiting round without regenerating, got {revealed}")
+    if (still_held, auto) != ("好，煙丟完我第一個進", "走走走"):
+        problems.append(
+            f"a waiting round should take over once the hold ends, got {(still_held, auto)}"
+        )
     if sent != [expected]:
         problems.append(f"double-press D should send once, got {sent}")
     if streamed != ("a", 1):

@@ -7,6 +7,7 @@ chat page header, so this panel is only the choice itself.
 
 from __future__ import annotations
 
+import time
 import tkinter as tk
 from collections.abc import Callable
 
@@ -19,6 +20,12 @@ from silenttalk.copilot.types import (
     ReplySuggestions,
 )
 from silenttalk.widgets import hint_row, wrap_to_width
+
+# Choices you are reading or picking from stay put this long after they
+# appeared or after your last key; a newer round waits behind them (R shows
+# it at once). In a busy channel every line brings a new round, faster than
+# anyone can read one.
+HOLD_SECONDS = 6.0
 
 _KEY_ALIASES = {"up": "w", "left": "a", "down": "s", "right": "d"}
 _CONFIRM_KEYS = {"return", "kp_enter", "space"}
@@ -61,8 +68,16 @@ class StoryPanel(tk.Frame):
         self._thinking_about = ("", "")
         self._round = 0
         self._mood = MOODS[0]
+        self._shown_at = 0.0
+        self._touched_at = 0.0
+        # A round that started while the shown one was held: its latest
+        # update waits in _incoming until the hold ends or R is pressed.
+        self._hidden = False
+        self._incoming: ReplySuggestions | None = None
+        self._reveal_job: str | None = None
+        self._latest_line = ""
+        self._colors: dict[str, str] = {}
 
-        self._round = 0
         # ---- dialogue box (visual-novel style) -------------------------------
         dialogue_outer = tk.Frame(self, bg=theme.ACCENT, padx=0, pady=0)
         dialogue_outer.pack(fill="x", pady=(theme.px(12), 0))
@@ -178,6 +193,7 @@ class StoryPanel(tk.Frame):
     def handle_key(self, keysym: str) -> bool:
         key = keysym.lower()
         key = _KEY_ALIASES.get(key, key)
+        self._touched_at = time.monotonic()
         if key in self._lanes:
             if key == self._selected and not self._sent:
                 self._confirm(key)
@@ -208,13 +224,24 @@ class StoryPanel(tk.Frame):
         return False
 
     def add_turn(self, turn: ConversationTurn) -> None:
-        """The newest line from someone else becomes the dialogue box."""
-        if not turn.is_self:
-            self._speaker_var.set(turn.speaker_name)
-            self._speaker_label.configure(fg=theme.speaker_color(turn.speaker_id))
-            self._line_var.set(turn.text)
+        """The dialogue box shows the line the choices answer, so a newer
+        line only replaces it while there is nothing to pick from."""
+        if turn.is_self:
+            return
+        self._colors[turn.speaker_name] = theme.speaker_color(turn.speaker_id)
+        self._latest_line = turn.text
+        if not self.has_choice():
+            self._show_line(turn.speaker_name, turn.text)
 
     def set_thinking(self, speaker: str, text: str) -> None:
+        if self._held():
+            self._hidden = True
+            self._set_status(f"{speaker} 又說了話，新選項想好前先看這組")
+            self._schedule_reveal()
+            return
+        # A round still waiting unseen is superseded by this one.
+        self._hidden = False
+        self._incoming = None
         was_thinking = self._thinking
         self._thinking = True
         self._fresh = True
@@ -226,7 +253,19 @@ class StoryPanel(tk.Frame):
 
     def set_suggestions(self, suggestions: ReplySuggestions) -> None:
         """Partial results (streamed lane by lane) fill in the same round; the
-        user may already pick one, and later updates keep that choice."""
+        user may already pick one, and later updates keep that choice. A new
+        round waits while the shown one is held (HOLD_SECONDS)."""
+        if self._hidden:
+            self._incoming = suggestions
+            if not suggestions.partial and suggestions.has_any():
+                self._set_status(
+                    f"{suggestions.trigger_speaker} 又說了話，新選項好了"
+                    "　R＝換過去，停手幾秒會自己換"
+                )
+            return
+        self._apply(suggestions)
+
+    def _apply(self, suggestions: ReplySuggestions) -> None:
         fresh = self._fresh
         self._fresh = not suggestions.partial
         self._thinking = suggestions.partial
@@ -245,6 +284,8 @@ class StoryPanel(tk.Frame):
 
         if fresh:
             self._round += 1
+            self._shown_at = time.monotonic()
+            self._show_line(suggestions.trigger_speaker, suggestions.trigger_text)
         self._choices = {lane.key: suggestions.text_for(lane) for lane in REPLY_LANES}
         if self._selected is None or not self._choices.get(self._selected):
             self._selected = None
@@ -254,12 +295,10 @@ class StoryPanel(tk.Frame):
             return
         if not suggestions.has_any():
             self._set_status("這句沒有想到合適的回覆，按 R 重想")
-        elif suggestions.trigger_text != self._line_var.get():
-            # The chat moved on while generating; say which line these answer.
-            self._set_status(
-                f"回應較早的一句 {suggestions.trigger_speaker}："
-                f"「{_trim(suggestions.trigger_text, 36)}」　R＝針對最新一句重想"
-            )
+        elif self._latest_line and suggestions.trigger_text != self._latest_line:
+            # The chat moved on while generating; the box shows the line
+            # these answer, the transcript the rest.
+            self._set_status("選擇你的回應（之後又有人說話了，R＝針對最新一句重想）")
         else:
             self._set_status("選擇你的回應")
         self._render_cards()
@@ -269,6 +308,51 @@ class StoryPanel(tk.Frame):
 
     # ---- internals -----------------------------------------------------------
 
+    def _held(self) -> bool:
+        """Someone may be reading or picking from the shown choices."""
+        if not self.has_choice() or self._character:
+            return False
+        last = max(self._shown_at, self._touched_at)
+        return time.monotonic() - last < HOLD_SECONDS
+
+    def _schedule_reveal(self) -> None:
+        if self._reveal_job is None:
+            self._reveal_job = self.after(300, self._reveal_when_free)
+
+    def _reveal_when_free(self) -> None:
+        self._reveal_job = None
+        if not self._hidden:
+            return
+        if self._held():
+            self._schedule_reveal()
+            return
+        self._reveal()
+
+    def _reveal(self) -> None:
+        """Show the waiting round: its latest update, or 'thinking' if none
+        has arrived yet. Later updates of that round then flow in as usual."""
+        self._hidden = False
+        incoming, self._incoming = self._incoming, None
+        self._fresh = True
+        if incoming is None:
+            self._choices = {lane.key: "" for lane in REPLY_LANES}
+            self._selected = None
+            self._thinking = True
+            self._thinking_tick = 0
+            self._render_cards()
+            self._tick_thinking()
+            return
+        was_thinking = self._thinking
+        self._apply(incoming)
+        if self._thinking and not was_thinking:
+            self._thinking_tick = 0
+            self._tick_thinking()
+
+    def _show_line(self, speaker: str, text: str) -> None:
+        self._speaker_var.set(speaker)
+        self._speaker_label.configure(fg=self._colors.get(speaker, theme.ACCENT_HI))
+        self._line_var.set(text)
+
     def _pick_mood(self, mood: str) -> None:
         self.set_mood(mood)
         if self._on_mood is not None:
@@ -277,6 +361,7 @@ class StoryPanel(tk.Frame):
 
     def _select(self, key: str) -> None:
         self.focus_set()
+        self._touched_at = time.monotonic()
         if self._sent:
             self._set_status("這回合已經說過了，等下一句或按 R 重想")
             return
@@ -313,6 +398,10 @@ class StoryPanel(tk.Frame):
         self._render_cards()
 
     def _regenerate(self) -> None:
+        if self._hidden:
+            # A newer round is waiting: R shows it instead of thinking again.
+            self._reveal()
+            return
         if self._on_regenerate is None:
             self._set_status("Copilot 未啟用，無法重想", error=True)
             return
