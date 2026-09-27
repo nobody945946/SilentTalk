@@ -267,6 +267,7 @@ THOUGHT_SEEN: set[str] = set()
 
 
 def generate(args: argparse.Namespace) -> None:
+    turn_eval.ensure_llama_server_on_path()
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     points = speak_points(turn_eval.load_test_set())
     lines: dict[str, dict[str, str]] = _load(LINES_PATH)
