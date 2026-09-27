@@ -4,6 +4,10 @@ Usage (from the repo root, llama-server on PATH):
     python scripts/dev/options_eval.py generate --rev 75ea075 --tag thought
     python scripts/dev/options_eval.py judge --tag thought
     python scripts/dev/options_eval.py generate --cpu ...   # while the GPU is busy
+    # same code, different model or adapter on the new side:
+    python scripts/dev/options_eval.py generate --rev HEAD --lora char-lora.gguf --tag lora
+    python scripts/dev/options_eval.py generate --rev HEAD --model gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf \
+        --old-model gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf --tag e4b
 
 At every other line someone else says in the M1 test set (turn_eval_data.jsonl,
 held out from training), the options code at `--rev` and the working tree
@@ -72,11 +76,22 @@ async def generate(args: argparse.Namespace) -> None:
     config = te.copilot_config()
     if args.cpu:
         config["llm_gpu_layers"] = 0
-    model_path = te.PROJECT_DIR / ".runtime" / "models" / "llm" / (args.model or config["llm_model"])
+    llm_dir = te.PROJECT_DIR / ".runtime" / "models" / "llm"
+    model_path = llm_dir / (args.model or config["llm_model"])
+    old_path = llm_dir / args.old_model if args.old_model else model_path
     te.EVAL_PORT = PORT
-    new_model = te.make_model(llm_module, model_path, config)
-    # Same server for both: the old client only builds different prompts.
-    old_model = te.make_model(old.llm, model_path, config)
+    lora = llm_dir / args.lora if args.lora else None
+    new_model = te.make_model(llm_module, model_path, config, lora)
+    if lora is not None:
+        new_model._lora_for_options = True
+    # Same server for both (the old client only builds different prompts)
+    # unless the old side runs another model, or the new side has an adapter:
+    # llama-server applies a loaded adapter to requests that do not set its
+    # scale, which the old client never does.
+    own_server = old_path != model_path or lora is not None
+    if own_server:
+        te.EVAL_PORT = PORT + 1
+    old_model = te.make_model(old.llm, old_path, config)
     # The app's 15 s limit is for a live chat; a shared or CPU-only eval box
     # can be slower, and one timeout should not cost the whole run.
     new_model._request_timeout = old_model._request_timeout = 180.0
@@ -89,10 +104,13 @@ async def generate(args: argparse.Namespace) -> None:
 
     def save() -> None:
         out.write_text(json.dumps({
-            "rev": args.rev, "model": model_path.name, "cpu": args.cpu, "records": records,
+            "rev": args.rev, "model": model_path.name, "old_model": old_path.name,
+            "lora": args.lora, "cpu": args.cpu, "records": records,
         }, ensure_ascii=False, indent=1), encoding="utf-8")
 
     await new_model.start()
+    if own_server:
+        await old_model.start()
     only = set(args.only.split(",")) if args.only else None
     try:
         for conv in test_set.conversations:
@@ -149,6 +167,8 @@ async def generate(args: argparse.Namespace) -> None:
             print(f"  {conv.id}: {sum(r['conv'] == conv.id for r in records)} points", flush=True)
     finally:
         await new_model.stop()
+        if own_server:
+            await old_model.stop()
     print(f"saved {out} ({len(records)} points)")
 
 
@@ -264,6 +284,8 @@ def main() -> int:
     gen.add_argument("--rev", required=True, help="git revision with the old options code")
     gen.add_argument("--tag", required=True)
     gen.add_argument("--model", help="gguf in .runtime/models/llm/ (default: config.toml)")
+    gen.add_argument("--old-model", help="the old side runs this gguf instead (own server)")
+    gen.add_argument("--lora", help="adapter gguf for the new side's options")
     gen.add_argument("--every", type=int, default=2, help="options at every Nth line of others")
     gen.add_argument("--only", help="comma-separated conversation ids")
     gen.add_argument("--cpu", action="store_true", help="no GPU layers (GPU busy)")

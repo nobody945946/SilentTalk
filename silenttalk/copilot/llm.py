@@ -176,9 +176,13 @@ class LocalReplyModel:
         can_type: bool = False,
         ai_honesty: str = "in_character",
         lora_path: Path | None = None,
+        lora_for_options: bool = False,
     ) -> None:
         self._model_path = model_path
         self._lora_path = lora_path
+        # The adapter is trained on character lines; options share its chat
+        # format, so it can be switched on for them too once it helps there.
+        self._lora_for_options = lora_for_options
         # Set once the adapter is on llama-server's command line.
         self._lora_loaded = False
         self._port = port
@@ -329,7 +333,8 @@ class LocalReplyModel:
         messages = self.option_messages(turns=turns, summary=summary)
         if on_partial is None:
             raw = await asyncio.to_thread(
-                self._request_messages, messages, None, _OPTIONS_MAX_TOKENS
+                self._request_messages, messages, None, _OPTIONS_MAX_TOKENS,
+                self._lora_for_options,
             )
             return self._parse_suggestions(raw, trigger_speaker, trigger_text)
 
@@ -344,7 +349,8 @@ class LocalReplyModel:
                 on_partial(dataclasses.replace(partial, partial=True))
 
         raw = await asyncio.to_thread(
-            self._request_messages, messages, on_lines, _OPTIONS_MAX_TOKENS
+            self._request_messages, messages, on_lines, _OPTIONS_MAX_TOKENS,
+            self._lora_for_options,
         )
         return self._parse_suggestions(raw, trigger_speaker, trigger_text)
 
@@ -649,8 +655,8 @@ class LocalReplyModel:
             raise LocalLLMError(f"本機回覆模型失敗：{exc}") from exc
 
     def _lora_field(self, character: bool) -> dict[str, object]:
-        """The adapter is trained for character mode only: every other request
-        (Copilot suggestions, summaries) runs the plain model."""
+        """The adapter is trained for character mode: other requests
+        (summaries, options unless lora_for_options) run the plain model."""
         if not self._lora_loaded:
             return {}
         return {"lora": [{"id": 0, "scale": 1.0 if character else 0.0}]}
