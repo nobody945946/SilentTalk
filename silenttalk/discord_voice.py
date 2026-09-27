@@ -16,8 +16,10 @@ from silenttalk.tts.base import AudioResult
 _LOG = logging.getLogger(__name__)
 StatusCallback = Callable[[AppState, str], None]
 PCMCallback = Callable[[int, str, bytes], None]
-# (author id, display name, content) typed in the voice channel's text chat.
-TextCallback = Callable[[int, str, str], None]
+# (author id, display name, content, addressed) typed in the channel's chat.
+# `addressed` is Discord's own signal: an @mention of the bot or a reply to
+# one of its messages - exact, unlike matching the name as a substring.
+TextCallback = Callable[[int, str, str, bool], None]
 # Discord's own limit; a character's line is far shorter, but a paste is not.
 MAX_TEXT_CHARS = 2000
 
@@ -79,8 +81,15 @@ class DiscordVoiceClient(discord.Client):
             or getattr(message.author, "name", None)
             or message.author.id
         )
-        _LOG.info("text_message_received char_count=%d", len(content))
-        callback(message.author.id, name, content)
+        addressed = self.user is not None and (
+            self.user in message.mentions
+            or getattr(getattr(message.reference, "resolved", None), "author", None)
+            == self.user
+        )
+        _LOG.info(
+            "text_message_received char_count=%d addressed=%s", len(content), addressed
+        )
+        callback(message.author.id, name, content, addressed)
 
     async def send_text(self, text: str) -> bool:
         """Say something in the voice channel's text chat. False if it could

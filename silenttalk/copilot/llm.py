@@ -107,6 +107,10 @@ _CAN_TYPE = (
     "絕對不要答應或假裝在做你做不到的事。"
 )
 
+# A summary longer than this is no longer a summary; it also has to stay
+# small next to the persona in a 4096-token context.
+_SUMMARY_CHARS = 320
+
 _END_PUNCTUATION = "？?！!。.…~～」』)）"
 _THINK_OPEN = "<think>"
 _THINK_CLOSE = "</think>"
@@ -382,6 +386,28 @@ class LocalReplyModel:
         if not value or value.upper().startswith("SKIP") or _compact(value) == _compact(trigger_text):
             return ""
         return value
+
+    async def summarize(self, transcript: str, previous: str = "") -> str:
+        """Fold an older stretch of chat into a couple of lines, so a long
+        session keeps its thread without growing the prompt."""
+        system = (
+            "你是對話記錄員。把 Discord 語音聊天的一段記錄濃縮成重點，"
+            "只寫真的發生過的事。台灣繁體中文，最多兩句、80 字以內，不要換行、"
+            "不要評論、不要加標題。"
+        )
+        earlier = f"更早的重點：{previous}\n\n" if previous else ""
+        prompt = (
+            f"{earlier}這段對話：\n{transcript}\n\n"
+            "寫成重點（誰在聊什麼、決定了什麼、有什麼還沒結束）："
+        )
+        raw = await asyncio.to_thread(
+            self._request_completion, system, prompt, None, 160
+        )
+        text = raw.strip()
+        close_index = text.lower().rfind(_THINK_CLOSE)
+        if close_index >= 0:
+            text = text[close_index + len(_THINK_CLOSE) :]
+        return to_taiwan_traditional(" ".join(text.split()))[:_SUMMARY_CHARS]
 
     def _drain_stderr(self, stream: IO[bytes]) -> None:
         for raw_line in iter(stream.readline, b""):

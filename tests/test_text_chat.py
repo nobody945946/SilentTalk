@@ -43,7 +43,9 @@ def _client(text_chat: bool = True) -> tuple[DiscordVoiceClient, list, FakeChann
     client = DiscordVoiceClient(
         DiscordConfig("unused", 123, text_chat=text_chat),
         lambda *_: None,
-        text_callback=lambda user_id, name, content: typed.append((user_id, name, content)),
+        text_callback=lambda user_id, name, content, addressed: typed.append(
+            (user_id, name, content, addressed)
+        ),
     )
     channel = FakeChannel(555)
     client.active_voice = lambda: FakeVoice(channel)  # type: ignore[assignment,method-assign]
@@ -63,7 +65,7 @@ def test_only_the_voice_channels_own_chat_is_read() -> None:
     ):
         asyncio.run(client.on_message(message))  # type: ignore[arg-type]
 
-    assert typed == [(789, "Alice", "凱哥晚餐吃什麼")]
+    assert typed == [(789, "Alice", "凱哥晚餐吃什麼", False)]
 
 
 def test_text_is_not_read_without_the_callback() -> None:

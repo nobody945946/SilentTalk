@@ -8,6 +8,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from silenttalk.copilot.character import ENGAGEMENT_MODES
+
 DEFAULT_LLM_MODEL = "gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf"
 STT_ENGINES = ("paraformer", "sensevoice")
 
@@ -71,6 +73,15 @@ class CopilotConfig:
     llm_low_vram: bool = True
     # Character mode: seconds of quiet after the bot spoke, and lines from
     # others, before it joins in without being called by name.
+    # "called": answer when named (@mention / reply in text, the name in
+    # voice) plus a short follow-up window. "active": also join in by itself.
+    # Auto-compaction: older turns are folded into a short summary by the
+    # local model, so a long session keeps its thread at a fixed prompt size.
+    compact_context: bool = True
+    compact_keep_turns: int = 20
+    compact_batch_turns: int = 12
+    character_engagement: str = "called"
+    character_follow_up_seconds: float = 20.0
     character_cooldown_seconds: float = 8.0
     character_turn_gap: int = 3
     stt_engine: str = "paraformer"
@@ -97,6 +108,13 @@ def _section(data: dict, name: str) -> dict:
     if not isinstance(value, dict):
         raise ConfigError(f"config.toml 的 [{name}] 必須是 table。")
     return value
+
+
+def _one_of(value: object, allowed: list[str], field: str) -> str:
+    choice = str(value).strip().lower()
+    if choice not in allowed:
+        raise ConfigError(f"copilot.{field} 只能是 {' 或 '.join(allowed)}。")
+    return choice
 
 
 def _stt_engine(value: object) -> str:
@@ -220,6 +238,17 @@ def load_settings(project_dir: Path) -> Settings:
             ),
             llm_gpu_layers=max(0, min(999, int(copilot.get("llm_gpu_layers", 99)))),
             llm_low_vram=bool(copilot.get("llm_low_vram", True)),
+            compact_context=bool(copilot.get("compact_context", True)),
+            compact_keep_turns=max(8, min(200, int(copilot.get("compact_keep_turns", 20)))),
+            compact_batch_turns=max(4, min(200, int(copilot.get("compact_batch_turns", 12)))),
+            character_engagement=_one_of(
+                copilot.get("character_engagement", "called"),
+                [mode for mode, _ in ENGAGEMENT_MODES],
+                "character_engagement",
+            ),
+            character_follow_up_seconds=max(
+                0.0, min(600.0, float(copilot.get("character_follow_up_seconds", 20.0)))
+            ),
             character_cooldown_seconds=max(
                 0.0, min(600.0, float(copilot.get("character_cooldown_seconds", 8.0)))
             ),

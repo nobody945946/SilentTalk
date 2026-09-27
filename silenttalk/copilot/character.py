@@ -21,10 +21,27 @@ _QUESTION_END = ("？", "?", "嗎", "呢", "吧")
 _GENERIC_NAMES = ("機器人", "bot", "ai")
 
 
+# When the character opens its mouth at all.
+#   called  - only when spoken to: @mention or a reply in text, its name in
+#             voice, plus a short follow-up window so a back-and-forth does
+#             not need the name every time. Predictable in a busy channel.
+#   active  - also joins in on its own: after a cooldown, on a question or
+#             once the others have talked for a while.
+ENGAGEMENT_MODES: tuple[tuple[str, str], ...] = (
+    ("called", "被叫到才回"),
+    ("active", "會主動加入"),
+)
+
+
 @dataclass(frozen=True, slots=True)
 class CharacterPolicy:
+    mode: str = "called"
+    # "called": a line this soon after the character spoke continues the
+    # exchange, so the next answer needs no name. 0 disables it.
+    follow_up_seconds: float = 20.0
+    # "active" only: stay quiet this long after speaking, then join in on a
+    # question or after this many lines from others.
     cooldown_seconds: float = 8.0
-    # Unprompted, speak only after this many lines from others.
     turn_gap: int = 3
     # Drop a reply when the chat moved on by this many lines while generating.
     stale_turns: int = 2
@@ -34,6 +51,9 @@ class CharacterPolicy:
 class CharacterState:
     last_spoke_at: float | None = None
     turns_since_spoke: int = 0
+    # Follow-ups answered since the character last spoke; one keeps an
+    # exchange going without letting the bot ride along with the whole chat.
+    follow_ups: int = 0
 
     def heard(self) -> None:
         self.turns_since_spoke += 1
@@ -41,6 +61,7 @@ class CharacterState:
     def spoke(self, now: float) -> None:
         self.last_spoke_at = now
         self.turns_since_spoke = 0
+        self.follow_ups = 0
 
 
 def is_question(text: str) -> bool:
@@ -73,6 +94,9 @@ def is_addressed(text: str, persona: Persona) -> bool:
     return any(name in folded for name in names)
 
 
+MAX_FOLLOW_UPS = 1
+
+
 def should_reply(
     policy: CharacterPolicy,
     state: CharacterState,
@@ -81,8 +105,17 @@ def should_reply(
     addressed: bool,
     now: float,
 ) -> bool:
+    """Whether this line is for the character. `addressed` means it was named:
+    an @mention or a reply to it in text, its name or nickname in voice."""
     if addressed:
         return True
-    if state.last_spoke_at is not None and now - state.last_spoke_at < policy.cooldown_seconds:
+    since_spoke = None if state.last_spoke_at is None else now - state.last_spoke_at
+    if policy.mode == "called":
+        return (
+            since_spoke is not None
+            and since_spoke < policy.follow_up_seconds
+            and state.follow_ups < MAX_FOLLOW_UPS
+        )
+    if since_spoke is not None and since_spoke < policy.cooldown_seconds:
         return False
     return is_question(text) or state.turns_since_spoke >= policy.turn_gap

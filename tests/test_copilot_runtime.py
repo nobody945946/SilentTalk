@@ -27,6 +27,10 @@ class SlowFakeLLM:
     def set_persona(self, persona: object) -> None:
         pass
 
+    async def summarize(self, transcript: str, previous: str = "") -> str:
+        self.calls.append(("summarize", transcript.count("\n") + 1, previous))
+        return "稍早在聊晚餐"
+
     async def character_reply(
         self, *, context: str, trigger_speaker: str, trigger_text: str, addressed: bool
     ) -> str:
@@ -37,12 +41,12 @@ class SlowFakeLLM:
 
 
 async def _runtime(
-    tmp_path: Path, *, text: bool = False
+    tmp_path: Path, *, text: bool = False, config: CopilotConfig | None = None
 ) -> tuple[CopilotRuntime, SlowFakeLLM, list]:
     delivered: list[ReplySuggestions | ConversationTurn | str] = []
     runtime = CopilotRuntime(
         tmp_path,
-        CopilotConfig(),
+        config or CopilotConfig(),
         owner_user_id=1,
         on_suggestions=delivered.append,
         on_error=lambda _: None,
@@ -143,14 +147,34 @@ async def test_character_answers_its_name_and_speaks_the_line(tmp_path: Path) ->
 
 
 @pytest.mark.asyncio
-async def test_character_stays_quiet_without_a_reason(tmp_path: Path) -> None:
+async def test_character_answers_one_follow_up_then_stays_quiet(tmp_path: Path) -> None:
+    """Default "called" mode: after it speaks, the next line continues the
+    exchange without repeating its name; the rest of the chat is not its
+    business until someone names it again."""
     runtime, llm, _ = await _character_runtime(tmp_path)
-    runtime.record_self("我先講一句")  # just spoke: cooldown running
-    runtime._handle_turn(2, "阿傑", "我剛剛吃了拉麵")
-    runtime._handle_turn(3, "小雨", "晚餐吃什麼")
+    runtime.record_self("我先講一句")
+    runtime._handle_turn(2, "阿傑", "我剛剛吃了拉麵")  # follow-up: answered
+    await _settle()
+    runtime._handle_turn(3, "小雨", "晚餐吃什麼")  # not for it any more
+    runtime._handle_turn(2, "阿傑", "我也餓了")
     await _settle()
 
+    assert llm.calls == [("character", "我剛剛吃了拉麵", False)]
+    await _stop(runtime)
+
+
+@pytest.mark.asyncio
+async def test_character_ignores_the_room_until_it_is_named(tmp_path: Path) -> None:
+    runtime, llm, _ = await _character_runtime(tmp_path)
+    runtime._handle_turn(2, "阿傑", "欸晚餐吃什麼")
+    runtime._handle_turn(3, "小雨", "我都可以")
+    runtime._handle_turn(2, "阿傑", "那就麥當勞吧")
+    await _settle()
     assert llm.calls == []
+
+    runtime._handle_turn(3, "小雨", "凱哥你說呢")
+    await _settle()
+    assert llm.calls == [("character", "凱哥你說呢", True)]
     await _stop(runtime)
 
 
@@ -170,7 +194,8 @@ async def test_owner_mic_counts_only_in_character_mode(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_character_drops_a_reply_once_the_chat_moved_on(tmp_path: Path) -> None:
     runtime, llm, delivered = await _character_runtime(tmp_path)
-    runtime._handle_turn(2, "阿傑", "晚餐要吃什麼")  # a question: joins in
+    runtime.record_self("我剛說過一句")
+    runtime._handle_turn(2, "阿傑", "晚餐要吃什麼")  # follow-up, not named
     await _settle()
     runtime._handle_turn(3, "小雨", "我要吃拉麵")
     runtime._handle_turn(2, "阿傑", "好啊那走")
@@ -178,7 +203,7 @@ async def test_character_drops_a_reply_once_the_chat_moved_on(tmp_path: Path) ->
     await _settle()
 
     assert llm.calls[0] == ("character", "晚餐要吃什麼", False)
-    assert ("spoke", "收到") not in delivered
+    assert ("spoke", "收到") not in delivered  # the chat moved on while thinking
     await _stop(runtime)
 
 
@@ -210,4 +235,48 @@ async def test_typed_lines_fall_back_to_speech_when_text_is_off(tmp_path: Path) 
     await _settle()
 
     assert ("spoke", "收到") in delivered
+    await _stop(runtime)
+
+
+@pytest.mark.asyncio
+async def test_a_long_session_is_compacted_instead_of_truncated(tmp_path: Path) -> None:
+    """Uninterrupted chat: old turns become a summary, recent ones stay
+    verbatim, and the prompt stops growing."""
+    runtime, llm, _ = await _runtime(
+        tmp_path,
+        config=CopilotConfig(recent_turns=6, compact_keep_turns=6, compact_batch_turns=6),
+    )
+
+    for n in range(12):
+        runtime._handle_turn(2, "阿傑", f"第{n}句話")
+    await _settle()
+    await _settle()
+
+    assert any(call[0] == "summarize" for call in llm.calls if isinstance(call, tuple))
+    prompt = runtime._context.render_for_prompt()
+    assert "稍早在聊晚餐" in prompt
+    assert "第0句話" not in prompt and "第11句話" in prompt
+    assert len(runtime._context.snapshot()) == 6
+    await _stop(runtime)
+
+
+@pytest.mark.asyncio
+async def test_compaction_can_be_turned_off(tmp_path: Path) -> None:
+    runtime, llm, _ = await _runtime(
+        tmp_path,
+        config=CopilotConfig(
+            recent_turns=6, compact_keep_turns=6, compact_batch_turns=6,
+            compact_context=False,
+        ),
+    )
+
+    for n in range(12):
+        runtime._handle_turn(2, "阿傑", f"第{n}句話")
+    await _settle()
+    await _settle()
+
+    assert not any(call[0] == "summarize" for call in llm.calls if isinstance(call, tuple))
+    # Without compaction the old turns are simply dropped from the prompt.
+    assert runtime._context.summary == ""
+    assert "這場對話稍早的重點" not in runtime._context.render_for_prompt()
     await _stop(runtime)

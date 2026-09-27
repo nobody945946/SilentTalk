@@ -50,11 +50,21 @@ llm_gpu_layers = 99
 # ~2.8 GB instead of ~3.1 GB). Falls back to the normal cache automatically if
 # the GPU driver can't do it.
 llm_low_vram = true
-# Character mode (the bot plays the persona by itself): after it speaks, stay
-# quiet this many seconds unless called by name; then join in on a question or
-# once others have said this many lines.
+# When the character speaks up: "called" = only when named (@mention or a
+# reply in the text chat, its name or nickname in voice), plus a short window
+# after it spoke so a back-and-forth needs the name only once. "active" = it
+# also joins in by itself, after the cooldown, on a question or once the
+# others have said character_turn_gap lines.
+character_engagement = "called"
+character_follow_up_seconds = 20
 character_cooldown_seconds = 8
 character_turn_gap = 3
+# Auto-compaction: once the session passes compact_keep_turns +
+# compact_batch_turns, the older part is folded into a short summary by the
+# local model, so long chats keep their thread at a fixed prompt size.
+compact_context = true
+compact_keep_turns = 20
+compact_batch_turns = 12
 # Speech-to-text engine: "paraformer" (default, streaming) or "sensevoice"
 # (Silero VAD + offline SenseVoice: about the same accuracy -- 6.9% vs 7.2% CER
 # on scripts/dev/stt_eval.py -- adds punctuation, uses less CPU, ~240 MB extra
