@@ -15,7 +15,12 @@ from silenttalk.copilot.persona import Persona
 
 # Question words that mark a line as a question even without "？" (speech
 # recognition output rarely has punctuation).
-_QUESTION = re.compile(r"(什麼|甚麼|怎麼|為什麼|為何|誰|哪|幾|多少|要不要|是不是|有沒有|對不對|好不好)")
+# Speech recognition rarely produces "？", so a question is spotted by its
+# words. "嗎/呢" are question particles and can sit mid-sentence
+# ("你們有吃宵夜嗎我剛點了外送").
+_QUESTION = re.compile(
+    r"(什麼|甚麼|怎麼|為什麼|為何|誰|哪|幾|多少|要不要|是不是|有沒有|對不對|好不好|嗎|呢)"
+)
 _QUESTION_END = ("？", "?", "嗎", "呢", "吧")
 # How people refer to a bot that has no name of its own.
 _GENERIC_NAMES = ("機器人", "bot", "ai")
@@ -70,14 +75,27 @@ def is_question(text: str) -> bool:
 
 
 # ASCII-only word edges: \b treats CJK as word characters, so "是AI吧" has none.
-_AI_QUESTION = re.compile(
-    r"((?<![a-z])(ai|bot)(?![a-z])|ａｉ|人工智慧|機器人|真人|是不是人|是人嗎)", re.IGNORECASE
+# ASCII-only word edges: \b treats CJK as word characters, so "是AI吧" has none.
+_AI_WORD = re.compile(
+    r"((?<![a-z])(ai|bot)(?![a-z])|ａｉ|人工智慧|機器人|真人)", re.IGNORECASE
 )
+# "you are (not) a ...": the claim has to be about the listener, which is what
+# separates "你是不是 AI" from "剛剛打野打太快了像機器人".
+_ABOUT_YOU = re.compile(r"你(?!們)\s*[^，。！？\s]{0,6}?(是|像|不是|該不會|會不會)")
 
 
 def asks_if_ai(text: str) -> bool:
-    """Someone is asking (or saying) whether the bot is an AI / a real person."""
-    return bool(_AI_QUESTION.search(text))
+    """Someone is asking this bot whether it is an AI or a real person.
+
+    Both halves are required: the AI word, and the line being about "you".
+    Mentioning a bot or an AI while talking about something else (a laggy
+    teammate, a Slack bot someone is building) is not a question for us.
+    """
+    if not _AI_WORD.search(text):
+        return False
+    return bool(_ABOUT_YOU.search(text)) or bool(
+        re.search(r"你(?!們)[^，。！？]{0,8}(嗎|吧|\?|？)", text)
+    )
 
 
 def talks_to_you(text: str) -> bool:

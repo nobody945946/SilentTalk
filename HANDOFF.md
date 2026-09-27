@@ -336,6 +336,8 @@ while not vad.empty():
 - **口頭禪重複：** 一句接一句說時，小模型幾乎每句都塞口頭禪（實測 86%）。`LocalReplyModel` 記住最近 4 句，用過的口頭禪／代表台詞會在下一句 prompt 裡點名「不要再用」→ 40%。
 - **實測（Gemma 4 E2B，`persona_eval.py --mode character --runs 2`）：** voice 3.68、stance 3.42、natural 3.26、fit（時機）3.36、捏造 2%、踩底線 5%、盲測辨識 99%，3090 上 0.34 s／句（3050 Ti 推估 0.6–0.8 s）。
 - **角色的聲音（9/27）：** 人設有 `voice`／`voice_pitch`／`voice_speed`／`voice_effect`（`silenttalk/voice_styles.py` 的 `PERSONA_VOICES`、`VOICE_EFFECTS`）。只影響 TTS，**不進 LLM prompt**（不影響人格評估與蒸餾資料）。Controller 用 active persona 的聲音說所有的話；UI 語速是整體偏好，會疊加在人設語速上。音效鏈尾端有補償增益＋limiter（實測各音效與原聲 RMS 差 ≤0.6 dB、峰值 ≤ −7 dBFS）。試聽走 `tts/local_play.py`：FFmpeg 套同一條音效鏈→WAV→Windows `winsound`。
+- **關於規則式判斷（9/27 檢討）：** `character.py` 用關鍵字判斷「是不是問句」「是不是在問你是不是 AI」。這是為了不在 4 GB GPU 上多花一次模型呼叫，但**它確實會誤判**：用 3887 句生成對話量測，`asks_if_ai` 原本命中 69 句、約一半是誤判（在講隊友像機器人、在講自己寫的 bot）；加上「必須是在講『你』」的條件後降到 23 句、誤判約 3 句。`is_question` 補上句中的「嗎／呢」後從 35.1% 升到 39.6%（原本漏掉「你們有吃宵夜嗎我剛點了外送」）。
+  **正確的長期解法是讓模型自己判斷**：`asks_if_ai` 這條之所以存在，是因為實測小模型在人設壓力下會否認自己是 AI（凱哥：「欸我不是AI啦」）。**LoRA 訓練完後要重測**：拿掉這個提示，看模型是否自己就會承認。會的話就刪掉這段規則。文字端的「有沒有叫我」已經不是 regex，用的是 Discord 的 `message.mentions`（結構化、精確）。
 - **還沒做：** 多人同時說話的插話判斷（目前只看 STT 的 final 句）、Bot 說話時有人開口就停（barge-in）、長期記憶（跨場次記得誰是誰）。
 
 ---

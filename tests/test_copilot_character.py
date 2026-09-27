@@ -73,8 +73,26 @@ def test_called_mode_answers_one_follow_up_then_waits_to_be_named_again() -> Non
     assert not should_reply(CALLED, state, "所以呢", addressed=False, now=230.0)
 
 
-def test_ai_questions_are_spotted_next_to_chinese_text() -> None:
+def test_only_questions_aimed_at_the_bot_count_as_asking_if_it_is_an_ai() -> None:
     from silenttalk.copilot.character import asks_if_ai
 
-    assert asks_if_ai("欸你是AI吧") and asks_if_ai("你是真人嗎") and asks_if_ai("這個bot好笑")
+    # Asked of the bot: it has to own up.
+    assert asks_if_ai("欸你是AI吧")
+    assert asks_if_ai("你是真人嗎")
+    assert asks_if_ai("欸你是不是 AI 啊？聲音好平")
+    assert asks_if_ai("不是啦我剛剛覺得你反應太快像機器人")
+
+    # Someone talking about a bot, not to one. Nudging the character to
+    # confess here would break the act for no reason.
+    assert not asks_if_ai("剛剛打野打太快了像機器人")
+    assert not asks_if_ai("我乾脆寫個老闆指令機器人來自動回應他")
+    assert not asks_if_ai("這個bot好笑")
+    # Not about AI at all.
     assert not asks_if_ai("我在aim練槍") and not asks_if_ai("robot玩具")
+
+
+def test_questions_are_spotted_without_punctuation() -> None:
+    # Speech recognition gives no "？", and the particle can sit mid-sentence.
+    assert is_question("欸你們有吃宵夜嗎我剛點了雞排飯外送到家")
+    assert is_question("晚餐吃什麼")
+    assert not is_question("我先下線了")
