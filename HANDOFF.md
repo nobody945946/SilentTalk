@@ -14,12 +14,25 @@
 2. **角色模式**：Bot 自己就是使用者寫的人設，自己聽、自己決定要不要接話、自己講。**說話的是一個角色。**
 
 **使用者的目標是 2，而且要做到「頂級電子人，講話無違和」。** 1 維持現狀，這一輪不動。
+**人設是使用者自己寫的，而且大多是「關係」**：想要老婆就老婆、想要小孩就小孩、想要兄弟就兄弟（使用者原話）。所以角色要認得頻道裡的使用者本人（人設「人際關係」欄填 Discord 名稱），而且 LoRA 是**一個通用 adapter 服務所有人設**，不是訓練某一個角色。
 
 **硬體標準：RTX 3050 Ti Laptop（4 GB VRAM）。** 使用者最差的機器就是這個等級，開發以它為準；純 CPU 只是退路（能用就好）。**不用任何付費 API**（這是玩具專案）。使用者的 3050 Ti 筆電是 Windows 11、Intel 11 代 8 執行緒，**實測數字見 5.1**。
 
 **這一輪在做什麼：** 使用者同意把角色模式整個重蓋，舊的蒸餾資料和 LoRA 已停用、封存在 `archive/distill-v1/`（原因見那裡的 README，第 3 節也有摘要）。
 
-**測試：** `148 passed`，三個檢查指令都乾淨（見 1.3）。
+**測試：** `152 passed`，三個檢查指令都乾淨（見 1.3）。**用 `pytest` 自己的 exit code 判斷**，不要 `pytest | tail` 後面接 `&&`（tail 會吃掉失敗，這一輪發生過）。
+
+**目前狀態（2026-09-27 16:00）：**
+
+| 項目 | 狀態 |
+|---|---|
+| M1 測試集＋評估 | ✅ `scripts/dev/turn_eval*.py`、`turn_eval_data.jsonl`（15 場、393 判斷點，另有 6 場關係型人設正在加） |
+| M2 新架構（模型判斷＋只往後接） | ✅ 預設「被叫才回」過關；「主動」模式仍太吵（見 5.2） |
+| M5 TTS 串流 | ✅ 開發機第一聲 600–700 ms → 270–290 ms；**沒在真 Discord 聽過** |
+| M5 等對方講完 | ⬜ 需要真人語音資料才能調，先不動 |
+| M3 挑老師 | 🔄 網路太慢，只能用本機的 Qwen3-30B-A3B（見 M3） |
+| M4 LoRA | 🔄 資料產生器、訓練、轉檔、評估流程都寫好並試跑過（`scripts/dev/character_pipeline.sh`） |
+| 實機 Discord 驗收 | ⬜ 需要使用者，步驟在第 4 節最後 |
 
 ---
 
@@ -132,59 +145,87 @@ source .runtime/tools/env.sh     # llama-server b11179 (Vulkan) 進 PATH
 
 ## 4. 里程碑（依序）
 
-### M0｜量現況基準 ✅ 部分完成
+### M0｜量現況基準 ✅
 
 - [x] 停掉舊蒸餾流程、刪 cron 看門狗、資料封存到 `archive/distill-v1/`
 - [x] 3050 Ti 實機分段延遲（5.1，`bench_hw.py`）
-- [ ] 補上還沒量的兩段：STT 從最後一個字到判定講完的實際等待時間（Paraformer 每 ~0.6 s 才吐字，加上 0.8 s 靜音規則）、Discord 從拿到音訊到對方聽到聲音
-- [ ] 現況（舊架構、Gemma 4 E2B、無 LoRA）在 M1 測試集上的時機指標和內容分數
+- [x] 舊架構在 M1 上的分數（5.2）
+- [ ] 還沒量的兩段：STT 從最後一個字到判定講完的實際等待、Discord 從拿到音訊到對方聽到。要真 Discord，App 的 log 有 `since_heard_ms`（聽到那句 → 角色的話備好）可以用
 
-### M1｜測試集與指標
+### M1｜測試集與指標 ✅
 
-- 產生**完整多人對話**（20–40 句、2–5 個人類加上角色），每一句別人的話都標好「角色此時該講／不該講」，**標籤在出題時就決定**。
-- 難題要有固定比例：第三人稱提到角色、「你」其實在對別人、STT 聽錯名字（凱哥→開哥）、被問是不是 AI、被當助理使喚、別人在講私事、角色剛講完話後別人的回應（沒叫名字但是在回它）。
-- 用兩個互相獨立的評審交叉確認標籤（例：本機 Qwen3-30B-A3B 和 Claude Sonnet；**Claude 只在測試集用**）。不一致的丟掉或標「兩種都算對」。
-- 人設和情境種子要和之後的訓練資料完全分開（用內建 `PRESET_PERSONAS` 加另外手寫的幾個）。
-- 寫一個評估腳本：餵整場對話、逐句記錄模型講不講、講什麼、花多久，輸出 3.3 的所有數字。
-- **過關：** 測試集 ≥ 300 個判斷點；評估腳本在開發機上跑得完；兩個評審的一致率要寫進第 5 節。
+- `scripts/dev/turn_eval_data.jsonl`：整場多人對話，標籤出題時決定，**Claude 寫的，只能評估不能訓練**（檔頭有寫，也列出訓練資料不能重用的名字）。Qwen3-30B-A3B 交叉核對原始一致率 75.8%，模糊的改成 either。
+- `scripts/dev/turn_eval.py --policy old|new [--only ids] [--judge] [--tag]`：逐句重播（角色的劇本台詞一定進歷史），old 路徑固定在 commit 5924fd0。**注意：** 評估時角色自己說出口的話不會進歷史，所以「主動」模式的角色看起來一直很久沒說話，插嘴率會比 App 裡高。
+- 正在加 6 場關係型人設（老婆、國小兒子、死黨、阿嬤、女朋友、國中妹妹）的對話，加完後一樣要跑 `--policy new`。
 
-### M2｜新架構 A＋B，先不訓練
+### M2｜新架構 A＋B，先不訓練 ✅（「主動」模式除外）
 
-- [x] 實作完成（見 3.2 A），`pytest -q` 全過。
-- [ ] 用 Gemma 4 E2B 原模型跑 M1（`scripts/dev/turn_eval.py --policy new`），和 `--policy old` 比。
-- **過關：** 時機指標比舊規則好、內容分數不退步、3050 Ti 上每句判斷 < 150 ms。
-- 不過關就把數字寫進第 5 節，停下來跟使用者報告。
+- 結果見 5.2：recall 73.7% → 94.7%、名字聽錯 8% → 83%、自然度 2.81 → 3.39、契合 2.86 → 3.67；「被叫才回」插嘴 9.5%（目標 ≤ 10%）。
+- 「主動」模式：先問「在對你說話嗎」，安靜滿 4 句才問「現在插一句自然嗎」（`_JOIN_AFTER_QUIET_LINES`），插嘴 75.8% → 53.0%，剩下的要靠 M4 訓練。
+- 另外修掉的：判斷請求沒帶 engagement（主動模式判斷用錯 prompt、快取也接不上）、人際關係沒進 prompt（老婆人設不知道誰是老公）、幾乎照抄對方的回話（「有啊我們週末去看電影」→「有啊，週末去看電影」）。
 
 ### M5｜整條路提速（架構 C，不用 GPU，可以和 M3、M4 並行）
 
-- **3050 Ti 實測顯示 LLM 不是瓶頸**（判斷＋一句話約 0.3 s），大頭是「等對方講完」（0.8 s 靜音規則＋STT 出字粒度）和 TTS（整句合成完 0.66 s、第一段聲音 0.45–0.53 s）。從這兩段開始改。
-- [x] **TTS 串流**（`silenttalk/tts/stream.py`，`scripts/dev/tts_latency.py` 量測）：EdgeTTS 的 MP3 一邊到一邊經 pipe 餵 FFmpeg。開發機、第一個 Opus 封包：16 字 594–638 ms → 268–290 ms，33 字 698–709 ms → 267–288 ms。兩個關鍵：FFmpeg 要宣告 `-f mp3` 並關掉探測（不然 602 ms），aiohttp 的 happy-eyeballs 延遲改 50 ms（開發機 5/12 次卡 250 ms 的 IPv6 回退消失）。**還沒在真的 Discord 上聽過。**
-- EdgeTTS 無法預先連線或重用連線（每次 `Communicate` 都開新 websocket，約 165 ms 是連線建立）；除非重寫它的協定，不要再試。
-- [ ] 等對方講完：現在是 Discord 封包停 0.65 s（`endpoint_silence_ms`）或 Paraformer 0.8 s 規則。縮短會在句中停頓時搶話，要有真人語音資料才能調，先不動。
-- **過關：** 端到端延遲達到 3.3 的目標，或者清楚寫出還差多少、卡在哪。
+- **3050 Ti 實測顯示 LLM 不是瓶頸**（判斷＋一句話約 0.3 s），大頭是「等對方講完」（0.8 s 靜音規則＋STT 出字粒度）和 TTS。
+- [x] **TTS 串流**（`silenttalk/tts/stream.py`，`scripts/dev/tts_latency.py` 量測）：開發機第一個 Opus 封包 16 字 594–638 ms → 268–290 ms，33 字 698–709 ms → 267–288 ms。關鍵：FFmpeg 宣告 `-f mp3` 並關掉探測（不然 602 ms）、aiohttp happy-eyeballs 改 50 ms。**還沒在真的 Discord 上聽過。**
+- EdgeTTS 無法預先連線或重用連線；除非重寫它的協定，不要再試。
+- [ ] 等對方講完：縮短會在句中停頓時搶話，要真人語音資料才能調，先不動。
 
-### M3｜挑老師（只能用本機免費模型）
+### M3｜挑老師（只能用本機免費模型）🔄
 
-- 候選：本機的 Qwen3-30B-A3B，以及開發機（3090 24 GB + 125 GB RAM）用 CPU offload 跑得動、**授權允許拿輸出訓練**的更大開源模型。下載前先確認授權和檔案大小，超過 100 GB 先問使用者。
-- 同一批 M1 題目上，讓每個候選當角色跑整場對話，用 Claude 評審（只評估）。
-- 也要試「老師本身的提升手段」：同一句生成多個版本，再由開源模型挑最好的一個。
-- **過關：** 找到一個老師，自然度比 M2 的學生高出評審誤差以上。**找不到就不蒸餾**，停下來報告。
+- `scripts/dev/teacher_bakeoff.py generate|judge|report`：每個候選在 M1 的「該講」點用 App 的正式請求說一句，老師另有「+pick」（4 個版本自己挑一個），Claude 盲評排名（只評估）。結果在 `.runtime/dev/m3/`。
+- 學生候選：Gemma 4 E2B（現役）、Qwen3.5-4B、Gemma 4 E4B（使用者說 3050 Ti 跑得動就可以換）。**但換學生要下載它的 HF 原始權重來訓練**（4B 級約 8 GB），網路不行就只能用 E2B。
+- 老師候選（都是 Apache-2.0）：Qwen3.6-35B-A3B、Qwen3.6-27B、Gemma 4 31B、Gemma-4-26B-A4B-TAIDE-zhTW。**2026-09-27 下載不下來**：沒有 HF token，Xet 會卡住、HTTP 只有 ~0.5 MB/s，而且這台機器的頻寬被別的程式用掉大半。`.runtime/dev/m3/download.sh`（`xget.py` 看門狗）在背景慢慢抓。**有 HF token 的話請使用者給，速度會正常。**
+- 所以這一輪先用本機的 Qwen3-30B-A3B。過關標準不變：「+pick」要比學生自然、差距超過評審誤差，否則不蒸餾。
 
-### M4｜新資料、訓練、評估
+### M4｜新資料、訓練、評估 🔄
 
-- 老師寫整場對話，角色是參與者，講不講由對話本身決定（自然產生沉默樣本）；多主動的參數也放進資料。
-- 別人的台詞加上 STT 雜訊（拿掉標點、同音錯字、聽錯名字），角色的台詞保持乾淨。
-- 用開源模型和規則篩資料（**不能用 Claude**）。
-- 訓練：多輪對話，每一個 assistant 位置（講或沉默）都算 loss。舊的 `scripts/dev/distill_data.py`、`distill_pipeline.sh`、`train_lora.py` 是舊格式，**要重寫，不要直接跑**；無人值守、斷點續跑、看門狗的做法可以沿用（見 6.1）。
-- **過關：** M1 上所有指標贏過 M2，而且差距超出評審誤差；3050 Ti 速度不退步。過關才上線（adapter 量化成 q8_0 放進 repo、`setup_copilot.py` 加下載項）。
+- `scripts/dev/character_data.py personas|scripts|refine|render`：
+  - 人設 80% 帶「和使用者的關係」（`ROLES`：老婆、兒子、死黨、阿嬤……），關係照人設編輯器的格式存（從角色的角度：「阿明：我老公」），使用者本人一定在對話裡。
+  - 老師寫整場對話，每句標「對誰說」，講不講由劇本決定；和標籤矛盾的點丟掉。
+  - 角色的每句台詞：用 App 的正式請求再寫 4 個版本，老師挑最自然的（避開「欸」開頭）。
+  - 輸出兩種列：判斷題（是／否，否最多是是的 2 倍）和台詞；別人的語音台詞加 STT 雜訊；「欸」開頭最多 12%。
+  - 親密關係只給成年人；未成年角色不碰戀愛。
+- `scripts/dev/character_pipeline.sh [--status]`：personas → scripts → refine → render → train_check → train → convert → eval → eval_judge，無人值守、可續跑（規則同 6.1）。adapter 輸出到 `.runtime/models/llm/character-e2b-lora.gguf`，`[copilot] character_lora` 填這個檔名就會載入；**只有角色模式的請求套用，Copilot 請求的 LoRA 強度是 0**。
+- 試跑過（小模型當替身老師）：四個資料步驟、訓練遮罩（只對答案算 loss）都正確。**單一請求切換 LoRA 強度還沒用真的 adapter 驗證過**，第一個 adapter 出來要先驗。
+- **過關：** M1 上時機（尤其「主動」模式插嘴）和內容分數贏過 M2，差距超出評審誤差；3050 Ti 速度不退步。過關才上線。
 
 ### 需要使用者本人的驗收（等他有空，不要催）
 
+**Discord 實機測試**是目前最缺的一塊。使用者在 3050 Ti 筆電上用 SSH 連開發機，筆電上有自己的 agent，給他下面這段 prompt 就好（使用者不想做雜事，**只請他講話和聽**）：
+
+```text
+在 C:\Users\A8fm0\Downloads\SilentTalk（Windows 11、RTX 3050 Ti）：
+1. git fetch origin，git checkout copilot-story-mode，git pull。
+2. .venv\Scripts\python.exe -m pip install -r requirements.txt，
+   .venv\Scripts\python.exe scripts\setup_copilot.py（已下載的會跳過）。
+3. 確認 .env 有 DISCORD_BOT_TOKEN、OWNER_USER_ID（沒有就停下來問使用者，不要自己填）。
+4. .venv\Scripts\python.exe app.py --copilot-smoke，把輸出貼回來。
+5. 用「啟動 SilentTalk.cmd」開 App，跟使用者說可以進語音頻道了。
+6. 使用者測完後，從 silenttalk.log 抓這幾種行的數字（log 裡沒有對話內容）：
+   copilot_turn_final、copilot_character_line（latency_ms、since_heard_ms、spoke）、
+   job_done（synthesis_ms、streamed）、character_line_dropped、任何 error／failed。
+   整理成表貼回來，並附上使用者說哪裡怪。
+不要 commit、不要改 repo 的檔案、不要動 .env 和 settings.json。
+```
+
+使用者要做的（約 10 分鐘）：人設頁選或建一個人設，「人際關係」加一行「自己的 Discord 名字：我老公（或我兒子、我兄弟…）」→ 開角色模式 → 在語音頻道：
+1. 叫它名字問一句 → 要回，感覺延遲
+2. 跟朋友聊別的、不叫它 → 不能插嘴
+3. 「我剛剛跟○○講過」（講到它但不是對它說）→ 不能回
+4. 它回完話後直接接它的話（不叫名字）→ 要回
+5. 故意叫錯一個同音字 → 最好要回
+6. 「你是不是 AI」→ 不承認、自然帶過
+7. 叫它寫程式或查天氣 → 用角色的方式推掉
+8. 聽聲音：音色合不合、有沒有斷音或爆音（TTS 串流是新的）
+9. 有沒有把你當成人際關係裡寫的那個人
+
+其他：
+
 | 項目 | 做法 |
 |---|---|
-| Discord 文字聊天 | Developer Portal → Bot → 打開 **Message Content Intent**；設定頁 → Discord → 打開「讀寫文字聊天」；在語音頻道聊天室 @Bot。預期 log 有 `text_message_received ... addressed=True`。PrivilegedIntentsRequired＝沒開 intent；`text_send_failed reason=forbidden`＝沒發言權限 |
-| 人設聲音 | 人設頁最下面「聲音」→「▶ 試聽」，主觀判斷合不合角色 |
-| 實機速度 | 筆電上 `.venv\Scripts\python.exe scripts\dev\bench_hw.py`，貼回最後那張表。**開著遊戲再跑一次**才知道 VRAM 被搶時的情況（還沒量） |
+| Discord 文字聊天 | Developer Portal → Bot → 打開 **Message Content Intent**；設定頁 → Discord → 打開「讀寫文字聊天」；在語音頻道聊天室 @Bot。預期 log 有 `text_message_received ... addressed=True` |
+| 邊打遊戲的 VRAM | 筆電開著遊戲跑 `.venv\Scripts\python.exe scripts\dev\bench_hw.py`，貼回最後那張表 |
 | voice-recv fork 修補 | 需要使用者的 GitHub，先問。要改 fork 的 `discord/ext/voice_recv/opus.py` 三處：`dave_session` 為 None 時不呼叫 `set_passthrough_mode`；`decrypt` 改用 `self._cached_id`；DAVE 還沒 ready 就丟掉封包。`discord_voice.py` 現有的防護不要刪 |
 | 不切視窗選選項（可選） | 只能用「修飾鍵＋數字」這類組合，**絕不能註冊單獨的 W/A/S/D 全域熱鍵**。先問使用者要哪組按鍵 |
 
@@ -212,7 +253,24 @@ source .runtime/tools/env.sh     # llama-server b11179 (Vulkan) 進 PATH
 - 同一個獨立 gate prompt 在 CPU 上約 1 s／句、15 題對 14 題，所以**不要另外加一次 gate 呼叫**，要併進生成。
 - 結論：**3050 Ti 上 LLM 很快，VRAM 也還有空間**；使用者感受到的延遲主要來自 STT 斷句和 TTS。
 
-### 5.2 模型比較（舊 persona_eval，四選項，3 人設 × 14 情境，Claude Sonnet 評審）
+### 5.2 角色模式時機與內容（M1，Gemma 4 E2B，3090，2026-09-27）
+
+recall 算在「該講」、插嘴算在「不該講」，either 兩邊都不算。結果檔在 `.runtime/dev/turn_eval/`（舊版用 `-r2` 那份，另一份的延遲被 port 衝突汙染）。
+
+| | 舊（關鍵字規則） | 新（模型判斷） |
+|---|---|---|
+| recall 全部（n=76） | 73.7% | **94.7%** |
+| 　被叫才回（n=56） | 80.4% | 92.9% |
+| 　名字被聽錯（n=12） | 8.3% | 83.3% |
+| 　回應角色剛說的話（n=23） | 60.9% | 95.7% |
+| 插嘴：被叫才回（n=158） | 6.3% | 9.5% |
+| 插嘴：主動（n=66） | 83.3% | 75.8% → 兩段式判斷後 53.0% |
+| 評審 natural / voice / fit | 2.81 / 3.58 / 2.86 | **3.39** / 3.60 / **3.67** |
+| 每次呼叫中位數 | 182 ms | 不講 79 ms、講 255 ms |
+
+出戲的全是「答應做做不到的事」（翻譯、查天氣、寫報告），沒有自承是 AI。原模型的毛病：凱哥 14 句裡 6 句「穩啦」、小晴像客服（「有什麼需要我幫忙的嗎」）、編造經歷。
+
+### 5.3 模型比較（舊 persona_eval，四選項，3 人設 × 14 情境，Claude Sonnet 評審）
 
 | 模型 | voice | stance | natural | lanes_ok | 捏造／踩底線 | VRAM | 3090 延遲 |
 |---|---|---|---|---|---|---|---|
@@ -225,7 +283,7 @@ source .runtime/tools/env.sh     # llama-server b11179 (Vulkan) 進 PATH
 
 角色模式（舊 prompt，Gemma 4 E2B）：voice 3.68、stance 3.42、natural 3.26、fit 3.36、捏造 2%、踩底線 5%、盲測辨識 99%。
 
-### 5.3 其他實測（仍然有效）
+### 5.4 其他實測（仍然有效）
 
 - **口頭禪重複**：連續說話時小模型 86% 的句子塞口頭禪；記住最近 4 句並在 prompt 點名「剛用過的不要再用」→ 40%。
 - **不出戲**：預設「照角色演」政策下 3 人設 × 6 句身分質問 = 0/18 自爆。
@@ -233,7 +291,7 @@ source .runtime/tools/env.sh     # llama-server b11179 (Vulkan) 進 PATH
 - **STT**：Paraformer 7.2% CER（預設）、SenseVoice 6.9%（可選）。STT 會把「凱哥」聽成「開哥」；目前靠人設的「暱稱」欄補。
 - **音效音量補償**：RMS 差 ≤ 0.6 dB，峰值 ≤ −7 dBFS（只有儀器量過，沒人耳聽過）。
 
-### 5.4 已驗證的下載資訊
+### 5.5 已驗證的下載資訊
 
 | 檔名 | 來源 | 位元組 | sha256 |
 |---|---|---|---|
@@ -254,7 +312,12 @@ source .runtime/tools/env.sh     # llama-server b11179 (Vulkan) 進 PATH
 | `scripts/dev/llm_eval.py` | 四選項格式／方向／速度 | 可用 |
 | `scripts/dev/stt_eval.py [--engine sensevoice]` | STT 準確度 | 可用 |
 | `scripts/dev/ui_preview.py` | UI 截圖＋按鍵流程 | 可用 |
-| `scripts/dev/distill_data.py`、`distill_pipeline.sh`、`train_lora.py` | 舊蒸餾流程 | **舊格式，M4 重寫前不要跑** |
+| `scripts/dev/turn_eval.py` | 角色模式時機＋內容評估（M1） | 可用 |
+| `scripts/dev/teacher_bakeoff.py` | 比老師（M3） | 可用 |
+| `scripts/dev/character_data.py`、`character_pipeline.sh` | 新 LoRA 資料與全流程（M4） | 可用 |
+| `scripts/dev/tts_latency.py` | TTS 檔案 vs 串流的第一個封包時間 | 可用 |
+| `scripts/dev/train_lora.py` | LoRA 訓練（通用，`--data`、`--max-length`） | 可用 |
+| `scripts/dev/distill_data.py`、`distill_pipeline.sh` | 舊蒸餾流程 | **舊格式，不要跑** |
 
 ### 6.1 無人值守流程的經驗（重寫 M4 時沿用）
 
