@@ -95,6 +95,11 @@ def main() -> int:
             str(devices[-1]["event"]).split(" ", 1)[-1] if devices else "—",
         ),
         (
+            "連上 Discord（ready／resumed）",
+            f"{len(events.get('discord_ready', []))}"
+            f"／{len(events.get('discord_gateway_resumed', []))}",
+        ),
+        (
             "語音接收",
             f"dave_version={receive[-1].get('dave_version')}"
             if receive
