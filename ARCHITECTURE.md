@@ -277,6 +277,8 @@ final transcript（含 Owner 自己的麥克風）
   → LocalReplyModel.character_turn()
       整場聊天是一段只往後接的 chat（和選項模式同一個格式），每句只 prefill 新的那句
       → 先問「最後一句是不是在對你說話」，文法限定只答 是／否（3050 Ti 約 80–90 ms）；
+        這一題套用角色 LoRA（models/character-e2b-lora-v1.q8_0.gguf，由 setup 裝進
+        .runtime/models/llm/）：誤回從 9.6% 降到 1.0%，該回的比例不變。
         Discord @提及或回覆直接算是
       → 「會主動加入」模式：角色已經安靜 4 句以上，再問「現在插一句自然嗎」
       → 是：同一段 chat 尾端加提示寫一句；幾乎重複對方的話就丟掉；
@@ -285,6 +287,8 @@ final transcript（含 Owner 自己的麥克風）
   → Controller._speak_as_character()   SpeechQueue 不閒置就丟掉（不搶話）
   → SpeechQueue → EdgeTTS（串流）→ Discord；播放完成才 record_self（以角色名顯示）
 ```
+
+LoRA 套在哪些請求由 `copilot.character_lora_uses` 決定（called／active／line／options）。v1 只有 called 有贏：它寫的台詞會硬塞人設背景、選項格式會壞，所以其餘都用原本的模型。有 LoRA 時 llama-server 開兩個 slot，套 LoRA 的請求走 slot 0、不套的走 slot 1：llama-server 在 LoRA 比例改變時會丟掉該 slot 的 prompt cache，共用一個 slot 的話每次開口都要重讀整段對話。
 
 被問「你是不是 AI」時怎麼回，由設定 `character_ai_honesty` 決定：預設 `in_character` 不出戲，`admit` 則老實承認是 AI 扮演的角色。App 只用到 `copilot/character.py` 的設定選項和 `asks_if_ai`；裡面舊的關鍵字規則（`should_reply` 等）已不再使用。
 

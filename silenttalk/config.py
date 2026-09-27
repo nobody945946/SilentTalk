@@ -75,7 +75,7 @@ class CopilotConfig:
     # Character-mode LoRA adapter in .runtime/models/llm/ ("" = none), and
     # which requests use it (copilot.llm.LORA_PARTS); summaries never do.
     character_lora: str = ""
-    character_lora_uses: tuple[str, ...] = ("called", "active", "line")
+    character_lora_uses: tuple[str, ...] = ("called",)
     # "called": answer only when the model judges a line is for the
     # character. "active": also join in by itself after a quiet stretch.
     # Auto-compaction: older turns are folded into a short summary by the
@@ -139,7 +139,7 @@ def _lora_uses(value: object) -> tuple[str, ...]:
     from silenttalk.copilot.llm import LORA_PARTS
 
     if value is None:
-        return ("called", "active", "line")
+        return ("called",)
     parts = value if isinstance(value, list) else str(value).split(",")
     chosen = tuple(str(part).strip() for part in parts if str(part).strip())
     unknown = [part for part in chosen if part not in LORA_PARTS]

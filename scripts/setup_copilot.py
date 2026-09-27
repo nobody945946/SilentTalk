@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import shutil
 import sys
 import tomllib
 import urllib.error
@@ -99,6 +100,29 @@ LLM_MODELS = {
     ),
 }
 DEFAULT_LLM_MODEL = "gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf"
+
+
+# Small files that ship in the repo (models/) and are copied into the runtime
+# model folder: the character LoRA trained on the dev box has no download URL.
+BUNDLED = (
+    (
+        "Character LoRA v1 (q8_0)",
+        PROJECT_DIR / "models" / "character-e2b-lora-v1.q8_0.gguf",
+        LLM_DIR / "character-e2b-lora-v1.q8_0.gguf",
+        "83655e8502a1c83b5d15dd1adc2bb4b908ddde6506d436f9a93eb491c566f957",
+    ),
+)
+
+
+def _install_bundled(label: str, source: Path, target: Path, expected_sha256: str) -> None:
+    if target.is_file() and _sha256(target) == expected_sha256:
+        print(f"[OK] {label}")
+        return
+    if not source.is_file() or _sha256(source) != expected_sha256:
+        raise RuntimeError(f"{label}: {source} is missing or damaged; run git pull again")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(source, target)
+    print(f"[OK] {label} (installed)")
 
 
 def _copilot_section() -> dict:
@@ -233,6 +257,8 @@ def main() -> int:
     try:
         for asset in (*ASSETS, *stt_assets, *([llm_asset] if llm_asset else [])):
             _download(*asset)
+        for bundled in BUNDLED:
+            _install_bundled(*bundled)
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
