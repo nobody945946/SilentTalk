@@ -48,6 +48,17 @@ def is_question(text: str) -> bool:
     return stripped.endswith(_QUESTION_END) or bool(_QUESTION.search(stripped))
 
 
+# ASCII-only word edges: \b treats CJK as word characters, so "是AI吧" has none.
+_AI_QUESTION = re.compile(
+    r"((?<![a-z])(ai|bot)(?![a-z])|ａｉ|人工智慧|機器人|真人|是不是人|是人嗎)", re.IGNORECASE
+)
+
+
+def asks_if_ai(text: str) -> bool:
+    """Someone is asking (or saying) whether the bot is an AI / a real person."""
+    return bool(_AI_QUESTION.search(text))
+
+
 def talks_to_you(text: str) -> bool:
     """Singular "你" (not "你們"): the line is aimed at one listener."""
     return bool(re.search(r"你(?!們)", text))

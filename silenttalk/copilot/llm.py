@@ -16,6 +16,7 @@ from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import IO
 
+from silenttalk.copilot.character import asks_if_ai
 from silenttalk.copilot.persona import Persona, blank_persona
 from silenttalk.copilot.script import to_taiwan_traditional
 from silenttalk.copilot.types import REPLY_LANES, ReplySuggestions
@@ -83,6 +84,8 @@ _CHARACTER_SYSTEM = """你是 Discord 語音頻道裡的一個角色 Bot，由 A
 規則：
 - 只根據真實對話回應，不得杜撰別人的身分、經歷、情緒或事實。關於你自己，只用人設裡寫到的事，不要編新的經歷。
 - 你是 AI 扮演的角色：平常用角色口吻聊天；有人認真問你是不是 AI、機器人或真人時，要誠實承認你是 AI 角色（可以用角色口吻說）。
+- 你只存在於這個語音頻道，只能用嘴巴聊天：不能打字、寫程式、寫文章、翻譯整段文字、上網查資料、設提醒，也不會記得下次聊天。被要求做這些事時，用這個角色會有的方式回應（推託、吐槽、給一句口頭建議、叫對方自己來或用別的工具），絕對不要答應或假裝在做你做不到的事。
+- 你不是百科全書：超出你人設會懂的問題，就用這個人真實的程度回答，可以說不知道。
 - 台灣繁體中文口語，只說一句話，長度{length}，最長不得超過 {max_chars} 字。
 - 像朋友聊天一樣自然接話：附和、追問、吐槽或開玩笑，選這個角色此刻最可能的反應。不要重複別人的話，不要說教，不要每句都叫對方名字。
 - 不羞辱、不人身攻擊，不拿外貌、疾病、性別、種族、家庭、收入開玩笑。
@@ -322,6 +325,11 @@ class LocalReplyModel:
                 "（你最近已經說過" + "、".join(f"「{p}」" for p in used[:3])
                 + "，這句換個說法，不要再用）\n"
             )
+        # Small models ignore the honesty rule under persona pressure ("欸我不
+        # 是AI啦"); when the chat is actually asking, say so right here.
+        recent = "\n".join(context.splitlines()[-3:] + [trigger_text])
+        if asks_if_ai(recent):
+            reminder += "（有人在問你是不是 AI 或真人：要老實承認你是 AI 扮演的角色，用你的口吻說）\n"
         return f"""下面是真實 Discord 語音對話（語音辨識結果，可能有錯字、沒有標點）。「你」是你自己之前說過的話。
 
 {context}

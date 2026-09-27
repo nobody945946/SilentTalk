@@ -49,3 +49,10 @@ def test_unprompted_replies_wait_for_cooldown_and_a_reason() -> None:
     state.heard()
     state.heard()
     assert should_reply(POLICY, state, "我吃飽了", addressed=False, now=110.0)
+
+
+def test_ai_questions_are_spotted_next_to_chinese_text() -> None:
+    from silenttalk.copilot.character import asks_if_ai
+
+    assert asks_if_ai("欸你是AI吧") and asks_if_ai("你是真人嗎") and asks_if_ai("這個bot好笑")
+    assert not asks_if_ai("我在aim練槍") and not asks_if_ai("robot玩具")
