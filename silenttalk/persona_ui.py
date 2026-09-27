@@ -70,7 +70,7 @@ SECTIONS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ),
     (
         "人際關係",
-        "寫 Discord 顯示名稱。只有當這個人出現在對話裡，關係才會被放進 prompt。",
+        "寫 Discord 顯示名稱，包括你自己：例如「你的名字：我老公」就會讓角色把你當老公。",
         ("relationships",),
     ),
     ("底線", "無論如何都不能說出口的話。", ("boundaries",)),

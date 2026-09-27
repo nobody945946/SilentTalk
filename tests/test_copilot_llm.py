@@ -369,3 +369,17 @@ async def test_gate_and_line_share_the_system_prompt_in_active_mode() -> None:
     gate, line = model.requests[0][1], model.requests[1][1]
     assert gate[0] == line[0]
     assert "話題你有想法或有梗" in gate[0]["content"]
+
+
+def test_relationships_are_in_the_character_system_prompt() -> None:
+    """A "wife" persona has to know which speaker is her husband."""
+    from dataclasses import replace
+
+    from silenttalk.copilot.persona import Relationship
+
+    model = LocalReplyModel(Path("unused.gguf"))
+    model.set_persona(
+        replace(PRESET_PERSONAS[1], relationships=(Relationship("阿明", "我老公，結婚三年"),))
+    )
+    system = model.character_messages(turns=_chat(CHAT))[0]["content"]
+    assert "- 阿明：我老公，結婚三年" in system

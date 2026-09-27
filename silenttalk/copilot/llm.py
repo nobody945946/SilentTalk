@@ -488,6 +488,19 @@ class LocalReplyModel:
 
     def _build_turn_system_prompt(self, persona: Persona, engagement: str) -> str:
         sheet = persona.render_system_block()
+        # All of them, not just who is talking right now: the list is part of
+        # the persona, so it stays in the cached prompt. This is what makes a
+        # character treat the owner as its husband, kid or brother.
+        relations = [
+            f"- {rel.name}：{rel.relation}"
+            for rel in persona.relationships
+            if rel.name and rel.relation
+        ]
+        if relations:
+            sheet += (
+                "\n你和這些人的關係（他們說話時，對話裡會出現這個名字）：\n"
+                + "\n".join(relations)
+            )
         name = persona.name.strip()
         return _TURN_SYSTEM.format(
             who=f"「{name}」" if name else "一個友善、好聊的朋友",
