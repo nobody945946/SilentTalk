@@ -193,6 +193,15 @@ need_vram() {
     [ "${free:-0}" -ge "$1" ] || { echo "only ${free} MiB free, need $1"; return 75; }
 }
 train() { need_vram 12500 || return 75; .runtime/train-venv/bin/python scripts/dev/train_lora.py "$@"; }
+# Rows carry the whole chat (~1.6k tokens): past 8k rows one epoch already
+# takes about four hours on the shared 3090, so stop at one.
+train_char() {
+    local rows epochs=2
+    rows=$(wc -l < "$DIR/train.jsonl")
+    [ "$rows" -gt 8000 ] && epochs=1
+    echo "rows=$rows epochs=$epochs"
+    train "$@" --epochs "$epochs"
+}
 eval_run() { .venv/bin/python scripts/dev/turn_eval.py --policy new --model "$STUDENT_GGUF" "$@"; }
 eval_judge() { online || return 75; .venv/bin/python scripts/dev/turn_eval.py "$@"; }
 
@@ -206,7 +215,7 @@ stage render .venv/bin/python scripts/dev/character_data.py render
 stage train_check env CUDA_VISIBLE_DEVICES= .runtime/train-venv/bin/python \
     scripts/dev/train_lora.py --base "$STUDENT_HF" --out "$LORA_DIR.check" \
     --data "$DIR/train.jsonl" --max-length 3072 --check
-stage train train --base "$STUDENT_HF" --out "$LORA_DIR" --data "$DIR/train.jsonl" \
+stage train train_char --base "$STUDENT_HF" --out "$LORA_DIR" --data "$DIR/train.jsonl" \
     --batch 1 --grad-accum 16 --max-length 3072
 stage convert env PYTHONPATH="$LLAMA_SRC/gguf-py" .runtime/train-venv/bin/python \
     "$LLAMA_SRC/convert_lora_to_gguf.py" --base "$STUDENT_HF" --outtype f16 \
