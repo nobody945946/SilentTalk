@@ -143,7 +143,7 @@ def test_persona_reminder_sits_right_before_the_options_request() -> None:
     tail = model.option_messages(turns=turns)[-1]["content"]
 
     assert tail.startswith(
-        "阿傑：衝B啦\n\n（記住：你是凱哥；句子短、節奏快；口頭禪和代表台詞少用，大約四五句才一次。"
+        "阿傑：衝B啦\n\n（記住：你是凱哥；句子短、節奏快、講話直接；口頭禪和代表台詞少用，大約四五句才一次。"
         "說出口的話要是這個人會說的話。）\n（語氣詞像真人一樣少用"
     )
     assert "【你的人設】" in model._build_turn_system_prompt(PRESET_PERSONAS[0], "options")
