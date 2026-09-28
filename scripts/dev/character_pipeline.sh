@@ -18,13 +18,17 @@
 #            and compares teacher and student lines blind, both orders
 # Teacher and checker are 3-bit quants that fit whole in the ~16 GB the
 # shared GPU has free: the first round's 17 GB MoE spilled to the CPU and
-# the whole 3090 ran at 20-60 tokens/s.
+# the whole 3090 ran at 20-60 tokens/s. They are served by a CUDA build of
+# llama-server (LLAMA_SERVER): the Vulkan build the laptop uses read prompts
+# at ~120 tokens/s here.
 #
 # The filter stage refuses the whole set (stage *filter.blocked) when any
 # number in character_data.HARD_CHECK is missed; nothing is trained then.
 # Order, so that a set that would be refused costs as little as possible:
-#   calibrate  the checker on 800 of the first round's gate rows: how far it
-#              agrees with labels made the same way
+#   calibrate  the checker on every gate row of 60 random first-round
+#              scripts: how far it agrees with labels made the same way.
+#              Whole scripts, in order, so the server reads each chat once
+#              (random single rows re-read ~1.4k tokens each: 10 s a row)
 #   pilot_*    the whole data path on 30 personas, through the hard check
 #   the rest   all 300 personas (resumes on top of the pilot), training,
 #              eval paired against the current candidates
@@ -63,9 +67,16 @@ TAG=${TAG:-v3-e4b}
 LORA_DIR=.runtime/dev/lora/character-$TAG
 LORA_GGUF=.runtime/models/llm/character-$TAG.q8_0.gguf
 LLAMA_SRC=.runtime/tools/llama.cpp-b11179
-# With part of the experts on the CPU (the GPU is shared), more parallel
-# slots batch more tokens per pass over those weights.
-SLOTS=${SLOTS:-8}
+LLAMA_SERVER=${LLAMA_SERVER:-.runtime/tools/llama.cpp-b11179-src/build-cuda/bin/llama-server}
+[ -x "$LLAMA_SERVER" ] || LLAMA_SERVER=llama-server
+# Parallel requests per server, measured on the shared 3090 (CUDA build):
+# the 27B teacher writes 43 tokens/s alone, 112 with 8, 151 with 16 (12
+# keeps its cache well inside the free memory). Gemma 4 31B reads prompts
+# slower the more sequences it holds (414 tokens/s with 1, 386 with 2, 112
+# with 8), so the checker gets 2.
+SLOTS=${SLOTS:-12}
+CHECKER_SLOTS=${CHECKER_SLOTS:-2}
+SERVER_SLOTS=$SLOTS
 
 log() { echo "$(date '+%F %T') $*" | tee -a "$LOG"; }
 
@@ -123,8 +134,8 @@ teacher_up() {
     fi
     log "starting $(basename "$TEACHER")"
     # --fit sizes the offload to the VRAM the shared GPU has free.
-    nohup llama-server -m "$TEACHER" --host 127.0.0.1 --port "$TEACHER_PORT" \
-        --fit on --fit-target 2048 -c $((SLOTS * 4096)) --parallel "$SLOTS" -fa on \
+    nohup "$LLAMA_SERVER" -m "$TEACHER" --host 127.0.0.1 --port "$TEACHER_PORT" \
+        --fit on --fit-target 2048 -c $((SERVER_SLOTS * 4096)) --parallel "$SERVER_SLOTS" -fa on \
         --cache-type-k q8_0 --cache-type-v q8_0 --jinja -t 12 \
         > "$LOGS/teacher.log" 2>&1 9>&- &
     for _ in $(seq 300); do
@@ -155,7 +166,7 @@ teacher_down() {
 data() {
     teacher_up || return 1
     .venv/bin/python scripts/dev/character_data.py "$@" \
-        --teacher-url "http://127.0.0.1:$TEACHER_PORT" --workers "$SLOTS" &
+        --teacher-url "http://127.0.0.1:$TEACHER_PORT" --workers "$SERVER_SLOTS" &
     DATA_JOB=$!
     local job=$DATA_JOB misses=0 tp finished status
     while true; do
@@ -243,17 +254,25 @@ eval_pair() {
         .venv/bin/python scripts/dev/turn_eval.py --judge-pair "$base" "$TAG" || return 1
     done
 }
-generator() { TEACHER=$GENERATOR; data "$@"; }
-checker() { TEACHER=$CHECKER; data "$@"; }
+generator() { TEACHER=$GENERATOR SERVER_SLOTS=$SLOTS; data "$@"; }
+checker() { TEACHER=$CHECKER SERVER_SLOTS=$CHECKER_SLOTS; data "$@"; }
 student() {
-    TEACHER=.runtime/models/llm/$STUDENT_GGUF
+    TEACHER=.runtime/models/llm/$STUDENT_GGUF SERVER_SLOTS=$SLOTS
     data student --student-url "http://127.0.0.1:$TEACHER_PORT"
 }
 # The checker against the first round's gate labels. Informational: its
 # number decides whether the first round's gate adapter may ship, and shows
 # early whether the checker and the labels can meet HARD_CHECK at all.
 calibrate() {
-    shuf -n 800 --random-source=<(yes) "$V1/train-gate-compact.jsonl" > "$V1/gate-sample.jsonl"
+    python3 - "$V1" <<'PY'
+import json, random, sys
+rows = [json.loads(line) for line in open(f"{sys.argv[1]}/train-gate-compact.jsonl")]
+pick = set(random.Random(7).sample(sorted({r["script"] for r in rows}), 60))
+with open(f"{sys.argv[1]}/gate-sample.jsonl", "w") as out:
+    for row in rows:
+        if row["script"] in pick:
+            out.write(json.dumps(row, ensure_ascii=False) + "\n")
+PY
     CHARDATA_DIR="$REPO/$V1" checker check --rows gate-sample.jsonl || return
     CHARDATA_DIR="$REPO/$V1" .venv/bin/python scripts/dev/character_data.py filter \
         --rows gate-sample.jsonl --min-lines 0

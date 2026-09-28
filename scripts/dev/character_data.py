@@ -1280,7 +1280,13 @@ def make_check(args: argparse.Namespace) -> None:
             wins += answer == teacher_is
         _append(path, {"key": key, "wins": wins, "compared": True})
 
-    _pool_scripts(args.workers, work, jobs)
+    # Gate questions first, then the comparisons: interleaved, each kind of
+    # prompt would evict the other from the slot and every gate row would
+    # re-read its whole chat.
+    _pool_scripts(args.workers, work, [r for r in jobs if r["kind"].startswith("gate")])
+    _pool_scripts(
+        args.workers, work, [r for r in jobs if not r["kind"].startswith("gate")]
+    )
 
 
 def rule_ok(row: dict[str, Any]) -> bool:
