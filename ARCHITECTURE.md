@@ -280,9 +280,15 @@ final transcript（含 Owner 自己的麥克風）
       → 是：同一段 chat 尾端加提示寫一句；幾乎重複對方的話就丟掉；
         記住最近 4 句，避免口頭禪重複
   → 生成期間對話又走了 ≥ stale_turns（2）句且不是被叫 → 丟掉
+冷場（沒有新的一句，worker 每秒檢查一次）：
+  → 角色模式、character_lull_seconds 秒沒人說話、這段冷場還沒開過口
+  → character_turn(lull=True)：不問閘門，尾端提示「開個話題：說說心裡掛著的事，或問問大家」
+    （和今天的心事幾乎一樣就重寫一次）；想的時候有人說話了就不說
   → Controller._speak_as_character()   SpeechQueue 不閒置就丟掉（不搶話）
   → SpeechQueue → EdgeTTS（串流）→ Discord；播放完成才 record_self（以角色名顯示）
 ```
+
+**人設給模型看的只有塑造這個人的部分**（`Persona.render_prompt_block`）：名字、身分、背景、想要、害怕、在意、最近、個性、說話感覺（去掉引號裡的詞）、幽默感、心情，加上人際關係。評審看的是完整人設（`render_system_block`）。**今天的心事**（`LocalReplyModel.make_agenda`，開始或換人設時由 runtime 在背景產生，只在記憶體）接在人設後面，也進 system prompt。
 
 LoRA 套在哪些請求由 `copilot.character_lora_uses` 決定（called／active／line／options）。v1 只有 called 有贏：它寫的台詞會硬塞人設背景、選項格式會壞，所以其餘都用原本的模型。有 LoRA 時 llama-server 開兩個 slot，套 LoRA 的請求走 slot 0、不套的走 slot 1：llama-server 在 LoRA 比例改變時會丟掉該 slot 的 prompt cache，共用一個 slot 的話每次開口都要重讀整段對話。
 
