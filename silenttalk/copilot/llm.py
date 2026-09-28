@@ -110,15 +110,6 @@ _LULL_HINT = (
     "或問問在場的人最近怎樣。自然一點，一句就好）"
 )
 
-# Rides on every line and options request, never on the gate (the LoRA's
-# gate was trained without it). A persona that says "常用「欸」「好啦」"
-# made Gemma 4 E2B put them in 22% of lines twice or more (humans in the
-# test chats: 8%), and read aloud they sound put on (laptop test,
-# 2026-09-28: "回復刻意使用一些語助詞，超級爛").
-_PARTICLE_RULE = (
-    "（語氣詞像真人一樣少用：大多數句子一個都不用，一句最多一個；"
-    "人設寫的語氣詞和口頭禪是偶爾才出現的習慣，不是每句都要）"
-)
 # Options are sampled lines, not four fixed intents. Asked for agree / ask /
 # disagree / joke in one go, Gemma 4 E2B answered the wrong line, disagreed
 # for the sake of it and repeated one trait (laptop test, 2026-09-28: "敷衍、
@@ -387,7 +378,7 @@ class LocalReplyModel:
         messages = self.character_messages(
             turns=turns, summary=summary, engagement="options", gate=True
         )
-        ask = _PARTICLE_RULE + "\n" + _OPTIONS_ASK
+        ask = _OPTIONS_ASK
         if not self._persona.is_blank:
             ask = self._persona.reminder_line("說出口的話要是", list_catchphrases=False) + "\n" + ask
         if messages[-1]["role"] == "user":
@@ -542,7 +533,6 @@ class LocalReplyModel:
             hints.append("（沒有人叫你，你決定自然地插一句話）")
         if not persona.is_blank:
             hints.append(persona.reminder_line("開口的話要是", list_catchphrases=False))
-        hints.append(_PARTICLE_RULE)
         used = [
             phrase
             for phrase in persona.signature_phrases()

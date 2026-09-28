@@ -47,8 +47,10 @@ NONE_ID = "none"
 
 # (section title, subtitle, fields, open at first). Fields are keys of
 # TEXT_FIELDS, or the special "traits" / "reply_length" / "relationships" /
-# "voice" editors. Ordered by how often people come back to them: who the
-# character is to whom stays open, the rest is one click deeper.
+# "voice" editors. Only what reaches the model (Persona.render_prompt_block)
+# is here: catchphrases, sample lines, pet peeves, knowledge, secrets and
+# boundaries were copied word for word or did nothing for a small model.
+# Older personas keep those values in personas.json; they are just not shown.
 SECTIONS: tuple[tuple[str, str, tuple[str, ...], bool], ...] = (
     (
         "基本",
@@ -57,18 +59,18 @@ SECTIONS: tuple[tuple[str, str, tuple[str, ...], bool], ...] = (
         True,
     ),
     (
-        "個性與說話方式",
-        "代表台詞最能讓 AI 抓到語氣，建議至少寫兩句。",
-        ("traits", "speech_style", "catchphrases", "humor_style", "reply_length", "sample_lines"),
-        False,
+        "他想要什麼",
+        "這一段最重要：想要的、怕的、在意的、最近發生的事，決定他會聊什麼、"
+        "冷場時會說什麼，也是別人認識他的地方。寫得越具體越像真人。",
+        ("desires", "fears", "values", "recent", "background"),
+        True,
     ),
     (
-        "背景與內心",
-        "慾望決定你會想把話題帶去哪；雷點決定你什麼時候會反對。",
-        ("background", "desires", "fears", "values", "pet_peeves", "recent", "knowledge", "secret"),
+        "個性",
+        "他講話的感覺。不用寫他常說哪些詞：小模型會每句照抄，聽起來很假。",
+        ("traits", "speech_style", "humor_style", "reply_length"),
         False,
     ),
-    ("底線", "無論如何都不能說出口的話。", ("boundaries",), False),
     (
         "聲音",
         "這個角色講話的聲音；Bot 說的每句話都會用它，不影響 AI 想出來的內容。",
@@ -78,10 +80,9 @@ SECTIONS: tuple[tuple[str, str, tuple[str, ...], bool], ...] = (
 )
 MULTILINE = {"background": 3, "sample_lines": 3, "speech_style": 2, "desires": 2}
 HINTS = {
-    "catchphrases": "例：穩啦、笑死。AI 只會偶爾帶到，不會每句都用。",
     "nickname": "用「、」分隔。語音常被聽錯的寫法也可以寫進來（例：凱哥、開哥）。",
-    "sample_lines": "一行一句，最多取前 4 句。",
-    "secret": "AI 知道但不會主動講，會影響迴避或轉移話題的方式。",
+    "recent": "例：昨天排位連輸五場、下個月要搬家。他每天會從這裡想出幾件心事。",
+    "speech_style": "例：句子短、講話直接、偶爾一句台語。引號裡的詞不會交給 AI。",
 }
 
 

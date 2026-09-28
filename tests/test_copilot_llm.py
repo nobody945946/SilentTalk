@@ -118,8 +118,7 @@ def test_options_after_your_own_line_get_their_own_request_turn() -> None:
     messages = model.option_messages(turns=_chat(CHAT[:4]))
 
     assert [m["role"] for m in messages] == ["system", "user", "assistant", "user"]
-    assert messages[-1]["content"].endswith("（換你說話了：說一句你現在會說的話）")
-    assert "語氣詞像真人一樣少用" in messages[-1]["content"]
+    assert messages[-1]["content"] == "（換你說話了：說一句你現在會說的話）"
 
 
 def test_character_line_parsing() -> None:
