@@ -121,6 +121,10 @@ async def generate(args: argparse.Namespace) -> None:
             old_persona = te.resolve_persona(old.persona, test_set, conv.persona_id)
             new_model.set_persona(new_persona)
             old_model.set_persona(old_persona)
+            if args.agenda and hasattr(new_model, "make_agenda"):
+                # As in the app: today's concerns are made when the persona is set.
+                new_model.set_agenda(())
+                await new_model.make_agenda()
             ids = te.speaker_ids(conv)
             new_turns: list[Any] = []
             old_turns: list[Any] = []
@@ -288,6 +292,8 @@ def main() -> int:
     gen.add_argument("--model", help="gguf in .runtime/models/llm/ (default: config.toml)")
     gen.add_argument("--old-model", help="the old side runs this gguf instead (own server)")
     gen.add_argument("--lora", help="adapter gguf for the new side's options")
+    gen.add_argument("--agenda", action="store_true",
+                     help="new side: make today's concerns first, as the app does")
     gen.add_argument("--port", type=int, help=f"llama-server port (default {PORT}; +1 for an own old server)")
     gen.add_argument("--every", type=int, default=2, help="options at every Nth line of others")
     gen.add_argument("--only", help="comma-separated conversation ids")
