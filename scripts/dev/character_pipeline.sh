@@ -133,10 +133,18 @@ teacher_up() {
         kill -9 "$pid" 2>/dev/null
         sleep 2
     fi
-    log "starting $(basename "$TEACHER")"
-    # --fit sizes the offload to the VRAM the shared GPU has free.
+    # The whole model on the GPU or not at all: with --fit it once started
+    # while the previous model was still freeing its memory, left layers on
+    # the CPU and wrote at a fifth of the speed. Wait for the room instead.
+    local need=$(( $(stat -c %s "$TEACHER") / 1048576 + 3500 ))
+    for _ in $(seq 60); do [ "$(free_mib)" -ge "$need" ] && break; sleep 30; done
+    if [ "$(free_mib)" -lt "$need" ]; then
+        log "only $(free_mib) MiB free, $(basename "$TEACHER") needs $need"
+        return 75
+    fi
+    log "starting $(basename "$TEACHER") ($(free_mib) MiB free)"
     nohup "$LLAMA_SERVER" -m "$TEACHER" --host 127.0.0.1 --port "$TEACHER_PORT" \
-        --fit on --fit-target 2048 -c $((SERVER_SLOTS * 4096)) --parallel "$SERVER_SLOTS" -fa on \
+        -ngl 99 --fit off -c $((SERVER_SLOTS * 4096)) --parallel "$SERVER_SLOTS" -fa on \
         --cache-type-k q8_0 --cache-type-v q8_0 --jinja -t 12 \
         > "$LOGS/teacher.log" 2>&1 9>&- &
     for _ in $(seq 300); do
@@ -158,14 +166,17 @@ teacher_restart() {
 
 teacher_down() {
     local pid; pid=$(teacher_pid)
-    [ -n "$pid" ] && kill "$pid" && log "teacher stopped" && sleep 5
-    return 0
+    [ -n "$pid" ] || return 0
+    kill "$pid"
+    for _ in $(seq 120); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
+    log "teacher stopped"
 }
+free_mib() { nvidia-smi --query-gpu=memory.free --format=csv,noheader,nounits | head -1; }
 
 # A data step under teacher supervision (see the first pipeline for why the
 # watcher and the health checks look the way they do).
 data() {
-    teacher_up || return 1
+    teacher_up || return $?
     .venv/bin/python scripts/dev/character_data.py "$@" \
         --teacher-url "http://127.0.0.1:$TEACHER_PORT" --workers "$SERVER_SLOTS" &
     DATA_JOB=$!
