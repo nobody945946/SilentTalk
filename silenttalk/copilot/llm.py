@@ -14,10 +14,18 @@ import threading
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Iterable, Sequence
+from dataclasses import replace
+from datetime import datetime
 from pathlib import Path
 from typing import IO
 
 from silenttalk.copilot.character import asks_if_ai
+from silenttalk.copilot.character_state import (
+    STATUSES,
+    CharacterState,
+    Concern,
+    merge_state,
+)
 from silenttalk.copilot.persona import Persona, blank_persona
 from silenttalk.copilot.script import to_taiwan_traditional
 from silenttalk.copilot.types import REPLY_LANES, ConversationTurn, ReplySuggestions
@@ -94,15 +102,44 @@ _ENGAGEMENT_RULES["options"] = (
 _OPTIONS_ASK = "（換你說話了：說一句你現在會說的話）"
 # A character with nothing going on in its own life only ever reacts: the
 # soul judge (turn_eval --judge-soul) read "看不出來" off 8 of 21 test chats
-# (know 2.6 / 5). So each session starts with a few concrete things on its
-# mind today, made from its persona, which it can bring up.
-_AGENDA_ASK = (
-    "用第一人稱寫 4 件你今天心裡掛著的具體小事：今天或最近發生的事、想做的事、在煩的事、在期待的事。"
-    "要符合上面的你、具體、有畫面，像真的在過的生活；可以提到你身邊的人。"
-    "每件一行、一句話，不要編號，不要解釋。"
+# (know 2.6 / 5). Its life is a CharacterState (character_state.py): a few
+# concrete concerns that move on as it talks, views, mood and feelings about
+# people, kept between sessions in its own words.
+_CONCERNS_WANTED = 4
+_FILL_ASK = (
+    "現在是{now}。再用第一人稱寫 {n} 件你今天心裡掛著的具體小事：今天或最近發生的事、想做的事、"
+    "在煩的事、在期待的事。要接著你最近的生活，符合你這個人、具體、有畫面，可以跟現在的時間有關，"
+    "可以提到你身邊的人；不要跟上面已經掛著或已經了結的事重複。每件一行、一句話，不要編號，不要解釋。"
 )
-_AGENDA_ITEMS = 4
-_AGENDA_CHARS = 40
+_UPDATE_ASK = """下面是你剛剛在 Discord 語音聊天的一段，只用來更新你自己的狀態：
+{chat}
+
+你心裡掛著的事：
+{concerns}
+
+用你自己的話更新你的狀態，照下面的格式輸出，沒有變化的就不用寫：
+進度|編號|told 或 progress 或 done 或 dropped|一句話說現在怎樣
+新心事|因為這段聊天，你心裡新掛著的一件事
+{full_lines}近況|你最近在忙或發生在你身上的事
+心情|你現在的心情，幾個字
+told＝你已經跟大家說過這件事；progress＝有進展；done＝已經達成或滿足了；dropped＝不想了、放下了。
+規則：只寫你自己的想法和感受，用你自己的話；不要照抄任何人說的話；不要寫別人的電話、地址、帳號這類資料。"""
+_UPDATE_FULL_LINES = "看法|你在這段聊天裡說出口的一個看法\n感覺|名字|你現在對這個人的感覺\n"
+_UPDATE_CHAT_TURNS = 24
+# How much of its life the character carries (config copilot.character_memory):
+# off = today's concerns for this session only; light = concerns, recent and
+# mood kept between sessions, updated only when the chat is over or long
+# quiet; full = also views and feelings about people, updated as it talks.
+MEMORY_LEVELS = ("off", "light", "full")
+_STATUS_WORDS = {
+    "open": "還沒跟大家說過",
+    "told": "說過了",
+    "progress": "有進展",
+    "done": "達成了",
+    "dropped": "放下了",
+}
+_WEEKDAYS = "一二三四五六日"
+
 # After a lull nobody called it, so there is no gate: the character opens a
 # topic from its own life, or asks after someone.
 _LULL_HINT = (
@@ -187,6 +224,7 @@ class LocalReplyModel:
         ai_honesty: str = "in_character",
         lora_path: Path | None = None,
         lora_uses: Iterable[str] = ("called", "active", "line"),
+        memory: str = "off",
     ) -> None:
         self._model_path = model_path
         self._lora_path = lora_path
@@ -208,8 +246,9 @@ class LocalReplyModel:
         self._stderr_tail: collections.deque[str] = collections.deque(maxlen=40)
         self._base_url = f"http://127.0.0.1:{port}"
         self._persona = blank_persona()
-        # Today's concrete concerns (make_agenda); part of the system prompt.
-        self._agenda: tuple[str, ...] = ()
+        # Its own life (CharacterState), part of the system prompt.
+        self._state = CharacterState()
+        self._memory = memory if memory in MEMORY_LEVELS else "off"
         # What the character said lately, to stop it repeating its catchphrases.
         self._recent_character_lines: collections.deque[str] = collections.deque(maxlen=4)
 
@@ -223,7 +262,7 @@ class LocalReplyModel:
         """Takes effect on the next request; the system prompt cache refills once."""
         if persona.id != self._persona.id:
             self._recent_character_lines.clear()
-            self._agenda = ()
+            self._state = CharacterState()
         self._persona = persona
 
     async def start(self) -> None:
@@ -378,7 +417,7 @@ class LocalReplyModel:
         messages = self.character_messages(
             turns=turns, summary=summary, engagement="options", gate=True
         )
-        ask = _OPTIONS_ASK
+        ask = f"（現在是{_now_words()}）\n" + _OPTIONS_ASK
         if not self._persona.is_blank:
             ask = self._persona.reminder_line("說出口的話要是", list_catchphrases=False) + "\n" + ask
         if messages[-1]["role"] == "user":
@@ -414,7 +453,7 @@ class LocalReplyModel:
                     "line" in self._lora_uses, temperature,
                 )
                 line = self._parse_character_line(raw, "")
-                if not any(_alike_to(line, item, 0.8) for item in self._agenda):
+                if not any(_alike_to(line, item, 0.8) for item in self.agenda):
                     break
             if line:
                 self._recent_character_lines.append(line)
@@ -531,6 +570,8 @@ class LocalReplyModel:
             # "active" mode chiming in: nobody called it, so it must not
             # answer as if someone had.
             hints.append("（沒有人叫你，你決定自然地插一句話）")
+        # It knows what time it is: "都半夜了還不睡", a Friday-night plan.
+        hints.append(f"（現在是{_now_words()}）")
         if not persona.is_blank:
             hints.append(persona.reminder_line("開口的話要是", list_catchphrases=False))
         used = [
@@ -583,47 +624,95 @@ class LocalReplyModel:
             abilities=_CAN_TYPE if self._can_type else _VOICE_ONLY,
             length=persona.length_rule(),
             max_chars=self._max_reply_chars,
-            sheet=f"\n【你的人設】口吻、用詞、句長、立場都照這裡：\n{sheet}\n{self._agenda_block()}"
+            sheet=f"\n【你的人設】口吻、用詞、句長、立場都照這裡：\n{sheet}\n{self._state_block()}"
             if sheet
             else "",
         )
 
-    def _agenda_block(self) -> str:
-        if not self._agenda:
-            return ""
-        return (
-            "你今天心裡掛著的事（聊天時接得上就自然帶到，冷場時可以拿來開話題，不要硬塞）：\n"
-            + "\n".join(f"- {item}" for item in self._agenda)
-            + "\n"
-        )
+    def _state_block(self) -> str:
+        block = self._state.prompt_block(full=self._memory == "full")
+        return f"\n【你自己的生活】\n{block}\n" if block else ""
+
+    @property
+    def state(self) -> CharacterState:
+        return self._state
 
     @property
     def agenda(self) -> tuple[str, ...]:
-        return self._agenda
+        """What is on its mind right now (the active concerns)."""
+        return tuple(concern.text for concern in self._state.active_concerns())
+
+    def set_state(self, state: CharacterState) -> None:
+        """Takes effect on the next request (the system prompt cache refills once)."""
+        self._state = state
 
     def set_agenda(self, items: Sequence[str]) -> None:
-        """Takes effect on the next request (the system prompt cache refills once)."""
-        self._agenda = tuple(items)
+        """Concerns only, nothing else about its life (tests and evals)."""
+        self._state = CharacterState(concerns=tuple(Concern(item) for item in items))
 
     async def make_agenda(self) -> tuple[str, ...]:
-        """A few concrete things on the character's mind today, from its
-        persona. Kept in memory only; nothing of the chat goes into it."""
+        """Top up what is on its mind to a few concerns; returns them all."""
+        self._state = await self.fill_concerns(self._state)
+        return self.agenda
+
+    async def fill_concerns(self, state: CharacterState) -> CharacterState:
+        """New concerns for today on top of the ones still open, following on
+        from its recent life. Made from the persona and its own state only."""
         sheet = self._persona.render_prompt_block()
-        if not sheet:
-            return ()
+        missing = _CONCERNS_WANTED - len(state.active_concerns())
+        if not sheet or missing <= 0:
+            return state
+        known = state.prompt_block(full=self._memory == "full")
         messages = [
-            {"role": "system", "content": f"你是下面這個人：\n{sheet}"},
-            {"role": "user", "content": _AGENDA_ASK},
+            {"role": "system", "content": f"你是下面這個人：\n{sheet}" + (f"\n\n{known}" if known else "")},
+            {"role": "user", "content": _FILL_ASK.format(now=_now_words(), n=missing)},
         ]
         raw = await asyncio.to_thread(
             self._request_messages, messages, None, 200, False, 0.9
         )
-        items = []
+        taken = [c.text for c in state.concerns]
+        new: list[Concern] = []
         for line in raw.splitlines():
             item = to_taiwan_traditional(line.strip().lstrip("-*•0123456789.、) ").strip())
-            if len(item) >= 4 and item not in items:
-                items.append(item[:_AGENDA_CHARS])
-        return tuple(items[:_AGENDA_ITEMS])
+            if len(item) >= 4 and not any(_alike_to(item, old, 0.7) for old in taken):
+                taken.append(item)
+                new.append(Concern(item))
+        return replace(state, concerns=state.concerns + tuple(new[:missing])).normalized()
+
+    async def update_state(self, turns: Sequence[ConversationTurn]) -> CharacterState:
+        """How its life moved on in this stretch of chat: concerns shared,
+        progressing, done or dropped; new ones; views it stated; feelings
+        about people; recent; mood. In its own words; nothing is quoted."""
+        sheet = self._persona.render_prompt_block()
+        if not sheet or not turns:
+            return self._state
+        name = self._persona.name.strip() or "你"
+        chat = "\n".join(
+            f"{'你（' + name + '）' if turn.is_self else turn.speaker_name}：{turn.text}"
+            for turn in turns[-_UPDATE_CHAT_TURNS:]
+        )
+        active = self._state.active_concerns()
+        concerns = "\n".join(
+            f"{n}. {c.text}（{_STATUS_WORDS[c.status]}）" for n, c in enumerate(active, 1)
+        ) or "（目前沒有）"
+        full = self._memory == "full"
+        known = self._state.prompt_block(full=full)
+        messages = [
+            {"role": "system", "content": f"你是下面這個人：\n{sheet}" + (f"\n\n{known}" if known else "")},
+            {
+                "role": "user",
+                "content": _UPDATE_ASK.format(
+                    chat=chat, concerns=concerns, full_lines=_UPDATE_FULL_LINES if full else ""
+                ),
+            },
+        ]
+        raw = await asyncio.to_thread(
+            self._request_messages, messages, None, 260 if full else 160, False
+        )
+        update = _parse_state_update(raw, self._state)
+        if not full:
+            update = replace(update, views=(), feelings=())
+        return merge_state(self._state, update)
 
     def _parse_character_line(self, raw: str, trigger_text: str) -> str:
         cleaned = raw.strip()
@@ -901,6 +990,64 @@ def _options(lines: list[str], trigger_speaker: str, trigger_text: str) -> Reply
     for lane, line in zip(REPLY_LANES, lines, strict=False):
         values[lane.field] = line
     return ReplySuggestions(trigger_speaker=trigger_speaker, trigger_text=trigger_text, **values)
+
+
+def _now_words(now: datetime | None = None) -> str:
+    """ "星期五晚上 11:40": the local time the way people say it."""
+    now = now or datetime.now()
+    hour = now.hour
+    part = (
+        "半夜" if hour < 5 else "清晨" if hour < 8 else "早上" if hour < 11
+        else "中午" if hour < 13 else "下午" if hour < 18 else "晚上"
+    )
+    return f"星期{_WEEKDAYS[now.weekday()]}{part} {now:%H:%M}"
+
+
+def _parse_state_update(raw: str, state: CharacterState) -> CharacterState:
+    """The model's update lines ("進度|2|done|約成了") as a new state; lines
+    it could not read are skipped, and anything unmentioned stays as it was."""
+    active = state.active_concerns()
+    updates: dict[int, tuple[str, str]] = {}
+    new: list[str] = []
+    views: list[str] = []
+    feelings: list[tuple[str, str]] = []
+    recent = mood = ""
+    for line in raw.splitlines():
+        parts = [part.strip() for part in re.split(r"[|｜]", line.strip().lstrip("-*• "))]
+        if len(parts) < 2 or not parts[1]:
+            continue
+        tag = parts[0]
+        if tag == "進度" and len(parts) >= 3:
+            number = re.sub(r"\D", "", parts[1])
+            status = parts[2].lower()
+            if number and status in STATUSES and 1 <= int(number) <= len(active):
+                updates[int(number) - 1] = (status, parts[3] if len(parts) > 3 else "")
+        elif tag == "新心事":
+            new.append(parts[1])
+        elif tag == "看法":
+            views.append(parts[1])
+        elif tag == "感覺" and len(parts) >= 3 and parts[2]:
+            feelings.append((parts[1], to_taiwan_traditional(parts[2])))
+        elif tag == "近況":
+            recent = parts[1]
+        elif tag == "心情":
+            mood = parts[1]
+    moved = []
+    for index, concern in enumerate(active):
+        if index in updates:
+            status, note = updates[index]
+            moved.append(Concern(concern.text, status, to_taiwan_traditional(note) or concern.note))
+        else:
+            moved.append(concern)
+    return CharacterState(
+        concerns=tuple(
+            state.finished_concerns() + moved + [Concern(to_taiwan_traditional(t)) for t in new]
+        ),
+        recent=to_taiwan_traditional(recent),
+        mood=to_taiwan_traditional(mood),
+        views=tuple(to_taiwan_traditional(view) for view in views),
+        feelings=tuple(feelings),
+    )
 
 
 def _alike_to(a: str, b: str, ratio: float) -> bool:

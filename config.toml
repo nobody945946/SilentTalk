@@ -67,6 +67,11 @@ character_engagement = "called"
 # Character mode: after this many seconds of silence the character brings up
 # something on its mind today or asks after someone (0 = never).
 character_lull_seconds = 30
+# Its own life between sessions (character_state.json, never the chat):
+# "off" = new concerns every session; "light" = concerns, recent and mood are
+# kept and move on after each chat; "full" = also views and feelings about
+# each person, updated as it talks (for a bigger model than Gemma 4 E2B).
+character_memory = "off"
 # Auto-compaction: once the session passes compact_keep_turns +
 # compact_batch_turns, the older part is folded into a short summary by the
 # local model, so long chats keep their thread at a fixed prompt size.

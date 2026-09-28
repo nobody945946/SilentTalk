@@ -9,6 +9,14 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from silenttalk.copilot.character import AI_HONESTY_MODES, ENGAGEMENT_MODES
+
+# Mirrors copilot.llm.MEMORY_LEVELS (config must not import the LLM module).
+MEMORY_LEVEL_NAMES = ("off", "light", "full")
+MEMORY_LEVEL_CHOICES: tuple[tuple[str, str], ...] = (
+    ("off", "不記得（每次重新想今天的心事）"),
+    ("light", "記得心事、近況和心情"),
+    ("full", "再加上看法和對每個人的感覺（需要大一點的模型）"),
+)
 from silenttalk.settings_store import SETTINGS_FILE, SettingsStore, merge
 
 DEFAULT_LLM_MODEL = "gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf"
@@ -89,6 +97,9 @@ class CopilotConfig:
     # Character mode: after this many seconds with nobody talking, the
     # character opens a topic of its own (0 = never).
     character_lull_seconds: float = 30.0
+    # How much of its own life the character keeps between sessions
+    # (copilot.llm.MEMORY_LEVELS: off / light / full).
+    character_memory: str = "off"
     stt_engine: str = "paraformer"
 
 
@@ -313,6 +324,9 @@ def load_settings(project_dir: Path) -> Settings:
                 copilot.get("character_engagement", "called"),
                 [mode for mode, _ in ENGAGEMENT_MODES],
                 "character_engagement",
+            ),
+            character_memory=_one_of(
+                copilot.get("character_memory", "off"), list(MEMORY_LEVEL_NAMES), "character_memory"
             ),
             character_lull_seconds=max(
                 0.0, min(600.0, float(copilot.get("character_lull_seconds", 30.0)))

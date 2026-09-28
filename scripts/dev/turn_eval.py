@@ -250,6 +250,10 @@ def persona_sheet(persona: Any) -> str:
 CPU_ONLY = False
 # Filled by --agenda: each conversation's generated concerns, for the result file.
 AGENDAS: dict[str, list[str]] = {}
+# Filled by --chain: the character's life after each conversation (its prompt block).
+STATES: dict[str, str] = {}
+# Set by --memory: character_memory for the new policy.
+MEMORY: str | None = None
 # Set by --lora-uses: which requests the adapter is applied to.
 LORA_USES: tuple[str, ...] | None = None
 
@@ -280,6 +284,8 @@ def make_model(
     extra: dict[str, Any] = {"lora_path": lora} if lora is not None else {}
     if lora is not None and LORA_USES is not None:
         extra["lora_uses"] = LORA_USES
+    if MEMORY is not None:
+        extra["memory"] = MEMORY
     return llm_module.LocalReplyModel(
         model_path,
         **extra,
@@ -433,17 +439,25 @@ async def run_new(args: argparse.Namespace, test_set: TestSet) -> list[dict[str,
     model = make_model(llm_module, args.model_path, config, lora)
     await model.start()
     records: list[dict[str, Any]] = []
+    # --chain: a persona's conversations are consecutive days; its life
+    # (with memory on) carries over from one to the next.
+    lives: dict[str, Any] = {}
+    chain_pos: dict[str, int] = defaultdict(int)
     try:
         for conv in test_set.conversations:
             persona = resolve_persona(persona_module, test_set, conv.persona_id)
             model.set_persona(persona)
+            chain_pos[conv.persona_id] += 1
             if hasattr(model, "_recent_character_lines"):
                 model._recent_character_lines.clear()
+            if hasattr(model, "set_state"):
+                from silenttalk.copilot.character_state import CharacterState
+
+                model.set_state(lives.get(conv.persona_id, CharacterState())
+                                if args.chain and MEMORY not in (None, "off") else CharacterState())
             agenda: tuple[str, ...] = ()
             if args.agenda:
-                model.set_agenda(())
                 agenda = await model.make_agenda()
-                model.set_agenda(agenda)
             ids = speaker_ids(conv)
             turns: list[Any] = []
             now = time.time()
@@ -468,6 +482,7 @@ async def run_new(args: argparse.Namespace, test_set: TestSet) -> list[dict[str,
                 records.append(base_record(conv, index, line) | {
                     "gate": "model", "addressed": bool(line.get("mention")),
                     "spoke": bool(reply), "reply": reply, "latency_ms": round(latency, 1),
+                    "chain_pos": chain_pos[conv.persona_id],
                 })
             if args.lull:
                 # The channel goes quiet after the last line: does the
@@ -481,11 +496,18 @@ async def run_new(args: argparse.Namespace, test_set: TestSet) -> list[dict[str,
                     "engagement": conv.engagement, "speaker": "", "text": "",
                     "via": "voice", "mention": False, "expect": "lull", "tags": ["lull"],
                     "gate": "lull", "lull": True, "addressed": False,
-                    "spoke": bool(reply), "reply": reply,
+                    "spoke": bool(reply), "reply": reply, "chain_pos": chain_pos[conv.persona_id],
                     "latency_ms": round((time.perf_counter() - started) * 1000, 1),
                 })
             if agenda:
                 AGENDAS[conv.id] = list(agenda)
+            if args.chain and MEMORY not in (None, "off"):
+                # The chat is over: its life moves on, as when the app closes.
+                model.set_state(await model.update_state(turns))
+                if len(model.state.active_concerns()) < 2:
+                    model.set_state(await model.fill_concerns(model.state))
+                lives[conv.persona_id] = model.state
+                STATES[conv.id] = model.state.prompt_block(full=MEMORY == "full")
             print(f"  {conv.id}: done", flush=True)
     finally:
         await model.stop()
@@ -704,11 +726,14 @@ SOUL_PAIR_PROMPT = """你是讀人很準的評審。下面每一組是同一個�
 每一組回答：
 - know：只看這些話，哪個版本讓你比較認識這個人——他想要什麼、在意什麼、在過怎樣的生活（"A"、"B" 或 "tie"）
 - real：哪個版本比較像一個真實的人在講話，而不是在應付對話（"A"、"B" 或 "tie"）
+- life：哪個版本比較像一個生活會往前走的人：有自己在進行的事、不會把同一件事講來講去（"A"、"B" 或 "tie"）
 
-只輸出 JSON 陣列，不要其他文字，長度 {k}：[{{"id": 1, "know": "A", "real": "B"}}, ...]"""
+只輸出 JSON 陣列，不要其他文字，長度 {k}：[{{"id": 1, "know": "A", "real": "B", "life": "A"}}, ...]"""
 
 
-def judge_pair(tag_a: str, tag_b: str, test_set: TestSet, model: str, seed: int) -> dict[str, Any]:
+def judge_pair(
+    tag_a: str, tag_b: str, test_set: TestSet, model: str, seed: int, later_only: bool = False
+) -> dict[str, Any]:
     """Blind A/B of two runs on the same chats: per point where both spoke,
     and per conversation for "do I know this person". Both orders, so the
     judge's position bias cancels. Absolute 1-5 scores drift between judge
@@ -716,8 +741,12 @@ def judge_pair(tag_a: str, tag_b: str, test_set: TestSet, model: str, seed: int)
     from silenttalk.copilot import persona as persona_module
 
     runs = [json.loads((OUT_DIR / f"{tag}.json").read_text(encoding="utf-8")) for tag in (tag_a, tag_b)]
-    keyed = [{(r["conv"], r["index"]): r for r in run["records"] if r.get("spoke") and r.get("reply")}
-             for run in runs]
+    def wanted(record: dict[str, Any]) -> bool:
+        return bool(record.get("spoke") and record.get("reply")) and (
+            not later_only or record.get("chain_pos", 1) >= 2
+        )
+
+    keyed = [{(r["conv"], r["index"]): r for r in run["records"] if wanted(r)} for run in runs]
     shared = sorted(set(keyed[0]) & set(keyed[1]))
     convs = {c.id: c for c in test_set.conversations}
     rng = random.Random(seed)
@@ -766,10 +795,10 @@ def judge_pair(tag_a: str, tag_b: str, test_set: TestSet, model: str, seed: int)
     lines = [defaultdict(list), defaultdict(list)]
     for side, run in enumerate(runs):
         for r in sorted(run["records"], key=lambda r: (r["conv"], r["index"])):
-            if r.get("spoke") and r.get("reply"):
+            if wanted(r):
                 lines[side][r["conv"]].append(("（冷場時）" if r.get("lull") else "") + r["reply"])
     conv_ids = sorted(set(lines[0]) & set(lines[1]))
-    soul = {"know": {"a": 0, "b": 0, "tie": 0}, "real": {"a": 0, "b": 0, "tie": 0}}
+    soul = {key: {"a": 0, "b": 0, "tie": 0} for key in ("know", "real", "life")}
     first = [rng.random() < 0.5 for _ in conv_ids]
     for a_first in (first, [not f for f in first]):
         for start in range(0, len(conv_ids), 7):
@@ -790,14 +819,14 @@ def judge_pair(tag_a: str, tag_b: str, test_set: TestSet, model: str, seed: int)
                     continue
             for n, (_, af) in enumerate(chunk, 1):
                 verdict = next((v for v in result if v.get("id") == n), {})
-                for key in ("know", "real"):
+                for key in ("know", "real", "life"):
                     choice = verdict.get(key)
                     soul[key]["tie" if choice not in ("A", "B") else ("a" if (choice == "A") == af else "b")] += 1
     total = sum(wins.values()) or 1
     return {
         "a": tag_a, "b": tag_b, "points": len(shared),
         "lines": {k: round(v / total, 3) for k, v in wins.items()},
-        "know": soul["know"], "real": soul["real"],
+        "know": soul["know"], "real": soul["real"], "life": soul["life"],
     }
 
 
@@ -844,12 +873,13 @@ def judge_soul(
         for start in range(0, len(items), 7):
             chunk = items[start:start + 7]
             prompt = SOUL_PROMPT.format(items="\n\n".join(chunk), k=len(chunk))
-            for attempt in range(3):
+            result = []
+            for _ in range(3):
                 try:
                     result = run_judge(prompt, model)
                     break
                 except (RuntimeError, subprocess.TimeoutExpired, json.JSONDecodeError):
-                    result = []
+                    continue
             for offset, verdict in enumerate(result):
                 index = start + offset
                 if index >= len(answers) or not isinstance(verdict, dict):
@@ -910,6 +940,12 @@ def main() -> int:
     parser.add_argument("--judge-only", metavar="TAG", help="judge an existing results file")
     parser.add_argument("--agenda", action="store_true",
                         help="new policy: give the character today's concerns first (make_agenda)")
+    parser.add_argument("--memory", choices=("off", "light", "full"),
+                        help="new policy: character_memory")
+    parser.add_argument("--chain", action="store_true",
+                        help="new policy: a persona's chats are consecutive days (memory carries over)")
+    parser.add_argument("--later-only", action="store_true",
+                        help="--judge-pair: only the 2nd and later chats of each persona")
     parser.add_argument("--lull", action="store_true",
                         help="new policy: after each chat, a quiet spell; record the line it opens with")
     parser.add_argument("--judge-pair", nargs=2, metavar=("TAG_A", "TAG_B"),
@@ -925,8 +961,9 @@ def main() -> int:
                         "(called,active,line) that use the adapter; default all")
     parser.add_argument("--port", type=int, help="llama-server port (default 18411)")
     args = parser.parse_args()
-    global CPU_ONLY, LORA_USES, EVAL_PORT
+    global CPU_ONLY, LORA_USES, EVAL_PORT, MEMORY
     CPU_ONLY = args.cpu
+    MEMORY = args.memory
     if args.lora_uses:
         LORA_USES = tuple(part.strip() for part in args.lora_uses.split(",") if part.strip())
     if args.port:
@@ -944,12 +981,13 @@ def main() -> int:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     if args.judge_pair:
         tag_a, tag_b = args.judge_pair
-        result = judge_pair(tag_a, tag_b, test_set, args.judge_model, args.seed)
+        result = judge_pair(tag_a, tag_b, test_set, args.judge_model, args.seed, args.later_only)
         out = OUT_DIR / f"pair-{tag_a}-vs-{tag_b}.json"
         out.write_text(json.dumps(result, ensure_ascii=False, indent=1), encoding="utf-8")
         print(f"lines ({result['points']} points, both orders): {tag_a} {result['lines']['a']}"
               f"  {tag_b} {result['lines']['b']}  tie {result['lines']['tie']}")
-        print(f"know this person (per conversation): {result['know']}   real person: {result['real']}")
+        print(f"know this person (per conversation): {result['know']}   real person: {result['real']}"
+              f"   life moves on: {result['life']}")
         return 0
     if args.judge_soul:
         path = OUT_DIR / f"{args.judge_soul}.json"
@@ -1001,7 +1039,7 @@ def main() -> int:
         "seconds_per_line": args.seconds_per_line,
         "wall_seconds": round(time.time() - started, 1),
         "created": time.strftime("%Y-%m-%d %H:%M:%S"),
-        "metrics": metrics, "records": records, "agendas": AGENDAS,
+        "metrics": metrics, "records": records, "agendas": AGENDAS, "states": STATES,
     }
     path = OUT_DIR / f"{tag}.json"
     path.write_text(json.dumps(result, ensure_ascii=False, indent=1), encoding="utf-8")

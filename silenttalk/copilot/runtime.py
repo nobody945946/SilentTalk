@@ -9,6 +9,7 @@ from pathlib import Path
 
 from silenttalk.config import CopilotConfig
 from silenttalk.copilot.character import CharacterPolicy
+from silenttalk.copilot.character_state import STATE_FILE, CharacterStateStore
 from silenttalk.copilot.context import ConversationStore
 from silenttalk.copilot.llm import LocalReplyModel
 from silenttalk.copilot.persona import Persona, blank_persona
@@ -26,6 +27,13 @@ AgendaCallback = Callable[[tuple[str, ...]], None]
 
 # How often the worker looks for a lull while nothing else wakes it.
 _LULL_POLL_SECONDS = 1.0
+# Updating the character's life costs a 3050 Ti a few seconds of generation,
+# so it never runs mid-chat: "light" waits for this long a silence (after any
+# lull topic), "full" also runs every _FULL_UPDATE_LINES lines while idle.
+_QUIET_UPDATE_SECONDS = 90.0
+_FULL_UPDATE_LINES = 16
+# Too little chat since the last update to be worth one.
+_MIN_UPDATE_LINES = 4
 LineCallback = Callable[[str], None]
 
 # "嗯", "好", "喔" are context, not something worth four reply options.
@@ -74,6 +82,9 @@ class CopilotRuntime:
         self._on_character_text = on_character_text
         self._on_agenda = on_agenda
         self._agenda_task: asyncio.Task[None] | None = None
+        self._memory = config.character_memory
+        self._states = CharacterStateStore(project_dir / STATE_FILE)
+        self._lines_since_update = 0
         # Lulls: when anyone last spoke, and whether the character already
         # opened a topic in this quiet spell (only someone else talking
         # starts a new one, so it never talks to an empty room twice).
@@ -122,6 +133,7 @@ class CopilotRuntime:
                 else None
             ),
             lora_uses=config.character_lora_uses,
+            memory=config.character_memory,
         )
         self._stt = transcriber(
             asr_dir,
@@ -146,6 +158,13 @@ class CopilotRuntime:
         if worker is not None:
             worker.cancel()
             await asyncio.gather(worker, return_exceptions=True)
+        # The chat is over: let its life move on once more before closing.
+        if self._memory != "off" and self._lines_since_update >= _MIN_UPDATE_LINES:
+            try:
+                await asyncio.wait_for(self._update_life(), timeout=30)
+            except (TimeoutError, asyncio.CancelledError):
+                _LOG.warning("copilot_state_update_skipped reason=timeout")
+        self._save_life()
         await asyncio.to_thread(self._stt.stop)
         await self._llm.stop()
         self._loop = None
@@ -179,42 +198,115 @@ class CopilotRuntime:
         self._emit_turn(turn)
         # The silence counts from the last thing anyone said, the bot included.
         self._last_heard_at = time.monotonic()
+        self._lines_since_update += 1
 
     def set_persona(self, persona: Persona) -> None:
         """Must run on the runtime loop; applies from the next generation on."""
         changed = persona.id != self._persona.id
+        if changed:
+            self._save_life()  # the previous character's, before it is swapped out
         self._persona = persona
         self._llm.set_persona(persona)
         _LOG.info("copilot_persona_set blank=%s", persona.is_blank)
+        if changed and self._memory != "off" and not persona.is_blank:
+            self._llm.set_state(self._states.load(persona.id))
+            self._lines_since_update = 0
         if changed or not self._llm.agenda:
-            self.refresh_agenda()
+            self._start_agenda(reroll=False)
 
     def refresh_agenda(self) -> None:
-        """A new set of today's concerns for the current persona, made in the
-        background. Must run on the runtime loop."""
+        """換一批: new concerns in place of the ones it has not brought up yet.
+        Must run on the runtime loop."""
+        self._start_agenda(reroll=True)
+
+    def clear_life(self) -> None:
+        """Forget what the character carried between sessions (persona page).
+        Must run on the runtime loop."""
+        if not self._persona.is_blank:
+            self._states.clear(self._persona.id)
+        self._llm.set_state(type(self._llm.state)())
+        self._start_agenda(reroll=False)
+
+    def _start_agenda(self, *, reroll: bool) -> None:
         if self._loop is None or self._persona.is_blank:
             return
         if self._agenda_task is not None:
             self._agenda_task.cancel()
-        self._agenda_task = self._loop.create_task(self._make_agenda(), name="copilot-agenda")
+        self._agenda_task = self._loop.create_task(
+            self._make_agenda(reroll), name="copilot-agenda"
+        )
 
-    async def _make_agenda(self) -> None:
+    async def _make_agenda(self, reroll: bool) -> None:
         started = time.perf_counter()
+        state = self._llm.state
+        if reroll:
+            state = replace(
+                state, concerns=tuple(c for c in state.concerns if c.status != "open")
+            )
         try:
-            items = await self._llm.make_agenda()
+            state = await self._llm.fill_concerns(state)
         except asyncio.CancelledError:
             raise
         except Exception as exc:
             _LOG.warning("copilot_agenda_failed error_type=%s", type(exc).__name__)
             return
-        self._llm.set_agenda(items)
+        self._llm.set_state(state)
+        self._save_life()
         _LOG.info(
             "copilot_agenda_ready items=%d ms=%d",
-            len(items),
+            len(state.active_concerns()),
             round((time.perf_counter() - started) * 1000),
         )
-        if self._on_agenda is not None:
-            self._on_agenda(items)
+        self._show_life()
+
+    def _show_life(self) -> None:
+        if self._on_agenda is None:
+            return
+        marks = {"told": "（說過了）", "progress": "（有進展）"}
+        self._on_agenda(
+            tuple(c.text + marks.get(c.status, "") for c in self._llm.state.active_concerns())
+        )
+
+    def _save_life(self) -> None:
+        if self._memory == "off" or self._persona.is_blank or self._llm.state.is_empty:
+            return
+        try:
+            self._states.save(self._persona.id, self._llm.state)
+        except OSError as exc:
+            _LOG.warning("copilot_state_save_failed error_type=%s", type(exc).__name__)
+
+    def _update_due(self) -> bool:
+        if self._memory == "off" or self._persona.is_blank or self._pending is not None:
+            return False
+        if self._memory == "full" and self._lines_since_update >= _FULL_UPDATE_LINES:
+            return True
+        quiet = time.monotonic() - self._last_heard_at
+        return self._lines_since_update >= _MIN_UPDATE_LINES and quiet >= _QUIET_UPDATE_SECONDS
+
+    async def _update_life(self) -> None:
+        """How the chat moved its life on: concerns shared, progressing, done
+        or dropped, new ones, recent and mood (views and feelings in "full").
+        Counts only in the log; the state itself is the user's file."""
+        started = time.perf_counter()
+        self._lines_since_update = 0
+        try:
+            state = await self._llm.update_state(self._context.snapshot())
+            if len(state.active_concerns()) < 2:
+                state = await self._llm.fill_concerns(state)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            _LOG.warning("copilot_state_update_failed error_type=%s", type(exc).__name__)
+            return
+        self._llm.set_state(state)
+        self._save_life()
+        _LOG.info(
+            "copilot_state_updated active=%d finished=%d ms=%d",
+            len(state.active_concerns()),
+            len(state.finished_concerns()),
+            round((time.perf_counter() - started) * 1000),
+        )
+        self._show_life()
 
     def apply_settings(self, copilot: dict[str, object]) -> None:
         """Live settings from the settings page. Must run on the runtime loop.
@@ -308,6 +400,7 @@ class CopilotRuntime:
         self._turn_seq += 1
         self._last_heard_at = time.monotonic()
         self._lull_spoken = False
+        self._lines_since_update += 1
         if self._wake is not None and self._pending is None:
             # Nothing waiting to generate: a good moment to compact.
             self._maybe_compact()
@@ -372,6 +465,8 @@ class CopilotRuntime:
             except TimeoutError:
                 if self._lull_due():
                     await self._open_topic()
+                elif self._update_due():
+                    await self._update_life()
                 continue
             self._wake.clear()
             trigger, self._pending = self._pending, None

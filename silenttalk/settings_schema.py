@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from silenttalk.config import STT_ENGINES
+from silenttalk.config import MEMORY_LEVEL_CHOICES, STT_ENGINES
 from silenttalk.copilot.character import AI_HONESTY_MODES, ENGAGEMENT_MODES
 from silenttalk.voice_styles import PERSONA_VOICES
 
@@ -92,6 +92,12 @@ PAGES: tuple[Page, ...] = (
                     "copilot", "compact_batch_turns", "每次濃縮句數", "int",
                     "超過保留量這麼多句時才啟動一次濃縮。",
                     minimum=4, maximum=200, step=2,
+                ),
+                Setting(
+                    "copilot", "character_memory", "角色記得自己的生活", "choice",
+                    "記得的話，他的心事會隨聊天往前走（約成了、放下了、有新的），下次開啟接著過；"
+                    "只存他自己的狀態，不存對話內容，可在人設頁清除。",
+                    choices=MEMORY_LEVEL_CHOICES,
                 ),
                 Setting(
                     "copilot", "max_session_turns", "記憶體保留句數", "int",

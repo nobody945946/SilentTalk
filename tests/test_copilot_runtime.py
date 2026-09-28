@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from silenttalk.config import CopilotConfig
+from silenttalk.copilot.character_state import (
+    CharacterState,
+    CharacterStateStore,
+    Concern,
+)
 from silenttalk.copilot.persona import PRESET_PERSONAS
 from silenttalk.copilot.runtime import CopilotRuntime
 from silenttalk.copilot.types import ConversationTurn, ReplySuggestions
@@ -314,24 +320,89 @@ async def test_compaction_can_be_turned_off(tmp_path: Path) -> None:
     await _stop(runtime)
 
 
+def _with_life(llm: SlowFakeLLM, update: CharacterState | None = None) -> list[str]:
+    """Give the fake model a CharacterState, top-ups and updates; returns a
+    log of what was asked of it."""
+    asked: list[str] = []
+    llm.state = CharacterState()  # type: ignore[attr-defined]
+    llm.agenda = ()  # type: ignore[attr-defined]
+    llm.set_state = lambda state: setattr(llm, "state", state)  # type: ignore[attr-defined]
+
+    async def fill_concerns(state: CharacterState) -> CharacterState:
+        asked.append("fill")
+        fresh = tuple(Concern(t) for t in ("剛烤好草莓蛋糕", "想約大家週末打球"))
+        return replace(state, concerns=state.concerns + fresh[: 4 - len(state.active_concerns())])
+
+    async def update_state(turns) -> CharacterState:
+        asked.append("update")
+        return update or llm.state  # type: ignore[attr-defined]
+
+    llm.fill_concerns = fill_concerns  # type: ignore[attr-defined]
+    llm.update_state = update_state  # type: ignore[attr-defined]
+    return asked
+
+
 @pytest.mark.asyncio
 async def test_a_new_persona_gets_todays_concerns(tmp_path: Path) -> None:
     runtime, llm, _ = await _runtime(tmp_path)
     shown: list[tuple[str, ...]] = []
     runtime._on_agenda = shown.append
-    concerns = ("剛烤好草莓蛋糕", "想約大家週末打球")
-
-    async def make_agenda() -> tuple[str, ...]:
-        return concerns
-
-    llm.agenda = ()  # type: ignore[attr-defined]
-    llm.make_agenda = make_agenda  # type: ignore[attr-defined]
-    llm.set_agenda = lambda items: setattr(llm, "agenda", tuple(items))  # type: ignore[attr-defined]
+    _with_life(llm)
     runtime.set_persona(PRESET_PERSONAS[0])
     await _settle()
 
-    assert shown == [concerns]
-    assert llm.agenda == concerns  # type: ignore[attr-defined]
+    assert shown == [("剛烤好草莓蛋糕", "想約大家週末打球")]
+    assert not (tmp_path / "character_state.json").exists()  # memory "off"
+    await _stop(runtime)
+
+
+@pytest.mark.asyncio
+async def test_light_memory_carries_its_life_and_updates_only_when_quiet(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from silenttalk.copilot import runtime as runtime_module
+
+    monkeypatch.setattr(runtime_module, "_LULL_POLL_SECONDS", 0.01)
+    monkeypatch.setattr(runtime_module, "_QUIET_UPDATE_SECONDS", 0.3)
+    store = CharacterStateStore(tmp_path / "character_state.json")
+    store.save(PRESET_PERSONAS[0].id, CharacterState(concerns=(Concern("想揪大家週六打通宵"),)))
+    runtime, llm, _ = await _runtime(
+        tmp_path, config=CopilotConfig(character_memory="light", character_lull_seconds=0)
+    )
+    moved_on = CharacterState(
+        concerns=(Concern("想揪大家週六打通宵", "done", "約成了"), Concern("週六前買好零食"))
+    )
+    asked = _with_life(llm, moved_on)
+    runtime.set_persona(PRESET_PERSONAS[0])
+    await _settle()
+    # Last time's concern is back, topped up to four.
+    assert [c.text for c in llm.state.active_concerns()][0] == "想揪大家週六打通宵"  # type: ignore[attr-defined]
+
+    for n in range(5):
+        runtime._handle_turn(2, "A", f"聊天中第{n}句")
+        llm.release.set()
+        await asyncio.sleep(0.05)
+    assert "update" not in asked  # never mid-chat
+    await asyncio.sleep(0.6)
+    assert asked.count("update") == 1  # once the room has been quiet a while
+    saved = store.load(PRESET_PERSONAS[0].id)
+    assert {c.text: c.status for c in saved.concerns}["想揪大家週六打通宵"] == "done"
+    await _stop(runtime)
+
+
+@pytest.mark.asyncio
+async def test_clearing_forgets_its_life(tmp_path: Path) -> None:
+    store = CharacterStateStore(tmp_path / "character_state.json")
+    store.save(PRESET_PERSONAS[0].id, CharacterState(concerns=(Concern("想揪大家週六打通宵"),)))
+    runtime, llm, _ = await _runtime(tmp_path, config=CopilotConfig(character_memory="light"))
+    _with_life(llm)
+    runtime.set_persona(PRESET_PERSONAS[0])
+    await _settle()
+    runtime.clear_life()
+    await _settle()
+
+    texts = [c.text for c in store.load(PRESET_PERSONAS[0].id).concerns]
+    assert "想揪大家週六打通宵" not in texts
     await _stop(runtime)
 
 

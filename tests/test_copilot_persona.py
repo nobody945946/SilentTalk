@@ -153,8 +153,9 @@ def test_persona_reminder_sits_right_before_the_options_request() -> None:
 
     assert tail.startswith(
         "阿傑：衝B啦\n\n（記住：你是凱哥；句子短、節奏快、講話直接。"
-        "說出口的話要是這個人會說的話。）\n（換你說話了"
+        "說出口的話要是這個人會說的話。）\n（現在是星期"
     )
+    assert tail.endswith("（換你說話了：說一句你現在會說的話）")
     assert "【你的人設】" in model._build_turn_system_prompt(PRESET_PERSONAS[0], "options")
 
 
