@@ -30,7 +30,8 @@
 #              Whole scripts, in order, so the server reads each chat once
 #              (random single rows re-read ~1.4k tokens each: 10 s a row)
 #   pilot_*    the whole data path on 30 personas, through the hard check
-#   the rest   all 300 personas (resumes on top of the pilot), training,
+#   the rest   as many personas as the pilot's yield needs for ~2000 kept
+#              lines (at most 300; resumes on top of the pilot), training,
 #              eval paired against the current candidates
 #
 # Same unattended rules as the first pipeline (archived with its data in
@@ -280,6 +281,15 @@ PY
     [ "$rc" -eq 0 ] || [ "$rc" -eq 3 ]
 }
 personas() { head -n "$1" "$V1/personas.jsonl" > "$DIR/personas.jsonl"; }
+# Personas for ~2000 kept lines at the pilot's yield.
+full_count() {
+    python3 - "$DIR/filter.json" "$PILOT_PERSONAS" <<'PY'
+import json, math, sys
+kept = json.load(open(sys.argv[1]))["lines_kept"]
+pilot = int(sys.argv[2])
+print(max(pilot, min(300, math.ceil(2000 * pilot / max(kept, 1)))))
+PY
+}
 render() { .venv/bin/python scripts/dev/character_data.py render; }
 filter() { .venv/bin/python scripts/dev/character_data.py filter "$@"; }
 
@@ -292,7 +302,7 @@ stage pilot_render render
 stage pilot_student student
 stage pilot_check checker check
 stage pilot_filter filter --min-lines $((HARD_LINES * PILOT_PERSONAS / 300))
-stage personas personas 300
+stage personas personas "$(full_count)"
 stage scripts generator scripts --per-persona "$PER_PERSONA"
 stage refine generator refine
 stage render render

@@ -32,6 +32,7 @@ from __future__ import annotations
 import argparse
 import difflib
 import json
+import math
 import os
 import random
 import re
@@ -1280,13 +1281,46 @@ def make_check(args: argparse.Namespace) -> None:
             wins += answer == teacher_is
         _append(path, {"key": key, "wins": wins, "compared": True})
 
+    # Filter keeps at most max_gate_rows // 3 "是" rows: check only the gate
+    # rows of enough scripts to fill that (with room for disagreement) and
+    # mark the rest skipped.
+    gates = [r for r in rows if r["kind"].startswith("gate")]
+    chosen = _gate_scripts(gates, done, math.ceil(args.max_gate_rows / 3 * 1.25))
+    for row in jobs:
+        if row["kind"].startswith("gate") and row["script"] not in chosen:
+            _append(path, {"key": row_key(row), "skipped": True})
     # Gate questions first, then the comparisons: interleaved, each kind of
     # prompt would evict the other from the slot and every gate row would
     # re-read its whole chat.
-    _pool_scripts(args.workers, work, [r for r in jobs if r["kind"].startswith("gate")])
+    _pool_scripts(
+        args.workers,
+        work,
+        [r for r in jobs if r["kind"].startswith("gate") and r["script"] in chosen],
+    )
     _pool_scripts(
         args.workers, work, [r for r in jobs if not r["kind"].startswith("gate")]
     )
+
+
+def _gate_scripts(
+    gates: list[dict[str, Any]], done: set[str], wanted_yes: int
+) -> set[Any]:
+    """Scripts whose gate rows get checked: those already started, then
+    random others, until they hold `wanted_yes` rows labelled 是."""
+    by_script: dict[Any, list[dict[str, Any]]] = {}
+    for row in gates:
+        by_script.setdefault(row["script"], []).append(row)
+    order = sorted(by_script)
+    random.Random(6000).shuffle(order)
+    order.sort(key=lambda s: not any(row_key(r) in done for r in by_script[s]))
+    chosen: set[Any] = set()
+    yes = 0
+    for script in order:
+        if yes >= wanted_yes:
+            break
+        chosen.add(script)
+        yes += sum(r["messages"][-1]["content"] == "是" for r in by_script[script])
+    return chosen
 
 
 def rule_ok(row: dict[str, Any]) -> bool:
@@ -1315,7 +1349,11 @@ def make_filter(args: argparse.Namespace) -> int:
     verdicts = {r["key"]: r for r in _read(OUT_DIR / "check.jsonl")}
     checked = [r for r in rows if row_key(r) in verdicts]
     verdict = {id(r): verdicts[row_key(r)] for r in checked}
-    gates = [r for r in checked if r["kind"].startswith("gate")]
+    gates = [
+        r
+        for r in checked
+        if r["kind"].startswith("gate") and not verdict[id(r)].get("skipped")
+    ]
     lines = [r for r in checked if r["kind"] in ("line", "lull")]
     kept_gates = [r for r in gates if verdict[id(r)].get("agree")]
     kept_lines = [r for r in lines if verdict[id(r)].get("wins", 0) >= 2 and rule_ok(r)]

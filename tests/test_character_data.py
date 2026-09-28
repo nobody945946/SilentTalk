@@ -265,6 +265,47 @@ def test_gate_rows_are_capped_keeping_two_no_per_yes(chardata: Path) -> None:
     assert (answers.count("是"), answers.count("否")) == (3, 6)
 
 
+def test_only_the_gate_rows_filter_can_use_are_checked(
+    chardata: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _checked_set(chardata, [True] * 12, [])  # 12 scripts, one gate row each
+    (chardata / "check.jsonl").unlink()
+    asked: list[int] = []
+    monkeypatch.setattr(
+        character_data, "chat", lambda url, messages, **kw: asked.append(1) or ["是"]
+    )
+    args = type(
+        "Args",
+        (),
+        {"rows": "train.jsonl", "teacher_url": "", "workers": 2, "max_gate_rows": 6},
+    )()
+
+    character_data.make_check(args)
+
+    verdicts = [
+        json.loads(line) for line in (chardata / "check.jsonl").read_text().splitlines()
+    ]
+    assert len(verdicts) == 12
+    checked = [v for v in verdicts if not v.get("skipped")]
+    # filter keeps 6 // 3 = 2 "是": scripts are added until 3 (2 × 1.25) are in.
+    assert len(asked) == len(checked) < 12
+    assert sum(v["agree"] for v in checked) == 3  # the checker says 是 to all
+    character_data.make_filter(
+        type(
+            "Args",
+            (),
+            {
+                "rows": "train.jsonl",
+                "min_gate_agree": 0.0,
+                "min_lines": 0,
+                "max_gate_rows": 6,
+            },
+        )()
+    )
+    stats = json.loads((chardata / "filter.json").read_text())
+    assert (stats["coverage"], stats["gate_rows"]) == (1.0, len(checked))
+
+
 def test_only_checked_rows_are_trained_on(chardata: Path) -> None:
     _checked_set(chardata, [n != 0 for n in range(20)], [2, 2, 2, 0, 1])
 
