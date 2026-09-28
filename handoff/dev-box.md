@@ -1,6 +1,6 @@
 # 開發機工作檔（Linux、RTX 3090）
 
-更新：2026-09-28 08:30｜分支：`copilot-story-mode`
+更新：2026-09-28 下午｜分支：`copilot-story-mode`
 你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事。舊版在 `archive/`（只在這台機器、不進 git），不必讀。
 
 ---
@@ -8,37 +8,35 @@
 ## 1. 現況
 
 **產品：** Windows 桌面程式，Discord Bot 兩種用法，同一個本機模型、同一段對話格式。
-- **選項模式**：聽別人講話 → 本機模型想四句「這個角色自己會說的話」→ 使用者按 WASD 選 → TTS 替他說。
-- **角色模式**：Bot 自己就是使用者寫的人設，自己判斷要不要開口、自己講。
+- **角色模式**：Bot 就是使用者寫的人設，自己判斷要不要開口、自己講；有「今天在想」的心事，冷場時會自己開話題。
+- **選項模式**：聽別人講話 → 取樣四句「這個角色自己會說的話」→ 使用者按 WASD 選 → TTS 替他說。
 
-**使用者要的：**
-- 「頂級電子人，講話無違和」；免費；使用者不標資料、不評樣本。
-- 人設是使用者自己寫、隨時切換，大多是和他的**關係**（老婆、小孩、兄弟），使用者本人就在語音頻道裡。所以 LoRA 是**一個通用 adapter 服務所有人設**。
-- 即時比精準重要。**硬體標準是 RTX 3050 Ti 4 GB**，只用免費、本機的東西。學生模型可以換，只要 3050 Ti 跟得上。
+**使用者要的：**「頂級電子人，講話無違和」；免費；不標資料、不評樣本。人設大多是和他的**關係**（老婆、小孩、兄弟），一個通用 LoRA 服務所有人設。即時比精準重要。**硬體標準是 RTX 3050 Ti 4 GB**；學生模型可以換，**速度別掉太多**。每一項都要在 3050 Ti 的小模型上量過才開；小模型扛不住的架構可以先留著給以後的大主機。慢的候選（例如 dense 老師）也要量完再決定，不能因為慢就跳過。
 
 | 項目 | 狀態 |
 |---|---|
-| 選項不被新的一組蓋掉（6 秒保留、R 換過去） | ✅ 開發機 ui_preview 驗過；**筆電還沒試** |
-| 選項改成取樣「角色自己會說的話」 | ✅ 盲評贏舊版，§5.1；**筆電還沒試** |
-| 角色 LoRA v1，只用在「是不是在叫你」 | ✅ 已隨 repo 出貨（`models/`），§5.2；**筆電還沒試** |
-| 模型判斷何時開口、對話只往後接、關係型人設、TTS 串流、UI 重做 | ✅（前幾輪） |
-| 真 Discord 實測 | ⬜ 等筆電這一輪（`handoff/laptop.md`）的回報 |
-| Gemma 4 E4B 當學生 | 🔄 開發機：選項大贏、角色台詞輸；3050 Ti 速度等筆電量，§4 |
-| 老師比較第二輪 | 🔄 等 GPU（別的專案佔 17 GB），§4 |
+| 人設只給「塑造這個人」的部分、今天的心事、冷場開話題 | ✅ 出貨（§5.2） |
+| 角色 LoRA v1 只用在「是不是在叫你」（E2B） | ✅ 出貨 |
+| 選項＝取樣四句、看的時候不會被換掉 | ✅ 出貨（§5.1） |
+| 角色記憶（跨次演進的心事、看法、對人的感覺） | 🧊 架構做好（`character_state.py`、`copilot.character_memory`），E2B 上量輸，**預設 off**（§5.3） |
+| **換學生 E4B＋自己的判斷 LoRA** | 🔄 背景流程在跑（§4 A） |
+| 老師比較第二輪 | 🔄 挑選法已評完，Gemma 31B 先想再寫和 TAIDE 還沒跑（§4 B、§5.5） |
+| 筆電實測（本輪） | ⬜ `handoff/laptop.md`：延遲拆解、角色模式、語音辨識在真人聲音哪裡失敗 |
 
-**測試：** `160 passed`。
+**測試：** `178 passed`。
 
 ## 2. 開發機規則（通用規則在 AGENTS.md）
 
 1. 改 prompt、模型、架構之前先量，改完再量，變差就退回。量不出贏就不出貨。
-2. **Claude 的輸出不能用來訓練，也不能用來挑選訓練資料**（Anthropic 條款）。Claude 只能當評審。老師模型只能用授權允許的開源權重模型。
-3. 測試集 `scripts/dev/turn_eval_data.jsonl` 是 Claude 寫的，**只能評估**；檔頭列出訓練資料不能用的名字，`character_data.py` 會自動排除。
-4. GPU 和別的專案共用（ComfyUI、whisper-api、musichub 的 `stage_music.py` 會佔到 17 GB），**不要動它們的程序**。要大量 VRAM 的工作先等空間（`nvidia-smi --query-gpu=memory.free`）。
-5. 不要 `ruff format` 整個 repo，只格式化自己新增的檔案。
-6. 選項的四個位置只有一個來源：`silenttalk/copilot/types.py` 的 `REPLY_LANES`。選項模式的 WASD 絕不註冊成全域熱鍵。
-7. 正在跑的 bash 腳本不要原地改（bash 邊跑邊讀檔）：寫成新檔再 `os.replace`，然後重啟那個流程。
-8. 這台機器沒有 git 身分：commit 用 `git -c user.name="nobody945946" -c user.email="104478886+nobody945946@users.noreply.github.com" commit ...`。
-9. 同時跑兩個評估時各給一個 port（`turn_eval.py --port`、`options_eval.py --port`），否則會連到對方的模型。
+2. **評審的絕對分數（1–5）在不同次之間會漂移，漂移比我們要看的差異還大**（同一版本兩次差到 0.7）。要比兩個版本，一律用**配對盲評**（`turn_eval.py --judge-pair`、`options_eval.py judge`、`teacher_bakeoff.py judge`：同一個點兩版並排、正反順序各評一次）。
+3. **Claude 的輸出不能用來訓練，也不能用來挑選訓練資料**（Anthropic 條款）。Claude 只能當評審。老師模型只能用授權允許的開源權重模型。
+4. 測試集 `scripts/dev/turn_eval_data.jsonl` 是 Claude 寫的，**只能評估**；檔頭的名字清單，`character_data.py` 會自動排除。
+5. GPU 和別的專案共用（ComfyUI、whisper-api、musichub 有時佔到 17 GB），**不要動它們的程序**。長時間的大工作（老師、訓練）不要擋在急的小評估前面；要大量 VRAM 先等空間。在別人佔著 GPU 時量到的速度不算數。
+6. 關程序：**先列出 PID 再 kill**；`awk`/`grep` 比對的字串如果也出現在自己這行指令裡，會連自己的 shell 一起殺掉（exit 144，這台機器發生過兩次）。
+7. 背景的「等 A 結束再做 B」監看，在 A 被手動停掉後會照樣做 B：停掉 A 時一併停掉監看，或換新的輸出檔名。
+8. 不要 `ruff format` 整個 repo。正在跑的 bash 腳本不要原地改。
+9. 這台機器沒有 git 身分：commit 用 `git -c user.name="nobody945946" -c user.email="104478886+nobody945946@users.noreply.github.com" commit ...`。
+10. 同時跑兩個評估時各給一個 port（`--port`）。
 
 **每次改完要跑：**
 
@@ -49,101 +47,110 @@ xvfb-run -a -s "-screen 0 2400x1600x24" .runtime/tools/ui-preview-env/bin/python
     scripts/dev/ui_preview.py --font "Noto Sans CJK TC" [--scale 1.5]   # 改過 UI 才需要，要打開截圖看
 ```
 
-UI 截圖一定要用 `.runtime/tools/ui-preview-env/bin/python`（conda-forge 的 Tk，有 Xft）；專案 venv 的 Tk 中文粗體會變方框。
+## 3. 怎麼運作（`silenttalk/copilot/llm.py` 的 `LocalReplyModel`）
 
-## 3. 怎麼運作（主程式 `silenttalk/copilot/llm.py` 的 `LocalReplyModel`）
-
-1. **對話格式：只往後接。** 別人的話是 user 訊息（`名字：內容`），角色／使用者自己的話是 assistant 訊息，人設和人際關係在 system prompt。新的一句只接在最後，前面整段快取沿用；這次請求專用的提示只附在最後一則訊息。
-2. **角色模式 `character_turn`：** 在同一段快取上問 是／否（grammar 限制 1 個 token）。先問「是不是在對你說話」；「主動」模式下角色安靜滿 4 句才再問「現在插一句自然嗎」。是的話再寫一句。**不要**改回「一次呼叫、講或 SKIP」：零訓練的模型 18 句全回。
-3. **選項模式 `suggest`：** 同一段對話尾端問「換你說話了：說一句你現在會說的話」，溫度 1.0 取樣最多 7 次，留最多四句彼此不像、也不重複對方的句子。每多一次只多生成那一句（快取沿用）。
-4. **LoRA：** `copilot.character_lora`＋`copilot.character_lora_uses`（`called`／`active`／`line`／`options`）。預設只有 `called`。有 LoRA 時 llama-server 開兩個 slot：套 LoRA 的請求走 slot 0、不套的走 slot 1（`_lora_field`）。**llama-server 在 LoRA 比例改變時會丟掉該 slot 的快取**（實測整段 1336 token 重讀），共用一個 slot 的話每次開口都重讀整段對話。兩個 slot 的 VRAM：1395 → 1486 MiB。
-5. **TTS：** EdgeTTS 的 MP3 一邊收一邊餵 FFmpeg（`silenttalk/tts/stream.py`），不寫硬碟。
+1. **對話格式：只往後接。** 別人的話是 user 訊息（`名字：內容`），角色／使用者自己的話是 assistant 訊息，人設、人際關係、今天的心事在 system prompt。請求專用的提示只附在最後一則訊息。
+2. **人設（`Persona.render_prompt_block`）**：名字、身分、背景、想要、害怕、在意、最近、個性滑桿、說話感覺（去掉引號裡的詞）、幽默感、心情。口頭禪、代表台詞、雷點、熟悉、秘密、底線**不送**：小模型會逐字照抄（寫了「常說『真的啦』」的人設 80% 句子帶啦）。評審看完整人設（`render_system_block`）。
+3. **今天的心事**：runtime 在設定人設時背景產生最多 4 件（`fill_concerns`，只照人設、只在記憶體），放在人設後面；角色畫面顯示，「換一批」換掉還沒說過的。
+4. **角色模式 `character_turn`**：同一段快取上問 是／否（grammar 1 token）；先問「是不是在對你說話」，「主動」模式安靜滿 4 句再問「插一句自然嗎」；是的話寫一句。**冷場**：`character_lull_seconds`（預設 30）沒人說話 → `lull=True` 不問閘門，開個話題；照念心事就重寫；同一段冷場只一次。
+5. **選項模式 `suggest`**：同一段對話尾端問「換你說話了」，溫度 1.0 取樣最多 7 次，留最多四句不像彼此、不重複對方的。
+6. **LoRA**：`copilot.character_lora`＋`character_lora_uses`（預設只有 `called`）。有 LoRA 時開兩個 slot：套的走 slot 0、不套的走 slot 1（llama-server 在 LoRA 比例改變時會丟掉 slot 的快取）。
+7. **角色記憶（`character_state.py`，預設 off）**：`light`＝心事和進度、近況、心情存在 `character_state.json`（使用者同意的例外：只存角色自己的狀態、用它自己的話），只在關閉或 90 秒冷場後更新；`full`＝再加看法和對人的感覺、每 16 句更新；兩者都帶時間（「星期五晚上 23:40」）。off 就是量過贏的版本，**不帶時間**。
 
 ## 4. 接下來
 
-**等筆電回報（`laptop-report` 分支）：** 選項和角色模式的使用者感想、`--copilot-smoke` 秒數、E4B 在 3050 Ti 的 VRAM 和速度、Windows 截圖。
+**A. E4B 判斷 LoRA（`scratchpad/e4b_gate.sh`，無人值守）**：下載 `google/gemma-4-E4B-it-qat-q4_0-unquantized`（rev 476025a…，sha256 驗證）到 `.runtime/hf/gemma-4-E4B-it-qat` → CPU 遮罩檢查 → 用 `.runtime/dev/chardata/train-gate-compact.jsonl`（8280 筆判斷題、精簡人設格式、最長 2126 token）訓練 1 輪（`--max-length 2304`，約 5 小時）→ 轉 q8_0 到 `.runtime/models/llm/character-e4b-gate-v1.q8_0.gguf` → `turn_eval --tag now-e4b-gate` → 和 `now-e2b` 配對盲評。流程不在了的話照這個順序手動跑。
+- 判斷題的答案來自 v1 老師（Qwen3-30B-A3B）寫劇本時標的「對誰說」；v1 的判斷部分量過會贏，台詞部分沒用。v1 的完整人設版資料備份在 `train-v1-fullsheet.jsonl`。
+- **過關標準**：開口時機（被叫才回的誤回 ≤ 2%、主動插嘴不高於 E2B 的 37%）＋配對盲評不輸 E2B。
+- **過關就出貨**：adapter 放 `models/`、`setup_copilot.py` 的 `BUNDLED` 加上它、config 預設 `llm_model` 換 E4B（setup 會下載 4.2 GB）、`character_lora` 換成它；重寫筆電工作檔加一次 E4B 實測。
+- 3050 Ti：E4B 載入 10 s、VRAM 2.7 GB、生成 26.5 token/s（E2B 76）、判斷 174 ms（E2B 約 90）；每說一句約多 0.4 秒。
 
-**E4B 要不要換：** 開發機上 E4B 寫選項大贏 E2B（出貨的取樣格式也贏，60% 對 32%，§5.1；CPU 上慢約 1.6 倍），但角色台詞的自然度、口吻反而輸（§5.2）。等筆電量到 E4B 在 3050 Ti 的 VRAM 和速度：跑得動的話，選項模式改用 E4B、角色模式維持 E2B＋LoRA，切模式時重開 llama-server（4 GB 放不下兩個模型；E4B 載入要幾秒）。
+**B. 老師比較收尾**：Gemma 4 31B（dense）的 +think 只做了 43/114，TAIDE（`gemma4-26b-taide`）還沒跑。在 GPU 乾淨時用 pinned worktree `/home/clawd/SilentTalk-bakeoff`（b6a6a3d，舊的完整人設格式，和其他老師一致）跑 `teacher_bakeoff.py generate --only gemma4-31b,gemma4-26b-taide`，同時重量 Gemma 31B 沒被搶資源時的速度，再和目前前兩名一起盲評。
 
-**老師比較第二輪：** 2026-09-28 早上有一個背景程序在等 GPU 空出來（E4B 學生要 6 GB、老師要 21 GB）再跑。它不在了的話，自己在有空間時跑（可續跑）：
-```bash
-.venv/bin/python scripts/dev/teacher_bakeoff.py generate \
-    --only student-gemma4-e4b,qwen3.6-35b-a3b,qwen3.6-27b,gemma4-31b,gemma4-26b-taide
-```
-每個老師都有「寫四句挑一句」（`+pick`）和「先想再寫」（`+think`）兩種。跑完用：
-```bash
-.venv/bin/python scripts/dev/teacher_bakeoff.py judge --tag pick --variants student-gemma4-e2b,qwen3-30b-a3b+pick,<各老師>+pick
-.venv/bin/python scripts/dev/teacher_bakeoff.py judge --tag think --variants student-gemma4-e2b,qwen3-30b-a3b+pick,<各老師>+think
-```
-（一次最多排 6 個版本，評審才穩。）`timing.json` 有每個版本每點幾秒：老師要重產幾千句，太慢的不實際。
+**C. 第三版資料**：老師先定 **Qwen3.6-35B-A3B＋挑選**（和 27B 打平、最快；§5.5），除非 B 的 dense 候選明顯更好（那就用它，算好重產時間）。**不要開推理模式**（先想再寫兩個都輸）。台詞先接住對方那句、人設只在自然時出現；格式和 App 現在一致（精簡人設＋今天的心事＋冷場開話題的提示）；**產資料時先抽查**：隨機抽一批資料台詞，和學生自己寫的配對盲評，資料沒有明顯比較好就不訓練。學生看 A 的結果（E4B 過關就用 E4B）。
 
-**LoRA v2 的方向（照 §5.2 的教訓）：** v1 的台詞會硬塞人設背景（「我已經存了三萬」這種答非所問），因為老師寫劇本時每句都在用人設。下一版資料要：台詞先接住對方那句、人設只在自然時出現；換掉老師要照上面的比較結果；判斷題的資料可以保留（v1 的判斷是贏的）。
+**D. 等筆電回報**：延遲拆解（模型 1.27 s、TTS 1.26 s 是哪一段慢）、真人聲音的語音辨識（空白片段數、片段長度）、角色模式的感受。
 
 ## 5. 量過的數字
 
-### 5.1 選項（`options_eval.py`，21 場對話每隔一句、269 點 × 正反順序各評一次，Claude 盲評，1–5 分）
+### 5.1 選項（`options_eval.py`，21 場對話每隔一句、269 點、正反順序各評一次）
 
-| 比較 | 誰比較好 | 自己的想法 | 接得上 | 口吻 | 自然 | 可用句數（/4） |
-|---|---|---|---|---|---|---|
-| 舊四方向 vs **先寫心裡想再寫四句** | 55% vs 40% | 2.61 / 2.55 | 2.83 / 2.50 | 3.09 / 2.89 | 3.00 / 2.86 | 2.00 / 1.75 |
-| 舊四方向 vs **取樣角色會說的話**（出貨） | 39% vs **56%** | 2.42 / 2.31 | 2.51 / **3.04** | 2.69 / **2.95** | 2.80 / **3.17** | 1.37 / **1.75** |
-| 心裡想格式：E2B vs **E4B** | 26% vs **70%** | 2.38 / 2.87 | 2.45 / 3.11 | 2.70 / 3.22 | 2.78 / 3.19 | 1.30 / 2.00 |
-| 取樣格式（出貨的）：E2B vs **E4B** | 32% vs **60%** | 2.33 / 2.66 | 2.84 / 3.17 | 2.83 / 3.17 | 2.95 / 3.20 | 1.53 / 1.94 |
-| 心裡想格式：無 LoRA vs 套 LoRA | 67% vs 31% | — | — | — | — | LoRA 版一組平均空一格 |
-
-- 把上一輪的「心裡想」帶進下一輪：小模型直接照抄，248 次裡 151 次幾乎一樣（一個角色連續九輪都在講跳傘），已退回。
-- 同一次評分裡的分數才能比；不同次的絕對分數會漂。
-
-### 5.2 角色模式（`turn_eval.py`，545 個判斷點，Claude 評台詞）
-
-| | 無 LoRA | LoRA 全開 | **LoRA 只用在「是不是在叫你」（出貨）** | E4B 無 LoRA |
+| 比較 | 誰比較好 | 接得上 | 可用句數（/4） | 含「啦」 |
 |---|---|---|---|---|
-| 被叫才回：該回的有回 | 89.0% | 89.0% | **89.0%** | 93.9% |
-| 被叫才回：不該回卻回 | 9.6% | 1.0% | **1.0%** | 9.6% |
-| 主動：該回的有回 | 93.8% | 84.4% | 84.4% | 93.8% |
-| 主動：插嘴 | 47.3% | 54.8% | **38.7%** | 48.4% |
-| 自然／口吻／時機 | 3.54 / 3.70 / 3.82 | 3.60 / 3.85 / 3.76 | 3.44 / 3.68 / 3.81 | 3.08 / 3.23 / 3.64 |
-| 對使用者本人：自然／時機 | 3.42 / 3.61 | 2.90 / 3.14 | 3.43 / 3.61 | 3.36 / 4.19 |
+| 舊四方向 vs **取樣角色會說的話** | 39% vs **56%** | 2.51 / **3.04** | 1.37 / **1.75** | |
+| 取樣：完整人設 vs **精簡人設＋心事**（出貨） | 45% vs 45% | 2.91 / 2.83 | 1.60 / 1.58 | 31% → **16%** |
+| 取樣：E2B vs **E4B** | 32% vs **60%** | 2.84 / 3.17 | 1.53 / 1.94 | |
 
-- 無 LoRA 基準是 `--cpu` 跑的（當時 GPU 在訓練），判斷和台詞可以比，延遲不能比。
-- q8_0 的 LoRA 和 f16 在 545 點裡 543 點判斷相同。
+「先寫心裡想再寫四句」（輸 40% vs 55%）、把上一輪的想法帶到下一輪（小模型照抄）、選項套 LoRA（輸 31% vs 67%）、語氣詞規則（輸 37% vs 47%）都沒出貨。
 
-### 5.3 3050 Ti 實機（使用者筆電，`bench_hw.py`，Gemma 4 E2B）
+### 5.2 角色模式（`turn_eval.py`，21 場、545 個判斷點；配對盲評＝逐句，以及整場「比較認識這個人／比較像真人」）
 
-| | GPU | 純 CPU |
+| 比較 | 逐句 | 認識這個人 | 像真人 | 含「啦」 |
+|---|---|---|---|---|
+| 出貨前 vs **精簡人設＋個性＋心事＋冷場（C2）** | 48% vs 45% | 13 vs **28** | 15 vs **26** | 39% → **14%** |
+| C2 vs C2 去掉語氣詞規則（出貨） | 46% vs 43% | 17 vs 25 | 24 vs 18 | 14% → 18% |
+| E2B＋LoRA vs **E4B（沒有 LoRA）** | 36% vs **60%** | 17 vs **25** | 16 vs **26** | 22% / 22% |
+
+開口時機（被叫才回的誤回／主動插嘴／該回有回）：無 LoRA 9.6% / 47% / 90%；**E2B＋LoRA 只用在 called 1.0% / 37% / 89%**；E4B 無 LoRA 9.1% / 53% / 94%。
+- 靈魂分數（`--judge-soul`，看完角色的話對他認識多少 1–5）：出貨前 2.6，8/21 場「看不出來」。
+- 精簡人設但不加個性和幽默：逐句略輸、認識度平手 → 個性和幽默要留。
+
+### 5.3 角色記憶（`--chain --memory`，5 個人設 × 2–3 場連續，第 2 場以後配對盲評）
+
+| | off | light |
 |---|---|---|
-| 模型 VRAM | 1370 MiB | — |
-| 判斷一句（只往後接） | 78–93 ms | 644 ms |
-| 生成速度 | 68–79 token/s | 8.8 token/s |
+| 逐句 | **52%** | 39% |
+| 認識這個人 | **12** | 6 |
+| 生活會往前走 | **13** | 5 |
 
-**3090 的數字不能照比例換算成 3050 Ti**：實測 3050 Ti 的生成速度是 3090 的 57%，不是 20%。
+E2B 寫不好狀態：三天的心事一字不差、同一件事換句話又出現、把自己的暱稱當成別人、把「下午三點半」寫死在心事裡。帶時間和新格式的版本也輸（認識度 10 vs 19），所以 off 退回量過的版本。
 
-### 5.4 老師比較第一輪（114 個「該講」的點 × 2 輪 Claude 盲評）
+### 5.4 3050 Ti 實機（`bench_hw.py`）
 
-| 候選 | 平均名次 | 贏學生 | 不及格 |
-|---|---|---|---|
-| Qwen3-30B-A3B＋挑選（v1 的老師） | 1.90 | 76% | 24 |
-| Qwen3-30B-A3B | 2.21 | 71% | 29 |
-| 學生 Qwen3.5-4B | 2.89 | 52% | 70 |
-| 學生 Gemma 4 E2B | 3.00 | — | 69 |
+| | E2B | E4B |
+|---|---|---|
+| VRAM | 1370 MiB | 2694 MiB |
+| 判斷一句 | 78–93 ms | 174 ms |
+| 生成速度 | 68–79 token/s | 26.5 token/s |
 
-### 5.5 TTS（開發機，文字備好到第一個 Opus 封包）：串流 267–290 ms（原本先存檔 594–709 ms）。
+上一輪真 Discord：角色開口時模型本身中位數 1.27 s、TTS 到第一段聲音 1.26 s（開發機 0.27 s），原因待本輪拆解。**3090 的數字不能照比例換算成 3050 Ti**。
+
+### 5.5 老師（114 個「該講」的點 × 2 輪盲評排名，越小越好；每組最多 6 個版本）
+
+挑選組（寫四句，同一個模型挑一句）：
+
+| 候選 | 平均名次 | 贏學生 | 不及格 | 秒／點 |
+|---|---|---|---|---|
+| Qwen3.6-27B（dense） | **2.52** | 82% | 29 | 9.1 |
+| Gemma 4 31B（dense） | 2.62 | 83% | **22** | 57.6（GPU 被別的專案佔，不準） |
+| Qwen3.6-35B-A3B（MoE） | 2.65 | 79% | 35 | **6.2** |
+| Qwen3-30B-A3B（MoE，v1 的老師） | 3.03 | 75% | 53 | — |
+| 學生 Gemma 4 E2B | 4.19 | — | 116 | — |
+
+先想再寫組：35B-A3B 挑選 2.77、27B 挑選 2.81、**35B-A3B 先想再寫 3.04**、v1 老師 3.14、**27B 先想再寫 3.24** → 推理模式反而變差，而且慢 4 倍。
+學生組：v1 老師 1.85、**E4B 2.61**、Qwen3.5-4B 2.69、E2B 2.81。
+
+### 5.6 語音辨識壓力測試（`stt_eval.py --stress`，合成語音）
+
+SenseVoice 在快 60%、小聲 -18 dB、悶住、連著講都維持 CER 6.9–10.7%、沒有漏；Paraformer 小聲漏 10/16、悶住全漏。使用者說的失敗在合成語音上重現不了 → 等真人 log。
 
 ## 6. 工具
 
 | 指令 | 用途 |
 |---|---|
-| `scripts/dev/options_eval.py generate --rev R [--model/--old-model/--lora/--cpu/--port] --tag T`、`judge --tag T`、`report --tag T` | 選項 A/B：`--rev` 的程式 vs 工作目錄 |
-| `scripts/dev/turn_eval.py --policy new [--lora F --lora-uses called] [--cpu] [--port] [--judge] [--judge-only TAG]` | 角色模式的時機和內容 |
+| `scripts/dev/turn_eval.py --policy new [--model] [--lora F --lora-uses called] [--agenda] [--lull] [--memory M --chain] [--cpu] [--port]` | 角色模式 |
+| `turn_eval.py --judge-pair A B [--later-only]`、`--judge-soul TAG`、`--judge-only TAG` | 配對盲評、靈魂分數、單版評分 |
+| `scripts/dev/options_eval.py generate --rev R [--model/--old-model/--lora/--agenda/--cpu/--port] --tag T`、`judge`、`report` | 選項 A/B |
 | `scripts/dev/teacher_bakeoff.py generate/judge/report [--variants --tag]` | 老師比較 |
-| `scripts/dev/character_data.py`、`character_pipeline.sh`、`train_lora.py` | LoRA 資料和全流程（v1 跑完了；cron 看門狗已刪） |
-| `scripts/dev/bench_hw.py [--model]`、`tts_latency.py`、`log_summary.py` | 速度量測、log 數字整理 |
-| `scripts/dev/stt_eval.py`、`ui_preview.py` | STT、UI |
+| `scripts/dev/character_data.py`、`character_pipeline.sh`、`train_lora.py` | LoRA 資料與訓練 |
+| `scripts/dev/bench_hw.py [--model] [--lora]`、`tts_latency.py`、`stt_eval.py [--stress]`、`log_summary.py` | 延遲、語音辨識、log 數字 |
+| `scripts/dev/ui_preview.py` | UI 截圖與流程檢查 |
 
 ## 7. 踩過的雷
 
-- **llama-server 的 LoRA 比例**：沒寫比例的請求會套上已載入的 LoRA；比例一變就丟掉那個 slot 的快取。所有請求都要寫比例，套和不套各用一個 slot。
-- **HF 下載**：沒有 token 時 Xet 會停在 0 B/s。分段 `curl -r` 平行下載（8 段）加 sha256 驗證最穩，E4B 4.2 GB 約 15 分鐘。
-- **`claude -p` 偶爾卡超過 15 分鐘**：評審一定要每批存檔、可以續跑、失敗重試（`options_eval.py judge` 已經這樣做）。
-- **`pgrep -f` / `pkill -f`**：比對到的字串也在自己的 shell 命令列裡，結果把自己殺掉。
-- **`git revert` 沒有 `-q`**：加了只會印出用法、什麼都沒做。
+- **llama-server 的 LoRA 比例**：沒寫比例的請求會套上已載入的 LoRA；比例一變就丟掉那個 slot 的快取。
+- **TRL 的截斷從尾巴截**：太長的訓練資料會連答案一起截掉；先量 token 長度再設 `--max-length`。
+- **HF 下載**：分段 `curl -r` 平行下載加 sha256 驗證最穩；Hugging Face 有時限速到 5 MB/s。
+- **`claude -p` 偶爾卡超過 15 分鐘**：評審要每批存檔、可續跑、失敗重試。
+- **E2B 的狀態更新**：編號會亂、同一件事換句話又出現、把自己的暱稱當別人——要讓小模型維護長期狀態前先量。
+- **`git revert` 沒有 `-q`**。
