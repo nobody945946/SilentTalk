@@ -80,6 +80,14 @@ LLM_MODELS = {
         "e531007218dfab990486a5de7676a6932d6ea8dea233d1f698d7c21cf8a16889",
         2_600_000_000,
     ),
+    # Twice E2B's size: better options on the dev box, speed on a 3050 Ti
+    # still to be measured (scripts/dev/bench_hw.py --model ...).
+    "gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf": (
+        "Gemma 4 E4B QAT Q4_K_XL",
+        "https://huggingface.co/unsloth/gemma-4-E4B-it-qat-GGUF/resolve/main/gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf?download=true",
+        "df0fd4ee07072c607c29a0a1cb4f98918426cca12f45a2776bdd6ee6d09a4de3",
+        4_200_000_000,
+    ),
     "Qwen3.5-4B-Q4_K_M.gguf": (
         "Qwen3.5-4B Q4_K_M",
         "https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf?download=true",
@@ -234,6 +242,13 @@ def _download(
 
 
 def main() -> int:
+    # `setup_copilot.py <model file>` also fetches another known reply model,
+    # e.g. to benchmark it, without changing config.toml.
+    extra = [name for name in sys.argv[1:] if not name.startswith("-")]
+    unknown = [name for name in extra if name not in LLM_MODELS]
+    if unknown:
+        print(f"ERROR: unknown model {unknown}; known: " + ", ".join(LLM_MODELS), file=sys.stderr)
+        return 1
     section = _copilot_section()
     if not bool(section.get("enabled", True)):
         print("Copilot is disabled in config.toml; model deployment skipped.")
@@ -255,7 +270,8 @@ def main() -> int:
 
     print("Checking SilentTalk Copilot models...")
     try:
-        for asset in (*ASSETS, *stt_assets, *([llm_asset] if llm_asset else [])):
+        extra_assets = [_llm_asset(name) for name in extra]
+        for asset in (*ASSETS, *stt_assets, *([llm_asset] if llm_asset else []), *extra_assets):
             _download(*asset)
         for bundled in BUNDLED:
             _install_bundled(*bundled)
