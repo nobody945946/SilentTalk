@@ -320,12 +320,19 @@ class OfflineTranscriber:
                 len(samples) * 1000 // SAMPLE_RATE,
                 int((time.perf_counter() - started) * 1000),
             )
-            self._emit(speaker_id, state.speaker_name, stream.result.text)
+            if not self._emit(speaker_id, state.speaker_name, stream.result.text):
+                # The VAD heard speech but nothing came out: the "said it a
+                # bit fast or unclear and it failed" case. Length only.
+                _LOG.info(
+                    "copilot_stt_empty speaker_id=%s audio_ms=%d",
+                    speaker_id,
+                    len(samples) * 1000 // SAMPLE_RATE,
+                )
 
-    def _emit(self, speaker_id: int, speaker_name: str, raw_text: str) -> None:
+    def _emit(self, speaker_id: int, speaker_name: str, raw_text: str) -> bool:
         text = to_taiwan_traditional(" ".join(raw_text.split()))
         if not has_speech_text(text):
-            return
+            return False
 
         _LOG.info(
             "copilot_turn_final speaker_id=%s char_count=%d",
@@ -333,3 +340,4 @@ class OfflineTranscriber:
             len(text),
         )
         self._on_turn(speaker_id, speaker_name, text)
+        return True
