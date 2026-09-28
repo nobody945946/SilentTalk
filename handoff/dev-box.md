@@ -59,7 +59,7 @@ xvfb-run -a -s "-screen 0 2400x1600x24" .runtime/tools/ui-preview-env/bin/python
 
 ## 4. 接下來
 
-**A. E4B 判斷 LoRA（`scratchpad/e4b_gate.sh`，無人值守）**：下載 `google/gemma-4-E4B-it-qat-q4_0-unquantized`（rev 476025a…，sha256 驗證）到 `.runtime/hf/gemma-4-E4B-it-qat` → CPU 遮罩檢查 → 用 `.runtime/dev/chardata/train-gate-compact.jsonl`（8280 筆判斷題、精簡人設格式、最長 2126 token）訓練 1 輪（`--max-length 2304`，約 5 小時）→ 轉 q8_0 到 `.runtime/models/llm/character-e4b-gate-v1.q8_0.gguf` → `turn_eval --tag now-e4b-gate` → 和 `now-e2b` 配對盲評。流程不在了的話照這個順序手動跑。
+**A. E4B 判斷 LoRA（`scratchpad/e4b_gate.sh`，無人值守）**：下載 `google/gemma-4-E4B-it-qat-q4_0-unquantized`（rev 476025a…，sha256 驗證）到 `.runtime/hf/gemma-4-E4B-it-qat` → CPU 遮罩檢查 → 用 `.runtime/dev/chardata/train-gate-compact.jsonl`（8280 筆判斷題、精簡人設格式、最長 2126 token）以 **QLoRA（`--4bit`，要 train-venv 裝好 bitsandbytes）** 訓練 1 輪（`--max-length 2304`，約 5 小時；bf16 的 E4B 放不進別的專案佔著之後剩下的 15 GB）→ 轉 q8_0 到 `.runtime/models/llm/character-e4b-gate-v1.q8_0.gguf` → `turn_eval --tag now-e4b-gate` → 和 `now-e2b` 配對盲評。流程不在了的話照這個順序手動跑。
 - 判斷題的答案來自 v1 老師（Qwen3-30B-A3B）寫劇本時標的「對誰說」；v1 的判斷部分量過會贏，台詞部分沒用。v1 的完整人設版資料備份在 `train-v1-fullsheet.jsonl`。
 - **過關標準**：開口時機（被叫才回的誤回 ≤ 2%、主動插嘴不高於 E2B 的 37%）＋配對盲評不輸 E2B。
 - **過關就出貨**：adapter 放 `models/`、`setup_copilot.py` 的 `BUNDLED` 加上它、config 預設 `llm_model` 換 E4B（setup 會下載 4.2 GB）、`character_lora` 換成它；重寫筆電工作檔加一次 E4B 實測。

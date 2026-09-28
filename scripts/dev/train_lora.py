@@ -44,6 +44,12 @@ def main() -> int:
         "--max-length", type=int, default=2048, help="tokens; longer rows are truncated"
     )
     parser.add_argument(
+        "--4bit",
+        dest="four_bit",
+        action="store_true",
+        help="QLoRA: load the base in 4-bit (nf4); E4B in bf16 does not fit next to other tenants",
+    )
+    parser.add_argument(
         "--check",
         action="store_true",
         help="build everything, show which tokens are trained on, one short forward; no training",
@@ -85,8 +91,21 @@ def main() -> int:
     print(f"train {len(train)}  eval {len(evaluation)}")
     print(train[0]["prompt"][-300:] + train[0]["completion"])
 
+    quantized: dict = {}
+    if args.four_bit:
+        from transformers import BitsAndBytesConfig
+
+        quantized = {
+            "quantization_config": BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_compute_dtype=torch.bfloat16,
+                bnb_4bit_use_double_quant=True,
+            ),
+            "device_map": {"": 0},
+        }
     model = AutoModelForCausalLM.from_pretrained(
-        args.base, dtype=torch.bfloat16, attn_implementation="sdpa"
+        args.base, dtype=torch.bfloat16, attn_implementation="sdpa", **quantized
     )
     # Text only: Gemma 4 also ships vision/audio towers (~0.9 GiB) that a
     # text forward never calls. Drop them before the trainer moves the model
@@ -95,6 +114,10 @@ def main() -> int:
     for name in ("vision_tower", "audio_tower", "embed_vision", "embed_audio"):
         if inner is not None and getattr(inner, name, None) is not None:
             setattr(inner, name, None)
+    if args.four_bit:
+        from peft import prepare_model_for_kbit_training
+
+        model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=True)
     config = SFTConfig(
         output_dir=args.out,
         num_train_epochs=args.epochs,
