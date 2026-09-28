@@ -22,7 +22,7 @@ class FakeVoiceData:
     pcm: bytes
 
 
-def test_voice_receive_ignores_owner_and_bots_but_keeps_other_people() -> None:
+def test_voice_receive_keeps_owner_and_other_people_but_ignores_bots() -> None:
     heard: list[tuple[int, str, bytes]] = []
     client = DiscordVoiceClient(
         DiscordConfig("unused", 123),
@@ -34,7 +34,10 @@ def test_voice_receive_ignores_owner_and_bots_but_keeps_other_people() -> None:
     client._on_voice_pcm(FakeUser(456, "OtherBot", True), FakeVoiceData(b"bot"))  # type: ignore[arg-type]
     client._on_voice_pcm(FakeUser(789, "Alice"), FakeVoiceData(b"human"))  # type: ignore[arg-type]
 
-    assert heard == [(789, "Alice", b"human")]
+    assert heard == [
+        (123, "Owner", b"owner"),
+        (789, "Alice", b"human"),
+    ]
 
 
 @dataclass

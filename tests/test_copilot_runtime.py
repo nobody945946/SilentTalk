@@ -208,12 +208,18 @@ async def test_a_discord_mention_is_passed_on_as_addressed(tmp_path: Path) -> No
 @pytest.mark.asyncio
 async def test_owner_mic_counts_only_in_character_mode(tmp_path: Path) -> None:
     runtime, _, _ = await _runtime(tmp_path)
+    packets: list[tuple[int, str, bytes]] = []
+    runtime._stt.push_pcm = lambda *packet: packets.append(packet)  # type: ignore[method-assign]
+    runtime.accept_pcm(1, "Owner", b"options")
     runtime._handle_turn(1, "Owner", "我在講話")
+    assert packets == []
     assert "我在講話" not in runtime._context.render_for_prompt()
 
     runtime.set_persona(PRESET_PERSONAS[0])
     runtime.set_character_mode(True)
+    runtime.accept_pcm(1, "Owner", b"character")
     runtime._handle_turn(1, "Owner", "凱哥你好")
+    assert packets == [(1, "Owner", b"character")]
     assert "凱哥你好" in runtime._context.render_for_prompt()
     await _stop(runtime)
 

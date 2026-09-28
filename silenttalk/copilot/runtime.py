@@ -139,6 +139,10 @@ class CopilotRuntime:
         self._loop = None
 
     def accept_pcm(self, speaker_id: int, speaker_name: str, pcm: bytes) -> None:
+        # Options speak for the owner, so their mic is not input there. In
+        # character mode the owner is another participant the character hears.
+        if speaker_id == self._owner_user_id and not self._character_mode:
+            return
         self._stt.push_pcm(speaker_id, speaker_name, pcm)
 
     def accept_text(

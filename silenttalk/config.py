@@ -183,16 +183,21 @@ def config_defaults(project_dir: Path) -> dict[str, dict[str, object]]:
     return tables
 
 
-def load_settings(project_dir: Path) -> Settings:
-    load_dotenv(project_dir / ".env")
+def load_effective_tables(project_dir: Path) -> dict:
+    """Return file defaults with settings-page overrides applied."""
     config_path = project_dir / "config.toml"
     if not config_path.exists():
         raise ConfigError(f"找不到唯一設定檔：{config_path}")
     with config_path.open("rb") as handle:
         raw = tomllib.load(handle)
+    return merge(raw, SettingsStore(project_dir / SETTINGS_FILE).load())
+
+
+def load_settings(project_dir: Path) -> Settings:
+    load_dotenv(project_dir / ".env")
     # What the settings page changed wins over the file's defaults, and then
     # goes through exactly the same validation below.
-    raw = merge(raw, SettingsStore(project_dir / SETTINGS_FILE).load())
+    raw = load_effective_tables(project_dir)
 
     token = os.getenv("DISCORD_BOT_TOKEN", "").strip()
     owner_raw = os.getenv("OWNER_USER_ID", "").strip()

@@ -413,8 +413,6 @@ class DiscordVoiceClient(discord.Client):
             # Before the DAVE handshake settles, frames are still E2E-encrypted
             # and decode to noise; STT would turn that into invented words.
             return
-        if user.id == self._config.owner_user_id:
-            return
         if self.user is not None and user.id == self.user.id:
             return
         if bool(getattr(user, "bot", False)):

@@ -3,12 +3,15 @@ from __future__ import annotations
 import hashlib
 import shutil
 import sys
-import tomllib
 import urllib.error
 import urllib.request
 from pathlib import Path
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT_DIR))
+
+from silenttalk.config import load_effective_tables
+
 RUNTIME_DIR = PROJECT_DIR / ".runtime"
 ASR_DIR = RUNTIME_DIR / "models" / "asr"
 LLM_DIR = RUNTIME_DIR / "models" / "llm"
@@ -39,7 +42,7 @@ ASSETS = (
     ),
 )
 
-# Only downloaded when config.toml sets copilot.stt_engine = "sensevoice".
+# Only downloaded when the effective settings select copilot.stt_engine = "sensevoice".
 # min_size is 95% of the verified byte count.
 SENSEVOICE_ASSETS = (
     (
@@ -134,9 +137,7 @@ def _install_bundled(label: str, source: Path, target: Path, expected_sha256: st
 
 
 def _copilot_section() -> dict:
-    config_path = PROJECT_DIR / "config.toml"
-    with config_path.open("rb") as handle:
-        raw = tomllib.load(handle)
+    raw = load_effective_tables(PROJECT_DIR)
     section = raw.get("copilot", {})
     return section if isinstance(section, dict) else {}
 
@@ -251,7 +252,7 @@ def main() -> int:
         return 1
     section = _copilot_section()
     if not bool(section.get("enabled", True)):
-        print("Copilot is disabled in config.toml; model deployment skipped.")
+        print("Copilot is disabled in the effective settings; model deployment skipped.")
         return 0
 
     model_name = str(section.get("llm_model", DEFAULT_LLM_MODEL)).strip()
