@@ -257,13 +257,16 @@ need_vram() {
 }
 train() { need_vram 12500 || return 75; .runtime/train-venv/bin/python scripts/dev/train_lora.py "$@"; }
 eval_run() { .venv/bin/python scripts/dev/turn_eval.py --policy new --model "$STUDENT_GGUF" "$@"; }
-# Paired, both orders, against every current candidate that has results.
+# Paired, both orders: plain E4B against the adapter on every decision and
+# line, and against the adapter on decisions only (lines from plain E4B:
+# the first round's gate adapter made lines worse when it wrote them).
 eval_pair() {
     online || return 75
-    local base
-    for base in now-e4b now-e4b-gate; do
-        [ -f ".runtime/dev/turn_eval/$base.json" ] || continue
-        .venv/bin/python scripts/dev/turn_eval.py --judge-pair "$base" "$TAG" || return 1
+    local a b
+    for pair in "now-e4b $TAG" "now-e4b $TAG-gate" "$TAG-gate $TAG"; do
+        read -r a b <<< "$pair"
+        [ -f ".runtime/dev/turn_eval/pair-$a-vs-$b.json" ] && continue
+        .venv/bin/python scripts/dev/turn_eval.py --judge-pair "$a" "$b" || return 1
     done
 }
 generator() { TEACHER=$GENERATOR SERVER_SLOTS=$SLOTS; data "$@"; }
@@ -335,6 +338,8 @@ stage convert env PYTHONPATH="$LLAMA_SRC/gguf-py" .runtime/train-venv/bin/python
 # Generate first (offline, saved), then judge: no network only delays judging.
 stage eval eval_run --lora "$(basename "$LORA_GGUF")" --lora-uses called,active,line \
     --agenda --lull --tag "$TAG"
+stage eval_gate eval_run --lora "$(basename "$LORA_GGUF")" --lora-uses called,active \
+    --agenda --lull --tag "$TAG-gate"
 stage eval_pair eval_pair
 
 touch "$STATE/done"
