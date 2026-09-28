@@ -576,7 +576,7 @@ def script_request(
 
 def script_prompt(persona: Persona, spec: dict[str, Any]) -> str:
     name, owner = persona.name, spec["owner"]
-    sheet = persona.render_system_block()
+    sheet = persona.render_prompt_block()
     relation_text = (
         "\n".join(f"- {who}：{rel}" for who, rel in spec["relations"])
         or "（沒有特別關係，都是朋友）"

@@ -28,12 +28,16 @@ def test_blank_persona_adds_nothing_to_the_prompt() -> None:
     assert "【你的人設】" not in model._build_turn_system_prompt(blank, "options")
 
 
-def test_persona_sheet_reaches_the_system_prompt() -> None:
+def test_the_prompt_gets_who_the_person_is_not_words_to_copy() -> None:
     persona = Persona(
         id="p1",
         name="凱哥",
         desires="想帶大家贏",
+        recent="昨天排位連輸五場",
+        speech_style="句子短、節奏快，常用「欸」「好啦」，偶爾一句台語。",
         catchphrases="穩啦、笑死",
+        sample_lines="欸我的，下波我先進",
+        pet_peeves="有人亂衝",
         traits={"tongue": 5, "energy": 2, "warmth": 3},
         mood="累",
     )
@@ -41,12 +45,17 @@ def test_persona_sheet_reaches_the_system_prompt() -> None:
 
     assert "名字：凱哥" in system
     assert "你想要：想帶大家贏" in system
-    assert "穩啦、笑死" in system
-    assert "非常毒舌嘴砲" in system
-    assert "偏內向安靜" in system
-    # Neutral sliders stay out of the prompt.
-    assert "冷淡" not in system and "熱情" not in system
+    assert "最近：昨天排位連輸五場" in system
+    assert "說話感覺：句子短、節奏快，偶爾一句台語" in system
     assert "現在的心情：累" in system
+    # Words a small model would copy into every line stay out, and so do
+    # details that barely changed a line (pet peeves, knowledge).
+    for copied in ("好啦", "穩啦", "欸我的", "有人亂衝"):
+        assert copied not in system
+    # Personality stays: it shapes how they talk without words to copy.
+    assert "個性：偏內向安靜、非常毒舌嘴砲" in system
+    # Judges still see the whole sheet.
+    assert "穩啦、笑死" in persona.render_system_block()
 
 
 def test_system_prompt_is_stable_so_the_kv_cache_is_reused() -> None:
@@ -143,7 +152,7 @@ def test_persona_reminder_sits_right_before_the_options_request() -> None:
     tail = model.option_messages(turns=turns)[-1]["content"]
 
     assert tail.startswith(
-        "阿傑：衝B啦\n\n（記住：你是凱哥；句子短、節奏快、講話直接；口頭禪和代表台詞少用，大約四五句才一次。"
+        "阿傑：衝B啦\n\n（記住：你是凱哥；句子短、節奏快、講話直接。"
         "說出口的話要是這個人會說的話。）\n（語氣詞像真人一樣少用"
     )
     assert "【你的人設】" in model._build_turn_system_prompt(PRESET_PERSONAS[0], "options")

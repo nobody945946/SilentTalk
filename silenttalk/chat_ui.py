@@ -186,10 +186,12 @@ class CharacterView(tk.Frame):
         on_run: Callable[[bool], None],
         on_engagement: Callable[[str], None],
         stop_hotkey: str,
+        on_reroll_agenda: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(master, bg=theme.BG)
         self._on_run = on_run
         self._on_engagement = on_engagement
+        self._on_reroll_agenda = on_reroll_agenda
         self._running = False
         self._name = ""
 
@@ -244,6 +246,36 @@ class CharacterView(tk.Frame):
         self._engagement_help.pack(fill="x", pady=(theme.px(6), 0))
         wrap_to_width(self._engagement_help)
 
+        # What is on the character's mind today: what it brings up in a lull
+        # and what it relates to while talking. Made from the persona, kept
+        # in memory only; "換一批" asks for another set.
+        mind = card(self)
+        mind.outer.pack(fill="x", pady=(theme.px(12), 0))
+        head = tk.Frame(mind, bg=theme.PANEL)
+        head.pack(fill="x")
+        self._mind_title = tk.Label(
+            head, text="今天在想", bg=theme.PANEL, fg=theme.TEXT, font=theme.font(11, "bold")
+        )
+        self._mind_title.pack(side="left")
+        if on_reroll_agenda is not None:
+            reroll = tk.Label(
+                head, text="換一批", bg=theme.PANEL, fg=theme.ACCENT_HI,
+                font=theme.font(10), cursor="hand2",
+            )
+            reroll.pack(side="right")
+            reroll.bind("<Button-1>", lambda _: self._reroll())
+        self._mind = tk.Label(
+            mind,
+            text="選好人設後會自動想好。",
+            bg=theme.PANEL,
+            fg=theme.MUTED,
+            font=theme.font(10),
+            justify="left",
+            anchor="w",
+        )
+        self._mind.pack(fill="x", pady=(theme.px(8), 0))
+        wrap_to_width(self._mind)
+
         tk.Label(
             self,
             text=f"{stop_hotkey} 隨時讓它閉嘴（清掉正在說和排隊的話）",
@@ -257,6 +289,16 @@ class CharacterView(tk.Frame):
     def set_persona(self, name: str) -> None:
         self._name = name
         self._render()
+
+    def set_agenda(self, items: Sequence[str]) -> None:
+        self._mind.configure(
+            text="\n".join(f"・{item}" for item in items) if items else "這次沒有想到什麼，按「換一批」再想一次。"
+        )
+
+    def _reroll(self) -> None:
+        self._mind.configure(text="想一下……")
+        if self._on_reroll_agenda is not None:
+            self._on_reroll_agenda()
 
     def set_running(self, running: bool) -> None:
         self._running = running

@@ -38,6 +38,7 @@ class AppController:
         *,
         on_turn: TurnCallback | None = None,
         on_thinking: ThinkingCallback | None = None,
+        on_agenda: Callable[[tuple[str, ...]], None] | None = None,
     ) -> None:
         self._settings = settings
         self._status = status
@@ -58,6 +59,7 @@ class AppController:
                 on_thinking=on_thinking,
                 on_character_line=self._speak_as_character,
                 on_character_text=self._type_as_character,
+                on_agenda=on_agenda,
                 can_type=settings.discord.text_chat,
             )
         self._discord = DiscordVoiceClient(
@@ -234,6 +236,12 @@ class AppController:
         if copilot is None:
             raise RuntimeError("Copilot 未啟用或啟動失敗。")
         self._loop.call_soon_threadsafe(copilot.regenerate)
+
+    def reroll_agenda(self) -> None:
+        """A new set of the character's concerns for today."""
+        copilot = self._copilot
+        if copilot is not None and not self._closing:
+            self._loop.call_soon_threadsafe(copilot.refresh_agenda)
 
     def set_persona(self, persona: Persona) -> None:
         """Safe from any thread; before start() it is applied once the loop runs."""

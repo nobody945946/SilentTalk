@@ -22,6 +22,10 @@ SuggestionCallback = Callable[[ReplySuggestions], None]
 MessageCallback = Callable[[str], None]
 TurnCallback = Callable[[ConversationTurn], None]
 ThinkingCallback = Callable[[str, str], None]
+AgendaCallback = Callable[[tuple[str, ...]], None]
+
+# How often the worker looks for a lull while nothing else wakes it.
+_LULL_POLL_SECONDS = 1.0
 LineCallback = Callable[[str], None]
 
 # "嗯", "好", "喔" are context, not something worth four reply options.
@@ -57,6 +61,7 @@ class CopilotRuntime:
         on_thinking: ThinkingCallback | None = None,
         on_character_line: LineCallback | None = None,
         on_character_text: LineCallback | None = None,
+        on_agenda: AgendaCallback | None = None,
         can_type: bool = False,
     ) -> None:
         self._config = config
@@ -67,6 +72,13 @@ class CopilotRuntime:
         self._on_thinking = on_thinking
         self._on_character_line = on_character_line
         self._on_character_text = on_character_text
+        self._on_agenda = on_agenda
+        self._agenda_task: asyncio.Task[None] | None = None
+        # Lulls: when anyone last spoke, and whether the character already
+        # opened a topic in this quiet spell (only someone else talking
+        # starts a new one, so it never talks to an empty room twice).
+        self._last_heard_at = 0.0
+        self._lull_spoken = True
         self._persona = blank_persona()
         self._character_mode = False
         self._character_policy = CharacterPolicy(mode=config.character_engagement)
@@ -165,18 +177,56 @@ class CopilotRuntime:
         turn = ConversationTurn.now(self._owner_user_id, name, text, is_self=True)
         self._context.append(turn)
         self._emit_turn(turn)
+        # The silence counts from the last thing anyone said, the bot included.
+        self._last_heard_at = time.monotonic()
 
     def set_persona(self, persona: Persona) -> None:
         """Must run on the runtime loop; applies from the next generation on."""
+        changed = persona.id != self._persona.id
         self._persona = persona
         self._llm.set_persona(persona)
         _LOG.info("copilot_persona_set blank=%s", persona.is_blank)
+        if changed or not self._llm.agenda:
+            self.refresh_agenda()
+
+    def refresh_agenda(self) -> None:
+        """A new set of today's concerns for the current persona, made in the
+        background. Must run on the runtime loop."""
+        if self._loop is None or self._persona.is_blank:
+            return
+        if self._agenda_task is not None:
+            self._agenda_task.cancel()
+        self._agenda_task = self._loop.create_task(self._make_agenda(), name="copilot-agenda")
+
+    async def _make_agenda(self) -> None:
+        started = time.perf_counter()
+        try:
+            items = await self._llm.make_agenda()
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            _LOG.warning("copilot_agenda_failed error_type=%s", type(exc).__name__)
+            return
+        self._llm.set_agenda(items)
+        _LOG.info(
+            "copilot_agenda_ready items=%d ms=%d",
+            len(items),
+            round((time.perf_counter() - started) * 1000),
+        )
+        if self._on_agenda is not None:
+            self._on_agenda(items)
 
     def apply_settings(self, copilot: dict[str, object]) -> None:
         """Live settings from the settings page. Must run on the runtime loop.
 
         Only what does not need a reload: engagement, compaction and reply
         length. Model, port and STT engine are startup-only."""
+        self._config = replace(
+            self._config,
+            character_lull_seconds=float(
+                copilot.get("character_lull_seconds", self._config.character_lull_seconds)
+            ),
+        )
         policy = self._character_policy
         self._character_policy = CharacterPolicy(
             mode=str(copilot.get("character_engagement", policy.mode)),
@@ -256,6 +306,8 @@ class CopilotRuntime:
         self._context.append(turn)
         self._emit_turn(turn)
         self._turn_seq += 1
+        self._last_heard_at = time.monotonic()
+        self._lull_spoken = False
         if self._wake is not None and self._pending is None:
             # Nothing waiting to generate: a good moment to compact.
             self._maybe_compact()
@@ -315,7 +367,12 @@ class CopilotRuntime:
     async def _suggestion_worker(self) -> None:
         assert self._wake is not None
         while True:
-            await self._wake.wait()
+            try:
+                await asyncio.wait_for(self._wake.wait(), timeout=_LULL_POLL_SECONDS)
+            except TimeoutError:
+                if self._lull_due():
+                    await self._open_topic()
+                continue
             self._wake.clear()
             trigger, self._pending = self._pending, None
             self._maybe_compact()
@@ -325,6 +382,45 @@ class CopilotRuntime:
                 await self._speak(trigger)
             else:
                 await self._generate(trigger)
+
+    def _lull_due(self) -> bool:
+        seconds = self._config.character_lull_seconds
+        return (
+            self._character_mode
+            and seconds > 0
+            and not self._lull_spoken
+            and self._pending is None
+            and time.monotonic() - self._last_heard_at >= seconds
+        )
+
+    async def _open_topic(self) -> None:
+        """Nobody has said anything for a while: the character brings up
+        something on its mind, or asks after someone."""
+        self._lull_spoken = True
+        heard_at = self._last_heard_at
+        started = time.perf_counter()
+        try:
+            line = await self._llm.character_turn(
+                turns=self._context.snapshot(),
+                summary=self._context.summary,
+                engagement=self._character_policy.mode,
+                lull=True,
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            _LOG.warning("copilot_lull_failed error_type=%s", type(exc).__name__)
+            return
+        _LOG.info(
+            "copilot_character_lull latency_ms=%d spoke=%s",
+            round((time.perf_counter() - started) * 1000),
+            bool(line),
+        )
+        # Someone spoke while it was thinking: the lull is over.
+        if not line or not self._character_mode or self._last_heard_at != heard_at:
+            return
+        if self._on_character_line is not None:
+            self._on_character_line(line)
 
     async def _speak(self, trigger: _Trigger) -> None:
         started = time.perf_counter()

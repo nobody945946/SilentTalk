@@ -63,6 +63,11 @@ PAGES: tuple[Page, ...] = (
                     choices=ENGAGEMENT_MODES,
                 ),
                 Setting(
+                    "copilot", "character_lull_seconds", "冷場時找話聊", "int",
+                    "頻道安靜這麼多秒後，角色會說說自己今天在想的事，或問問大家最近怎樣。0＝不會。",
+                    minimum=0, maximum=300, step=5, unit="秒",
+                ),
+                Setting(
                     "copilot", "character_ai_honesty", "被問「你是AI嗎」", "choice",
                     "照角色演：當成朋友開玩笑，用角色的方式帶過，不承認自己是程式——"
                     "角色比較完整。承認：認真被問時老實說自己是 AI 扮演的角色。",

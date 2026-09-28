@@ -64,6 +64,9 @@ character_lora_uses = "called"
 # announce it is scripted), "admit" owns up when sincerely asked.
 character_ai_honesty = "in_character"
 character_engagement = "called"
+# Character mode: after this many seconds of silence the character brings up
+# something on its mind today or asks after someone (0 = never).
+character_lull_seconds = 30
 # Auto-compaction: once the session passes compact_keep_turns +
 # compact_batch_turns, the older part is folded into a short summary by the
 # local model, so long chats keep their thread at a fixed prompt size.

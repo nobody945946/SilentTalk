@@ -103,6 +103,7 @@ class SilentTalkUI:
         set_character_mode: Callable[[bool, str, float], None] | None = None,
         preview_voice: Callable[[str, Persona, float], None] | None = None,
         send_text: Callable[[str], None] | None = None,
+        reroll_agenda: Callable[[], None] | None = None,
         settings_store: SettingsStore | None = None,
         config_defaults: dict[str, dict[str, object]] | None = None,
         apply_settings: Callable[[dict[str, dict[str, object]]], None] | None = None,
@@ -118,6 +119,7 @@ class SilentTalkUI:
         self._character_callback = set_character_mode
         self._preview_callback = preview_voice
         self._send_text_callback = send_text
+        self._reroll_agenda_callback = reroll_agenda
         self._character_on = False
         self._persona_name = ""
         self._copilot_enabled = regenerate_suggestions is not None
@@ -358,6 +360,7 @@ class SilentTalkUI:
             on_run=self._set_character_mode,
             on_engagement=self._set_engagement,
             stop_hotkey=self._stop_hotkey,
+            on_reroll_agenda=self._reroll_agenda_callback,
         )
         self._manual_tab = self._build_manual_page(self._chat_stack)
         self._chat_views = {
@@ -620,6 +623,10 @@ class SilentTalkUI:
 
     def set_suggestions(self, suggestions: ReplySuggestions) -> None:
         self._actions.put(UIAction("suggestions", suggestions=suggestions))
+
+    def set_agenda(self, items: Sequence[str]) -> None:
+        """Safe from any thread: the character's concerns for today."""
+        self._actions.put(UIAction("agenda", message="\n".join(items)))
 
     def set_suggestions_thinking(self, speaker: str, text: str) -> None:
         self._actions.put(UIAction("thinking", message=text, speaker=speaker))
@@ -1177,6 +1184,10 @@ class SilentTalkUI:
             elif action.kind == "thinking":
                 self._ai_dot.set(theme.ACCENT_HI, "AI 思考中")
                 self.story.set_thinking(action.speaker, action.message)
+            elif action.kind == "agenda":
+                self._character_view.set_agenda(
+                    [item for item in action.message.splitlines() if item]
+                )
             elif action.kind == "turn" and action.turn is not None:
                 self.transcript.add_turn(action.turn)
                 self.story.add_turn(action.turn)

@@ -90,6 +90,10 @@ def main() -> int:
         if ui is not None:
             ui.set_suggestions_thinking(speaker, text)
 
+    def agenda(items: tuple[str, ...]) -> None:
+        if ui is not None:
+            ui.set_agenda(items)
+
     controller = AppController(
         settings,
         status,
@@ -97,6 +101,7 @@ def main() -> int:
         suggestions,
         on_turn=conversation_turn,
         on_thinking=thinking,
+        on_agenda=agenda,
     )
     quick_phrases = QuickPhraseStore(project_dir / "quick_phrases.json")
     preferences = PreferenceStore(project_dir / "ui_preferences.json")
@@ -128,6 +133,7 @@ def main() -> int:
         personas=personas,
         apply_persona=controller.set_persona,
         preview_voice=controller.preview_voice,
+        reroll_agenda=controller.reroll_agenda if settings.copilot.enabled else None,
         send_text=controller.send_text if settings.discord.text_chat else None,
         settings_store=settings_store,
         config_defaults=config_defaults(project_dir),

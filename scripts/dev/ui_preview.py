@@ -76,6 +76,7 @@ def main() -> int:
     character: list[tuple[bool, str, float]] = []
     previews: list[tuple[str, str]] = []
     typed: list[str] = []
+    rerolled: list[bool] = []
     applied_settings: list[list[str]] = []
     personas = PersonaStore(temp / "personas.json")
     personas.save(PersonaState(list(PRESET_PERSONAS), PRESET_PERSONAS[0].id))
@@ -93,6 +94,7 @@ def main() -> int:
         set_character_mode=lambda on, style, rate: character.append((on, style, rate)),
         preview_voice=lambda text, persona, _rate: previews.append((text, persona.voice)),
         send_text=typed.append,
+        reroll_agenda=lambda: rerolled.append(True),
         settings_store=SettingsStore(temp / "settings.json"),
         config_defaults=config_defaults(PROJECT_DIR),
         apply_settings=lambda tables: applied_settings.append(sorted(tables)),
@@ -246,6 +248,15 @@ def main() -> int:
     ui.settings_panel.show("chat")
     shot("15_settings_changed")
     ui.show_page("character")
+    concerns = [
+        "昨天排位連輸五場，還在不爽，今天一定要把牌位打回來才甘願",
+        "想揪大家週六打通宵，不知道小雨跟阿傑有沒有空",
+        "新買的滑鼠還沒拆，下班要來試試看手感到底有沒有比較好",
+        "最近公司專案一直改需求，下班只想打遊戲不想碰電腦以外的事",
+    ]
+    ui.set_agenda(concerns)
+    pump()
+    shown_agenda = ui._character_view._mind.cget("text")
     shot("12a_character_paused")
     ui._character_view._toggle()  # 開始
     ui.add_conversation_turn(ConversationTurn(12, "小雨", "凱哥你晚餐要吃什麼"))
@@ -265,6 +276,8 @@ def main() -> int:
 
     expected = "上一把就是這樣被架，我覺得先丟煙再進比較穩"
     problems = []
+    if shown_agenda != "\n".join(f"・{item}" for item in concerns):
+        problems.append(f"today's concerns should show in the character view, got {shown_agenda!r}")
     if held != (held_text, trigger):
         problems.append(f"a newer round must not replace choices being read, got {held}")
     if revealed != ("好，煙丟完我第一個進", newer, 1):

@@ -92,6 +92,24 @@ _ENGAGEMENT_RULES["options"] = (
     "每次輪到你，就說一句你現在會說的話，你的主人會從幾句裡挑一句說出口；不要輸出 SKIP。"
 )
 _OPTIONS_ASK = "（換你說話了：說一句你現在會說的話）"
+# A character with nothing going on in its own life only ever reacts: the
+# soul judge (turn_eval --judge-soul) read "看不出來" off 8 of 21 test chats
+# (know 2.6 / 5). So each session starts with a few concrete things on its
+# mind today, made from its persona, which it can bring up.
+_AGENDA_ASK = (
+    "用第一人稱寫 4 件你今天心裡掛著的具體小事：今天或最近發生的事、想做的事、在煩的事、在期待的事。"
+    "要符合上面的你、具體、有畫面，像真的在過的生活；可以提到你身邊的人。"
+    "每件一行、一句話，不要編號，不要解釋。"
+)
+_AGENDA_ITEMS = 4
+_AGENDA_CHARS = 40
+# After a lull nobody called it, so there is no gate: the character opens a
+# topic from its own life, or asks after someone.
+_LULL_HINT = (
+    "（大家安靜了好一陣子，沒有人在說話。換你開個話題：說說你心裡掛著的一件事，"
+    "或問問在場的人最近怎樣。自然一點，一句就好）"
+)
+
 # Rides on every line and options request, never on the gate (the LoRA's
 # gate was trained without it). A persona that says "常用「欸」「好啦」"
 # made Gemma 4 E2B put them in 22% of lines twice or more (humans in the
@@ -199,6 +217,8 @@ class LocalReplyModel:
         self._stderr_tail: collections.deque[str] = collections.deque(maxlen=40)
         self._base_url = f"http://127.0.0.1:{port}"
         self._persona = blank_persona()
+        # Today's concrete concerns (make_agenda); part of the system prompt.
+        self._agenda: tuple[str, ...] = ()
         # What the character said lately, to stop it repeating its catchphrases.
         self._recent_character_lines: collections.deque[str] = collections.deque(maxlen=4)
 
@@ -212,6 +232,7 @@ class LocalReplyModel:
         """Takes effect on the next request; the system prompt cache refills once."""
         if persona.id != self._persona.id:
             self._recent_character_lines.clear()
+            self._agenda = ()
         self._persona = persona
 
     async def start(self) -> None:
@@ -382,11 +403,31 @@ class LocalReplyModel:
         summary: str = "",
         addressed: bool = False,
         engagement: str = "called",
+        lull: bool = False,
     ) -> str:
         """What the character says after the newest line, or "" to stay quiet.
 
         `turns` is the whole chat so far, the character's own lines marked
-        `is_self`; `addressed` is Discord's own @mention or reply signal."""
+        `is_self`; `addressed` is Discord's own @mention or reply signal.
+        `lull`: the channel has gone quiet; open a topic, no gate."""
+        if lull:
+            messages = self.character_messages(
+                turns=turns, summary=summary, engagement=engagement, lull=True
+            )
+            line = ""
+            # Read out word for word, a concern sounds like a note, not like
+            # talking (options_eval-style check on 21 lulls: 2 near-copies).
+            for temperature in (0.65, 1.0):
+                raw = await asyncio.to_thread(
+                    self._request_messages, messages, None, 90,
+                    "line" in self._lora_uses, temperature,
+                )
+                line = self._parse_character_line(raw, "")
+                if not any(_alike_to(line, item, 0.8) for item in self._agenda):
+                    break
+            if line:
+                self._recent_character_lines.append(line)
+            return line
         joining = False
         if not addressed:
             if turns and turns[-1].is_self:
@@ -457,6 +498,7 @@ class LocalReplyModel:
         engagement: str = "called",
         gate: bool = False,
         joining: bool = False,
+        lull: bool = False,
     ) -> list[dict[str, str]]:
         """The chat as messages. Everything but the tail of the last message
         is byte-identical to the previous request's, for the prompt cache.
@@ -482,12 +524,17 @@ class LocalReplyModel:
                 messages[-1]["content"] += "\n" + line
             else:
                 messages.append({"role": "user", "content": line})
+        if lull and messages[-1]["role"] != "user":
+            # The character spoke last; the lull itself is the new "message".
+            messages.append({"role": "user", "content": "（安靜）"})
         if messages[-1]["role"] != "user" or gate:
             return messages
         # Per-request hints ride on the end of the newest message only; the
         # next request drops them again, which costs a few tokens of prefill.
         hints = []
-        if addressed:
+        if lull:
+            hints.append(_LULL_HINT)
+        elif addressed:
             hints.append("（最後這句是在叫你，要回應）")
         elif joining:
             # "active" mode chiming in: nobody called it, so it must not
@@ -520,7 +567,7 @@ class LocalReplyModel:
         return messages
 
     def _build_turn_system_prompt(self, persona: Persona, engagement: str) -> str:
-        sheet = persona.render_system_block()
+        sheet = persona.render_prompt_block()
         # All of them, not just who is talking right now: the list is part of
         # the persona, so it stays in the cached prompt. This is what makes a
         # character treat the owner as its husband, kid or brother.
@@ -546,8 +593,47 @@ class LocalReplyModel:
             abilities=_CAN_TYPE if self._can_type else _VOICE_ONLY,
             length=persona.length_rule(),
             max_chars=self._max_reply_chars,
-            sheet=f"\n【你的人設】口吻、用詞、句長、立場都照這裡：\n{sheet}\n" if sheet else "",
+            sheet=f"\n【你的人設】口吻、用詞、句長、立場都照這裡：\n{sheet}\n{self._agenda_block()}"
+            if sheet
+            else "",
         )
+
+    def _agenda_block(self) -> str:
+        if not self._agenda:
+            return ""
+        return (
+            "你今天心裡掛著的事（聊天時接得上就自然帶到，冷場時可以拿來開話題，不要硬塞）：\n"
+            + "\n".join(f"- {item}" for item in self._agenda)
+            + "\n"
+        )
+
+    @property
+    def agenda(self) -> tuple[str, ...]:
+        return self._agenda
+
+    def set_agenda(self, items: Sequence[str]) -> None:
+        """Takes effect on the next request (the system prompt cache refills once)."""
+        self._agenda = tuple(items)
+
+    async def make_agenda(self) -> tuple[str, ...]:
+        """A few concrete things on the character's mind today, from its
+        persona. Kept in memory only; nothing of the chat goes into it."""
+        sheet = self._persona.render_prompt_block()
+        if not sheet:
+            return ()
+        messages = [
+            {"role": "system", "content": f"你是下面這個人：\n{sheet}"},
+            {"role": "user", "content": _AGENDA_ASK},
+        ]
+        raw = await asyncio.to_thread(
+            self._request_messages, messages, None, 200, False, 0.9
+        )
+        items = []
+        for line in raw.splitlines():
+            item = to_taiwan_traditional(line.strip().lstrip("-*•0123456789.、) ").strip())
+            if len(item) >= 4 and item not in items:
+                items.append(item[:_AGENDA_CHARS])
+        return tuple(items[:_AGENDA_ITEMS])
 
     def _parse_character_line(self, raw: str, trigger_text: str) -> str:
         cleaned = raw.strip()
@@ -825,6 +911,10 @@ def _options(lines: list[str], trigger_speaker: str, trigger_text: str) -> Reply
     for lane, line in zip(REPLY_LANES, lines, strict=False):
         values[lane.field] = line
     return ReplySuggestions(trigger_speaker=trigger_speaker, trigger_text=trigger_text, **values)
+
+
+def _alike_to(a: str, b: str, ratio: float) -> bool:
+    return bool(a) and difflib.SequenceMatcher(None, _compact(a), _compact(b)).ratio() >= ratio
 
 
 def _alike(a: str, b: str) -> bool:

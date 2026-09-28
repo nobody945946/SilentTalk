@@ -13,6 +13,7 @@ personas.json. Conversation text never is.
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from dataclasses import asdict, dataclass, field, fields, replace
 from pathlib import Path
@@ -156,20 +157,55 @@ class Persona:
             lines.extend(f"「{sample}」" for sample in samples[:4])
         return "\n".join(lines)
 
+    def render_prompt_block(self) -> str:
+        """What the model sees: who this person is and what they want.
+
+        Gemma 4 E2B copied whatever words a sheet listed (sample lines,
+        catchphrases, 常說「真的啦」) into most lines, and spent its attention
+        on details (pet peeves, knowledge, humour style, sliders) that barely
+        changed a line. So the prompt keeps what makes a person, and speech
+        style shrinks to how they sound, without words to copy. The full sheet
+        (render_system_block) is what judges see."""
+        lines: list[str] = []
+        name = self.name.strip()
+        if name:
+            nick = _one_line(self.nickname)
+            lines.append(f"名字：{name}" + (f"（朋友叫你：{nick}）" if nick else ""))
+        for key, label in (
+            ("identity", "身分"),
+            ("background", "背景"),
+            ("desires", "你想要"),
+            ("fears", "你害怕、想避開"),
+            ("values", "你在意"),
+            ("recent", "最近"),
+        ):
+            value = _one_line(getattr(self, key))
+            if value:
+                lines.append(f"{label}：{value}")
+        traits = self._trait_phrases()
+        if traits:
+            lines.append("個性：" + "、".join(traits))
+        feel = _speech_feel(self.speech_style)
+        if feel:
+            lines.append(f"說話感覺：{feel}")
+        humor = _speech_feel(self.humor_style)
+        if humor:
+            lines.append(f"幽默感：{humor}")
+        if self.mood and self.mood != "平常":
+            lines.append(f"現在的心情：{self.mood}（語氣要帶出來）")
+        return "\n".join(lines)
+
     def reminder_line(self, what: str = "四句都要是", *, list_catchphrases: bool = True) -> str:
         """One line restating who is talking, placed right before the answer.
 
         Character mode speaks one line after another, so listing catchphrases
         there makes every line use one; it says "use them rarely" instead."""
         bits = [self.name.strip() or "你"]
-        if self.speech_style.strip():
-            bits.append(_one_line(self.speech_style).split("，")[0])
-        if self.catchphrases.strip():
-            bits.append(
-                "口頭禪偶爾用：" + _one_line(self.catchphrases)
-                if list_catchphrases
-                else "口頭禪和代表台詞少用，大約四五句才一次"
-            )
+        feel = _speech_feel(self.speech_style)
+        if feel:
+            bits.append(feel.split("，")[0])
+        if list_catchphrases and self.catchphrases.strip():
+            bits.append("口頭禪偶爾用：" + _one_line(self.catchphrases))
         return "（記住：你是" + "；".join(bits) + f"。{what}這個人會說的話。）"
 
     def signature_phrases(self) -> list[str]:
@@ -191,6 +227,15 @@ class Persona:
             strong = level in (TRAIT_MIN, TRAIT_MAX)
             phrases.append(("非常" if strong else "偏") + word)
         return phrases
+
+
+def _speech_feel(style: str) -> str:
+    """How someone sounds, without the words they "often say": listed words
+    get copied into every line by a small model."""
+    text = re.sub(r"[「『“\"][^」』”\"]*[」』”\"]", "", _one_line(style))
+    text = re.sub(r"(常說|常用|愛說|會說|常講|愛用|口頭禪是?)", "", text)
+    clauses = [c.strip("、 ") for c in re.split(r"[，,。；;]", text)]
+    return "，".join([c for c in clauses if c][:2])
 
 
 def blank_persona(persona_id: str = "none") -> Persona:

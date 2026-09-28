@@ -312,3 +312,110 @@ async def test_compaction_can_be_turned_off(tmp_path: Path) -> None:
     assert runtime._context.summary == ""
     assert "這場對話稍早的重點" not in runtime._context.render_for_prompt()
     await _stop(runtime)
+
+
+@pytest.mark.asyncio
+async def test_a_new_persona_gets_todays_concerns(tmp_path: Path) -> None:
+    runtime, llm, _ = await _runtime(tmp_path)
+    shown: list[tuple[str, ...]] = []
+    runtime._on_agenda = shown.append
+    concerns = ("剛烤好草莓蛋糕", "想約大家週末打球")
+
+    async def make_agenda() -> tuple[str, ...]:
+        return concerns
+
+    llm.agenda = ()  # type: ignore[attr-defined]
+    llm.make_agenda = make_agenda  # type: ignore[attr-defined]
+    llm.set_agenda = lambda items: setattr(llm, "agenda", tuple(items))  # type: ignore[attr-defined]
+    runtime.set_persona(PRESET_PERSONAS[0])
+    await _settle()
+
+    assert shown == [concerns]
+    assert llm.agenda == concerns  # type: ignore[attr-defined]
+    await _stop(runtime)
+
+
+@pytest.mark.asyncio
+async def test_a_lull_opens_one_topic_until_someone_speaks_again(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from silenttalk.copilot import runtime as runtime_module
+
+    monkeypatch.setattr(runtime_module, "_LULL_POLL_SECONDS", 0.01)
+    runtime, llm, delivered = await _runtime(
+        tmp_path, config=CopilotConfig(character_lull_seconds=0.05)
+    )
+    asked: list[bool] = []
+
+    async def character_turn(*, turns, summary, engagement, addressed=False, lull=False) -> str:
+        asked.append(lull)
+        return "我今天烤了草莓蛋糕" if lull else ""
+
+    llm.character_turn = character_turn  # type: ignore[method-assign]
+    runtime.set_character_mode(True)
+    # No lull before anyone has said anything.
+    await asyncio.sleep(0.2)
+    assert asked == []
+
+    runtime._handle_turn(2, "A", "欸大家好")
+    await asyncio.sleep(0.3)
+    spoken = [item for item in delivered if isinstance(item, tuple)]
+    assert spoken == [("spoke", "我今天烤了草莓蛋糕")]
+    assert asked == [False, True]  # the line itself, then one lull
+    # Still quiet: it does not talk to an empty room again.
+    await asyncio.sleep(0.2)
+    assert asked == [False, True]
+
+    runtime._handle_turn(3, "B", "真的假的")
+    await asyncio.sleep(0.3)
+    assert asked == [False, True, False, True]
+    await _stop(runtime)
+
+
+@pytest.mark.asyncio
+async def test_no_lull_topics_outside_character_mode(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from silenttalk.copilot import runtime as runtime_module
+
+    monkeypatch.setattr(runtime_module, "_LULL_POLL_SECONDS", 0.01)
+    runtime, llm, delivered = await _runtime(
+        tmp_path, config=CopilotConfig(character_lull_seconds=0.05)
+    )
+    runtime._handle_turn(2, "A", "欸大家好")
+    llm.release.set()
+    await asyncio.sleep(0.3)
+
+    assert not [item for item in delivered if isinstance(item, tuple)]
+    await _stop(runtime)
+
+
+@pytest.mark.asyncio
+async def test_a_lull_line_is_dropped_if_someone_speaks_meanwhile(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from silenttalk.copilot import runtime as runtime_module
+
+    monkeypatch.setattr(runtime_module, "_LULL_POLL_SECONDS", 0.01)
+    runtime, llm, delivered = await _runtime(
+        tmp_path, config=CopilotConfig(character_lull_seconds=0.05)
+    )
+    thinking = asyncio.Event()
+
+    async def character_turn(*, turns, summary, engagement, addressed=False, lull=False) -> str:
+        if not lull:
+            return ""
+        thinking.set()
+        await llm.release.wait()
+        return "我今天烤了草莓蛋糕"
+
+    llm.character_turn = character_turn  # type: ignore[method-assign]
+    runtime.set_character_mode(True)
+    runtime._handle_turn(2, "A", "欸大家好")
+    await asyncio.wait_for(thinking.wait(), 2)
+    runtime._handle_turn(3, "B", "我回來了")  # the lull is over
+    llm.release.set()
+    await asyncio.sleep(0.05)
+
+    assert ("spoke", "我今天烤了草莓蛋糕") not in delivered
+    await _stop(runtime)

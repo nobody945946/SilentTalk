@@ -648,7 +648,7 @@ class PersonaPanel(tk.Frame):
             persona = replace(self._collect(), mood=self._state.mood)
         except (TypeError, ValueError):
             return
-        sheet = persona.render_system_block()
+        sheet = persona.render_prompt_block()
         notes = [
             f"{r.name}：{r.relation}"
             for r in persona.relationships

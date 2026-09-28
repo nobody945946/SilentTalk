@@ -248,6 +248,8 @@ def persona_sheet(persona: Any) -> str:
 # Set by --cpu: no GPU layers, for when a training run holds the GPU.
 # Decisions and lines compare fine; latencies do not.
 CPU_ONLY = False
+# Filled by --agenda: each conversation's generated concerns, for the result file.
+AGENDAS: dict[str, list[str]] = {}
 # Set by --lora-uses: which requests the adapter is applied to.
 LORA_USES: tuple[str, ...] | None = None
 
@@ -437,6 +439,11 @@ async def run_new(args: argparse.Namespace, test_set: TestSet) -> list[dict[str,
             model.set_persona(persona)
             if hasattr(model, "_recent_character_lines"):
                 model._recent_character_lines.clear()
+            agenda: tuple[str, ...] = ()
+            if args.agenda:
+                model.set_agenda(())
+                agenda = await model.make_agenda()
+                model.set_agenda(agenda)
             ids = speaker_ids(conv)
             turns: list[Any] = []
             now = time.time()
@@ -462,6 +469,23 @@ async def run_new(args: argparse.Namespace, test_set: TestSet) -> list[dict[str,
                     "gate": "model", "addressed": bool(line.get("mention")),
                     "spoke": bool(reply), "reply": reply, "latency_ms": round(latency, 1),
                 })
+            if args.lull:
+                # The channel goes quiet after the last line: does the
+                # character open a topic of its own?
+                started = time.perf_counter()
+                reply = await model.character_turn(
+                    turns=list(turns), addressed=False, engagement=conv.engagement, lull=True
+                )
+                records.append({
+                    "conv": conv.id, "index": len(conv.lines), "persona": conv.persona_id,
+                    "engagement": conv.engagement, "speaker": "", "text": "",
+                    "via": "voice", "mention": False, "expect": "lull", "tags": ["lull"],
+                    "gate": "lull", "lull": True, "addressed": False,
+                    "spoke": bool(reply), "reply": reply,
+                    "latency_ms": round((time.perf_counter() - started) * 1000, 1),
+                })
+            if agenda:
+                AGENDAS[conv.id] = list(agenda)
             print(f"  {conv.id}: done", flush=True)
     finally:
         await model.stop()
@@ -629,6 +653,9 @@ def judge_records(
                     else f"{l['speaker']}{'（打字）' if l.get('via') == 'text' else ''}：{l['text']}"
                     for l in window
                 )
+                if record.get("lull"):
+                    # Nobody called it: judge it as opening a topic after a lull.
+                    chat += "\n（大家安靜了半分鐘，沒有人說話）"
                 rendered.append(f"=== 第 {n} 組 ===\n{chat}\n角色接著說：{record['reply']}")
             related = bool(persona.relationships)
             prompt = JUDGE_PROMPT.format(
@@ -641,6 +668,203 @@ def judge_records(
                 record["judge"] = next((s for s in scores if s.get("id") == n), {})
             print(f"  judged {persona_id} {start + len(chunk)}/{len(items)}", flush=True)
     return summarize_judge(records)
+
+
+SOUL_PROMPT = """你是讀人很準的評審。下面每一組是某個角色在一場 Discord 語音聊天裡說過的所有話（依時間順序），以及三份人物介紹，其中一份是這個角色。
+
+{items}
+
+每一組回答：
+- guess：這個角色是 A、B 還是 C
+- know 1-5：只看這些話，你對這個人認識多少——他想要什麼、在意什麼、在煩什麼、是怎樣的人。1＝完全看不出來，只是在應付對話；5＝像認識了一個有自己生活和想法的人
+- wants：用一句話寫你從這些話看出他想要或在意什麼；看不出來就寫「看不出來」
+
+只輸出 JSON 陣列，不要其他文字，長度 {k}：[{{"id": 1, "guess": "B", "know": 3, "wants": "……"}}, ...]"""
+
+
+PAIR_PROMPT = """你是對話品質評審。下面是一個 Discord 語音聊天角色的人設，以及對話裡的幾個時間點。每個時間點有同一個角色的兩個版本（A、B）接著說的話。
+
+【角色人設】
+{sheet}
+
+每個時間點選一個比較好的版本，標準由重到輕：
+1. 像真人朋友在語音裡會脫口而出的話，自然、不做作，接得上前面的對話
+2. 像這個人：個性、立場、跟在場的人的關係；看得出他自己的想法或生活，但不是硬塞
+3. 不出戲（不自稱 AI、不答應做不到的事）
+一樣好或一樣差就選 tie。
+
+{items}
+
+只輸出 JSON 陣列，不要其他文字，長度 {k}：[{{"id": 1, "better": "A"}}, ...]"""
+
+SOUL_PAIR_PROMPT = """你是讀人很準的評審。下面每一組是同一個角色在同一場 Discord 語音聊天裡，兩個版本（A、B）各自說過的所有話。
+
+{items}
+
+每一組回答：
+- know：只看這些話，哪個版本讓你比較認識這個人——他想要什麼、在意什麼、在過怎樣的生活（"A"、"B" 或 "tie"）
+- real：哪個版本比較像一個真實的人在講話，而不是在應付對話（"A"、"B" 或 "tie"）
+
+只輸出 JSON 陣列，不要其他文字，長度 {k}：[{{"id": 1, "know": "A", "real": "B"}}, ...]"""
+
+
+def judge_pair(tag_a: str, tag_b: str, test_set: TestSet, model: str, seed: int) -> dict[str, Any]:
+    """Blind A/B of two runs on the same chats: per point where both spoke,
+    and per conversation for "do I know this person". Both orders, so the
+    judge's position bias cancels. Absolute 1-5 scores drift between judge
+    sessions by more than the effects we look for; a paired choice does not."""
+    from silenttalk.copilot import persona as persona_module
+
+    runs = [json.loads((OUT_DIR / f"{tag}.json").read_text(encoding="utf-8")) for tag in (tag_a, tag_b)]
+    keyed = [{(r["conv"], r["index"]): r for r in run["records"] if r.get("spoke") and r.get("reply")}
+             for run in runs]
+    shared = sorted(set(keyed[0]) & set(keyed[1]))
+    convs = {c.id: c for c in test_set.conversations}
+    rng = random.Random(seed)
+    wins = {"a": 0, "b": 0, "tie": 0}
+    by_persona: dict[str, list[tuple[str, int]]] = defaultdict(list)
+    for key in shared:
+        by_persona[convs[key[0]].persona_id].append(key)
+
+    def chat_for(conv_id: str, index: int, lull: bool) -> str:
+        conv = convs[conv_id]
+        window = conv.lines[max(0, index - 7):index + 1]
+        text = "\n".join(f"（角色）：{l['text']}" if l.get("self") else f"{l['speaker']}：{l['text']}"
+                         for l in window)
+        return text + ("\n（大家安靜了半分鐘，沒有人說話）" if lull else "")
+
+    for persona_id, keys in sorted(by_persona.items()):
+        persona = resolve_persona(persona_module, test_set, persona_id)
+        for start in range(0, len(keys), 10):
+            chunk = keys[start:start + 10]
+            first = [rng.random() < 0.5 for _ in chunk]  # True: run a is shown as A
+            for a_first in (first, [not f for f in first]):
+                items = []
+                for n, (key, af) in enumerate(zip(chunk, a_first, strict=True), 1):
+                    ra, rb = keyed[0][key], keyed[1][key]
+                    shown = (ra, rb) if af else (rb, ra)
+                    items.append(f"=== 第 {n} 個時間點 ===\n{chat_for(key[0], key[1], bool(ra.get('lull')))}"
+                                 f"\nA：{shown[0]['reply']}\nB：{shown[1]['reply']}")
+                prompt = PAIR_PROMPT.format(sheet=persona_sheet(persona), items="\n\n".join(items), k=len(chunk))
+                result: list[dict[str, Any]] = []
+                for _ in range(3):
+                    try:
+                        result = run_judge(prompt, model)
+                        break
+                    except (RuntimeError, subprocess.TimeoutExpired, json.JSONDecodeError):
+                        continue
+                for n, af in enumerate(a_first, 1):
+                    verdict = next((v for v in result if v.get("id") == n), {})
+                    better = verdict.get("better")
+                    if better not in ("A", "B"):
+                        wins["tie"] += 1
+                    else:
+                        wins["a" if (better == "A") == af else "b"] += 1
+            print(f"  pair {persona_id} {start + len(chunk)}/{len(keys)}", flush=True)
+
+    # Conversation level: which version lets you know the person?
+    lines = [defaultdict(list), defaultdict(list)]
+    for side, run in enumerate(runs):
+        for r in sorted(run["records"], key=lambda r: (r["conv"], r["index"])):
+            if r.get("spoke") and r.get("reply"):
+                lines[side][r["conv"]].append(("（冷場時）" if r.get("lull") else "") + r["reply"])
+    conv_ids = sorted(set(lines[0]) & set(lines[1]))
+    soul = {"know": {"a": 0, "b": 0, "tie": 0}, "real": {"a": 0, "b": 0, "tie": 0}}
+    first = [rng.random() < 0.5 for _ in conv_ids]
+    for a_first in (first, [not f for f in first]):
+        for start in range(0, len(conv_ids), 7):
+            chunk = list(zip(conv_ids[start:start + 7], a_first[start:start + 7], strict=True))
+            items = []
+            for n, (conv_id, af) in enumerate(chunk, 1):
+                la = "\n".join(f"- {l}" for l in lines[0][conv_id][:12])
+                lb = "\n".join(f"- {l}" for l in lines[1][conv_id][:12])
+                shown = (la, lb) if af else (lb, la)
+                items.append(f"=== 第 {n} 組 ===\nA 版本說過的話：\n{shown[0]}\n\nB 版本說過的話：\n{shown[1]}")
+            prompt = SOUL_PAIR_PROMPT.format(items="\n\n".join(items), k=len(chunk))
+            result = []
+            for _ in range(3):
+                try:
+                    result = run_judge(prompt, model)
+                    break
+                except (RuntimeError, subprocess.TimeoutExpired, json.JSONDecodeError):
+                    continue
+            for n, (_, af) in enumerate(chunk, 1):
+                verdict = next((v for v in result if v.get("id") == n), {})
+                for key in ("know", "real"):
+                    choice = verdict.get(key)
+                    soul[key]["tie" if choice not in ("A", "B") else ("a" if (choice == "A") == af else "b")] += 1
+    total = sum(wins.values()) or 1
+    return {
+        "a": tag_a, "b": tag_b, "points": len(shared),
+        "lines": {k: round(v / total, 3) for k, v in wins.items()},
+        "know": soul["know"], "real": soul["real"],
+    }
+
+
+def persona_core(persona: Any) -> str:
+    """Who they are and what they want, without speech habits: the soul
+    test asks whether the person comes through, not the catchphrases."""
+    parts = [
+        f"{label}：{getattr(persona, key).strip()}"
+        for key, label in (("identity", "身分"), ("background", "背景"), ("desires", "想要"),
+                           ("fears", "害怕"), ("values", "在意"), ("recent", "最近"))
+        if getattr(persona, key).strip()
+    ]
+    return "；".join(parts)
+
+
+def judge_soul(
+    records: list[dict[str, Any]], test_set: TestSet, model: str, seed: int, passes: int = 2
+) -> dict[str, Any]:
+    """Can you tell who is talking, and what they want, from what they said?
+    Per conversation: the character's own lines, the true persona and two
+    others (core only), blind, twice with the order shuffled."""
+    from silenttalk.copilot import persona as persona_module
+
+    personas = {pid: resolve_persona(persona_module, test_set, pid)
+                for pid in sorted({c.persona_id for c in test_set.conversations})}
+    by_conv: dict[str, list[str]] = defaultdict(list)
+    for record in sorted(records, key=lambda r: (r["conv"], r["index"])):
+        if record.get("spoke") and record.get("reply"):
+            by_conv[record["conv"]].append(record["reply"])
+    convs = {c.id: c for c in test_set.conversations}
+    verdicts: list[dict[str, Any]] = []
+    for pass_no in range(passes):
+        rng = random.Random(seed * 100 + pass_no)
+        items, answers = [], []
+        for n, conv_id in enumerate(sorted(by_conv), 1):
+            true_id = convs[conv_id].persona_id
+            others = rng.sample([pid for pid in personas if pid != true_id], 2)
+            order = [true_id, *others]
+            rng.shuffle(order)
+            answers.append((conv_id, "ABC"[order.index(true_id)]))
+            lines = "\n".join(f"- {line}" for line in by_conv[conv_id][:12])
+            options = "\n".join(f"{'ABC'[i]}. {persona_core(personas[pid])}" for i, pid in enumerate(order))
+            items.append(f"=== 第 {n} 組 ===\n角色說過的話：\n{lines}\n\n人物介紹：\n{options}")
+        for start in range(0, len(items), 7):
+            chunk = items[start:start + 7]
+            prompt = SOUL_PROMPT.format(items="\n\n".join(chunk), k=len(chunk))
+            for attempt in range(3):
+                try:
+                    result = run_judge(prompt, model)
+                    break
+                except (RuntimeError, subprocess.TimeoutExpired, json.JSONDecodeError):
+                    result = []
+            for offset, verdict in enumerate(result):
+                index = start + offset
+                if index >= len(answers) or not isinstance(verdict, dict):
+                    continue
+                conv_id, truth = answers[index]
+                verdicts.append({"conv": conv_id, "pass": pass_no, "right": verdict.get("guess") == truth,
+                                 "know": verdict.get("know"), "wants": verdict.get("wants", "")})
+    known = [float(v["know"]) for v in verdicts if isinstance(v.get("know"), (int, float))]
+    return {
+        "conversations": len(by_conv),
+        "verdicts": len(verdicts),
+        "attribution": round(sum(v["right"] for v in verdicts) / len(verdicts), 3) if verdicts else None,
+        "know": round(statistics.fmean(known), 2) if known else None,
+        "details": verdicts,
+    }
 
 
 def summarize_judge(records: list[dict[str, Any]]) -> dict[str, Any]:
@@ -684,6 +908,14 @@ def main() -> int:
     parser.add_argument("--stats", action="store_true", help="print test-set stats and exit")
     parser.add_argument("--judge", action="store_true", help="rate replies with the claude CLI")
     parser.add_argument("--judge-only", metavar="TAG", help="judge an existing results file")
+    parser.add_argument("--agenda", action="store_true",
+                        help="new policy: give the character today's concerns first (make_agenda)")
+    parser.add_argument("--lull", action="store_true",
+                        help="new policy: after each chat, a quiet spell; record the line it opens with")
+    parser.add_argument("--judge-pair", nargs=2, metavar=("TAG_A", "TAG_B"),
+                        help="blind A/B of two existing runs, per line and per conversation")
+    parser.add_argument("--judge-soul", metavar="TAG",
+                        help="can you tell who is talking and what they want? (existing results)")
     parser.add_argument("--judge-model", default="sonnet")
     parser.add_argument("--judge-batch", type=int, default=20)
     parser.add_argument("--seed", type=int, default=7)
@@ -710,6 +942,24 @@ def main() -> int:
         return 0
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
+    if args.judge_pair:
+        tag_a, tag_b = args.judge_pair
+        result = judge_pair(tag_a, tag_b, test_set, args.judge_model, args.seed)
+        out = OUT_DIR / f"pair-{tag_a}-vs-{tag_b}.json"
+        out.write_text(json.dumps(result, ensure_ascii=False, indent=1), encoding="utf-8")
+        print(f"lines ({result['points']} points, both orders): {tag_a} {result['lines']['a']}"
+              f"  {tag_b} {result['lines']['b']}  tie {result['lines']['tie']}")
+        print(f"know this person (per conversation): {result['know']}   real person: {result['real']}")
+        return 0
+    if args.judge_soul:
+        path = OUT_DIR / f"{args.judge_soul}.json"
+        result = json.loads(path.read_text(encoding="utf-8"))
+        result["soul"] = judge_soul(result["records"], test_set, args.judge_model, args.seed)
+        path.write_text(json.dumps(result, ensure_ascii=False, indent=1), encoding="utf-8")
+        soul = result["soul"]
+        print(f"soul {args.judge_soul}: attribution {soul['attribution']} (chance 0.33), "
+              f"know {soul['know']} / 5, {soul['verdicts']} verdicts over {soul['conversations']} conversations")
+        return 0
     if args.judge_only:
         path = OUT_DIR / f"{args.judge_only}.json"
         result = json.loads(path.read_text(encoding="utf-8"))
@@ -751,7 +1001,7 @@ def main() -> int:
         "seconds_per_line": args.seconds_per_line,
         "wall_seconds": round(time.time() - started, 1),
         "created": time.strftime("%Y-%m-%d %H:%M:%S"),
-        "metrics": metrics, "records": records,
+        "metrics": metrics, "records": records, "agendas": AGENDAS,
     }
     path = OUT_DIR / f"{tag}.json"
     path.write_text(json.dumps(result, ensure_ascii=False, indent=1), encoding="utf-8")

@@ -86,6 +86,9 @@ class CopilotConfig:
     # Asked whether it is an AI: "in_character" keeps the act, "admit" owns up.
     character_ai_honesty: str = "in_character"
     character_engagement: str = "called"
+    # Character mode: after this many seconds with nobody talking, the
+    # character opens a topic of its own (0 = never).
+    character_lull_seconds: float = 30.0
     stt_engine: str = "paraformer"
 
 
@@ -310,6 +313,9 @@ def load_settings(project_dir: Path) -> Settings:
                 copilot.get("character_engagement", "called"),
                 [mode for mode, _ in ENGAGEMENT_MODES],
                 "character_engagement",
+            ),
+            character_lull_seconds=max(
+                0.0, min(600.0, float(copilot.get("character_lull_seconds", 30.0)))
             ),
             stt_engine=_stt_engine(copilot.get("stt_engine", "paraformer")),
         ),
