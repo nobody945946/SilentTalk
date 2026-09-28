@@ -13,6 +13,8 @@ ui_preferences.json
 ui_preferences.json.tmp
 personas.json
 personas.json.tmp
+character_state.json
+character_state.json.tmp
 .claude/worktrees/
 settings.json
 settings.json.tmp
