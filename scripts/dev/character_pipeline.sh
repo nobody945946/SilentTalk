@@ -10,16 +10,24 @@
 #
 # Round 3 (the first round's data stays in .runtime/dev/chardata/):
 #   teacher  Qwen3.6-27B, dense: best of the teacher comparison
-#            (.runtime/dev/m3/report-pick.json), 1.5x the time of the MoE
+#            (.runtime/dev/m3/report-pick.json)
 #   student  Gemma 4 E4B (QLoRA), which writes its own line for every line
 #            row: the teacher's line is kept only if it beats that
 #   checker  Gemma 4 31B, another family than the teacher, so it does not
 #            share the teacher's blind spots; answers every gate question
 #            and compares teacher and student lines blind, both orders
-# The filter stage refuses the whole set (stage filter.blocked) when any
+# Teacher and checker are 3-bit quants that fit whole in the ~16 GB the
+# shared GPU has free: the first round's 17 GB MoE spilled to the CPU and
+# the whole 3090 ran at 20-60 tokens/s.
+#
+# The filter stage refuses the whole set (stage *filter.blocked) when any
 # number in character_data.HARD_CHECK is missed; nothing is trained then.
-# Before generating anything, the checker re-checks the first round's gate
-# rows (calibrate): how far it agrees with labels made the same way.
+# Order, so that a set that would be refused costs as little as possible:
+#   calibrate  the checker on 800 of the first round's gate rows: how far it
+#              agrees with labels made the same way
+#   pilot_*    the whole data path on 30 personas, through the hard check
+#   the rest   all 300 personas (resumes on top of the pilot), training,
+#              eval paired against the current candidates
 #
 # Same unattended rules as the first pipeline (archived with its data in
 # archive/distill-v1): flock keeps one copy running, a dead teacher is
@@ -43,8 +51,10 @@ mkdir -p "$STATE" "$LOGS"
 LOG=$LOGS/pipeline.log
 
 PER_PERSONA=${PER_PERSONA:-2}
-GENERATOR=${GENERATOR:-.runtime/models/teacher/Qwen3.6-27B-UD-Q4_K_XL.gguf}
-CHECKER=${CHECKER:-.runtime/models/teacher/gemma-4-31B-it-UD-Q4_K_XL.gguf}
+GENERATOR=${GENERATOR:-.runtime/models/teacher/Qwen3.6-27B-UD-IQ3_XXS.gguf}
+CHECKER=${CHECKER:-.runtime/models/teacher/gemma-4-31B-it-UD-IQ3_XXS.gguf}
+PILOT_PERSONAS=30
+HARD_LINES=1500  # character_data.HARD_CHECK["lines_kept"], scaled for the pilot
 TEACHER=$GENERATOR  # whichever model the data step needs; one at a time
 TEACHER_PORT=18200
 STUDENT_HF=${STUDENT_HF:-.runtime/hf/gemma-4-E4B-it-qat}
@@ -201,7 +211,7 @@ stage() {
         log "stage $name: waiting (not possible right now), will retry"
         exit 0
     fi
-    if [ "$rc" -eq 3 ] && [ "$name" = filter ]; then
+    if [ "$rc" -eq 3 ] && [[ $name == *filter ]]; then
         touch "$STATE/$name.blocked"
         log "stage $name: REFUSED by the quality check, nothing will be trained; see $DIR/filter.json"
         exit 0
@@ -243,40 +253,42 @@ student() {
 # number decides whether the first round's gate adapter may ship, and shows
 # early whether the checker and the labels can meet HARD_CHECK at all.
 calibrate() {
-    CHARDATA_DIR="$REPO/$V1" checker check --rows train-gate-compact.jsonl || return
+    shuf -n 800 --random-source=<(yes) "$V1/train-gate-compact.jsonl" > "$V1/gate-sample.jsonl"
+    CHARDATA_DIR="$REPO/$V1" checker check --rows gate-sample.jsonl || return
     CHARDATA_DIR="$REPO/$V1" .venv/bin/python scripts/dev/character_data.py filter \
-        --rows train-gate-compact.jsonl --min-lines 0
+        --rows gate-sample.jsonl --min-lines 0
     local rc=$?
     [ "$rc" -eq 0 ] || [ "$rc" -eq 3 ]
 }
-personas() { cp "$V1/personas.jsonl" "$DIR/personas.jsonl"; }
-# Rows carry the whole chat (~1.6k tokens): past 8k rows one epoch already
-# takes about four hours on the shared 3090, so stop at one.
-train_checked() {
-    local rows epochs=2
-    rows=$(wc -l < "$DIR/train-checked.jsonl")
-    [ "$rows" -gt 8000 ] && epochs=1
-    echo "rows=$rows epochs=$epochs"
-    train "$@" --epochs "$epochs"
-}
+personas() { head -n "$1" "$V1/personas.jsonl" > "$DIR/personas.jsonl"; }
+render() { .venv/bin/python scripts/dev/character_data.py render; }
+filter() { .venv/bin/python scripts/dev/character_data.py filter "$@"; }
 
 stage calibrate calibrate
-stage personas personas
+# Exit 3 from a filter = refused by HARD_CHECK: marked blocked at once.
+stage pilot_personas personas "$PILOT_PERSONAS"
+stage pilot_scripts generator scripts --per-persona "$PER_PERSONA"
+stage pilot_refine generator refine
+stage pilot_render render
+stage pilot_student student
+stage pilot_check checker check
+stage pilot_filter filter --min-lines $((HARD_LINES * PILOT_PERSONAS / 300))
+stage personas personas 300
 stage scripts generator scripts --per-persona "$PER_PERSONA"
 stage refine generator refine
-stage render .venv/bin/python scripts/dev/character_data.py render
+stage render render
 stage student student
 stage check checker check
 teacher_down
-# Exit 3 = refused by HARD_CHECK: marked blocked at once, nothing trains.
-stage filter .venv/bin/python scripts/dev/character_data.py filter
+stage filter filter
 
 # CPU preflight (offline): the loss must cover exactly the answer tokens.
 stage train_check env CUDA_VISIBLE_DEVICES= .runtime/train-venv/bin/python \
     scripts/dev/train_lora.py --base "$STUDENT_HF" --out "$LORA_DIR.check" \
     --data "$DIR/train-checked.jsonl" --max-length 3072 --check
-stage train train_checked --base "$STUDENT_HF" --out "$LORA_DIR" --data "$DIR/train-checked.jsonl" \
-    --batch 1 --grad-accum 16 --max-length 3072 --4bit
+# One epoch: rows carry the whole chat (~1.5k tokens) at ~1.3 s each.
+stage train train --base "$STUDENT_HF" --out "$LORA_DIR" --data "$DIR/train-checked.jsonl" \
+    --batch 1 --grad-accum 16 --max-length 3072 --4bit --epochs 1
 stage convert env PYTHONPATH="$LLAMA_SRC/gguf-py" .runtime/train-venv/bin/python \
     "$LLAMA_SRC/convert_lora_to_gguf.py" --base "$STUDENT_HF" --outtype q8_0 \
     --outfile "$LORA_GGUF" "$LORA_DIR"

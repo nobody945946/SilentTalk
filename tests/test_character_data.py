@@ -237,13 +237,32 @@ def _checked_set(chardata: Path, agree: list[bool], wins: list[int]) -> None:
     )
 
 
-def _filter(min_lines: int = 3) -> int:
+def _filter(min_lines: int = 3, max_gate_rows: int = 4000) -> int:
     args = type(
         "Args",
         (),
-        {"rows": "train.jsonl", "min_gate_agree": 0.85, "min_lines": min_lines},
+        {
+            "rows": "train.jsonl",
+            "min_gate_agree": 0.85,
+            "min_lines": min_lines,
+            "max_gate_rows": max_gate_rows,
+        },
     )()
     return character_data.make_filter(args)
+
+
+def test_gate_rows_are_capped_keeping_two_no_per_yes(chardata: Path) -> None:
+    _checked_set(chardata, [True] * 40, [2, 2, 2])
+
+    assert _filter(max_gate_rows=9) == 0
+    kept = [
+        json.loads(line)
+        for line in (chardata / "train-checked.jsonl").read_text().splitlines()
+    ]
+    answers = [
+        r["messages"][-1]["content"] for r in kept if r["kind"].startswith("gate")
+    ]
+    assert (answers.count("是"), answers.count("否")) == (3, 6)
 
 
 def test_only_checked_rows_are_trained_on(chardata: Path) -> None:

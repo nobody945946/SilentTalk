@@ -1365,8 +1365,11 @@ def make_filter(args: argparse.Namespace) -> int:
     if failed:
         print("REFUSED, nothing to train on: " + "; ".join(failed), flush=True)
         return 3
-    # Keep "否" from swamping the gate, as render does.
+    # Keep "否" from swamping the gate, as render does. Each gate row costs a
+    # whole chat of compute for one trained token, and the E4B gate run had
+    # most of its eval-loss drop within the first ~1600 rows: cap them.
     yes = [r for r in kept_gates if r["messages"][-1]["content"] == "是"]
+    yes = yes[: args.max_gate_rows // 3]
     no = [r for r in kept_gates if r["messages"][-1]["content"] == "否"][: len(yes) * 2]
     keep = yes + no + kept_lines
     random.Random(4100).shuffle(keep)
@@ -1404,6 +1407,7 @@ def main() -> int:
         "--min-gate-agree", type=float, default=HARD_CHECK["gate_agree"]
     )
     parser.add_argument("--min-lines", type=int, default=HARD_CHECK["lines_kept"])
+    parser.add_argument("--max-gate-rows", type=int, default=4000)
     parser.add_argument("--teacher-url", default="http://127.0.0.1:18200")
     parser.add_argument(
         "--workers", type=int, default=4, help="match llama-server --parallel"
