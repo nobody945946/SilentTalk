@@ -314,7 +314,9 @@ class OfflineTranscriber:
             stream = recognizer.create_stream()
             stream.accept_waveform(SAMPLE_RATE, pad_segment(samples))
             recognizer.decode_stream(stream)
-            _LOG.debug(
+            # INFO, content-free: how a speaker's audio was cut up tells a
+            # VAD that splits sentences from a recogniser that mishears.
+            _LOG.info(
                 "copilot_stt_segment speaker_id=%s audio_ms=%d decode_ms=%d",
                 speaker_id,
                 len(samples) * 1000 // SAMPLE_RATE,

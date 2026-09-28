@@ -121,6 +121,8 @@ def main() -> int:
             else "沒有啟動",
         ),
         ("STT 斷出的句子", str(len(events.get("copilot_turn_final", [])))),
+        ("STT 聲音片段長度（SenseVoice）", ms(events.get("copilot_stt_segment", []), "audio_ms")),
+        ("STT 辨識一段花的時間", ms(events.get("copilot_stt_segment", []), "decode_ms")),
         (
             "STT 聽到聲音但沒辨識出字（SenseVoice）",
             f"{len(events.get('copilot_stt_empty', []))}"
