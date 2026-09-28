@@ -118,7 +118,8 @@ def test_options_after_your_own_line_get_their_own_request_turn() -> None:
     messages = model.option_messages(turns=_chat(CHAT[:4]))
 
     assert [m["role"] for m in messages] == ["system", "user", "assistant", "user"]
-    assert messages[-1]["content"] == "（換你說話了：說一句你現在會說的話）"
+    assert messages[-1]["content"].endswith("（換你說話了：說一句你現在會說的話）")
+    assert "語氣詞像真人一樣少用" in messages[-1]["content"]
 
 
 def test_character_line_parsing() -> None:
@@ -223,18 +224,19 @@ CHAT = [
 def test_character_chat_only_ever_grows_at_the_end() -> None:
     """Each new line leaves every earlier message byte-identical, so the
     llama-server prompt cache only prefills the new line."""
-    model = LocalReplyModel(Path("unused.gguf"))  # blank persona: no hints
+    model = LocalReplyModel(Path("unused.gguf"))
     turns = _chat(CHAT)
     for n in range(1, len(turns)):
-        before = model.character_messages(turns=turns[:n])
-        after = model.character_messages(turns=turns[: n + 1])
+        # gate=True: the chat without this request's hints on the end.
+        before = model.character_messages(turns=turns[:n], gate=True)
+        after = model.character_messages(turns=turns[: n + 1], gate=True)
         assert after[: len(before) - 1] == before[:-1]
         assert after[len(before) - 1]["content"].startswith(before[-1]["content"])
 
 
 def test_character_chat_roles() -> None:
     model = LocalReplyModel(Path("unused.gguf"))
-    messages = model.character_messages(turns=_chat(CHAT), summary="在聊晚餐")
+    messages = model.character_messages(turns=_chat(CHAT), summary="在聊晚餐", gate=True)
 
     # Roles alternate, as chat templates require: the summary and the lines
     # after it share one user turn.
