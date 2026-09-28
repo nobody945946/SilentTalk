@@ -106,6 +106,17 @@ _OPTIONS_ASK = "（換你說話了：說一句你現在會說的話）"
 # concrete concerns that move on as it talks, views, mood and feelings about
 # people, kept between sessions in its own words.
 _CONCERNS_WANTED = 4
+# character_memory "off" (a 2B model on a 3050 Ti) keeps exactly what was
+# measured to work (turn_eval core2 vs shipped: know this person 28 vs 13
+# conversations): concerns asked from the persona alone, shown as a plain
+# list, no clock in the requests. The richer prompt below (recent life, the
+# time of day) lost to it on Gemma 4 E2B: know 10 vs 19 conversations.
+_AGENDA_ASK = (
+    "用第一人稱寫 4 件你今天心裡掛著的具體小事：今天或最近發生的事、想做的事、在煩的事、在期待的事。"
+    "要符合上面的你、具體、有畫面，像真的在過的生活；可以提到你身邊的人。"
+    "每件一行、一句話，不要編號，不要解釋。"
+)
+_AGENDA_HEADER = "你今天心裡掛著的事（聊天時接得上就自然帶到，冷場時可以拿來開話題，不要硬塞）："
 _FILL_ASK = (
     "現在是{now}。再用第一人稱寫 {n} 件你心裡掛著的具體小事：最近發生的事、想做的事、"
     "在煩的事、在期待的事。要接著你最近的生活，符合你這個人、具體、有畫面，"
@@ -418,7 +429,9 @@ class LocalReplyModel:
         messages = self.character_messages(
             turns=turns, summary=summary, engagement="options", gate=True
         )
-        ask = f"（現在是{_now_words()}）\n" + _OPTIONS_ASK
+        ask = _OPTIONS_ASK
+        if self._memory != "off":
+            ask = f"（現在是{_now_words()}）\n" + ask
         if not self._persona.is_blank:
             ask = self._persona.reminder_line("說出口的話要是", list_catchphrases=False) + "\n" + ask
         if messages[-1]["role"] == "user":
@@ -571,8 +584,10 @@ class LocalReplyModel:
             # "active" mode chiming in: nobody called it, so it must not
             # answer as if someone had.
             hints.append("（沒有人叫你，你決定自然地插一句話）")
-        # It knows what time it is: "都半夜了還不睡", a Friday-night plan.
-        hints.append(f"（現在是{_now_words()}）")
+        # It knows what time it is ("都半夜了還不睡"): with memory on only;
+        # on Gemma 4 E2B the clock was part of a variant that lost.
+        if self._memory != "off":
+            hints.append(f"（現在是{_now_words()}）")
         if not persona.is_blank:
             hints.append(persona.reminder_line("開口的話要是", list_catchphrases=False))
         used = [
@@ -631,6 +646,11 @@ class LocalReplyModel:
         )
 
     def _state_block(self) -> str:
+        if self._memory == "off":
+            items = self.agenda
+            if not items:
+                return ""
+            return _AGENDA_HEADER + "\n" + "\n".join(f"- {item}" for item in items) + "\n"
         block = self._state.prompt_block(full=self._memory == "full")
         return f"\n【你自己的生活】\n{block}\n" if block else ""
 
@@ -663,11 +683,17 @@ class LocalReplyModel:
         missing = _CONCERNS_WANTED - len(state.active_concerns())
         if not sheet or missing <= 0:
             return state
-        known = state.prompt_block(full=self._memory == "full")
-        messages = [
-            {"role": "system", "content": f"你是下面這個人：\n{sheet}" + (f"\n\n{known}" if known else "")},
-            {"role": "user", "content": _FILL_ASK.format(now=_now_words(), n=missing)},
-        ]
+        if self._memory == "off":
+            messages = [
+                {"role": "system", "content": f"你是下面這個人：\n{sheet}"},
+                {"role": "user", "content": _AGENDA_ASK},
+            ]
+        else:
+            known = state.prompt_block(full=self._memory == "full")
+            messages = [
+                {"role": "system", "content": f"你是下面這個人：\n{sheet}" + (f"\n\n{known}" if known else "")},
+                {"role": "user", "content": _FILL_ASK.format(now=_now_words(), n=missing)},
+            ]
         raw = await asyncio.to_thread(
             self._request_messages, messages, None, 200, False, 0.9
         )
