@@ -645,7 +645,7 @@ def script_prompt(persona: Persona, spec: dict[str, Any]) -> str:
 不寫性內容；未成年角色不涉及戀愛；不人身攻擊。
 
 輸出 JSON：{{"summary_before": "…", "concerns": ["…", "…", "…"], "lines": [{{"s": "說話的人", "t": "內容", "to": "這句是對誰說的"}}, …]}}
-to 只能是：「{name}」、在場某個人的名字、或「大家」。{name}自己說的話 to 填他在回應的人。"""
+to 是這句要誰接話：叫{name}、問{name}、要{name}做什麼，或是在回應{name}剛說的話（吐槽他、接他的話、對他說「你…」），to 都填「{name}」；別人彼此在聊、只是講到{name}，to 填那個人或「大家」。to 只能是：「{name}」、在場某個人的名字、或「大家」。{name}自己說的話 to 填他在回應的人。"""
 
 
 def make_scripts(args: argparse.Namespace) -> None:
