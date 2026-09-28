@@ -30,7 +30,9 @@ are excluded. Everything is synthetic; no real conversation is involved.
 from __future__ import annotations
 
 import argparse
+import difflib
 import json
+import os
 import random
 import re
 import sys
@@ -64,7 +66,12 @@ from silenttalk.copilot.persona import (  # noqa: E402
 from silenttalk.copilot.script import to_taiwan_traditional  # noqa: E402
 from silenttalk.copilot.types import ConversationTurn  # noqa: E402
 
-OUT_DIR = PROJECT_DIR / ".runtime" / "dev" / "chardata"
+# CHARDATA_DIR keeps each round's data apart (v1 stays in chardata/).
+OUT_DIR = (
+    Path(os.environ["CHARDATA_DIR"])
+    if os.environ.get("CHARDATA_DIR")
+    else PROJECT_DIR / ".runtime" / "dev" / "chardata"
+)
 EVAL_DATA = Path(__file__).with_name("turn_eval_data.jsonl")
 _WRITE_LOCK = threading.Lock()
 
@@ -327,9 +334,10 @@ def chat(
     temperature: float,
     max_tokens: int,
     n: int = 1,
+    grammar: str | None = None,
 ) -> list[str]:
     """The teacher. Retries while the pipeline supervisor restarts it."""
-    body = {
+    body: dict[str, Any] = {
         "messages": messages,
         "temperature": temperature,
         "top_p": 0.9,
@@ -337,6 +345,8 @@ def chat(
         "cache_prompt": True,
         "chat_template_kwargs": {"enable_thinking": False},
     }
+    if grammar:
+        body["grammar"] = grammar
     request = urllib.request.Request(
         url.rstrip("/") + "/v1/chat/completions",
         data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
@@ -571,6 +581,8 @@ def script_request(
         "topic": rng.choice(TOPICS),
         "moments": rng.sample(MOMENTS, 3),
         "length": rng.choice(LINE_COUNTS),
+        # A quiet spell the character ends by opening a topic (the app's lull).
+        "quiet": rng.random() < 0.5,
     }
 
 
@@ -602,6 +614,12 @@ def script_prompt(persona: Persona, spec: dict[str, Any]) -> str:
         else "summary_before 留空字串。"
     )
     length = persona.length_rule()
+    quiet = (
+        f"對話中間有一次大家都安靜了一陣子，接著{name}自己開個話題（說說 concerns 裡的一件事，或問問在場的人最近怎樣）："
+        f'那一句加上 "quiet": true，to 填「大家」或他問的人。'
+        if spec.get("quiet")
+        else ""
+    )
     return f"""寫一段 Discord 語音頻道的語音辨識逐字稿，約 {spec["length"]} 句。
 在場的人：{"、".join(spec["humans"])}，還有「{name}」。{owner} 是頻道主人。
 
@@ -616,12 +634,16 @@ def script_prompt(persona: Persona, spec: dict[str, Any]) -> str:
 {moments}
 
 {ENGAGEMENT_BRIEF[spec["engagement"]].format(name=name)}
-{name}說話要完全是人設裡這個人的口吻：一次只說一句，長度{length}；口語、有個性，像真人朋友脫口而出，不像客服、老師或旁白；口頭禪全場最多用兩三次；不要每句都用「欸」開頭；只說人設裡寫到的關於自己的事，不編新經歷；{honesty}；他只能在頻道裡聊天，不會真的去寫程式、查資料或設提醒。
+先想好{name}今天心裡掛著的 3～4 件具體小事（最近發生的、想做的、在煩的、在期待的，要符合人設），寫進 concerns。
+{name}說話要完全是人設裡這個人的口吻：一次只說一句，長度{length}；口語、有個性，像真人朋友脫口而出，不像客服、老師或旁白。
+他的每一句都要先接住前一句：回應對方真正在說的事。自己的背景、想要的事和 concerns 只在話題接得上時才自然帶到，不要硬塞；關於自己只說人設和 concerns 裡的事，不編新經歷。
+語氣詞（啦、喔、欸、齁、耶）大多數句子一個都不用，一句最多一個；不要每句都用「欸」開頭；{honesty}；他只能在頻道裡聊天，不會真的去寫程式、查資料或設提醒。
+{quiet}
 其他人講話像真實的語音聊天：大多很短（一句 3～15 字），有時只有「真假」「笑死」「蛤」，會打斷、會岔題、不會每句都叫名字，同一個人可以連講兩三句，不要每句都用「欸」開頭，也不要講成書面語。{typing}
 {summary}
 不寫性內容；未成年角色不涉及戀愛；不人身攻擊。
 
-輸出 JSON：{{"summary_before": "…", "lines": [{{"s": "說話的人", "t": "內容", "to": "這句是對誰說的"}}, …]}}
+輸出 JSON：{{"summary_before": "…", "concerns": ["…", "…", "…"], "lines": [{{"s": "說話的人", "t": "內容", "to": "這句是對誰說的"}}, …]}}
 to 只能是：「{name}」、在場某個人的名字、或「大家」。{name}自己說的話 to 填他在回應的人。"""
 
 
@@ -674,6 +696,11 @@ def make_scripts(args: argparse.Namespace) -> None:
                 if spec["with_summary"]
                 else "",
                 "lines": lines,
+                "concerns": [
+                    to_taiwan_traditional(str(c)).strip()[:40]
+                    for c in (data.get("concerns") or [])[:4]
+                    if str(c).strip()
+                ],
             },
         )
 
@@ -706,6 +733,8 @@ def check_script(
                 "t": text,
                 "to": target,
                 "via": "text" if typed and spec["can_type"] else "voice",
+                # Said after a quiet spell, opening a topic (only its lines).
+                "quiet": bool(raw.get("quiet")) and speaker == name and bool(lines),
             }
         )
     said = [line for line in lines if line["s"] == name]
@@ -735,7 +764,13 @@ def decision_points(script: dict[str, Any], name: str) -> list[dict[str, Any]]:
     for index, line in enumerate(lines):
         if line["s"] == name:
             continue
-        speaks = index + 1 < len(lines) and lines[index + 1]["s"] == name
+        # A line followed by a quiet spell got no answer: the character's
+        # next line opens a topic of its own instead.
+        speaks = (
+            index + 1 < len(lines)
+            and lines[index + 1]["s"] == name
+            and not lines[index + 1].get("quiet")
+        )
         aimed = line["to"] == name
         if aimed != speaks and (engagement == "called" or aimed):
             continue
@@ -954,6 +989,8 @@ def make_render(args: argparse.Namespace) -> None:
         persona, turns = conversation(noisy_script, _persona(raw), noisy=True)
         spec = script["spec"]
         model = reply_model(persona, spec)
+        # Today's concerns sit in the system prompt, as in the app.
+        model.set_agenda(script.get("concerns", []))
         for point in decision_points(script, persona.name):
             index = point["index"]
             model._recent_character_lines.clear()
@@ -1022,6 +1059,33 @@ def make_render(args: argparse.Namespace) -> None:
                         "messages": messages + [{"role": "assistant", "content": line}],
                     }
                 )
+        # Quiet spells the character ended by opening a topic: the app's lull.
+        for index, line in enumerate(script["lines"]):
+            if not line.get("quiet") or not usable(line["t"], spec, args):
+                continue
+            history = turns[:index]
+            model._recent_character_lines.clear()
+            for turn in history:
+                if turn.is_self:
+                    model._recent_character_lines.append(turn.text)
+            messages = model.character_messages(
+                turns=history,
+                summary=script["summary_before"],
+                engagement=spec["engagement"],
+                lull=True,
+            )
+            replies.append(
+                {
+                    "script": number,
+                    "index": index,
+                    "engagement": spec["engagement"],
+                    "persona_id": persona.id,
+                    "role": raw.get("role", ""),
+                    "kind": "lull",
+                    "messages": messages
+                    + [{"role": "assistant", "content": line["t"]}],
+                }
+            )
     # A small model copies whatever opener dominates its lines; the teacher
     # sometimes offers nothing but "欸…", so cap it here.
     rng.shuffle(replies)
@@ -1044,6 +1108,7 @@ def make_render(args: argparse.Namespace) -> None:
     out = OUT_DIR / "train.jsonl"
     with out.open("w", encoding="utf-8") as handle:
         for row in rows:
+            row["key"] = row_key(row)
             handle.write(json.dumps(row, ensure_ascii=False) + "\n")
     lines = [r["messages"][-1]["content"] for r in replies]
     print(
@@ -1059,9 +1124,286 @@ def make_render(args: argparse.Namespace) -> None:
         )
 
 
+def row_key(row: dict[str, Any]) -> str:
+    return f"{row['script']}:{row['index']}:{row['kind']}"
+
+
+# ---------------------------------------------------------------- quality gate
+# Only rows that pass a hard check are trained on (train-checked.jsonl):
+# - gate rows: an independent open-weight model (the checker, of another
+#   family than the teacher) answers the same question; the label stays
+#   only when it agrees;
+# - line rows: the student writes its own line for the same request, the
+#   checker compares both blind in both orders, and the teacher's line stays
+#   only when it wins both; it must also pass fixed rules (one filler
+#   particle at most, not an echo of the line it answers; refine already
+#   dropped long lines, AI claims and assistant talk);
+# - the whole set is refused (exit 3), not trimmed, when any HARD_CHECK
+#   number is missed: then the scripts, the teacher or the checker is broken
+#   and training on the rest would only teach that.
+# Claude never takes part: its output must not select training data.
+
+HARD_CHECK = {
+    "coverage": 0.98,  # rows with a verdict
+    "gate_agree": 0.85,  # checker agrees with the gate label (--min-gate-agree)
+    "gate_agree_each": 0.75,  # ... on 是 and on 否 separately
+    # teacher's line wins in both orders; a checker tossing coins gets 0.25
+    "line_win_rate": 0.5,
+    "checker_consistent": 0.7,  # same verdict in both orders
+    "lines_kept": 1500,  # (--min-lines)
+}
+
+PARTICLES = set("啦喔欸齁耶呀嘛咧捏哦唷蛤嘿吼哇唉")
+CHECK_PAIR = """下面是 Discord 語音聊天的最後幾句，以及角色「{name}」接話的兩個版本。
+
+角色：
+{sheet}
+
+對話：
+{chat}
+
+A：{a}
+B：{b}
+
+哪一句比較好？標準：像真人朋友脫口而出、自然不做作；接得上前一句，回應對方真正在說的事；像這個人；自己的事只在接得上時才帶到、不硬塞；語氣詞不堆疊。只回答 A 或 B。"""
+CHECK_LULL = "（大家安靜了一陣子，接著角色開口）"
+
+
+def _chat_text(row: dict[str, Any], name: str, last: int = 10) -> str:
+    lines: list[str] = []
+    for message in row["messages"][1:-1]:
+        for text in message["content"].splitlines():
+            text = text.strip()
+            if not text or text.startswith("（"):
+                continue  # per-request hints, not chat
+            lines.append(
+                f"{name}（角色）：{text}" if message["role"] == "assistant" else text
+            )
+    chat_lines = lines[-last:]
+    if row["kind"] == "lull":
+        chat_lines.append(CHECK_LULL)
+    return "\n".join(chat_lines)
+
+
+def _clean_line(raw: str) -> str:
+    """First line of the student's answer, without a "名字：" it may prefix."""
+    line = next((part.strip() for part in raw.splitlines() if part.strip()), "")
+    named = re.match(r"^[^：:\s]{1,6}[：:](.+)$", line)
+    if named:
+        line = named.group(1)
+    return to_taiwan_traditional(line.strip("\"'「」『』* ").strip())
+
+
+def _by_script(rows: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
+    """One job per script, its rows in order: each request then extends the
+    previous one's prompt and the server's cache prefills only the new lines
+    (render shuffles the rows)."""
+    scripts: dict[Any, list[dict[str, Any]]] = {}
+    for row in rows:
+        scripts.setdefault(row["script"], []).append(row)
+    jobs = [sorted(group, key=lambda r: r["index"]) for group in scripts.values()]
+    random.Random(5000).shuffle(jobs)
+    return jobs
+
+
+def _pool_scripts(workers: int, work: Any, rows: list[dict[str, Any]]) -> None:
+    def work_script(group: list[dict[str, Any]]) -> None:
+        for row in group:
+            work(row)
+
+    _pool(workers, work_script, _by_script(rows))
+
+
+def make_student(args: argparse.Namespace) -> None:
+    """The student's own line for every line row (what training must beat)."""
+    rows = [r for r in _read(OUT_DIR / args.rows) if r["kind"] in ("line", "lull")]
+    path = OUT_DIR / "student.jsonl"
+    done = {r["key"] for r in _read(path)}
+    jobs = [r for r in rows if row_key(r) not in done]
+    print(f"student: {len(jobs)} lines", flush=True)
+
+    def work(row: dict[str, Any]) -> None:
+        raw = chat(
+            args.student_url, row["messages"][:-1], temperature=0.65, max_tokens=90
+        )[0]
+        _append(path, {"key": row_key(row), "line": _clean_line(raw)})
+
+    _pool_scripts(args.workers, work, jobs)
+
+
+def make_check(args: argparse.Namespace) -> None:
+    """The checker's verdicts: gate agreement, and teacher vs student lines."""
+    personas = {p["id"]: p for p in _read(OUT_DIR / "personas.jsonl")}
+    rows = _read(OUT_DIR / args.rows)
+    student = {r["key"]: r["line"] for r in _read(OUT_DIR / "student.jsonl")}
+    path = OUT_DIR / "check.jsonl"
+    done = {r["key"] for r in _read(path)}
+    jobs = [r for r in rows if row_key(r) not in done]
+    print(f"check: {len(jobs)} rows", flush=True)
+
+    def work(row: dict[str, Any]) -> None:
+        key = row_key(row)
+        if row["kind"].startswith("gate"):
+            answer = chat(
+                args.teacher_url,
+                row["messages"][:-1],
+                temperature=0.0,
+                max_tokens=2,
+                grammar='root ::= "是" | "否"',
+            )[0].strip()
+            _append(
+                path, {"key": key, "agree": answer == row["messages"][-1]["content"]}
+            )
+            return
+        mine = student.get(key, "")
+        teacher = row["messages"][-1]["content"]
+        if not mine or mine == teacher:
+            _append(path, {"key": key, "wins": 2 if not mine else 0})
+            return
+        persona = _persona(personas[row["persona_id"]])
+        wins = 0
+        for a, b, teacher_is in ((teacher, mine, "A"), (mine, teacher, "B")):
+            prompt = CHECK_PAIR.format(
+                name=persona.name,
+                sheet=persona.render_prompt_block(),
+                chat=_chat_text(row, persona.name),
+                a=a,
+                b=b,
+            )
+            answer = chat(
+                args.teacher_url,
+                [{"role": "user", "content": prompt}],
+                temperature=0.0,
+                max_tokens=2,
+                grammar='root ::= "A" | "B"',
+            )[0].strip()
+            wins += answer == teacher_is
+        _append(path, {"key": key, "wins": wins, "compared": True})
+
+    _pool_scripts(args.workers, work, jobs)
+
+
+def rule_ok(row: dict[str, Any]) -> bool:
+    line = row["messages"][-1]["content"]
+    if sum(ch in PARTICLES for ch in line) > 1:
+        return False
+    previous = [
+        t
+        for t in row["messages"][-2]["content"].splitlines()
+        if t and not t.startswith("（")
+    ]
+    if previous:
+        said = re.sub(r"^[^：]{1,12}：", "", previous[-1])
+        if difflib.SequenceMatcher(None, line, said).ratio() >= 0.75:
+            return False
+    return True
+
+
+def _share(part: int, whole: int) -> float:
+    return round(part / whole, 3) if whole else 0.0
+
+
+def make_filter(args: argparse.Namespace) -> int:
+    """Train only on checked rows, or refuse the whole set (exit 3)."""
+    rows = _read(OUT_DIR / args.rows)
+    verdicts = {r["key"]: r for r in _read(OUT_DIR / "check.jsonl")}
+    checked = [r for r in rows if row_key(r) in verdicts]
+    verdict = {id(r): verdicts[row_key(r)] for r in checked}
+    gates = [r for r in checked if r["kind"].startswith("gate")]
+    lines = [r for r in checked if r["kind"] in ("line", "lull")]
+    kept_gates = [r for r in gates if verdict[id(r)].get("agree")]
+    kept_lines = [r for r in lines if verdict[id(r)].get("wins", 0) >= 2 and rule_ok(r)]
+    compared = [verdict[id(r)]["wins"] for r in lines if verdict[id(r)].get("compared")]
+
+    def agree_on(label: str) -> float:
+        labelled = [r for r in gates if r["messages"][-1]["content"] == label]
+        return _share(
+            sum(bool(verdict[id(r)].get("agree")) for r in labelled), len(labelled)
+        )
+
+    stats = {
+        "rows": len(rows),
+        "coverage": _share(len(checked), len(rows)),
+        "gate_rows": len(gates),
+        "gate_agree": _share(len(kept_gates), len(gates)),
+        "gate_agree_yes": agree_on("是"),
+        "gate_agree_no": agree_on("否"),
+        "line_rows": len(lines),
+        "line_win_rate": _share(
+            sum(verdict[id(r)].get("wins", 0) >= 2 for r in lines), len(lines)
+        ),
+        "checker_consistent": _share(sum(w != 1 for w in compared), len(compared)),
+        "lines_failed_rules": sum(not rule_ok(r) for r in lines),
+        "lines_kept": len(kept_lines),
+        "lull_kept": sum(r["kind"] == "lull" for r in kept_lines),
+    }
+    minimum = dict(
+        HARD_CHECK, gate_agree=args.min_gate_agree, lines_kept=args.min_lines
+    )
+    failed = [
+        f"{name} {stats[name]} < {minimum[name]}"
+        for name in ("coverage", "gate_agree", "lines_kept")
+        if stats[name] < minimum[name]
+    ]
+    if gates:
+        failed += [
+            f"{name} {stats[name]} < {minimum['gate_agree_each']}"
+            for name in ("gate_agree_yes", "gate_agree_no")
+            if stats[name] < minimum["gate_agree_each"]
+        ]
+    if lines:
+        failed += [
+            f"{name} {stats[name]} < {minimum[name]}"
+            for name in ("line_win_rate", "checker_consistent")
+            if stats[name] < minimum[name]
+        ]
+    stats["refused"] = failed
+    print(f"filter: {stats}", flush=True)
+    (OUT_DIR / "filter.json").write_text(
+        json.dumps(stats, ensure_ascii=False, indent=1)
+    )
+    if failed:
+        print("REFUSED, nothing to train on: " + "; ".join(failed), flush=True)
+        return 3
+    # Keep "否" from swamping the gate, as render does.
+    yes = [r for r in kept_gates if r["messages"][-1]["content"] == "是"]
+    no = [r for r in kept_gates if r["messages"][-1]["content"] == "否"][: len(yes) * 2]
+    keep = yes + no + kept_lines
+    random.Random(4100).shuffle(keep)
+    with (OUT_DIR / "train-checked.jsonl").open("w", encoding="utf-8") as handle:
+        for row in keep:
+            handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+    print(
+        f"train-checked: {len(keep)} rows ({len(yes)} 是, {len(no)} 否, {len(kept_lines)} lines)",
+        flush=True,
+    )
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("step", choices=("personas", "scripts", "refine", "render"))
+    parser.add_argument(
+        "step",
+        choices=(
+            "personas",
+            "scripts",
+            "refine",
+            "render",
+            "student",
+            "check",
+            "filter",
+        ),
+    )
+    parser.add_argument("--student-url", default="http://127.0.0.1:18210")
+    parser.add_argument(
+        "--rows",
+        default="train.jsonl",
+        help="student/check/filter: rows file in the data dir",
+    )
+    parser.add_argument(
+        "--min-gate-agree", type=float, default=HARD_CHECK["gate_agree"]
+    )
+    parser.add_argument("--min-lines", type=int, default=HARD_CHECK["lines_kept"])
     parser.add_argument("--teacher-url", default="http://127.0.0.1:18200")
     parser.add_argument(
         "--workers", type=int, default=4, help="match llama-server --parallel"
@@ -1072,11 +1414,15 @@ def main() -> int:
     parser.add_argument("--max-prompt-chars", type=int, default=3400)
     args = parser.parse_args()
     OUT_DIR.mkdir(parents=True, exist_ok=True)
+    if args.step == "filter":
+        return make_filter(args)
     {
         "personas": make_personas,
         "scripts": make_scripts,
         "refine": make_refine,
         "render": make_render,
+        "student": make_student,
+        "check": make_check,
     }[args.step](args)
     return 0
 

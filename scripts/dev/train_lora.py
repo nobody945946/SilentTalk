@@ -83,11 +83,25 @@ def main() -> int:
             raise ValueError("chat template does not extend the prompt")
         return {"prompt": prompt, "completion": full[len(prompt) :]}
 
-    rows = [json.loads(line) for line in Path(args.data).read_text(encoding="utf-8").splitlines()]
+    rows = [
+        json.loads(line)
+        for line in Path(args.data).read_text(encoding="utf-8").splitlines()
+    ]
     random.Random(0).shuffle(rows)
-    split = max(1, int(len(rows) * args.holdout))
-    train = Dataset.from_list([render(r) for r in rows[split:]])
-    evaluation = Dataset.from_list([render(r) for r in rows[:split]])
+    rendered = [render(r) for r in rows]
+    # The trainer cuts long rows from the right, which would train on half an
+    # answer with no end marker: drop them instead, and say how many.
+    lengths = [
+        len(tokenizer(r["prompt"] + r["completion"])["input_ids"]) for r in rendered
+    ]
+    rendered = [r for r, n in zip(rendered, lengths) if n <= args.max_length]
+    print(
+        f"longest row {max(lengths)} tokens; "
+        f"{len(rows) - len(rendered)} rows over --max-length {args.max_length} dropped"
+    )
+    split = max(1, int(len(rendered) * args.holdout))
+    train = Dataset.from_list(rendered[split:])
+    evaluation = Dataset.from_list(rendered[:split])
     print(f"train {len(train)}  eval {len(evaluation)}")
     print(train[0]["prompt"][-300:] + train[0]["completion"])
 
