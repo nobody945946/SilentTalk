@@ -108,6 +108,10 @@ def main() -> int:
         help="file name in .runtime/models/llm/ or a path",
     )
     parser.add_argument("--gpu-layers", type=int, default=99, help="0 = CPU only")
+    parser.add_argument(
+        "--lora",
+        help="adapter (file in .runtime/models/llm/ or a path): time the app's LoRA gate + reply",
+    )
     parser.add_argument("--skip-tts", action="store_true", help="no internet")
     parser.add_argument("--llama-server", help="path to llama-server(.exe)")
     args = parser.parse_args()
@@ -206,6 +210,13 @@ def bench_llm(
         model = PROJECT_DIR / ".runtime" / "models" / "llm" / args.model
     if not model.is_file():
         raise BenchError(f"找不到模型 {model}")
+    lora = None
+    if args.lora:
+        lora = Path(args.lora)
+        if not lora.is_file():
+            lora = PROJECT_DIR / ".runtime" / "models" / "llm" / args.lora
+        if not lora.is_file():
+            raise BenchError(f"找不到 LoRA {lora}")
     exe = find_llama_server(args.llama_server)
     rows.append(("llama-server", exe))
     listing = subprocess.run(
@@ -233,14 +244,16 @@ def bench_llm(
         "127.0.0.1",
         "--port",
         str(PORT),
+        # With an adapter the app runs one slot per adapter scale (llm.py
+        # _lora_field), each with the full context.
         "--ctx-size",
-        "4096",
+        "8192" if lora else "4096",
         "--threads",
         str(threads),
         "--n-gpu-layers",
         str(args.gpu_layers),
         "--parallel",
-        "1",
+        "2" if lora else "1",
         "--jinja",
         "--flash-attn",
         "on",
@@ -248,7 +261,7 @@ def bench_llm(
         "q8_0",
         "--cache-type-v",
         "q8_0",
-    ]
+    ] + (["--lora", str(lora)] if lora else [])
     started = time.perf_counter()
     server = subprocess.Popen(
         cmd,
@@ -275,9 +288,26 @@ def bench_llm(
             1,
         )
 
+        old_requests, new_requests = old_format_requests(), new_format_requests()
+        if lora is not None:
+            # What the app does per line: the gate with the adapter (slot 0),
+            # then the reply without it (slot 1). Each slot keeps its cache.
+            on = {"lora": [{"id": 0, "scale": 1.0}], "id_slot": 0}
+            off = {"lora": [{"id": 0, "scale": 0.0}], "id_slot": 1}
+            post(new_requests[0], 1, extra=on)
+            post(new_requests[0], 1, extra=off)
+            gates, replies = [], []
+            for messages in new_requests[1:]:
+                gates.append(post(messages, 1, extra=on))
+                replies.append(post(messages, 20, extra=off))
+            rows.append(("判斷一句（LoRA，slot 0）", summarize(gates)))
+            rows.append(("接著回一句（原模型，slot 1，最多 20 token）", summarize(replies)))
+            speed = post(new_requests[-1], 32, ignore_eos=True, extra=off)
+            rows.append(("生成速度", f"{speed['tps']:.1f} token/s"))
+            return
+
         # The first request of each format fills its cache; time the rest,
         # which is what a running chat looks like.
-        old_requests, new_requests = old_format_requests(), new_format_requests()
         post(old_requests[0], 1)
         old = [post(m, 1) for m in old_requests[1:]]
         post(new_requests[0], 1)
@@ -316,8 +346,11 @@ def wait_healthy(server: subprocess.Popen) -> None:
     raise BenchError("llama-server 載入逾時")
 
 
-def post(messages: list[dict], max_tokens: int, *, ignore_eos: bool = False) -> dict:
+def post(
+    messages: list[dict], max_tokens: int, *, ignore_eos: bool = False, extra: dict | None = None
+) -> dict:
     body = {
+        **(extra or {}),
         "messages": messages,
         "max_tokens": max_tokens,
         "temperature": 0.0,
