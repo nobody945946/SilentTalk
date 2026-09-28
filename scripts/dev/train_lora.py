@@ -115,9 +115,11 @@ def main() -> int:
         if inner is not None and getattr(inner, name, None) is not None:
             setattr(inner, name, None)
     if args.four_bit:
-        from peft import prepare_model_for_kbit_training
-
-        model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=True)
+        # Not peft.prepare_model_for_kbit_training: it casts every
+        # non-quantized parameter to float32, and Gemma 4's per-layer
+        # embedding tables alone then need 8.75 GiB more. They stay bf16 and
+        # frozen; only the inputs need gradients for checkpointing to work.
+        model.enable_input_require_grads()
     config = SFTConfig(
         output_dir=args.out,
         num_train_epochs=args.epochs,
