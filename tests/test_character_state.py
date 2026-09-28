@@ -149,3 +149,17 @@ def test_memory_levels_are_the_same_in_config_and_model() -> None:
 
     assert llm.MEMORY_LEVELS == MEMORY_LEVEL_NAMES
     assert tuple(key for key, _ in MEMORY_LEVEL_CHOICES) == MEMORY_LEVEL_NAMES
+
+
+def test_the_same_worry_in_other_words_is_kept_once() -> None:
+    state = CharacterState(
+        concerns=(
+            Concern("阿凱今天中午又偷偷把我的能量飲料喝光了，該找他算算帳"),
+            Concern("阿凱今天中午又偷喝我的能量飲料，該找他算算帳", "done", "算完帳了"),
+            Concern("想把新出的戰場攻略傳給隊友"),
+        )
+    ).normalized()
+
+    texts = [c.text for c in state.concerns]
+    assert len(texts) == 2
+    assert state.concerns[-1].status == "done" or state.finished_concerns()

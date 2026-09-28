@@ -71,6 +71,10 @@ character_lull_seconds = 30
 # "off" = new concerns every session; "light" = concerns, recent and mood are
 # kept and move on after each chat; "full" = also views and feelings about
 # each person, updated as it talks (for a bigger model than Gemma 4 E2B).
+# Measured on Gemma 4 E2B (2026-09-28, 5 personas x 2-3 days): "light" lost
+# to "off" on every count (life moves on 5 vs 13); the 2B model could not
+# keep the state (nothing moved on, duplicates, its own nickname taken for
+# someone else). Keep "off" on a 3050 Ti.
 character_memory = "off"
 # Auto-compaction: once the session passes compact_keep_turns +
 # compact_batch_turns, the older part is folded into a short summary by the

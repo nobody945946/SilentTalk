@@ -11,6 +11,7 @@ why every text goes through `_clean` before it is kept.
 
 from __future__ import annotations
 
+import difflib
 import json
 import re
 from dataclasses import dataclass, replace
@@ -80,12 +81,16 @@ class CharacterState:
     def normalized(self) -> CharacterState:
         """Cleaned, capped and deduplicated: what may be kept on disk."""
         concerns: list[Concern] = []
-        seen: set[str] = set()
         for concern in self.concerns:
             text = _clean(concern.text)
-            if not text or text in seen or concern.status not in STATUSES:
+            if not text or concern.status not in STATUSES:
                 continue
-            seen.add(text)
+            # A small model writes the same worry twice in other words.
+            twin = next((i for i, c in enumerate(concerns) if _alike(c.text, text)), None)
+            if twin is not None:
+                if concern.status != "open":  # the later word on it wins
+                    concerns[twin] = Concern(concerns[twin].text, concern.status, _clean(concern.note))
+                continue
             concerns.append(Concern(text, concern.status, _clean(concern.note)))
         active = [c for c in concerns if c.active][:MAX_CONCERNS]
         finished = [c for c in concerns if not c.active][-MAX_FINISHED:]
@@ -206,6 +211,10 @@ class CharacterStateStore:
         temp = self.path.with_suffix(self.path.suffix + ".tmp")
         temp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
         temp.replace(self.path)
+
+
+def _alike(a: str, b: str) -> bool:
+    return difflib.SequenceMatcher(None, a, b).ratio() >= 0.7
 
 
 def _clean(text: str, limit: int = MAX_TEXT) -> str:
