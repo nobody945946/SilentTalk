@@ -1,6 +1,6 @@
 # 開發機工作檔（Linux、RTX 3090）
 
-更新：2026-09-29 傍晚｜分支：`copilot-story-mode`
+更新：2026-09-29 晚上｜分支：`copilot-story-mode`
 你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事。舊版在 `archive/`（只在這台機器、不進 git），不必讀。
 
 ---
@@ -16,15 +16,16 @@
 | 項目 | 狀態 |
 |---|---|
 | 人設只給「塑造這個人」的部分、今天的心事、冷場開話題 | ✅ 出貨（§5.2） |
-| **預設 E4B＋第三版 LoRA（判斷＋台詞）** | ✅ 出貨（`models/character-e4b-lora-v3.q8_0.gguf`；§5.2）。等筆電量延遲＋語音測試（§4 A） |
+| **真人語音辨識** | ❌→🔄 上一輪真人語音 0/67 可用（合成語音 1.7% 錯字率）：收音套件沒把 DAVE 加密解開。已換成上游＋PR #62，等筆電 `--stt-check`（§4 A） |
+| **預設 E4B＋第三版 LoRA（判斷＋台詞）** | ✅ 出貨（`models/character-e4b-lora-v3.q8_0.gguf`；§5.2）。3050 Ti 上套 LoRA 判斷 211 ms、生成 26.0 token/s（沒 LoRA 205 ms、26.4）：延遲沒問題 |
 | E2B＋v1 LoRA（只用在「是不是在叫你」） | 設定頁選 E2B 時自動換成它（adapter 跟著模型，`config.MODEL_ADAPTERS`） |
 | 選項＝取樣四句、看的時候不會被換掉 | ✅ 出貨（§5.1） |
 | 角色記憶（跨次演進的心事、看法、對人的感覺） | 🧊 架構做好（`character_state.py`、`copilot.character_memory`），E2B 上量輸，**預設 off**（§5.3） |
 | E4B＋第一版資料練的判斷 LoRA | ❌ 不出貨：資料沒過硬關卡（檢查員只同意 82.7% 的判斷標籤 < 85%，§5.8） |
 | 老師比較收尾（TAIDE、Gemma 31B 先想再寫） | 🔄 佇列在跑（`night_queue3.sh` 的最後一段），只給第四版參考 |
-| 筆電 | ⬜ `handoff/laptop.md`：先量 3050 Ti 套 LoRA 的延遲，過門檻才做 E4B 的語音測試 |
+| 筆電 | ⬜ `handoff/laptop.md`：先做真人辨識測試（念 8 句、自動算錯字率），≤ 15% 才做角色模式語音測試 |
 
-**測試：** `193 passed`。
+**測試：** `197 passed`。
 
 ## 2. 開發機規則（通用規則在 AGENTS.md）
 
@@ -64,10 +65,11 @@ xvfb-run -a -s "-screen 0 2400x1600x24" .runtime/tools/ui-preview-env/bin/python
 ## 4. 接下來
 
 **A. 等筆電回報**（`handoff/laptop.md`，回報在 `laptop-report` 分支的 `handoff/reports/laptop.md`）
-- 延遲門檻（3050 Ti，E4B＋v3 LoRA 用在判斷和台詞）：判斷一句中位數 ≤ 600 ms、生成 ≥ 15 token/s。E4B 沒有 LoRA 是 174 ms、26.5 token/s；E2B 套 v1 時判斷 90 → 265 ms、生成 76 → 50。
-- **沒過門檻**：把 v3 LoRA 合進 E4B 權重（peft merge → `convert_hf_to_gguf.py` → `llama-quantize` 成 Q4），角色模式就沒有 LoRA 的額外延遲；但選項模式也會用合併後的權重，出貨前要先用 `options_eval.py` 配對比較（第一版 LoRA 套選項時 31% vs 67% 大輸）。不行再退回 E2B＋v1，把兩種數字寫給使用者選。
-- **過了、語音測試做完**：看使用者自己的感想（開口時機、認不認識這個角色、語尾「啦」、選項好不好用）和 log 數字（語音辨識的空白片段、片段長度；聽到 → 角色開口的時間）。
-- 筆電上改過設定頁的模型的話，App 會用使用者選的那個，adapter 會跟著換。
+- 上一輪（E4B＋v3）：延遲過關，但**真人語音辨識 0/67 可用**，使用者：「連辨識文字都有困難，也無法知道模型究竟有多少實力」。原因：Discord 語音多一層端對端加密（DAVE），舊的 voice_recv fork 在 jitter buffer 之後、而且只在 session 「ready」時才解密，其他時候把密文當 Opus 解碼；遺失補償也拿還沒解密的下一幀（上游 issue #53）。
+- 已改：`requirements.txt` 的 voice_recv 換成上游＋PR #62（`LeadFreeCandy/...bec0481`，傳輸層解密後立刻解 DAVE、解不開就丟）；`silenttalk/voice_recv_patch.py`：解碼失敗的一幀當成遺失，不讓收音執行緒停掉。
+- 診斷（只記數字）：`voice_receive_stats`（每 30 秒：每人每秒幀數、大小不對、沒 session 丟掉、解碼錯誤、每個成員的 DAVE 解密 嘗試/成功/失敗/放行）；`copilot_stt_segment` 加音量（dBFS）和頻譜平坦度（人聲 < 0.3、白雜訊約 0.56）；`app.py --stt-check`（主人念 8 句固定句子，自動算錯字率）。`log_summary.py` 都會列出來。
+- **判讀**：`--stt-check` 平均錯字率 ≤ 15% → 看角色模式語音測試的感想（開口時機、認不認識這個角色、選項好不好用）。沒過 → 看 `voice_receive_stats`：DAVE 失敗多 → 解密還有問題；幀數遠低於 50 或大小不對 → 收音路徑；平坦度高（像雜訊）但 DAVE 成功 → 解碼；都正常但錯字率高 → 語音辨識本身（麥克風、口音、VAD 切段）。
+- **不要請使用者判斷辨識結果或角色的句子**（AGENTS.md 規則 2；上一輪讓他逐段判斷 67 段是錯的）：用 `--stt-check` 的錯字率。
 
 **B. 第四版要改的**
 - 劇本被丟掉 27%（試跑 13%），最多的是 JSON 解析失敗（39 個，多半是寫到 `max_tokens=3000` 被截斷）和「說話的人不在名單上」（33）：放寬 `max_tokens` 或要求短一點的劇本。
@@ -193,6 +195,7 @@ SenseVoice 在快 60%、小聲 -18 dB、悶住、連著講都維持 CER 6.9–10
 - **等待迴圈別用 `pgrep -f <字串>`**：字串也在迴圈自己的指令裡，永遠比對得到自己，迴圈不會結束；「log 出現某行」也要只看啟動之後新增的行，不然舊內容會直接觸發。
 - **下載會卡**：Xet 下載卡住時 `xget.py` 會重來，但 27B 那次重試 3 次花了 2.7 小時；GPU 工作不要排在下載後面空等。
 - **render 會打亂資料順序**：學生和檢查員要照劇本、照順序送（`_by_script`），伺服器的快取才只需要讀新增的幾句。
+- **合成語音的測試會繞過真實的輸入路徑**：`--copilot-smoke` 把合成語音直接餵給辨識器，錯字率 1.7%；真人經過 Discord 收音（DAVE 解密、jitter buffer）卻是 0/67。量下游（模型）之前，先用真實輸入把上游量過（`--stt-check`）。
 - **HF 下載**：`.runtime/dev/m3/xget.py`（Xet＋卡住自動重來）；沒 token 時有時限速到 5 MB/s。
 - **`claude -p` 偶爾卡超過 15 分鐘**：評審要每批存檔、可續跑、失敗重試。
 - **E2B 的狀態更新**：編號會亂、同一件事換句話又出現、把自己的暱稱當別人——要讓小模型維護長期狀態前先量。
