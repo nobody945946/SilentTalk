@@ -1,11 +1,11 @@
 # 筆電工作檔（Windows、RTX 3050 Ti）
 
-更新：2026-09-29 晚上｜分支：`copilot-story-mode`
+更新：2026-09-29 晚上（第二版）｜分支：`copilot-story-mode`
 你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫這台機器要做的事。
 
 ## 目的
 
-上一輪真人語音辨識全部失敗（0/67 可用），合成語音卻正常：問題在 Discord 收音。Discord 語音有第二層端對端加密（DAVE），舊的收音套件在很多情況下沒把它解開，辨識器聽到的是雜訊。這一輪換了收音套件（解密移到正確的位置），並加了**自動量分數的真人辨識測試**：使用者照著念 8 句，程式自己算錯字率，**不需要任何人判斷辨識結果對不對**。
+上一輪真人語音的辨識結果「部分對，但意思跑掉」（使用者的話），合成語音卻幾乎全對。Discord 語音有第二層端對端加密（DAVE），舊的收音套件有一部分幀沒解開就當聲音解碼；開發機的離線測試（真的 DAVE 加密＋Discord 的封包格式）重現了這種結果，新版在同一個測試裡每一幀都正確還原。也可能辨識器本身對真人聲音就不夠準，所以這一輪的辨識測試**同時量兩條路**：經過 Discord 的，和筆電麥克風直接收的（不經過 Discord）。使用者照著念 8 句，程式自己算錯字率，**不需要任何人判斷辨識結果對不對**。
 
 1. 先做辨識測試（約 3 分鐘，需要使用者念句子）。
 2. **平均錯字率 ≤ 15% 才做**角色模式的語音測試（約 10 分鐘）；沒過就停，直接回報（不要再占用使用者時間）。
@@ -26,7 +26,7 @@
   .venv\Scripts\python.exe -m pip install -r requirements.txt
   .venv\Scripts\python.exe scripts\setup_copilot.py
   ```
-  `pip` 那行要看到 `discord-ext-voice-recv` 被重新安裝（來源換成 `LeadFreeCandy/...bec0481...`）。setup 最後幾行要有 `[OK] Gemma 4 E4B QAT Q4_K_XL` 和 `[OK] Character LoRA v3 for E4B (q8_0)`。
+  `pip` 那行要看到 `discord-ext-voice-recv` 被重新安裝（來源換成 `LeadFreeCandy/...bec0481...`），並裝上 `sounddevice`。setup 最後幾行要有 `[OK] Gemma 4 E4B QAT Q4_K_XL` 和 `[OK] Character LoRA v3 for E4B (q8_0)`。
 
 - [ ] **2. 一鍵驗收**
   ```powershell
@@ -39,7 +39,7 @@
   .venv\Scripts\python.exe app.py --stt-check
   .venv\Scripts\python.exe scripts\dev\log_summary.py
   ```
-  Bot 會跟著進頻道；終端機一次顯示一句，請使用者用平常的速度念出來。結束時印出平均錯字率和 PASS／FAIL。兩段輸出都留下（只有數字）。**平均錯字率 > 15%（FAIL）就跳到步驟 6**，其餘不做。
+  Bot 會跟著進頻道；終端機一次顯示一句，請使用者用平常的速度念出來。每句印兩個錯字率：經過 Discord 的、筆電預設麥克風直接收的（開不起來會印「只量 Discord 這條路」）。結束時印出兩個平均和 PASS／FAIL（看 Discord 那條）。兩段輸出都留下（只有數字），並記下使用者在 Discord 用的是不是 Windows 預設的麥克風（問他一句就好）。**經過 Discord 的平均錯字率 > 15%（FAIL）就跳到步驟 6**，其餘不做。
 
 - [ ] **4. 角色模式語音測試（需要使用者，約 10 分鐘）**：用 `啟動 SilentTalk.cmd` 開 App，請使用者：
   1. 選一個他自己的人設，開**角色模式**，在語音頻道正常聊：有時叫角色、問它事情；有時自己聊、不理它；中間安靜 30 秒以上一次（角色應該自己開個話題）。
