@@ -526,7 +526,7 @@ class ReceiveStats:
         self.frames: dict[int, int] = {}
         self.odd = 0
         self.dropped = 0
-        self.decode_errors_before = voice_recv_patch.decode_errors
+        self.patch_before = _patch_counters()
 
     def frame(self, user_id: int, size: int) -> None:
         self.frames[user_id] = self.frames.get(user_id, 0) + 1
@@ -560,17 +560,39 @@ class ReceiveStats:
                 f" decrypt(attempts/ok/failed/passthrough)=[{' '.join(counters)}]"
             )
         rates = sorted((n / seconds for n in self.frames.values()), reverse=True)
+        counters = {
+            name: value - self.patch_before[name]
+            for name, value in _patch_counters().items()
+        }
         _LOG.info(
             "voice_receive_stats seconds=%.0f speakers=%d fps=[%s] odd_frames=%d "
-            "dropped_no_session=%d decode_errors=%d dave=%s",
+            "dropped_no_session=%d decode_errors=%d padded=%d dave_dropped=%d "
+            "unknown_ssrc=%d recoveries=%d dave=%s",
             seconds,
             len(self.frames),
             " ".join(f"{rate:.1f}" for rate in rates),
             self.odd,
             self.dropped,
-            voice_recv_patch.decode_errors - self.decode_errors_before,
+            counters["decode_errors"],
+            counters["padded"],
+            counters["dave_dropped"],
+            counters["unknown_ssrc"],
+            counters["recoveries"],
             dave,
         )
+
+
+def _patch_counters() -> dict[str, int]:
+    return {
+        name: getattr(voice_recv_patch, name)
+        for name in (
+            "decode_errors",
+            "padded",
+            "dave_dropped",
+            "unknown_ssrc",
+            "recoveries",
+        )
+    }
 
 
 STREAM_INPUT_OPTIONS = "-f mp3 -probesize 32 -analyzeduration 0 -fflags nobuffer"

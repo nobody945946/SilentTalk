@@ -133,7 +133,15 @@ def main() -> int:
             rates = re.search(r"fps=\[([^\]]*)\]", text)
             if rates and rates.group(1).split():
                 top.append(float(rates.group(1).split()[0]))
-            for key in ("odd_frames", "dropped_no_session", "decode_errors"):
+            for key in (
+                "odd_frames",
+                "dropped_no_session",
+                "decode_errors",
+                "padded",
+                "dave_dropped",
+                "unknown_ssrc",
+                "recoveries",
+            ):
                 found = re.search(rf"{key}=(\d+)", text)
                 totals[key] += int(found.group(1)) if found else 0
         dave = re.search(r"dave=(\S+)(.*)$", received[-1])
@@ -144,7 +152,9 @@ def main() -> int:
             else f"{len(received)} 次；沒有收到任何幀"
         ) + (
             f"；大小不對 {totals['odd_frames']}、沒 DAVE session 丟掉 {totals['dropped_no_session']}"
-            f"、解碼錯誤 {totals['decode_errors']}；最後一次 DAVE：{dave.group(1)}{dave.group(2)}"
+            f"、解碼錯誤 {totals['decode_errors']}、有 padding {totals['padded']}"
+            f"、DAVE 解不開丟掉 {totals['dave_dropped']}、SSRC 未對應丟掉 {totals['unknown_ssrc']}"
+            f"、DAVE 復原 {totals['recoveries']}；最後一次 DAVE：{dave.group(1)}{dave.group(2)}"
             if dave
             else ""
         )
