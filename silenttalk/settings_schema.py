@@ -259,7 +259,8 @@ PAGES: tuple[Page, ...] = (
                 Setting(
                     "copilot", "llm_model", "模型檔", "choice", "",
                     choices=(
-                        ("gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf", "Gemma 4 E2B（預設，約 1.4 GB VRAM）"),
+                        ("gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf", "Gemma 4 E4B（預設，約 2.7 GB VRAM）"),
+                        ("gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf", "Gemma 4 E2B（較輕較快，約 1.4 GB VRAM）"),
                         ("Qwen3.5-4B-Q4_K_M.gguf", "Qwen3.5 4B（品質相近，約 2.9 GB VRAM）"),
                         ("Qwen3-1.7B-Q4_K_M.gguf", "Qwen3 1.7B（較弱，CPU 稍快）"),
                     ),

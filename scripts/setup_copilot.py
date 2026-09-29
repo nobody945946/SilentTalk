@@ -110,7 +110,7 @@ LLM_MODELS = {
         2_490_000_000,
     ),
 }
-DEFAULT_LLM_MODEL = "gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf"
+DEFAULT_LLM_MODEL = "gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf"
 
 
 # Small files that ship in the repo (models/) and are copied into the runtime
@@ -121,6 +121,12 @@ BUNDLED = (
         PROJECT_DIR / "models" / "character-e2b-lora-v1.q8_0.gguf",
         LLM_DIR / "character-e2b-lora-v1.q8_0.gguf",
         "83655e8502a1c83b5d15dd1adc2bb4b908ddde6506d436f9a93eb491c566f957",
+    ),
+    (
+        "Character LoRA v3 for E4B (q8_0)",
+        PROJECT_DIR / "models" / "character-e4b-lora-v3.q8_0.gguf",
+        LLM_DIR / "character-e4b-lora-v3.q8_0.gguf",
+        "bf7fd9e3189fe0be7c15f8b79e5ccaa45bbbd5d5f9670c695a428c5bb88ebac0",
     ),
 )
 

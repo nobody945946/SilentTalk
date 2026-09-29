@@ -34,7 +34,7 @@ def test_loads_env_and_toml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     assert settings.copilot.enabled is True
     assert settings.copilot.endpoint_silence_ms == 650
     assert settings.copilot.llm_context_size == 4096
-    assert settings.copilot.llm_model == "gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf"
+    assert settings.copilot.llm_model == "gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf"
     assert settings.copilot.llm_gpu_layers == 99
     assert settings.copilot.stt_engine == "paraformer"
     assert settings.validate_runtime() == ["找不到 FFmpeg：missing-ffmpeg-for-test"]
@@ -98,7 +98,7 @@ def test_rejects_duplicate_hotkeys(
     (tmp_path / "config.toml").write_text(
         '[app]\nspeak_hotkey = "F8"\nstop_hotkey = "F8"\n'
         '[tts]\nengine = "edge"\n'
-        '[discord]\n',
+        "[discord]\n",
         encoding="utf-8",
     )
     monkeypatch.setenv("DISCORD_BOT_TOKEN", "test-token")
@@ -140,3 +140,51 @@ def test_rejects_unknown_stt_engine(
     monkeypatch.setenv("OWNER_USER_ID", "123456789")
     with pytest.raises(ConfigError, match="stt_engine"):
         load_settings(tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("model", "lora", "uses"),
+    [
+        # The shipped default: E4B with its own adapter on every decision and line.
+        (
+            "gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf",
+            "character-e4b-lora-v3.q8_0.gguf",
+            ("called", "active", "line"),
+        ),
+        # Switched to E2B on the settings page: the E2B adapter, on "called" only.
+        (
+            "gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf",
+            "character-e2b-lora-v1.q8_0.gguf",
+            ("called",),
+        ),
+        # A model no bundled adapter fits: none.
+        ("Qwen3.5-4B-Q4_K_M.gguf", "", ("called", "active", "line")),
+    ],
+)
+def test_the_character_adapter_follows_the_model(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, model: str, lora: str, uses: tuple
+) -> None:
+    _write_config(tmp_path)
+    with (tmp_path / "config.toml").open("a", encoding="utf-8") as handle:
+        handle.write(
+            f'[copilot]\nllm_model = "{model}"\n'
+            'character_lora = "character-e4b-lora-v3.q8_0.gguf"\n'
+            'character_lora_uses = "called,active,line"\n'
+        )
+    monkeypatch.setenv("DISCORD_BOT_TOKEN", "test-token")
+    monkeypatch.setenv("OWNER_USER_ID", "123456789")
+    copilot = load_settings(tmp_path).copilot
+    assert (copilot.character_lora, copilot.character_lora_uses) == (lora, uses)
+
+
+def test_an_adapter_of_ones_own_is_kept(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write_config(tmp_path)
+    with (tmp_path / "config.toml").open("a", encoding="utf-8") as handle:
+        handle.write(
+            '[copilot]\nllm_model = "Qwen3.5-4B-Q4_K_M.gguf"\ncharacter_lora = "mine.gguf"\n'
+        )
+    monkeypatch.setenv("DISCORD_BOT_TOKEN", "test-token")
+    monkeypatch.setenv("OWNER_USER_ID", "123456789")
+    assert load_settings(tmp_path).copilot.character_lora == "mine.gguf"

@@ -39,11 +39,12 @@ context_char_budget = 2400
 max_reply_chars = 72
 llama_port = 18088
 auto_popup = true
-# Reply model in .runtime/models/llm/ (downloaded by the launcher). Gemma 4 E2B
-# uses ~1.4 GB VRAM + ~2 GB RAM and keeps personas best for its size.
-# Alternatives: "Qwen3.5-4B-Q4_K_M.gguf" (same quality, ~2.9 GB VRAM, slower)
-# or "Qwen3-1.7B-Q4_K_M.gguf" (weaker personas, a bit faster on CPU only).
-llm_model = "gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf"
+# Reply model in .runtime/models/llm/ (downloaded by the launcher). Gemma 4 E4B
+# uses ~2.7 GB VRAM on a 3050 Ti (26.5 tokens/s) and beats E2B clearly: 60%
+# vs 36% per line, options 60% vs 32%. "gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf" is
+# the lighter choice (~1.4 GB VRAM, ~76 tokens/s; set character_lora to the
+# E2B adapter with it). An adapter only fits the model it was trained on.
+llm_model = "gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf"
 # Layers offloaded to the GPU; 0 = CPU only (about 3x slower, still usable).
 llm_gpu_layers = 99
 # 8-bit KV cache + flash attention: 1.7B uses ~1.4 GB instead of ~1.6 GB (4B:
@@ -53,10 +54,13 @@ llm_low_vram = true
 # Character-mode LoRA adapter in .runtime/models/llm/ ("" = none; the launcher
 # installs it from models/), and which requests use it: "called" / "active"
 # (the two "should I speak?" questions), "line" (what the character says),
-# "options" (the W/A/S/D choices). v1 only wins on "called": stray replies
-# 9.6% -> 1.0% at the same recall; its lines and options were worse.
-character_lora = "character-e2b-lora-v1.q8_0.gguf"
-character_lora_uses = "called"
+# "options" (the W/A/S/D choices). v3 (E4B, trained only on rows an
+# independent model checked) on called/active/line: stray replies 9.1% ->
+# 0.5%, chiming in where it shouldn't 53% -> 7.5%, and its lines beat plain
+# E4B 59% vs 40% (knowing the person 27 vs 15). With E2B use
+# "character-e2b-lora-v1.q8_0.gguf" on "called" only.
+character_lora = "character-e4b-lora-v3.q8_0.gguf"
+character_lora_uses = "called,active,line"
 # When the character speaks up, decided line by line by the local model:
 # "called" = only when someone calls it, asks it or answers it; "active" = it
 # also joins in by itself when the topic suits it.

@@ -94,7 +94,9 @@ def main() -> int:
     lengths = [
         len(tokenizer(r["prompt"] + r["completion"])["input_ids"]) for r in rendered
     ]
-    rendered = [r for r, n in zip(rendered, lengths) if n <= args.max_length]
+    rendered = [
+        r for r, n in zip(rendered, lengths, strict=True) if n <= args.max_length
+    ]
     print(
         f"longest row {max(lengths)} tokens; "
         f"{len(rows) - len(rendered)} rows over --max-length {args.max_length} dropped"

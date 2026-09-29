@@ -19,7 +19,19 @@ MEMORY_LEVEL_CHOICES: tuple[tuple[str, str], ...] = (
 )
 from silenttalk.settings_store import SETTINGS_FILE, SettingsStore, merge
 
-DEFAULT_LLM_MODEL = "gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf"
+DEFAULT_LLM_MODEL = "gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf"
+# The character adapters setup installs, each with the only model it fits
+# and the requests it measured better on.
+MODEL_ADAPTERS: dict[str, tuple[str, tuple[str, ...]]] = {
+    "gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf": (
+        "character-e4b-lora-v3.q8_0.gguf",
+        ("called", "active", "line"),
+    ),
+    "gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf": (
+        "character-e2b-lora-v1.q8_0.gguf",
+        ("called",),
+    ),
+}
 STT_ENGINES = ("paraformer", "sensevoice")
 
 
@@ -136,16 +148,16 @@ def _one_of(value: object, allowed: list[str], field: str) -> str:
 def _stt_engine(value: object) -> str:
     engine = str(value).strip().lower()
     if engine not in STT_ENGINES:
-        raise ConfigError(
-            'copilot.stt_engine 只能是 "paraformer" 或 "sensevoice"。'
-        )
+        raise ConfigError('copilot.stt_engine 只能是 "paraformer" 或 "sensevoice"。')
     return engine
 
 
 def _model_filename(value: object) -> str:
     name = str(value).strip()
     if not name.lower().endswith(".gguf") or Path(name).name != name:
-        raise ConfigError("copilot.llm_model 必須是 .runtime/models/llm/ 內的 .gguf 檔名。")
+        raise ConfigError(
+            "copilot.llm_model 必須是 .runtime/models/llm/ 內的 .gguf 檔名。"
+        )
     return name
 
 
@@ -168,6 +180,17 @@ def _optional_model_filename(value: object) -> str:
     return _model_filename(value) if str(value).strip() else ""
 
 
+def _adapter_for(
+    model: str, lora: str, uses: tuple[str, ...]
+) -> tuple[str, tuple[str, ...]]:
+    """A bundled adapter only loads on the model it was trained on: when the
+    settings page switches the model, the adapter follows it (or goes)."""
+    bases = {adapter: base for base, (adapter, _) in MODEL_ADAPTERS.items()}
+    if bases.get(lora, model) == model:
+        return lora, uses
+    return MODEL_ADAPTERS.get(model, ("", uses))
+
+
 def config_defaults(project_dir: Path) -> dict[str, dict[str, object]]:
     """config.toml as-is: what the settings page calls "the default"."""
     config_path = project_dir / "config.toml"
@@ -176,9 +199,7 @@ def config_defaults(project_dir: Path) -> dict[str, dict[str, object]]:
     with config_path.open("rb") as handle:
         raw = tomllib.load(handle)
     tables = {
-        name: dict(values)
-        for name, values in raw.items()
-        if isinstance(values, dict)
+        name: dict(values) for name, values in raw.items() if isinstance(values, dict)
     }
     # Values the file leaves out still have a default in the dataclasses;
     # the page needs them to show a starting position.
@@ -225,6 +246,12 @@ def load_settings(project_dir: Path) -> Settings:
     discord = _section(raw, "discord")
     audio = _section(raw, "audio")
     copilot = _section(raw, "copilot")
+    llm_model = _model_filename(copilot.get("llm_model", DEFAULT_LLM_MODEL))
+    character_lora, character_lora_uses = _adapter_for(
+        llm_model,
+        _optional_model_filename(copilot.get("character_lora", "")),
+        _lora_uses(copilot.get("character_lora_uses")),
+    )
     engine = str(tts.get("engine", "edge")).lower()
     if engine != "edge":
         raise ConfigError('MVP 目前只支援 tts.engine = "edge"。')
@@ -300,21 +327,21 @@ def load_settings(project_dir: Path) -> Settings:
             context_char_budget=max(
                 600, min(5000, int(copilot.get("context_char_budget", 2400)))
             ),
-            max_reply_chars=max(
-                24, min(160, int(copilot.get("max_reply_chars", 72)))
-            ),
+            max_reply_chars=max(24, min(160, int(copilot.get("max_reply_chars", 72)))),
             llama_port=max(1024, min(65535, int(copilot.get("llama_port", 18088)))),
             auto_popup=bool(copilot.get("auto_popup", True)),
-            llm_model=_model_filename(
-                copilot.get("llm_model", DEFAULT_LLM_MODEL)
-            ),
+            llm_model=llm_model,
             llm_gpu_layers=max(0, min(999, int(copilot.get("llm_gpu_layers", 99)))),
             llm_low_vram=bool(copilot.get("llm_low_vram", True)),
-            character_lora=_optional_model_filename(copilot.get("character_lora", "")),
-            character_lora_uses=_lora_uses(copilot.get("character_lora_uses")),
+            character_lora=character_lora,
+            character_lora_uses=character_lora_uses,
             compact_context=bool(copilot.get("compact_context", True)),
-            compact_keep_turns=max(8, min(200, int(copilot.get("compact_keep_turns", 20)))),
-            compact_batch_turns=max(4, min(200, int(copilot.get("compact_batch_turns", 12)))),
+            compact_keep_turns=max(
+                8, min(200, int(copilot.get("compact_keep_turns", 20)))
+            ),
+            compact_batch_turns=max(
+                4, min(200, int(copilot.get("compact_batch_turns", 12)))
+            ),
             character_ai_honesty=_one_of(
                 copilot.get("character_ai_honesty", "in_character"),
                 [mode for mode, _ in AI_HONESTY_MODES],
@@ -326,7 +353,9 @@ def load_settings(project_dir: Path) -> Settings:
                 "character_engagement",
             ),
             character_memory=_one_of(
-                copilot.get("character_memory", "off"), list(MEMORY_LEVEL_NAMES), "character_memory"
+                copilot.get("character_memory", "off"),
+                list(MEMORY_LEVEL_NAMES),
+                "character_memory",
             ),
             character_lull_seconds=max(
                 0.0, min(600.0, float(copilot.get("character_lull_seconds", 30.0)))

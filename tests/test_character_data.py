@@ -226,11 +226,12 @@ def _checked_set(chardata: Path, agree: list[bool], wins: list[int]) -> None:
         "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in gates + lines)
     )
     verdicts = [
-        {"key": character_data.row_key(r), "agree": a} for r, a in zip(gates, agree)
+        {"key": character_data.row_key(r), "agree": a}
+        for r, a in zip(gates, agree, strict=True)
     ]
     verdicts += [
         {"key": character_data.row_key(r), "wins": w, "compared": True}
-        for r, w in zip(lines, wins)
+        for r, w in zip(lines, wins, strict=True)
     ]
     (chardata / "check.jsonl").write_text(
         "".join(json.dumps(v) + "\n" for v in verdicts)

@@ -112,6 +112,11 @@ def main() -> int:
         "--lora",
         help="adapter (file in .runtime/models/llm/ or a path): time the app's LoRA gate + reply",
     )
+    parser.add_argument(
+        "--lora-uses",
+        default="called",
+        help='with --lora: as copilot.character_lora_uses; "line" in it times the reply with the adapter too',
+    )
     parser.add_argument("--skip-tts", action="store_true", help="no internet")
     parser.add_argument("--llama-server", help="path to llama-server(.exe)")
     args = parser.parse_args()
@@ -291,19 +296,35 @@ def bench_llm(
         old_requests, new_requests = old_format_requests(), new_format_requests()
         if lora is not None:
             # What the app does per line: the gate with the adapter (slot 0),
-            # then the reply without it (slot 1). Each slot keeps its cache.
+            # then the reply, with the adapter on the same slot when "line"
+            # is one of its uses, else without it (slot 1). Each slot keeps
+            # its cache.
             on = {"lora": [{"id": 0, "scale": 1.0}], "id_slot": 0}
             off = {"lora": [{"id": 0, "scale": 0.0}], "id_slot": 1}
+            line_on = "line" in args.lora_uses.split(",")
+            reply = on if line_on else off
             post(new_requests[0], 1, extra=on)
             post(new_requests[0], 1, extra=off)
             gates, replies = [], []
             for messages in new_requests[1:]:
                 gates.append(post(messages, 1, extra=on))
-                replies.append(post(messages, 20, extra=off))
+                replies.append(post(messages, 20, extra=reply))
             rows.append(("判斷一句（LoRA，slot 0）", summarize(gates)))
-            rows.append(("接著回一句（原模型，slot 1，最多 20 token）", summarize(replies)))
-            speed = post(new_requests[-1], 32, ignore_eos=True, extra=off)
-            rows.append(("生成速度", f"{speed['tps']:.1f} token/s"))
+            rows.append(
+                (
+                    "接著回一句（LoRA，slot 0，最多 20 token）"
+                    if line_on
+                    else "接著回一句（原模型，slot 1，最多 20 token）",
+                    summarize(replies),
+                )
+            )
+            speed = post(new_requests[-1], 32, ignore_eos=True, extra=reply)
+            rows.append(
+                (
+                    "生成速度（LoRA）" if line_on else "生成速度",
+                    f"{speed['tps']:.1f} token/s",
+                )
+            )
             return
 
         # The first request of each format fills its cache; time the rest,
@@ -347,7 +368,11 @@ def wait_healthy(server: subprocess.Popen) -> None:
 
 
 def post(
-    messages: list[dict], max_tokens: int, *, ignore_eos: bool = False, extra: dict | None = None
+    messages: list[dict],
+    max_tokens: int,
+    *,
+    ignore_eos: bool = False,
+    extra: dict | None = None,
 ) -> dict:
     body = {
         **(extra or {}),
