@@ -4,6 +4,7 @@ the receive stats say, and that one bad Opus frame doesn't stop listening."""
 from __future__ import annotations
 
 import logging
+import sys
 from dataclasses import dataclass
 from types import SimpleNamespace
 
@@ -150,3 +151,29 @@ def test_audio_stats_tell_voice_from_noise() -> None:
     assert -30 < voice_level < -15 and -30 < noise_level < -20
     assert voice_flat < 0.1 < 0.4 < noise_flat
     assert audio_stats(np.zeros(0, dtype=np.float32)) == (-120.0, 1.0)
+
+
+def test_the_local_microphone_arrives_as_discord_frames(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from silenttalk.copilot import stt_check
+
+    streams: list[SimpleNamespace] = []
+
+    def input_stream(**kwargs: object) -> SimpleNamespace:
+        streams.append(SimpleNamespace(**kwargs))
+        return streams[-1]
+
+    monkeypatch.setitem(
+        sys.modules, "sounddevice", SimpleNamespace(InputStream=input_stream)
+    )
+    frames: list[bytes] = []
+    assert stt_check._open_microphone(frames.append) is streams[0]
+    assert (streams[0].samplerate, streams[0].channels) == (48_000, 1)
+
+    mono = np.arange(1440, dtype="<i2").reshape(-1, 1)  # 30 ms
+    streams[0].callback(mono, 1440, None, None)
+
+    [frame] = frames  # 20 ms out, 10 ms kept for the next one
+    assert len(frame) == discord_voice.FRAME_BYTES
+    assert np.frombuffer(frame, "<i2")[:6].tolist() == [0, 0, 1, 1, 2, 2]

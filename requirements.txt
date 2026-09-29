@@ -5,3 +5,4 @@ discord-ext-voice-recv @ https://github.com/LeadFreeCandy/discord-ext-voice-recv
 sherpa-onnx==1.13.8
 numpy>=1.26,<3
 opencc-python-reimplemented==0.1.7
+sounddevice==0.5.6

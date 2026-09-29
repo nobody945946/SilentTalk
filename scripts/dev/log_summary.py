@@ -188,9 +188,14 @@ def main() -> int:
         (
             "真人辨識測試（--stt-check）",
             (
-                f"平均錯字率 {float(check_done[-1]['cer']):.1%}（{check_done[-1]['sentences']} 句，"
+                f"經過 Discord 平均錯字率 {float(check_done[-1]['cer']):.1%}（{check_done[-1]['sentences']} 句，"
                 f"{'PASS' if check_done[-1].get('passed') == '1' else 'FAIL'}）；"
-                f"有結果 {sum(int(r.get('heard_chars', 0)) > 0 for r in checks)}/{len(checks)} 句"
+                + (
+                    f"本機麥克風直接收 {float(check_done[-1]['local_cer']):.1%}；"
+                    if float(check_done[-1].get("local_cer", -1)) >= 0
+                    else "本機麥克風沒量；"
+                )
+                + f"有結果 {sum(int(r.get('heard_chars', 0)) > 0 for r in checks)}/{len(checks)} 句"
             )
             if check_done
             else "沒有跑",
