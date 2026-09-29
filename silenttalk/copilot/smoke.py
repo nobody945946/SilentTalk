@@ -83,9 +83,10 @@ LLM_SCENES: tuple[tuple[tuple[str, str], ...], ...] = (
         ("阿傑", "那是因為大家不會打他而已"),
     ),
 )
-# Qwen3-1.7B Q4_K_M: ~0.35 s on an RTX 3090, estimated 1-1.5 s on a 3050 Ti
-# Laptop, ~3 s CPU-only. Above this the story-mode choices feel laggy.
-LLM_MAX_MEDIAN_SECONDS = 3.0
+# Four sampled options on a 3050 Ti Laptop: Gemma 4 E2B ~2.0 s, E4B (the
+# default since 2026-09-29, clearly better lines) 3.0 s. Past 4 s the story-mode
+# choices feel laggy, or the model fell off the GPU.
+LLM_MAX_MEDIAN_SECONDS = 4.0
 # Sampling may not find four different lines, so three of four is the floor.
 LLM_MIN_LANES = 3
 
