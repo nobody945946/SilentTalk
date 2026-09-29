@@ -97,6 +97,29 @@ class Downsampler:
         return out.astype(np.float32, copy=False)
 
 
+def audio_stats(samples: np.ndarray) -> tuple[float, float]:
+    """Level (dBFS, RMS) and median spectral flatness of 16 kHz audio.
+
+    Flatness is the geometric over the arithmetic mean of the power spectrum
+    per 32 ms frame, 300-3400 Hz: voice stays well below 0.3, white noise
+    is ~0.56 (e.g. frames that were never decrypted). Numbers only, for the
+    log.
+    """
+    if len(samples) == 0:
+        return -120.0, 1.0
+    rms = float(np.sqrt(np.mean(np.square(samples, dtype=np.float64))))
+    level = 20.0 * float(np.log10(max(rms, 1e-6)))
+    frame = 512
+    count = len(samples) // frame
+    if count == 0:
+        return level, 1.0
+    frames = samples[: count * frame].reshape(count, frame) * np.hanning(frame)
+    power = np.abs(np.fft.rfft(frames, axis=1)) ** 2 + 1e-12
+    band = power[:, int(300 * frame / SAMPLE_RATE) : int(3400 * frame / SAMPLE_RATE)]
+    flatness = np.exp(np.mean(np.log(band), axis=1)) / np.mean(band, axis=1)
+    return level, float(np.median(flatness))
+
+
 def pad_segment(
     samples: np.ndarray, seconds: float = _SEGMENT_PADDING_SECONDS
 ) -> np.ndarray:
@@ -316,11 +339,15 @@ class OfflineTranscriber:
             recognizer.decode_stream(stream)
             # INFO, content-free: how a speaker's audio was cut up tells a
             # VAD that splits sentences from a recogniser that mishears.
+            level, flatness = audio_stats(samples)
             _LOG.info(
-                "copilot_stt_segment speaker_id=%s audio_ms=%d decode_ms=%d",
+                "copilot_stt_segment speaker_id=%s audio_ms=%d decode_ms=%d "
+                "level_dbfs=%.1f flatness=%.2f",
                 speaker_id,
                 len(samples) * 1000 // SAMPLE_RATE,
                 int((time.perf_counter() - started) * 1000),
+                level,
+                flatness,
             )
             if not self._emit(speaker_id, state.speaker_name, stream.result.text):
                 # The VAD heard speech but nothing came out: the "said it a

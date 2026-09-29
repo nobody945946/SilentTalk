@@ -9,6 +9,7 @@ from silenttalk.config import ConfigError, config_defaults, load_settings
 from silenttalk.controller import AppController
 from silenttalk.copilot.persona import PersonaStore
 from silenttalk.copilot.smoke import run_copilot_smoke
+from silenttalk.copilot.stt_check import run_stt_check
 from silenttalk.copilot.types import ConversationTurn, ReplySuggestions
 from silenttalk.logging_setup import configure_logging
 from silenttalk.phrases import QuickPhraseStore
@@ -37,6 +38,11 @@ def main() -> int:
         help="Check local STT + LLM on this machine (no Discord needed)",
     )
     parser.add_argument(
+        "--stt-check",
+        action="store_true",
+        help="Real-voice STT: the owner reads fixed sentences in Discord voice, scored by CER",
+    )
+    parser.add_argument(
         "--silenttalk-desktop",
         action="store_true",
         help=argparse.SUPPRESS,
@@ -56,6 +62,14 @@ def main() -> int:
             passed = asyncio.run(run_copilot_smoke(settings, project_dir))
         except Exception as exc:  # noqa: BLE001 - CLI boundary reports smoke failures.
             print(f"Copilot smoke 失敗：{exc}", file=sys.stderr)
+            return 4
+        return 0 if passed else 5
+
+    if args.stt_check:
+        try:
+            passed = asyncio.run(run_stt_check(settings, project_dir))
+        except Exception as exc:  # noqa: BLE001 - CLI boundary reports check failures.
+            print(f"STT check 失敗：{exc}", file=sys.stderr)
             return 4
         return 0 if passed else 5
 
@@ -111,7 +125,12 @@ def main() -> int:
     copilot_info = (
         [
             ("回覆模型", copilot.llm_model),
-            ("GPU", f"{copilot.llm_gpu_layers} 層" if copilot.llm_gpu_layers else "關閉（CPU）"),
+            (
+                "GPU",
+                f"{copilot.llm_gpu_layers} 層"
+                if copilot.llm_gpu_layers
+                else "關閉（CPU）",
+            ),
             ("省 VRAM", "開（8-bit KV cache）" if copilot.llm_low_vram else "關"),
             ("語音辨識", copilot.stt_engine),
         ]

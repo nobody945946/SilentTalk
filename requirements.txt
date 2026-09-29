@@ -1,7 +1,7 @@
 discord.py[voice]==2.7.1
 edge-tts==7.2.8
 python-dotenv==1.1.1
-discord-ext-voice-recv @ https://github.com/rdphillips7/discord-ext-voice-recv/archive/ddd28601fe556f585b869e215f29c8236b95f88f.zip
+discord-ext-voice-recv @ https://github.com/LeadFreeCandy/discord-ext-voice-recv/archive/bec048127f4148fd147afa3182c3771b6955dc08.zip
 sherpa-onnx==1.13.8
 numpy>=1.26,<3
 opencc-python-reimplemented==0.1.7

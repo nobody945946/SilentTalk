@@ -63,10 +63,13 @@ def main() -> int:
         except json.JSONDecodeError:
             continue
     if not args.all:
+        # The last app run or --stt-check run, whichever came last.
         starts = [
             i
             for i, r in enumerate(records)
-            if r.get("event", "").startswith("copilot_runtime_ready")
+            if r.get("event", "").startswith(
+                ("copilot_runtime_ready", "copilot_stt_check_start")
+            )
         ]
         if starts:
             records = records[max(0, starts[-1] - 50) :]
@@ -78,7 +81,9 @@ def main() -> int:
         name = text.split(" ", 1)[0]
         events.setdefault(name, []).append(dict(FIELD.findall(text)))
         if record.get("level") in ("WARNING", "ERROR", "CRITICAL"):
-            problems[f"{record['level']} {_problem_name(record)}{_exception_type(record)}"] += 1
+            problems[
+                f"{record['level']} {_problem_name(record)}{_exception_type(record)}"
+            ] += 1
 
     def ms(rows: list[dict[str, str]], key: str) -> str:
         values = [
@@ -101,6 +106,48 @@ def main() -> int:
         r for r in records if str(r.get("event", "")).startswith("copilot_llm_devices")
     ]
     receive = events.get("voice_receive_started", [])
+    segments = events.get("copilot_stt_segment", [])
+    received = [
+        str(r.get("event", ""))
+        for r in records
+        if str(r.get("event", "")).startswith("voice_receive_stats")
+    ]
+    checks = events.get("copilot_stt_check", [])
+    check_done = events.get("copilot_stt_check_done", [])
+
+    def median_of(rows: list[dict[str, str]], key: str, fmt: str) -> str:
+        values = []
+        for r in rows:
+            try:
+                values.append(float(r[key]))
+            except (KeyError, ValueError):
+                pass
+        return format(statistics.median(values), fmt) if values else "—"
+
+    def receive_summary() -> str:
+        if not received:
+            return "—"
+        top = []
+        totals = Counter()
+        for text in received:
+            rates = re.search(r"fps=\[([^\]]*)\]", text)
+            if rates and rates.group(1).split():
+                top.append(float(rates.group(1).split()[0]))
+            for key in ("odd_frames", "dropped_no_session", "decode_errors"):
+                found = re.search(rf"{key}=(\d+)", text)
+                totals[key] += int(found.group(1)) if found else 0
+        dave = re.search(r"dave=(\S+)(.*)$", received[-1])
+        return (
+            f"{len(received)} 次；說最多的人每秒幀數中位數 "
+            f"{statistics.median(top):.1f}（50＝全收到）"
+            if top
+            else f"{len(received)} 次；沒有收到任何幀"
+        ) + (
+            f"；大小不對 {totals['odd_frames']}、沒 DAVE session 丟掉 {totals['dropped_no_session']}"
+            f"、解碼錯誤 {totals['decode_errors']}；最後一次 DAVE：{dave.group(1)}{dave.group(2)}"
+            if dave
+            else ""
+        )
 
     rows = [
         (
@@ -120,9 +167,32 @@ def main() -> int:
             if receive
             else "沒有啟動",
         ),
+        ("收音（每 30 秒記一次）", receive_summary()),
         ("STT 斷出的句子", str(len(events.get("copilot_turn_final", [])))),
-        ("STT 聲音片段長度（SenseVoice）", ms(events.get("copilot_stt_segment", []), "audio_ms")),
-        ("STT 辨識一段花的時間", ms(events.get("copilot_stt_segment", []), "decode_ms")),
+        (
+            "STT 片段音量／頻譜平坦度（人聲 < 0.3，雜訊約 0.56）",
+            f"中位數 {median_of(segments, 'level_dbfs', '.1f')} dBFS／"
+            f"{median_of(segments, 'flatness', '.2f')}；像雜訊（> 0.4）"
+            f"{sum(float(r.get('flatness', 0)) > 0.4 for r in segments)}/{len(segments)} 段",
+        ),
+        (
+            "真人辨識測試（--stt-check）",
+            (
+                f"平均錯字率 {float(check_done[-1]['cer']):.1%}（{check_done[-1]['sentences']} 句，"
+                f"{'PASS' if check_done[-1].get('passed') == '1' else 'FAIL'}）；"
+                f"有結果 {sum(int(r.get('heard_chars', 0)) > 0 for r in checks)}/{len(checks)} 句"
+            )
+            if check_done
+            else "沒有跑",
+        ),
+        (
+            "STT 聲音片段長度（SenseVoice）",
+            ms(events.get("copilot_stt_segment", []), "audio_ms"),
+        ),
+        (
+            "STT 辨識一段花的時間",
+            ms(events.get("copilot_stt_segment", []), "decode_ms"),
+        ),
         (
             "STT 聽到聲音但沒辨識出字（SenseVoice）",
             f"{len(events.get('copilot_stt_empty', []))}"

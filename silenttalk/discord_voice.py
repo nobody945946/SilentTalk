@@ -9,11 +9,15 @@ from pathlib import Path
 import discord
 from discord.ext import voice_recv
 
+from silenttalk import voice_recv_patch
 from silenttalk.config import AudioConfig, DiscordConfig
 from silenttalk.state import AppState
 from silenttalk.tts.base import AudioResult
 
 _LOG = logging.getLogger(__name__)
+voice_recv_patch.apply()
+# 20 ms of 48 kHz stereo s16le: every decoded Discord voice frame.
+FRAME_BYTES = 3840
 StatusCallback = Callable[[AppState, str], None]
 PCMCallback = Callable[[int, str, bytes], None]
 # (author id, display name, content, addressed) typed in the channel's chat.
@@ -54,6 +58,7 @@ class DiscordVoiceClient(discord.Client):
         self._reconnect_delay = config.voice_reconnect_cooldown_seconds
         self._voice_ready = asyncio.Event()
         self._listen_retries = 0
+        self._receive = ReceiveStats(time.monotonic())
 
     def set_pcm_callback(self, callback: PCMCallback | None) -> None:
         self._pcm_callback = callback
@@ -174,6 +179,7 @@ class DiscordVoiceClient(discord.Client):
             try:
                 await asyncio.sleep(self._config.voice_reconnect_interval_seconds)
                 await self.sync_owner_voice()
+                self._log_receive_stats()
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
@@ -309,7 +315,9 @@ class DiscordVoiceClient(discord.Client):
         self._ensure_listening(new_voice)
         self._mark_voice_healthy()
 
-    async def wait_until_voice_ready(self, timeout_seconds: float | None = None) -> None:
+    async def wait_until_voice_ready(
+        self, timeout_seconds: float | None = None
+    ) -> None:
         if self.active_voice() is not None:
             return
 
@@ -379,10 +387,9 @@ class DiscordVoiceClient(discord.Client):
         if isinstance(voice.channel, discord.StageChannel):
             _LOG.warning("voice_receive_skipped reason=stage_channel")
             return
-        if getattr(connection, "dave_session", None) is None:
-            # The pinned voice_recv fork dereferences dave_session when building
-            # its decoder; without one, listen() dies and triggers reconnect loops.
-            # connect() can return just before the session is created, so retry.
+        if dave_version and getattr(connection, "dave_session", None) is None:
+            # With DAVE on, frames can only be decrypted once discord.py has
+            # the session; connect() can return just before it exists.
             self._listen_retries += 1
             _LOG.warning(
                 "voice_receive_waiting reason=no_dave_session attempt=%d",
@@ -409,13 +416,17 @@ class DiscordVoiceClient(discord.Client):
         callback = self._pcm_callback
         if callback is None or user is None or not data.pcm:
             return
-        if voice is not None and not _dave_receive_ready(voice):
-            # Before the DAVE handshake settles, frames are still E2E-encrypted
-            # and decode to noise; STT would turn that into invented words.
-            return
         if self.user is not None and user.id == self.user.id:
             return
         if bool(getattr(user, "bot", False)):
+            return
+        # DAVE on but no session yet: nothing decrypted these frames and they
+        # decode to noise, which STT would turn into invented words.
+        ready = voice is None or _dave_receive_ready(voice)
+        if ready:
+            self._receive.frame(user.id, len(data.pcm))
+        else:
+            self._receive.dropped += 1
             return
 
         name = str(
@@ -424,6 +435,19 @@ class DiscordVoiceClient(discord.Client):
             or user.id
         )
         callback(user.id, name, data.pcm)
+
+    def _log_receive_stats(self) -> None:
+        """Every 30 s while listening, even when no frame gets through (all
+        of them failing to decrypt is exactly the case to see)."""
+        now = time.monotonic()
+        if now - self._receive.started < ReceiveStats.PERIOD:
+            return
+        voice = self.active_voice()
+        stats, self._receive = self._receive, ReceiveStats(now)
+        if voice is None or not getattr(voice, "is_listening", lambda: False)():
+            return
+        members = getattr(voice.channel, "members", [])
+        stats.log(voice, now, [m.id for m in members if not getattr(m, "bot", False)])
 
     def _on_listen_stopped(self, error: Exception | None) -> None:
         if error is None or self.is_closed():
@@ -480,10 +504,73 @@ class DiscordVoiceClient(discord.Client):
 
 
 def _dave_receive_ready(voice: discord.VoiceClient) -> bool:
+    """voice_recv decrypts DAVE frames with discord.py's session and drops the
+    ones it can't; frames arriving while there is no session were not
+    decrypted at all."""
     connection = getattr(voice, "_connection", None)
     if int(getattr(connection, "dave_protocol_version", 0) or 0) == 0:
         return True
-    return bool(getattr(connection, "can_encrypt", False))
+    return getattr(connection, "dave_session", None) is not None
+
+
+class ReceiveStats:
+    """How voice arrives, in numbers only (no audio, no names): frames per
+    second per speaker (50 is every frame), frames of an unexpected size,
+    frames dropped for lack of a DAVE session, Opus decode errors, and the
+    DAVE session's own decrypt counters per speaker."""
+
+    PERIOD = 30.0
+
+    def __init__(self, started: float) -> None:
+        self.started = started
+        self.frames: dict[int, int] = {}
+        self.odd = 0
+        self.dropped = 0
+        self.decode_errors_before = voice_recv_patch.decode_errors
+
+    def frame(self, user_id: int, size: int) -> None:
+        self.frames[user_id] = self.frames.get(user_id, 0) + 1
+        if size != FRAME_BYTES:
+            self.odd += 1
+
+    def log(
+        self, voice: discord.VoiceClient | None, now: float, members: list[int]
+    ) -> None:
+        seconds = max(now - self.started, 1e-3)
+        connection = getattr(voice, "_connection", None)
+        version = int(getattr(connection, "dave_protocol_version", 0) or 0)
+        session = getattr(connection, "dave_session", None)
+        dave = f"v{version}"
+        if session is not None:
+            counters = []
+            speakers = sorted(self.frames, key=self.frames.__getitem__, reverse=True)
+            for user_id in speakers + [m for m in members if m not in self.frames]:
+                try:
+                    stats = session.get_decryption_stats(user_id)
+                except Exception:  # davey raises for users it has no decryptor for
+                    stats = None
+                counters.append(
+                    "-"
+                    if stats is None
+                    else f"{stats.attempts}/{stats.successes}/{stats.failures}/{stats.passthroughs}"
+                )
+            dave += (
+                f" ready={int(bool(getattr(session, 'ready', False)))}"
+                f" epoch={getattr(session, 'epoch', None)}"
+                f" decrypt(attempts/ok/failed/passthrough)=[{' '.join(counters)}]"
+            )
+        rates = sorted((n / seconds for n in self.frames.values()), reverse=True)
+        _LOG.info(
+            "voice_receive_stats seconds=%.0f speakers=%d fps=[%s] odd_frames=%d "
+            "dropped_no_session=%d decode_errors=%d dave=%s",
+            seconds,
+            len(self.frames),
+            " ".join(f"{rate:.1f}" for rate in rates),
+            self.odd,
+            self.dropped,
+            voice_recv_patch.decode_errors - self.decode_errors_before,
+            dave,
+        )
 
 
 STREAM_INPUT_OPTIONS = "-f mp3 -probesize 32 -analyzeduration 0 -fflags nobuffer"
