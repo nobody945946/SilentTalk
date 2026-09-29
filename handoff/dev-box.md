@@ -1,6 +1,6 @@
 # 開發機工作檔（Linux、RTX 3090）
 
-更新：2026-09-29 深夜｜分支：`copilot-story-mode`
+更新：2026-09-29 晚上（筆電辨識測試之後）｜分支：`copilot-story-mode`
 你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事。舊版在 `archive/`（只在這台機器、不進 git），不必讀。
 
 ---
@@ -16,16 +16,16 @@
 | 項目 | 狀態 |
 |---|---|
 | 人設只給「塑造這個人」的部分、今天的心事、冷場開話題 | ✅ 出貨（§5.2） |
-| **真人語音辨識** | ❌→🔄 上一輪真人語音「部分對，但意思跑掉」（合成語音 1.7% 錯字率）。收音換成上游＋PR #62＋我們的補丁，離線用真的 DAVE 驗過；等筆電 `--stt-check`（經過 Discord vs 本機麥克風，§4 A） |
+| **真人語音辨識** | ✅ 修好、真人驗過：DAVE 963 幀解開 961、解碼錯誤 0；照字念完的六句錯字率 0/0/0/7.7/0/10%（§4 A）。本機麥克風那條路沒收到聲音（原因未明，不影響） |
 | **預設 E4B＋第三版 LoRA（判斷＋台詞）** | ✅ 出貨（`models/character-e4b-lora-v3.q8_0.gguf`；§5.2）。3050 Ti 上套 LoRA 判斷 211 ms、生成 26.0 token/s（沒 LoRA 205 ms、26.4）：延遲沒問題 |
 | E2B＋v1 LoRA（只用在「是不是在叫你」） | 設定頁選 E2B 時自動換成它（adapter 跟著模型，`config.MODEL_ADAPTERS`） |
 | 選項＝取樣四句、看的時候不會被換掉 | ✅ 出貨（§5.1） |
 | 角色記憶（跨次演進的心事、看法、對人的感覺） | 🧊 架構做好（`character_state.py`、`copilot.character_memory`），E2B 上量輸，**預設 off**（§5.3） |
 | E4B＋第一版資料練的判斷 LoRA | ❌ 不出貨：資料沒過硬關卡（檢查員只同意 82.7% 的判斷標籤 < 85%，§5.8） |
 | 老師比較收尾（TAIDE、Gemma 31B 先想再寫） | 🔄 佇列在跑（`night_queue3.sh` 的最後一段），只給第四版參考 |
-| 筆電 | ⬜ `handoff/laptop.md`：先做真人辨識測試（念 8 句、自動算錯字率），≤ 15% 才做角色模式語音測試 |
+| 筆電 | ⬜ `handoff/laptop.md`：**角色模式語音測試**（E4B＋v3 第一次真的被聽到）。不再請使用者念句子（他說好幾天沒說話、念不順） |
 
-**測試：** `203 passed`（`tests/test_dave_receive.py` 需要開發用的 `cryptography`，沒有就跳過）。
+**測試：** `204 passed`（`tests/test_dave_receive.py` 需要開發用的 `cryptography`，沒有就跳過）。
 
 ## 2. 開發機規則（通用規則在 AGENTS.md）
 
@@ -65,9 +65,10 @@ xvfb-run -a -s "-screen 0 2400x1600x24" .runtime/tools/ui-preview-env/bin/python
 ## 4. 接下來
 
 **A. 等筆電回報**（`handoff/laptop.md`，回報在 `laptop-report` 分支的 `handoff/reports/laptop.md`）
-- 上一輪（E4B＋v3）：延遲過關（套 LoRA 判斷 211 ms、生成 26.0 token/s）；真人語音辨識「部分對，但意思跑掉」，使用者：「連辨識文字都有困難，也無法知道模型究竟有多少實力」。
+- 前兩輪：E4B＋v3 延遲過關（套 LoRA 判斷 211 ms、生成 26.0 token/s）；真人語音辨識先是「部分對，但意思跑掉」，改了收音後 `--stt-check`：DAVE 963/961、解碼錯誤 0、像雜訊的片段 0/9，照字念完的六句 0/0/0/7.7/0/10%（程式平均 18.9% 是一句沒念、一句結巴）。**這一輪看角色本身**：使用者的三個感想＋log 數字（開口時機、聽到 → 角色開口的時間、選項延遲）。
 - **收音怎麼改的**：Discord 語音多一層端對端加密（DAVE，MLS）。舊的 voice_recv fork 在 jitter buffer 之後、而且只在 session「ready」時才解，其餘幀把密文當 Opus 解碼、遺失補償也用沒解的下一幀。現在是上游＋PR #62（傳輸層解密後立刻解 DAVE，解不開就丟），加上 `silenttalk/voice_recv_patch.py`：先去掉 RTP padding（DAVE 的尾碼在最後，沒去掉就解不開；discord.js 也這樣做）、靜音幀（F8 FF FE，不加密）直接放行、SSRC 還沒對應到人的幀另外計數、同一人連續 36 幀解不開且沒有進行中的 transition 就回報最後一次 transition 無效並重建 session（discord.js 的做法；discord.py 只加密，不會發現）、解碼失敗的一幀當遺失幀。
 - **離線驗證**：`scripts/dev/dave_loopback.py` 扮演語音伺服器（自己的 P-256 金鑰當 MLS external sender，簽 RFC 9420 的 Add 提案），讓兩個 davey session 組成真的群組，照 Discord 客戶端的格式送語音（Opus → DAVE → 帶擴充標頭的 RTP、部分加 padding → aead_xchacha20_poly1305_rtpsize → 結尾靜音）進 voice_recv 自己的 `AudioReader.callback`。結果：每一幀和送出的 Opus 完全相同，STT 錯字率 1.4%＝直接餵的；沒去 padding 前每 7 包丟 1 包。模擬舊的錯：30% 的幀是密文 → 錯字率 29%（部分對）、60% → 78%、100% → 辨識器什麼都不出。只丟幀 50% → 27%。
+- `--stt-check` 現在由念的人控制節奏（Enter 下一句、r 重念、s 跳過不算），印麥克風名稱和音量；「收音」一列改報 RTP 序號算的封包遺失率（舊的「每秒幀數」把沒講話的時間平均進去，10.8 看起來像大量遺失，其實不是）。
 - **判讀**（`log_summary.py` 的「收音」「STT 片段音量／頻譜平坦度」「真人辨識測試」三列）：
   - 經過 Discord ≤ 15% → 看角色模式語音測試的感想。
   - 經過 Discord 高、本機麥克風低 → 傳輸：看 DAVE 解不開丟掉、SSRC 未對應丟掉、每秒幀數（50＝全收到）、復原次數。
