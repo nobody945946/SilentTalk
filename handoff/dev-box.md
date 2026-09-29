@@ -1,6 +1,6 @@
 # 開發機工作檔（Linux、RTX 3090）
 
-更新：2026-09-29 早上｜分支：`copilot-story-mode`
+更新：2026-09-29 傍晚｜分支：`copilot-story-mode`
 你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事。舊版在 `archive/`（只在這台機器、不進 git），不必讀。
 
 ---
@@ -16,15 +16,15 @@
 | 項目 | 狀態 |
 |---|---|
 | 人設只給「塑造這個人」的部分、今天的心事、冷場開話題 | ✅ 出貨（§5.2） |
-| 角色 LoRA v1 只用在「是不是在叫你」（E2B） | ✅ 出貨（目前的預設） |
+| **預設 E4B＋第三版 LoRA（判斷＋台詞）** | ✅ 出貨（`models/character-e4b-lora-v3.q8_0.gguf`；§5.2）。等筆電量延遲＋語音測試（§4 A） |
+| E2B＋v1 LoRA（只用在「是不是在叫你」） | 設定頁選 E2B 時自動換成它（adapter 跟著模型，`config.MODEL_ADAPTERS`） |
 | 選項＝取樣四句、看的時候不會被換掉 | ✅ 出貨（§5.1） |
 | 角色記憶（跨次演進的心事、看法、對人的感覺） | 🧊 架構做好（`character_state.py`、`copilot.character_memory`），E2B 上量輸，**預設 off**（§5.3） |
-| 換學生 E4B＋第一版資料練的判斷 LoRA | ❌ **不出貨**：考試很好（被叫誤回 0%），但它的資料沒過硬關卡（檢查員只同意 82.7% 的判斷標籤 < 85%，§5.8） |
-| **第三版資料＋硬關卡 → E4B LoRA** | 🔄 試跑過關（判斷一致 90.3%、老師贏學生 63.4%）；全量 199 個人設在跑，預計 9/29 晚上 7 點左右考完（§4 A） |
-| 老師比較收尾（TAIDE、Gemma 31B 先想再寫） | ⬜ 排在佇列最後，只給第四版參考 |
-| 筆電 | ⬜ 本輪（不需要使用者）已回報。**語音測試等 E4B 出貨後才做**（同一個問題不要讓使用者測兩次） |
+| E4B＋第一版資料練的判斷 LoRA | ❌ 不出貨：資料沒過硬關卡（檢查員只同意 82.7% 的判斷標籤 < 85%，§5.8） |
+| 老師比較收尾（TAIDE、Gemma 31B 先想再寫） | 🔄 佇列在跑（`night_queue3.sh` 的最後一段），只給第四版參考 |
+| 筆電 | ⬜ `handoff/laptop.md`：先量 3050 Ti 套 LoRA 的延遲，過門檻才做 E4B 的語音測試 |
 
-**測試：** `189 passed`。
+**測試：** `193 passed`。
 
 ## 2. 開發機規則（通用規則在 AGENTS.md）
 
@@ -63,19 +63,19 @@ xvfb-run -a -s "-screen 0 2400x1600x24" .runtime/tools/ui-preview-env/bin/python
 
 ## 4. 接下來
 
-**A. 第三版（`scripts/dev/character_pipeline.sh`，`--status` 看進度；資料在 `.runtime/dev/chardata-v3/`，log 在 `logs/`；外層佇列 `/tmp/claude-1012/-home-clawd-SilentTalk/fe1c7542-61d8-4f8b-a6a4-1202fdd9cc55/scratchpad/night_queue3.sh`，機器重開過就不在了：直接跑 `GENERATOR=.runtime/models/teacher/Qwen3.6-27B-UD-IQ3_XXS.gguf CHECKER=.runtime/models/teacher/gemma-4-31B-it-UD-IQ3_XXS.gguf scripts/dev/character_pipeline.sh`，每一階段都能續跑）**
-- 老師 `Qwen3.6-27B-UD-IQ3_XXS`（和 Q4 配對盲評平均名次 1.54 vs 1.46，在 0.1 的門檻內；快 1.3 倍）；檢查員 `gemma-4-31B-it-UD-IQ3_XXS`（和 Q4 判同樣 100 題一致 99%）；學生 E4B。
-- 順序：`calibrate` ✅ → `pilot_*`（30 個人設）✅ 過關 → 全量（人設數依試跑良率＝199）→ `refine` → `render` → `student` → `check`（判斷題只檢查 filter 用得到的量）→ `filter` → E4B QLoRA 1 輪 → `eval`（LoRA 套判斷＋台詞，`--tag v3-e4b`）、`eval_gate`（只套判斷，`v3-e4b-gate`）→ `eval_pair`：`now-e4b` vs `v3-e4b`、`now-e4b` vs `v3-e4b-gate`、`v3-e4b-gate` vs `v3-e4b`（`.runtime/dev/turn_eval/pair-*.json`）。
-- 實測速度（CUDA、整個模型在 GPU）：劇本 12 路每秒約 124 token；精修約每分鐘 11–15 句（每句依序取 4 個樣本＋挑一句，受每路每秒 10 token 限制）；檢查員每筆判斷題約 1.8 秒（有快取）。
-- 之後佇列會跑老師比較收尾（TAIDE、Gemma 31B 先想再寫），只給第四版參考。
+**A. 等筆電回報**（`handoff/laptop.md`，回報在 `laptop-report` 分支的 `handoff/reports/laptop.md`）
+- 延遲門檻（3050 Ti，E4B＋v3 LoRA 用在判斷和台詞）：判斷一句中位數 ≤ 600 ms、生成 ≥ 15 token/s。E4B 沒有 LoRA 是 174 ms、26.5 token/s；E2B 套 v1 時判斷 90 → 265 ms、生成 76 → 50。
+- **沒過門檻**：把 v3 LoRA 合進 E4B 權重（peft merge → `convert_hf_to_gguf.py` → `llama-quantize` 成 Q4），角色模式就沒有 LoRA 的額外延遲；但選項模式也會用合併後的權重，出貨前要先用 `options_eval.py` 配對比較（第一版 LoRA 套選項時 31% vs 67% 大輸）。不行再退回 E2B＋v1，把兩種數字寫給使用者選。
+- **過了、語音測試做完**：看使用者自己的感想（開口時機、認不認識這個角色、語尾「啦」、選項好不好用）和 log 數字（語音辨識的空白片段、片段長度；聽到 → 角色開口的時間）。
+- 筆電上改過設定頁的模型的話，App 會用使用者選的那個，adapter 會跟著換。
 
-**B. 出貨判斷（第三版考完）**：
-- 開口時機：被叫誤回 ≤ 2%、主動插嘴誤開口 ≤ 37%（E2B＋LoRA 的水準）、該回有回 ≥ 90%（看 `eval.log`／`eval_gate.log` 的表）。
-- 配對盲評：贏 `now-e4b`（E4B 沒有 LoRA）才用 LoRA；`v3-e4b` 和 `v3-e4b-gate` 哪個贏就用哪種 `character_lora_uses`（第一版的判斷 LoRA 套台詞時逐句 59% vs 37% 大輸，所以台詞可能要留給原本的 E4B）。
-- 都沒贏：出 E4B 不帶 LoRA（被叫誤回 9.1%），或留 E2B＋v1 LoRA，把兩種的數字寫給使用者選。
-- 出貨步驟：adapter 放 `models/`、`setup_copilot.py` 的 `BUNDLED` 加上它、config 預設 `llm_model` 換 E4B（setup 會下載 4.2 GB）、`character_lora`／`character_lora_uses` 換掉；重寫筆電工作檔，**這時才做語音測試**，並用 `bench_hw.py --lora` 量 3050 Ti 上套 LoRA 的判斷延遲（E2B 上是 265 ms vs 90 ms）。
+**B. 第四版要改的**
+- 劇本被丟掉 27%（試跑 13%），最多的是 JSON 解析失敗（39 個，多半是寫到 `max_tokens=3000` 被截斷）和「說話的人不在名單上」（33）：放寬 `max_tokens` 或要求短一點的劇本。
+- 精修每句依序取 4 個樣本＋挑一句，受每路每秒 10 token 限制（精修 2636 句花 3 小時）。
+- 檢查員每筆判斷題約 1.8 秒（31B dense、IQ3）；老師比較的 TAIDE（Gemma 4 26B MoE）如果夠好，可以當更快的檢查員，要先和 31B 比一致率。
+- 訓練最大的浪費是每筆判斷題要把約 1400 token 的整段對話跑一次、只練 1 個字：同一段對話的判斷點共用前綴，用自訂 attention mask 一次練完，理論上快約 10 倍（Gemma 4 的滑動視窗要對得上，先用小資料確認 loss 和逐筆一樣）。
 
-**C. 之後**：訓練最大的浪費是每筆判斷題要把約 1400 token 的整段對話跑一次、只練 1 個字。同一段對話的所有判斷點共用前綴，用自訂 attention mask 一次練完，理論上快約 10 倍；風險是 Gemma 4 的滑動視窗和自訂 mask 要對得上，要先用小資料確認 loss 和逐筆訓練一樣。
+**C. 第三版怎麼跑的**：`scripts/dev/character_pipeline.sh`（資料和 log 在 `.runtime/dev/chardata-v3/`）。老師 `Qwen3.6-27B-UD-IQ3_XXS`（和 Q4 配對盲評平均名次 1.54 vs 1.46，在 0.1 的門檻內）、檢查員 `gemma-4-31B-it-UD-IQ3_XXS`（和 Q4 一致 99%）、學生 E4B QLoRA 1 輪（5024 筆，約 2 小時）。順序：`calibrate` → `pilot_*`（30 個人設走完到硬關卡）→ 人設數依試跑良率（199）→ 劇本 → 精修 → `render` → `student` → `check` → `filter` → 訓練 → `eval`／`eval_gate` → `eval_pair`。
 
 ## 5. 量過的數字
 
@@ -96,10 +96,13 @@ xvfb-run -a -s "-screen 0 2400x1600x24" .runtime/tools/ui-preview-env/bin/python
 | 出貨前 vs **精簡人設＋個性＋心事＋冷場（C2）** | 48% vs 45% | 13 vs **28** | 15 vs **26** | | 39% → **14%** |
 | C2 vs C2 去掉語氣詞規則（出貨） | 46% vs 43% | 17 vs 25 | 24 vs 18 | | 14% → 18% |
 | E2B＋LoRA vs **E4B（沒有 LoRA）** | 36% vs **60%** | 17 vs **25** | 16 vs **26** | 16 vs **26** | 22% / 22% |
-| E2B＋LoRA vs **E4B＋判斷 LoRA（只套 called）** | 35% vs **60%** | 15 vs **27** | 20 vs 21 | 14 vs **28** | |
-| **E4B＋判斷 LoRA 只套 called** vs 也套台詞 | **59%** vs 37% | **31** vs 11 | **29** vs 13 | **31** vs 11 | |
+| E2B＋LoRA vs E4B＋第一版判斷 LoRA（只套 called） | 35% vs 60% | 15 vs 27 | 20 vs 21 | 14 vs 28 | |
+| 第一版判斷 LoRA 只套 called vs 也套台詞 | **59%** vs 37% | **31** vs 11 | **29** vs 13 | **31** vs 11 | |
+| E4B（沒有 LoRA）vs **E4B＋v3 LoRA（判斷＋台詞，出貨）** | 40% vs **59%** | 15 vs **27** | 15 vs **27** | 17 vs **25** | |
+| v3 只套判斷 vs **v3 判斷＋台詞** | 38% vs **61%** | 13 vs **29** | 11 vs **31** | 16 vs **26** | |
+| E4B（沒有 LoRA）vs v3 只套判斷 | **52%** vs 43% | 22 vs 20 | 24 vs 18 | 14 vs 27 | |
 
-開口時機（被叫才回的誤回／主動插嘴／該回有回）：無 LoRA 9.6% / 47% / 90%；E2B＋LoRA 只用在 called 1.0% / 37% / 89%；E4B 無 LoRA 9.1% / 53% / 94%；**E4B＋判斷 LoRA 只用在 called 0.0% / 39.8% / 95.6%**（3090 上每次判斷中位數 284 ms）。
+開口時機（被叫才回的誤回／主動插嘴／該回有回）：無 LoRA 9.6% / 47% / 90%；E2B＋LoRA 只用在 called 1.0% / 37% / 89%；E4B 無 LoRA 9.1% / 53% / 94%；E4B＋第一版判斷 LoRA 只用在 called 0.0% / 39.8% / 95.6%；**E4B＋v3 LoRA（called、active、line）0.5% / 7.5% / 93.9%**；v3 只套 called、active 0.0% / 7.5% / 93.0%。
 - 靈魂分數（`--judge-soul`，看完角色的話對他認識多少 1–5）：出貨前 2.6，8/21 場「看不出來」。
 - 精簡人設但不加個性和幽默：逐句略輸、認識度平手 → 個性和幽默要留。
 
@@ -161,6 +164,7 @@ E2B 寫不好狀態：三天的心事一字不差、同一件事換句話又出�
 |---|---|---|---|---|---|
 | 第一版判斷資料（抽 60 個劇本 966 筆） | 82.7% ❌ | 90.4% / 78.1% | — | — | — |
 | 第三版試跑（30 個人設、52 個劇本） | **90.3%** ✅ | 92.3% / 88.9% | 63.4% | 77.7% | 303 |
+| 第三版全量（199 個人設、288 個劇本） | **90.5%** ✅ | 93.2% / 88.5% | 64.3% | 78.1% | 1673 |
 
 第一版被檢查員質疑的「否」約一半是標錯：別人在回應角色剛說的話（「欸 你別急著下結論」），老師把 to 標成別人；另一半是檢查員太想開口。第三版劇本 prompt 把 to 定義成「這句要誰接話」（和 App 的判斷提示一致），一致率升到 90.3%。
 
