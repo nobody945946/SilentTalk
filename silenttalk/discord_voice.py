@@ -564,10 +564,12 @@ class ReceiveStats:
             name: value - self.patch_before[name]
             for name, value in _patch_counters().items()
         }
+        expected = counters["rtp_expected"]
+        loss = 1 - counters["rtp_received"] / expected if expected else 0.0
         _LOG.info(
             "voice_receive_stats seconds=%.0f speakers=%d fps=[%s] odd_frames=%d "
             "dropped_no_session=%d decode_errors=%d padded=%d dave_dropped=%d "
-            "unknown_ssrc=%d recoveries=%d dave=%s",
+            "unknown_ssrc=%d recoveries=%d rtp_packets=%d rtp_loss=%.1f%% dave=%s",
             seconds,
             len(self.frames),
             " ".join(f"{rate:.1f}" for rate in rates),
@@ -578,6 +580,8 @@ class ReceiveStats:
             counters["dave_dropped"],
             counters["unknown_ssrc"],
             counters["recoveries"],
+            counters["rtp_received"],
+            100 * max(0.0, loss),
             dave,
         )
 
@@ -591,6 +595,8 @@ def _patch_counters() -> dict[str, int]:
             "dave_dropped",
             "unknown_ssrc",
             "recoveries",
+            "rtp_expected",
+            "rtp_received",
         )
     }
 

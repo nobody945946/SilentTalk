@@ -127,12 +127,14 @@ def main() -> int:
     def receive_summary() -> str:
         if not received:
             return "—"
-        top = []
         totals = Counter()
+        lost = 0.0
         for text in received:
-            rates = re.search(r"fps=\[([^\]]*)\]", text)
-            if rates and rates.group(1).split():
-                top.append(float(rates.group(1).split()[0]))
+            packets = re.search(r"rtp_packets=(\d+) rtp_loss=([\d.]+)%", text)
+            if packets:
+                count, loss = int(packets.group(1)), float(packets.group(2)) / 100
+                totals["rtp_packets"] += count
+                lost += count * loss / max(1e-9, 1 - loss)
             for key in (
                 "odd_frames",
                 "dropped_no_session",
@@ -145,11 +147,12 @@ def main() -> int:
                 found = re.search(rf"{key}=(\d+)", text)
                 totals[key] += int(found.group(1)) if found else 0
         dave = re.search(r"dave=(\S+)(.*)$", received[-1])
+        packets = totals["rtp_packets"]
         return (
-            f"{len(received)} 次；說最多的人每秒幀數中位數 "
-            f"{statistics.median(top):.1f}（50＝全收到）"
-            if top
-            else f"{len(received)} 次；沒有收到任何幀"
+            f"{len(received)} 次；收到 {packets} 個語音封包、路上遺失 "
+            f"{lost / (packets + lost):.1%}"
+            if packets
+            else f"{len(received)} 次；沒有收到任何語音封包"
         ) + (
             f"；大小不對 {totals['odd_frames']}、沒 DAVE session 丟掉 {totals['dropped_no_session']}"
             f"、解碼錯誤 {totals['decode_errors']}、有 padding {totals['padded']}"

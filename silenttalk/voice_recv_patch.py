@@ -17,7 +17,10 @@
   listening and makes the app rebuild the voice connection; it is decoded
   as a lost frame instead (Opus packet loss concealment).
 
-Counters (for the voice_receive_stats log line) are module globals.
+Counters (for the voice_receive_stats log line) are module globals, among
+them RTP packets expected (from sequence numbers) and received: Discord
+sends nothing while nobody speaks but never skips a number, so a gap is a
+packet lost on the way.
 """
 
 from __future__ import annotations
@@ -41,6 +44,9 @@ padded = 0
 dave_dropped = 0
 unknown_ssrc = 0
 recoveries = 0
+rtp_expected = 0
+rtp_received = 0
+_last_sequence: dict[int, int] = {}
 _applied = False
 
 
@@ -80,6 +86,7 @@ def _patch_dave_decrypt() -> None:
 
     def _dave_decrypt(self: Any, packet: Any) -> bool:
         global padded, dave_dropped, unknown_ssrc
+        _count_sequence(packet)
         data = packet.decrypted_data
         if getattr(packet, "padding", False) and data:
             count = data[-1]
@@ -102,6 +109,20 @@ def _patch_dave_decrypt() -> None:
         return ok
 
     reader.AudioReader._dave_decrypt = _dave_decrypt
+
+
+def _count_sequence(packet: Any) -> None:
+    global rtp_expected, rtp_received
+    rtp_received += 1
+    last = _last_sequence.get(packet.ssrc)
+    step = 1 if last is None else (packet.sequence - last) & 0xFFFF
+    if 0 < step < 1000:  # in order, maybe after a gap
+        rtp_expected += step
+        _last_sequence[packet.ssrc] = packet.sequence
+    elif step >= 1000 and 0xFFFF - step >= 1000:  # a new stream (e.g. rejoined)
+        rtp_expected += 1
+        _last_sequence[packet.ssrc] = packet.sequence
+    # else: a late or duplicate packet, already counted as expected
 
 
 def _patch_transition_ready() -> None:

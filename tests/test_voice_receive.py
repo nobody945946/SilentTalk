@@ -165,15 +165,39 @@ def test_the_local_microphone_arrives_as_discord_frames(
         return streams[-1]
 
     monkeypatch.setitem(
-        sys.modules, "sounddevice", SimpleNamespace(InputStream=input_stream)
+        sys.modules,
+        "sounddevice",
+        SimpleNamespace(
+            InputStream=input_stream, query_devices=lambda kind: {"name": "Mic (Test)"}
+        ),
     )
     frames: list[bytes] = []
-    assert stt_check._open_microphone(frames.append) is streams[0]
+    microphone = stt_check._open_microphone(frames.append)
+    assert microphone is not None and microphone.stream is streams[0]
+    assert microphone.name == "Mic (Test)"
     assert (streams[0].samplerate, streams[0].channels) == (48_000, 1)
 
     mono = np.arange(1440, dtype="<i2").reshape(-1, 1)  # 30 ms
     streams[0].callback(mono, 1440, None, None)
 
     [frame] = frames  # 20 ms out, 10 ms kept for the next one
+    assert -60 < microphone.peak_dbfs < -20
     assert len(frame) == discord_voice.FRAME_BYTES
     assert np.frombuffer(frame, "<i2")[:6].tolist() == [0, 0, 1, 1, 2, 2]
+
+
+def _rtp_counts(ssrc: int, sequences: list[int]) -> tuple[int, int]:
+    before = voice_recv_patch.rtp_expected, voice_recv_patch.rtp_received
+    for sequence in sequences:
+        voice_recv_patch._count_sequence(SimpleNamespace(ssrc=ssrc, sequence=sequence))
+    return (
+        voice_recv_patch.rtp_expected - before[0],
+        voice_recv_patch.rtp_received - before[1],
+    )
+
+
+def test_rtp_loss_is_counted_from_sequence_gaps() -> None:
+    # 12 arrives late: expected 5, received 5, nothing lost.
+    assert _rtp_counts(90001, [10, 11, 13, 12, 14]) == (5, 5)
+    # Across the wrap, 0 never arrives: one of four lost.
+    assert _rtp_counts(90002, [65534, 65535, 1]) == (4, 3)

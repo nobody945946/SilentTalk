@@ -65,7 +65,8 @@ async def run_stt_check(settings: Settings, project_dir: Path) -> bool:
     if microphone is None:
         print("（本機麥克風開不起來，只量 Discord 這條路）")
     else:
-        microphone.start()
+        print(f"本機麥克風：{microphone.name}")
+        microphone.stream.start()
     client = DiscordVoiceClient(settings.discord, status, pcm_callback=on_pcm)
     rates: list[float] = []
     local_rates: list[float] = []
@@ -80,16 +81,20 @@ async def run_stt_check(settings: Settings, project_dir: Path) -> bool:
                 # Let the DAVE handshake settle before the first sentence.
                 await asyncio.sleep(3)
                 print(
-                    f"\n接下來會一句一句顯示 {len(CHECK_SENTENCES)} 句話。"
-                    "看到就用平常的速度念出來，念完等下一句。\n"
+                    f"\n接下來一句一句顯示 {len(CHECK_SENTENCES)} 句話，用平常的速度念。"
+                    "念完按 Enter 看下一句；念錯了按 r 再念一次；不想念的按 s 跳過"
+                    "（跳過的不算）。\n"
                 )
-                for index, sentence in enumerate(CHECK_SENTENCES, 1):
+                index = 0
+                while index < len(CHECK_SENTENCES):
+                    sentence = CHECK_SENTENCES[index]
+                    print(f"[{index + 1}/{len(CHECK_SENTENCES)}] 請念：{sentence}")
                     collector.reset()
                     local_collector.reset()
-                    print(f"[{index}/{len(CHECK_SENTENCES)}] 請念：{sentence}")
+                    if microphone is not None:
+                        microphone.peak_dbfs = -120.0
                     heard = await asyncio.to_thread(collector.wait, SENTENCE_TIMEOUT)
                     rate = char_error_rate(sentence, heard) if heard else 1.0
-                    rates.append(rate)
                     local_heard, local_rate = "", -1.0
                     if microphone is not None:
                         local_heard = await asyncio.to_thread(local_collector.wait, 5.0)
@@ -98,16 +103,6 @@ async def run_stt_check(settings: Settings, project_dir: Path) -> bool:
                             if local_heard
                             else 1.0
                         )
-                        local_rates.append(local_rate)
-                    _LOG.info(
-                        "copilot_stt_check index=%d cer=%.3f heard_chars=%d "
-                        "local_cer=%.3f local_chars=%d",
-                        index,
-                        rate,
-                        len(heard),
-                        local_rate,
-                        len(local_heard),
-                    )
                     print(
                         (
                             f"    Discord：錯字率 {rate:.0%}（聽到 {len(heard)} 字）"
@@ -115,18 +110,46 @@ async def run_stt_check(settings: Settings, project_dir: Path) -> bool:
                             else f"    Discord：{SENTENCE_TIMEOUT:.0f} 秒內沒有辨識結果"
                         )
                         + (
-                            f"｜本機麥克風：錯字率 {local_rate:.0%}（聽到 {len(local_heard)} 字）"
+                            f"｜本機麥克風：錯字率 {local_rate:.0%}（聽到 {len(local_heard)} 字，"
+                            f"最大音量 {microphone.peak_dbfs:.0f} dBFS）"
                             if microphone is not None
                             else ""
                         )
                     )
-                    await asyncio.sleep(1.0)
+                    choice = (
+                        (
+                            await asyncio.to_thread(
+                                input, "    Enter 下一句／r 再念／s 跳過："
+                            )
+                        )
+                        .strip()
+                        .lower()
+                    )
+                    if choice == "r":
+                        continue
+                    skipped = choice == "s"
+                    _LOG.info(
+                        "copilot_stt_check index=%d cer=%.3f heard_chars=%d "
+                        "local_cer=%.3f local_chars=%d mic_peak_dbfs=%.0f skipped=%d",
+                        index + 1,
+                        rate,
+                        len(heard),
+                        local_rate,
+                        len(local_heard),
+                        microphone.peak_dbfs if microphone is not None else -120.0,
+                        int(skipped),
+                    )
+                    if not skipped:
+                        rates.append(rate)
+                        if microphone is not None:
+                            local_rates.append(local_rate)
+                    index += 1
             finally:
                 await client.close()
                 await asyncio.gather(connect_task, return_exceptions=True)
     finally:
         if microphone is not None:
-            microphone.close()
+            microphone.stream.close()
         await asyncio.to_thread(local.stop)
         await asyncio.to_thread(transcriber.stop)
     average = statistics.fmean(rates) if rates else 1.0
@@ -141,7 +164,7 @@ async def run_stt_check(settings: Settings, project_dir: Path) -> bool:
         local_average,
     )
     print(
-        f"\n經過 Discord：平均錯字率 {average:.1%}（門檻 {STT_MAX_CER:.0%}），"
+        f"\n經過 Discord：平均錯字率 {average:.1%}（{len(rates)} 句，門檻 {STT_MAX_CER:.0%}），"
         f"{heard_count}/{len(rates)} 句有結果 → {'PASS' if passed else 'FAIL'}"
     )
     if local_rates:
@@ -149,24 +172,39 @@ async def run_stt_check(settings: Settings, project_dir: Path) -> bool:
     return passed
 
 
-def _open_microphone(push: Callable[[bytes], None]) -> Any | None:
+class _Microphone:
+    def __init__(self, stream: Any, name: str) -> None:
+        self.stream = stream
+        self.name = name
+        self.peak_dbfs = -120.0
+
+
+def _open_microphone(push: Callable[[bytes], None]) -> _Microphone | None:
     """The default microphone as 20 ms frames of 48 kHz stereo s16le (the
-    shape Discord receive yields); None when it can't be opened (no
-    sounddevice or PortAudio, no input device)."""
+    shape Discord receive yields), with its loudest 20 ms level since the
+    last reset; None when it can't be opened (no sounddevice or PortAudio,
+    no input device)."""
     try:
         import sounddevice
     except (ImportError, OSError):
         return None
     pending = bytearray()
+    microphone: _Microphone | None = None
 
     def on_audio(indata: np.ndarray, frames: int, time_info: Any, status: Any) -> None:
-        pending.extend(np.repeat(indata[:, 0], 2).astype("<i2").tobytes())
+        samples = indata[:, 0]
+        if microphone is not None and len(samples):
+            rms = float(np.sqrt(np.mean(np.square(samples, dtype=np.float64)))) / 32768
+            microphone.peak_dbfs = max(
+                microphone.peak_dbfs, 20 * np.log10(max(rms, 1e-6))
+            )
+        pending.extend(np.repeat(samples, 2).astype("<i2").tobytes())
         while len(pending) >= DISCORD_FRAME_BYTES:
             push(bytes(pending[:DISCORD_FRAME_BYTES]))
             del pending[:DISCORD_FRAME_BYTES]
 
     try:
-        return sounddevice.InputStream(
+        stream = sounddevice.InputStream(
             samplerate=48_000,
             channels=1,
             dtype="int16",
@@ -178,6 +216,12 @@ def _open_microphone(push: Callable[[bytes], None]) -> Any | None:
             "copilot_stt_check_no_microphone error_type=%s", type(exc).__name__
         )
         return None
+    try:
+        name = str(sounddevice.query_devices(kind="input")["name"])
+    except Exception:  # noqa: BLE001 - the name is only for the report
+        name = "?"
+    microphone = _Microphone(stream, name)
+    return microphone
 
 
 async def _wait_listening(client: DiscordVoiceClient, timeout: float) -> None:
