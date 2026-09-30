@@ -369,7 +369,7 @@ def bench_llm(
         # Generation speed: force a fixed length so every machine does the same work.
         speed = post(new_requests[-1], 32, ignore_eos=True)
         rows.append(("生成速度", f"{speed['tps']:.1f} token/s"))
-        reply = post(new_format_requests()[-1], 60)
+        reply = post(new_requests[-1], 60)
         rows.append(
             ("回一句話（新格式）", f"{reply['ms']:.0f} ms（{reply['n']} token）")
         )
