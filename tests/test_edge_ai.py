@@ -139,3 +139,39 @@ def test_restart_handoff_temporarily_suspends_crash_restore(tmp_path: Path) -> N
     manager.hold_handoff()
 
     assert manager.handoff_until > 0
+
+
+def test_stop_refuses_to_break_a_live_silenttalk_lease(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manager = edge_service.EdgeAIManager(tmp_path)
+    manager.mode = "character"
+    manager.owner_pid = 123
+    monkeypatch.setattr(edge_service, "_pid_alive", lambda pid: True)
+
+    with pytest.raises(PermissionError):
+        manager.stop_service()
+
+
+def test_stop_releases_the_base_server(tmp_path: Path) -> None:
+    class Running:
+        returncode = 0
+
+        def poll(self) -> None:
+            return None
+
+        def terminate(self) -> None:
+            return None
+
+        def wait(self, timeout: float | None = None) -> int:
+            return 0
+
+    manager = edge_service.EdgeAIManager(tmp_path)
+    manager.mode = "base"
+    manager.process = Running()  # type: ignore[assignment]
+
+    status = manager.stop_service()
+
+    assert manager.process is None
+    assert status["mode"] == "stopped"
+    assert status["ready"] is False

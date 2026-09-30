@@ -8,5 +8,12 @@ if not exist ".venv\Scripts\pythonw.exe" (
     exit /b 1
 )
 
-start "" ".venv\Scripts\pythonw.exe" "scripts\start_edge_ai.py" --open
+".venv\Scripts\python.exe" "scripts\install_e4b_command.py" >nul
+if errorlevel 1 (
+    echo 無法安裝全域 e4b 指令。
+    pause
+    exit /b 1
+)
+
+call "%LOCALAPPDATA%\Microsoft\WinGet\Links\e4b.cmd"
 exit /b 0

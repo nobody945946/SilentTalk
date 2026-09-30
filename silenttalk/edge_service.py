@@ -226,6 +226,24 @@ class EdgeAIManager:
                 self.handoff_until = time.monotonic() + seconds
             return self.status()
 
+    def stop_service(self) -> dict[str, object]:
+        with self.lock:
+            if (
+                self.mode == "character"
+                and self.owner_pid is not None
+                and _pid_alive(self.owner_pid)
+            ):
+                raise PermissionError("SilentTalk still owns character mode")
+            self.loading = True
+            self._stop_child()
+            self.mode = "stopped"
+            self.port = GENERAL_PORT
+            self.owner_pid = None
+            self.owner_dead_since = None
+            self.handoff_until = 0.0
+            self.loading = False
+            return self.status()
+
 
 class Handler(BaseHTTPRequestHandler):
     manager: EdgeAIManager
@@ -237,6 +255,7 @@ class Handler(BaseHTTPRequestHandler):
         self._json(HTTPStatus.OK, self.manager.status())
 
     def do_POST(self) -> None:  # noqa: N802
+        stop_control_server = False
         try:
             length = int(self.headers.get("Content-Length", "0"))
             payload = json.loads(self.rfile.read(length) or b"{}")
@@ -252,6 +271,9 @@ class Handler(BaseHTTPRequestHandler):
                 result = self.manager.hold_handoff()
             elif self.path == "/base":
                 result = self.manager.switch("base", owner_pid)
+            elif self.path == "/shutdown":
+                result = self.manager.stop_service()
+                stop_control_server = True
             else:
                 self.send_error(HTTPStatus.NOT_FOUND)
                 return
@@ -265,6 +287,8 @@ class Handler(BaseHTTPRequestHandler):
             )
             return
         self._json(HTTPStatus.OK, result)
+        if stop_control_server:
+            threading.Thread(target=self.server.shutdown, daemon=True).start()
 
     def log_message(self, format: str, *args: object) -> None:
         return

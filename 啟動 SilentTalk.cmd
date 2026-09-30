@@ -79,6 +79,13 @@ if errorlevel 1 (
     exit /b 1
 )
 
+".venv\Scripts\python.exe" "scripts\install_e4b_command.py" >nul
+if errorlevel 1 (
+    echo ERROR: Could not install the global e4b command.
+    pause
+    exit /b 1
+)
+
 where ffmpeg.exe >nul 2>nul
 if errorlevel 1 (
     where winget.exe >nul 2>nul

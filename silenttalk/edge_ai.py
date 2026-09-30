@@ -137,7 +137,24 @@ def request_base(project_dir: Path) -> dict[str, object]:
     return _post("/base", {}, timeout=120)
 
 
-def _post(path: str, payload: dict[str, object], *, timeout: float) -> dict[str, object]:
+def shutdown_service() -> dict[str, object]:
+    status = service_status()
+    if status is None:
+        return {"mode": "stopped", "ready": False}
+    result = _post("/shutdown", {}, timeout=30, require_ready=False)
+    deadline = time.monotonic() + 10
+    while control_service_present() and time.monotonic() < deadline:
+        time.sleep(0.1)
+    return result
+
+
+def _post(
+    path: str,
+    payload: dict[str, object],
+    *,
+    timeout: float,
+    require_ready: bool = True,
+) -> dict[str, object]:
     request = urllib.request.Request(
         f"http://127.0.0.1:{CONTROL_PORT}{path}",
         data=json.dumps(payload).encode("utf-8"),
@@ -152,6 +169,6 @@ def _post(path: str, payload: dict[str, object], *, timeout: float) -> dict[str,
         raise EdgeAIError(f"E4B mode switch failed ({exc.code}): {detail}") from exc
     except (OSError, ValueError, urllib.error.URLError) as exc:
         raise EdgeAIError(f"E4B service request failed: {exc}") from exc
-    if not isinstance(value, dict) or value.get("ready") is not True:
+    if not isinstance(value, dict) or (require_ready and value.get("ready") is not True):
         raise EdgeAIError(f"E4B mode switch did not become ready: {value}")
     return value
