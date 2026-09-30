@@ -77,7 +77,7 @@ def chardata(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         "stt_variants": ["小文"],
     }
     (tmp_path / "personas.jsonl").write_text(
-        json.dumps(persona, ensure_ascii=False) + "\n"
+        json.dumps(persona, ensure_ascii=False) + "\n", encoding="utf-8"
     )
     monkeypatch.setattr(character_data, "OUT_DIR", tmp_path)
     return tmp_path
@@ -85,19 +85,21 @@ def chardata(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 def _render(chardata: Path, script: dict, refined: dict[int, str]) -> list[dict]:
     (chardata / "scripts.jsonl").write_text(
-        json.dumps(script, ensure_ascii=False) + "\n"
+        json.dumps(script, ensure_ascii=False) + "\n", encoding="utf-8"
     )
     (chardata / "refined.jsonl").write_text(
         "".join(
             json.dumps({"script": 0, "index": i, "line": line}, ensure_ascii=False)
             + "\n"
             for i, line in refined.items()
-        )
+        ),
+        encoding="utf-8",
     )
     args = type("Args", (), {"max_prompt_chars": 100_000, "max_chars": 72})()
     character_data.make_render(args)
     return [
-        json.loads(line) for line in (chardata / "train.jsonl").read_text().splitlines()
+        json.loads(line)
+        for line in (chardata / "train.jsonl").read_text(encoding="utf-8").splitlines()
     ]
 
 
@@ -223,7 +225,8 @@ def _checked_set(chardata: Path, agree: list[bool], wins: list[int]) -> None:
     gates = [_row("gate_called", "是否"[n % 2], script=n) for n in range(len(agree))]
     lines = [_row("line", "那你早點睡", script=100 + n) for n in range(len(wins))]
     (chardata / "train.jsonl").write_text(
-        "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in gates + lines)
+        "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in gates + lines),
+        encoding="utf-8",
     )
     verdicts = [
         {"key": character_data.row_key(r), "agree": a}
@@ -234,7 +237,7 @@ def _checked_set(chardata: Path, agree: list[bool], wins: list[int]) -> None:
         for r, w in zip(lines, wins, strict=True)
     ]
     (chardata / "check.jsonl").write_text(
-        "".join(json.dumps(v) + "\n" for v in verdicts)
+        "".join(json.dumps(v) + "\n" for v in verdicts), encoding="utf-8"
     )
 
 
@@ -258,7 +261,9 @@ def test_gate_rows_are_capped_keeping_two_no_per_yes(chardata: Path) -> None:
     assert _filter(max_gate_rows=9) == 0
     kept = [
         json.loads(line)
-        for line in (chardata / "train-checked.jsonl").read_text().splitlines()
+        for line in (chardata / "train-checked.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
     ]
     answers = [
         r["messages"][-1]["content"] for r in kept if r["kind"].startswith("gate")
@@ -284,7 +289,10 @@ def test_only_the_gate_rows_filter_can_use_are_checked(
     character_data.make_check(args)
 
     verdicts = [
-        json.loads(line) for line in (chardata / "check.jsonl").read_text().splitlines()
+        json.loads(line)
+        for line in (chardata / "check.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
     ]
     assert len(verdicts) == 12
     checked = [v for v in verdicts if not v.get("skipped")]
@@ -303,7 +311,7 @@ def test_only_the_gate_rows_filter_can_use_are_checked(
             },
         )()
     )
-    stats = json.loads((chardata / "filter.json").read_text())
+    stats = json.loads((chardata / "filter.json").read_text(encoding="utf-8"))
     assert (stats["coverage"], stats["gate_rows"]) == (1.0, len(checked))
 
 
@@ -313,7 +321,9 @@ def test_only_checked_rows_are_trained_on(chardata: Path) -> None:
     assert _filter() == 0
     kept = [
         json.loads(line)
-        for line in (chardata / "train-checked.jsonl").read_text().splitlines()
+        for line in (chardata / "train-checked.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
     ]
     assert {r["script"] for r in kept if r["kind"] == "line"} == {100, 101, 102}
     assert 0 not in {r["script"] for r in kept}  # the checker disagreed
@@ -340,15 +350,15 @@ def test_a_bad_set_is_refused_not_trimmed(
 
     assert _filter() == 3
     assert not (chardata / "train-checked.jsonl").exists()
-    refused = json.loads((chardata / "filter.json").read_text())["refused"]
+    refused = json.loads((chardata / "filter.json").read_text(encoding="utf-8"))["refused"]
     assert [r.split()[0] for r in refused] == [reason]
 
 
 def test_rows_without_a_verdict_refuse_the_set(chardata: Path) -> None:
     _checked_set(chardata, [True] * 20, [2, 2, 2])
-    rows = (chardata / "train.jsonl").read_text()
+    rows = (chardata / "train.jsonl").read_text(encoding="utf-8")
     (chardata / "train.jsonl").write_text(
-        rows + json.dumps(_row("line", "好", script=999)) + "\n"
+        rows + json.dumps(_row("line", "好", script=999)) + "\n", encoding="utf-8"
     )
 
     assert _filter() == 3  # 23 of 24 checked

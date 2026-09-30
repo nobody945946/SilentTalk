@@ -32,10 +32,8 @@ playback_timeout_seconds = 90.0
 [copilot]
 enabled = true
 endpoint_silence_ms = 650
-llm_context_size = 4096
-recent_turns = 16
-max_session_turns = 100
-context_char_budget = 2400
+llm_context_size = 32768
+max_session_turns = 240
 max_reply_chars = 72
 llama_port = 18088
 auto_popup = true
@@ -84,8 +82,8 @@ character_memory = "off"
 # compact_batch_turns, the older part is folded into a short summary by the
 # local model, so long chats keep their thread at a fixed prompt size.
 compact_context = true
-compact_keep_turns = 20
-compact_batch_turns = 12
+compact_keep_turns = 96
+compact_batch_turns = 32
 # Speech-to-text engine: "paraformer" (default, streaming) or "sensevoice"
 # (Silero VAD + offline SenseVoice: about the same accuracy -- 6.9% vs 7.2% CER
 # on scripts/dev/stt_eval.py -- adds punctuation, uses less CPU, ~240 MB extra

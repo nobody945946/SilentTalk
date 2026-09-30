@@ -119,7 +119,7 @@ async def test_filler_words_join_context_without_triggering(tmp_path: Path) -> N
     await _settle()
 
     assert llm.calls == []
-    assert "嗯" in runtime._context.render_for_prompt()
+    assert [turn.text for turn in runtime._context.snapshot()] == ["嗯"]
     assert runtime.regenerate() is False
     await _stop(runtime)
 
@@ -219,14 +219,14 @@ async def test_owner_mic_counts_only_in_character_mode(tmp_path: Path) -> None:
     runtime.accept_pcm(1, "Owner", b"options")
     runtime._handle_turn(1, "Owner", "我在講話")
     assert packets == []
-    assert "我在講話" not in runtime._context.render_for_prompt()
+    assert "我在講話" not in [turn.text for turn in runtime._context.snapshot()]
 
     runtime.set_persona(PRESET_PERSONAS[0])
     runtime.set_character_mode(True)
     runtime.accept_pcm(1, "Owner", b"character")
     runtime._handle_turn(1, "Owner", "凱哥你好")
     assert packets == [(1, "Owner", b"character")]
-    assert "凱哥你好" in runtime._context.render_for_prompt()
+    assert "凱哥你好" in [turn.text for turn in runtime._context.snapshot()]
     await _stop(runtime)
 
 
@@ -282,7 +282,7 @@ async def test_a_long_session_is_compacted_instead_of_truncated(tmp_path: Path) 
     verbatim, and the prompt stops growing."""
     runtime, llm, _ = await _runtime(
         tmp_path,
-        config=CopilotConfig(recent_turns=6, compact_keep_turns=6, compact_batch_turns=6),
+        config=CopilotConfig(compact_keep_turns=6, compact_batch_turns=6),
     )
 
     for n in range(12):
@@ -291,9 +291,9 @@ async def test_a_long_session_is_compacted_instead_of_truncated(tmp_path: Path) 
     await _settle()
 
     assert any(call[0] == "summarize" for call in llm.calls if isinstance(call, tuple))
-    prompt = runtime._context.render_for_prompt()
-    assert "稍早在聊晚餐" in prompt
-    assert "第0句話" not in prompt and "第11句話" in prompt
+    assert runtime._context.summary == "稍早在聊晚餐"
+    texts = [turn.text for turn in runtime._context.snapshot()]
+    assert "第0句話" not in texts and "第11句話" in texts
     assert len(runtime._context.snapshot()) == 6
     await _stop(runtime)
 
@@ -303,7 +303,7 @@ async def test_compaction_can_be_turned_off(tmp_path: Path) -> None:
     runtime, llm, _ = await _runtime(
         tmp_path,
         config=CopilotConfig(
-            recent_turns=6, compact_keep_turns=6, compact_batch_turns=6,
+            compact_keep_turns=6, compact_batch_turns=6,
             compact_context=False,
         ),
     )
@@ -316,7 +316,6 @@ async def test_compaction_can_be_turned_off(tmp_path: Path) -> None:
     assert not any(call[0] == "summarize" for call in llm.calls if isinstance(call, tuple))
     # Without compaction the old turns are simply dropped from the prompt.
     assert runtime._context.summary == ""
-    assert "這場對話稍早的重點" not in runtime._context.render_for_prompt()
     await _stop(runtime)
 
 

@@ -33,7 +33,7 @@ def test_loads_env_and_toml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     assert settings.tts.engine == "edge"
     assert settings.copilot.enabled is True
     assert settings.copilot.endpoint_silence_ms == 650
-    assert settings.copilot.llm_context_size == 4096
+    assert settings.copilot.llm_context_size == 32768
     assert settings.copilot.llm_model == "gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf"
     assert settings.copilot.llm_gpu_layers == 99
     assert settings.copilot.stt_engine == "paraformer"
@@ -82,7 +82,7 @@ def test_rejects_missing_config(tmp_path: Path) -> None:
         load_settings(tmp_path)
 
 
-def test_rejects_unimplemented_tts(
+def test_rejects_unsupported_tts_engine(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _write_config(tmp_path, "cosyvoice")

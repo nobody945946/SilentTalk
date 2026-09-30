@@ -82,10 +82,8 @@ class AudioConfig:
 class CopilotConfig:
     enabled: bool = True
     endpoint_silence_ms: int = 650
-    llm_context_size: int = 4096
-    recent_turns: int = 16
-    max_session_turns: int = 100
-    context_char_budget: int = 2400
+    llm_context_size: int = 32768
+    max_session_turns: int = 240
     max_reply_chars: int = 72
     llama_port: int = 18088
     auto_popup: bool = True
@@ -101,8 +99,8 @@ class CopilotConfig:
     # Auto-compaction: older turns are folded into a short summary by the
     # local model, so a long session keeps its thread at a fixed prompt size.
     compact_context: bool = True
-    compact_keep_turns: int = 20
-    compact_batch_turns: int = 12
+    compact_keep_turns: int = 96
+    compact_batch_turns: int = 32
     # Asked whether it is an AI: "in_character" keeps the act, "admit" owns up.
     character_ai_honesty: str = "in_character"
     character_engagement: str = "called"
@@ -318,14 +316,10 @@ def load_settings(project_dir: Path) -> Settings:
                 350, min(2000, int(copilot.get("endpoint_silence_ms", 650)))
             ),
             llm_context_size=max(
-                1024, min(4096, int(copilot.get("llm_context_size", 4096)))
+                1024, min(32768, int(copilot.get("llm_context_size", 32768)))
             ),
-            recent_turns=max(4, min(24, int(copilot.get("recent_turns", 16)))),
             max_session_turns=max(
-                20, min(200, int(copilot.get("max_session_turns", 100)))
-            ),
-            context_char_budget=max(
-                600, min(5000, int(copilot.get("context_char_budget", 2400)))
+                20, min(500, int(copilot.get("max_session_turns", 240)))
             ),
             max_reply_chars=max(24, min(160, int(copilot.get("max_reply_chars", 72)))),
             llama_port=max(1024, min(65535, int(copilot.get("llama_port", 18088)))),
@@ -337,10 +331,10 @@ def load_settings(project_dir: Path) -> Settings:
             character_lora_uses=character_lora_uses,
             compact_context=bool(copilot.get("compact_context", True)),
             compact_keep_turns=max(
-                8, min(200, int(copilot.get("compact_keep_turns", 20)))
+                8, min(200, int(copilot.get("compact_keep_turns", 96)))
             ),
             compact_batch_turns=max(
-                4, min(200, int(copilot.get("compact_batch_turns", 12)))
+                4, min(200, int(copilot.get("compact_batch_turns", 32)))
             ),
             character_ai_honesty=_one_of(
                 copilot.get("character_ai_honesty", "in_character"),

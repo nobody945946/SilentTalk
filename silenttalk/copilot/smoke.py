@@ -89,6 +89,7 @@ LLM_SCENES: tuple[tuple[tuple[str, str], ...], ...] = (
 LLM_MAX_MEDIAN_SECONDS = 4.0
 # Sampling may not find four different lines, so three of four is the floor.
 LLM_MIN_LANES = 3
+SUMMARY_MARKER = "藍鯨七號"
 
 
 @dataclass(frozen=True, slots=True)
@@ -301,6 +302,17 @@ async def _llm_gate(settings: Settings, project_dir: Path) -> bool:
     )
     try:
         results = await run_scenes(model, LLM_SCENES[:3])
+        first_transcript = "\n".join(
+            [f"阿傑：大家決定這次測試代號是{SUMMARY_MARKER}，之後要記得"]
+            + [f"小雨：這是第一段聊天的第{n}件小事" for n in range(1, 32)]
+        )
+        second_transcript = "\n".join(
+            f"Ken：這是後來聊天的第{n}件小事" for n in range(32, 64)
+        )
+        summary_started = time.perf_counter()
+        first_summary = await model.summarize(first_transcript)
+        final_summary = await model.summarize(second_transcript, first_summary)
+        summary_seconds = time.perf_counter() - summary_started
     finally:
         await model.stop()
     for result in results:
@@ -316,4 +328,9 @@ async def _llm_gate(settings: Settings, project_dir: Path) -> bool:
         f"  延遲中位數 {median:.2f}s（門檻 {LLM_MAX_MEDIAN_SECONDS:.0f}s）"
         f"{'' if speed_ok else ' ← 太慢'}；格式 {'OK' if format_ok else '不合格（模型沒照四行格式）'}"
     )
-    return format_ok and speed_ok
+    summary_ok = SUMMARY_MARKER in first_summary and SUMMARY_MARKER in final_summary
+    print(
+        f"  兩輪長對話摘要 {summary_seconds:.1f}s；"
+        f"早期代號 {'PASS' if summary_ok else 'FAIL'}"
+    )
+    return format_ok and speed_ok and summary_ok

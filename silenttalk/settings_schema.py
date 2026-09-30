@@ -279,7 +279,7 @@ PAGES: tuple[Page, ...] = (
                 Setting(
                     "copilot", "llm_context_size", "模型 context", "int",
                     "模型一次能看的 token 數；調大更耗 VRAM。",
-                    minimum=1024, maximum=16384, step=512, restart=True,
+                    minimum=1024, maximum=32768, step=512, restart=True,
                 ),
                 Setting(
                     "copilot", "llama_port", "llama-server 連接埠", "int",

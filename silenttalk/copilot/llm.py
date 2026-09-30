@@ -200,12 +200,12 @@ _JOIN_AFTER_QUIET_LINES = 4
 # Turns kept verbatim in a character request. Past this the oldest ones are
 # dropped a batch at a time, so the prompt prefix (and its KV cache) survives
 # most new lines; compaction normally folds them into the summary first.
-_TURN_WINDOW = 40
-_TURN_DROP_BATCH = 16
+_TURN_WINDOW = 128
+_TURN_DROP_BATCH = 32
 
 # A summary longer than this is no longer a summary; it also has to stay
-# small next to the persona in a 4096-token context.
-_SUMMARY_CHARS = 320
+# small next to the persona in a 32768-token context.
+_SUMMARY_CHARS = 640
 
 _END_PUNCTUATION = "？?！!。.…~～」』)）"
 _THINK_OPEN = "<think>"
@@ -764,8 +764,8 @@ class LocalReplyModel:
         session keeps its thread without growing the prompt."""
         system = (
             "你是對話記錄員。把 Discord 語音聊天的一段記錄濃縮成重點，"
-            "只寫真的發生過的事。台灣繁體中文，最多兩句、80 字以內，不要換行、"
-            "不要評論、不要加標題。"
+            "只寫真的發生過的事。保留人物、尚未結束的話題、約定、決定和專有名詞。"
+            "台灣繁體中文，最多六句、320 字以內，不要換行、不要評論、不要加標題。"
         )
         earlier = f"更早的重點：{previous}\n\n" if previous else ""
         prompt = (
@@ -773,7 +773,7 @@ class LocalReplyModel:
             "寫成重點（誰在聊什麼、決定了什麼、有什麼還沒結束）："
         )
         raw = await asyncio.to_thread(
-            self._request_completion, system, prompt, None, 160
+            self._request_completion, system, prompt, None, 640
         )
         text = raw.strip()
         close_index = text.lower().rfind(_THINK_CLOSE)

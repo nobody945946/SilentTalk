@@ -33,7 +33,7 @@ def test_the_page_can_change_settings_without_touching_config_toml(
     assert settings.copilot.character_engagement == "active"
     assert settings.copilot.compact_context is False
     # Untouched keys keep the file's values, and the file itself is unchanged.
-    assert settings.copilot.compact_keep_turns == 20
+    assert settings.copilot.compact_keep_turns == 96
     assert (project / "config.toml").read_text(encoding="utf-8") == before
 
 

@@ -78,6 +78,25 @@ def test_options_stop_trying_when_the_model_keeps_saying_the_same() -> None:
     assert len(temperatures) == 7
 
 
+def test_summary_uses_the_expanded_budget_and_keeps_previous_context() -> None:
+    import asyncio
+
+    model = LocalReplyModel(Path("unused.gguf"))
+    calls = []
+
+    def fake(system, prompt, on_lines=None, max_tokens=240):
+        calls.append((system, prompt, max_tokens))
+        return "重" * 800
+
+    model._request_completion = fake  # type: ignore[method-assign]
+    summary = asyncio.run(model.summarize("這段對話", "更早的重要決定"))
+
+    assert "最多六句、320 字以內" in calls[0][0]
+    assert "更早的重點：更早的重要決定" in calls[0][1]
+    assert calls[0][2] == 640
+    assert summary == "重" * 640
+
+
 def test_each_new_option_is_shown_as_soon_as_it_is_written() -> None:
     import asyncio
 
@@ -277,15 +296,15 @@ def test_engagement_setting_changes_only_the_system_prompt() -> None:
 
 def test_long_chats_drop_old_turns_a_batch_at_a_time() -> None:
     model = LocalReplyModel(Path("unused.gguf"))
-    turns = [ConversationTurn(2, "阿傑", f"第{n}句") for n in range(60)]
+    turns = [ConversationTurn(2, "阿傑", f"第{n}句") for n in range(161)]
 
     first_kept = []
-    for n in range(41, 61):
+    for n in range(129, 162):
         content = model.character_messages(turns=turns[:n])[1]["content"]
         first_kept.append(content.split("\n")[0])
-    # 41..56 turns share one starting point; only crossing a batch moves it.
-    assert set(first_kept[:16]) == {"阿傑：第16句"}
-    assert set(first_kept[16:]) == {"阿傑：第32句"}
+    # 129..160 turns share one starting point; only crossing a batch moves it.
+    assert set(first_kept[:32]) == {"阿傑：第32句"}
+    assert set(first_kept[32:]) == {"阿傑：第64句"}
 
 
 def test_nothing_to_answer_after_the_characters_own_line() -> None:

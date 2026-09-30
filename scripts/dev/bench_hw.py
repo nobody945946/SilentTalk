@@ -98,6 +98,7 @@ TIMED_FROM = 8
 RECENT_TURNS = 16  # config.toml [copilot] recent_turns
 TTS_LINE = "欸我的，下波我先進，你們跟緊一點"
 TTS_VOICE = "zh-TW-YunJheNeural"
+RECALL_MARKER = "藍鯨七號"
 
 
 def main() -> int:
@@ -108,6 +109,18 @@ def main() -> int:
         help="file name in .runtime/models/llm/ or a path",
     )
     parser.add_argument("--gpu-layers", type=int, default=99, help="0 = CPU only")
+    parser.add_argument(
+        "--context-size",
+        type=int,
+        default=32768,
+        help="context tokens per llama-server slot (default: 32768)",
+    )
+    parser.add_argument(
+        "--history-turns",
+        type=int,
+        default=len(CHAT),
+        help="synthetic chat turns sent before the timed tail (default: 16)",
+    )
     parser.add_argument(
         "--lora",
         help="adapter (file in .runtime/models/llm/ or a path): time the app's LoRA gate + reply",
@@ -120,6 +133,10 @@ def main() -> int:
     parser.add_argument("--skip-tts", action="store_true", help="no internet")
     parser.add_argument("--llama-server", help="path to llama-server(.exe)")
     args = parser.parse_args()
+    if args.context_size < 1024:
+        parser.error("--context-size must be at least 1024")
+    if args.history_turns < 10:
+        parser.error("--history-turns must be at least 10")
     # Redirected output on a zh-TW Windows is cp950, which has no Simplified
     # characters; the STT line would crash the whole report.
     sys.stdout.reconfigure(errors="replace")
@@ -241,6 +258,8 @@ def bench_llm(
 
     # Same flags as silenttalk/copilot/llm.py LocalReplyModel.start (low_vram).
     threads = max(2, min(6, (os.cpu_count() or 4) // 2))
+    slots = 2 if lora else 1
+    rows.append(("每槽 context", f"{args.context_size} tokens × {slots} slots"))
     cmd = [
         exe,
         "--model",
@@ -252,13 +271,13 @@ def bench_llm(
         # With an adapter the app runs one slot per adapter scale (llm.py
         # _lora_field), each with the full context.
         "--ctx-size",
-        "8192" if lora else "4096",
+        str(args.context_size * slots),
         "--threads",
         str(threads),
         "--n-gpu-layers",
         str(args.gpu_layers),
         "--parallel",
-        "2" if lora else "1",
+        str(slots),
         "--jinja",
         "--flash-attn",
         "on",
@@ -293,7 +312,10 @@ def bench_llm(
             1,
         )
 
-        old_requests, new_requests = old_format_requests(), new_format_requests()
+        chat = synthetic_chat(args.history_turns)
+        timed_from = max(TIMED_FROM, len(chat) - 8)
+        old_requests = old_format_requests(chat, timed_from)
+        new_requests = new_format_requests(chat, timed_from)
         if lora is not None:
             # What the app does per line: the gate with the adapter (slot 0),
             # then the reply, with the adapter on the same slot when "line"
@@ -318,6 +340,14 @@ def bench_llm(
                     summarize(replies),
                 )
             )
+            if args.history_turns > len(CHAT):
+                recalled = RECALL_MARKER in replies[-1]["text"]
+                rows.append(
+                    (
+                        "長對話回想",
+                        ("PASS" if recalled else "FAIL") + f"（{replies[-1]['text']}）",
+                    )
+                )
             speed = post(new_requests[-1], 32, ignore_eos=True, extra=reply)
             rows.append(
                 (
@@ -337,7 +367,7 @@ def bench_llm(
         rows.append(("判斷一句（新格式）", summarize(new)))
 
         # Generation speed: force a fixed length so every machine does the same work.
-        speed = post(new_format_requests()[-1], 32, ignore_eos=True)
+        speed = post(new_requests[-1], 32, ignore_eos=True)
         rows.append(("生成速度", f"{speed['tps']:.1f} token/s"))
         reply = post(new_format_requests()[-1], 60)
         rows.append(
@@ -396,28 +426,49 @@ def post(
     return {
         "ms": (time.perf_counter() - started) * 1000,
         "prompt": timings.get("prompt_n", 0),
+        "prompt_total": result.get("usage", {}).get("prompt_tokens", 0),
         "n": timings.get("predicted_n", 0),
         "tps": timings.get("predicted_per_second", 0.0),
+        "text": str(result.get("choices", [{}])[0].get("message", {}).get("content", "")),
     }
 
 
 def summarize(results: list[dict]) -> str:
     ms = [r["ms"] for r in results]
     prompt = statistics.median(r["prompt"] for r in results)
+    prompt_total = statistics.median(r["prompt_total"] for r in results)
     return (
         f"中位數 {statistics.median(ms):.0f} ms（{min(ms):.0f}–{max(ms):.0f}），"
-        f"每次重算 {prompt:.0f} token"
+        f"總 prompt {prompt_total:.0f} token，每次重算 {prompt:.0f} token"
     )
 
 
-def old_format_requests() -> list[list[dict]]:
+def synthetic_chat(turns: int) -> tuple[tuple[str, str], ...]:
+    """Repeat the fixed chat with numbered lines for long-context benchmarks."""
+    chat = [
+        (speaker, f"{text}（第{index + 1}句）")
+        for index, (speaker, text) in zip(range(turns), CHAT * ((turns // len(CHAT)) + 1))
+    ]
+    if turns > len(CHAT):
+        first_external = next(index for index, (speaker, _) in enumerate(chat) if speaker != BOT)
+        last_external = next(
+            index for index in range(len(chat) - 1, -1, -1) if chat[index][0] != BOT
+        )
+        chat[first_external] = (chat[first_external][0], f"記住測試代號是{RECALL_MARKER}")
+        chat[last_external] = (chat[last_external][0], "剛才請你記住的測試代號是什麼")
+    return tuple(chat)
+
+
+def old_format_requests(
+    chat: tuple[tuple[str, str], ...], timed_from: int
+) -> list[list[dict]]:
     """What silenttalk/copilot/llm.py sends today: the recent window rebuilt each line."""
     requests = []
-    for index in range(TIMED_FROM, len(CHAT)):
-        speaker, text = CHAT[index]
+    for index in range(timed_from, len(chat)):
+        speaker, text = chat[index]
         if speaker == BOT:
             continue
-        recent = CHAT[max(0, index - RECENT_TURNS) : index]
+        recent = chat[max(0, index - RECENT_TURNS) : index]
         context = "最近對話：\n" + "\n".join(
             f"{'你' if who == BOT else who}：{line}" for who, line in recent
         )
@@ -432,11 +483,13 @@ def old_format_requests() -> list[list[dict]]:
     return requests
 
 
-def new_format_requests() -> list[list[dict]]:
+def new_format_requests(
+    chat: tuple[tuple[str, str], ...], timed_from: int
+) -> list[list[dict]]:
     """Append-only chat: others are user turns, the character's lines are assistant turns."""
     requests = []
     messages: list[dict] = [{"role": "system", "content": SYSTEM}]
-    for index, (speaker, text) in enumerate(CHAT):
+    for index, (speaker, text) in enumerate(chat):
         if speaker == BOT:
             messages.append({"role": "assistant", "content": text})
             continue
@@ -448,7 +501,7 @@ def new_format_requests() -> list[list[dict]]:
             }
         else:
             messages.append({"role": "user", "content": line})
-        if index >= TIMED_FROM:
+        if index >= timed_from:
             requests.append([dict(m) for m in messages])
     return requests
 

@@ -108,14 +108,11 @@ class CopilotRuntime:
         llm_model = runtime_dir / "models" / "llm" / config.llm_model
 
         self._context = ConversationStore(
-            recent_turns=config.recent_turns,
             max_turns=config.max_session_turns,
-            char_budget=config.context_char_budget,
-            older_self_turns=4,
         )
         # Keep this many turns verbatim; older ones are folded into a summary
         # so a long session never gets truncated mid-thought.
-        self._compact_keep = max(config.recent_turns, config.compact_keep_turns)
+        self._compact_keep = config.compact_keep_turns
         self._compact_trigger = self._compact_keep + max(4, config.compact_batch_turns)
         self._compacting = False
         self._llm = LocalReplyModel(
@@ -337,8 +334,7 @@ class CopilotRuntime:
             ),
         )
         self._compact_keep = max(
-            self._config.recent_turns,
-            int(copilot.get("compact_keep_turns", self._compact_keep)),
+            8, int(copilot.get("compact_keep_turns", self._compact_keep))
         )
         self._compact_trigger = self._compact_keep + max(
             4, int(copilot.get("compact_batch_turns", self._config.compact_batch_turns))
@@ -432,7 +428,8 @@ class CopilotRuntime:
 
     async def _compact(self) -> None:
         try:
-            older = self._context.pending_compaction(self._compact_keep)
+            keep = self._compact_keep
+            older = self._context.pending_compaction(keep)
             if not older:
                 return
             transcript = "\n".join(
@@ -443,7 +440,7 @@ class CopilotRuntime:
             summary = await self._llm.summarize(transcript, self._context.summary)
             if not summary:
                 return
-            self._context.compact(summary, len(older))
+            self._context.compact(summary, len(older), keep)
             _LOG.info(
                 "copilot_context_compacted folded=%d summary_chars=%d ms=%d",
                 len(older),
