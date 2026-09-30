@@ -13,10 +13,9 @@ def main() -> int:
     links.mkdir(parents=True, exist_ok=True)
     shim = links / "e4b.cmd"
     python = project_dir / ".venv" / "Scripts" / "python.exe"
-    cli = project_dir / "scripts" / "e4b_cli.py"
+    cli = project_dir / "e4b_core" / "cli.py"
     shim.write_text(
-        "@echo off\n"
-        f'"{python}" "{cli}" %*\n',
+        f'@echo off\n"{python}" "{cli}" %*\n',
         encoding="utf-8",
     )
     print(shim)

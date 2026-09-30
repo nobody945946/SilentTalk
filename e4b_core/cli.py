@@ -10,12 +10,8 @@ PROJECT_DIR = Path(__file__).resolve().parents[1]
 if str(PROJECT_DIR) not in sys.path:
     sys.path.insert(0, str(PROJECT_DIR))
 
-from silenttalk.edge_ai import (  # noqa: E402
-    EdgeAIError,
-    request_base,
-    service_status,
-    shutdown_service,
-)
+from e4b_core.api import request_base, service_status, shutdown_service
+from e4b_core.runtime import E4BCoreError
 
 AUTOSTART_NAME = "E4B Edge AI.cmd"
 LEGACY_AUTOSTART_NAME = "E4B Edge AI.lnk"
@@ -26,12 +22,7 @@ def _startup_dir() -> Path:
     if not appdata:
         raise RuntimeError("APPDATA is unavailable")
     return (
-        Path(appdata)
-        / "Microsoft"
-        / "Windows"
-        / "Start Menu"
-        / "Programs"
-        / "Startup"
+        Path(appdata) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup"
     )
 
 
@@ -49,10 +40,9 @@ def set_autostart(enabled: bool) -> None:
     legacy = startup / LEGACY_AUTOSTART_NAME
     if enabled:
         pythonw = PROJECT_DIR / ".venv" / "Scripts" / "pythonw.exe"
-        starter = PROJECT_DIR / "scripts" / "start_edge_ai.py"
+        cli = PROJECT_DIR / "e4b_core" / "cli.py"
         command.write_text(
-            "@echo off\n"
-            f'start "" "{pythonw}" "{starter}"\n',
+            f'@echo off\nstart "" "{pythonw}" "{cli}" start\n',
             encoding="utf-8",
         )
         legacy.unlink(missing_ok=True)
@@ -68,19 +58,19 @@ def print_status() -> None:
         return
     mode = status.get("mode")
     if mode == "base":
-        print(f"E4B base running: {status.get('url')}")
+        print(f"E4B core running: {status.get('url')}")
     elif mode == "character":
-        print("E4B is in use by SilentTalk (character LoRA)")
+        print("E4B core is leased to SilentTalk (character LoRA)")
     else:
-        print(f"E4B status: {mode}")
+        print(f"E4B core status: {mode}")
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(prog="e4b", description="Local E4B edge AI")
+    parser = argparse.ArgumentParser(prog="e4b", description="Local E4B Core")
     subparsers = parser.add_subparsers(dest="command")
-    subparsers.add_parser("start", help="start E4B without opening a browser")
-    subparsers.add_parser("stop", help="stop E4B and release GPU memory")
-    subparsers.add_parser("status", help="show the current E4B mode")
+    subparsers.add_parser("start", help="start E4B Core without opening a browser")
+    subparsers.add_parser("stop", help="stop E4B Core and release GPU memory")
+    subparsers.add_parser("status", help="show the current E4B Core mode")
     auto = subparsers.add_parser("autostart", help="control Windows login startup")
     auto.add_argument("state", choices=("on", "off", "status"))
     args = parser.parse_args()
@@ -108,7 +98,7 @@ def main() -> int:
                 set_autostart(False)
             print("E4B autostart: " + ("on" if autostart_enabled() else "off"))
             return 0
-    except (EdgeAIError, OSError, RuntimeError) as exc:
+    except (E4BCoreError, OSError, RuntimeError) as exc:
         print(f"E4B error: {exc}", file=sys.stderr)
         return 1
     return 2

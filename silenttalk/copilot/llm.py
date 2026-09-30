@@ -19,6 +19,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import IO
 
+from e4b_core.runtime import build_server_args
 from silenttalk.copilot.character import asks_if_ai
 from silenttalk.copilot.character_state import (
     STATUSES,
@@ -32,7 +33,6 @@ from silenttalk.copilot.types import REPLY_LANES, ConversationTurn, ReplySuggest
 from silenttalk.edge_ai import (
     EdgeAIError,
     acquire_character,
-    build_server_args,
     release_character,
 )
 
