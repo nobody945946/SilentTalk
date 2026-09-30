@@ -61,6 +61,7 @@ class AppController:
                 on_character_text=self._type_as_character,
                 on_agenda=on_agenda,
                 can_type=settings.discord.text_chat,
+                managed_llm=True,
             )
         self._discord = DiscordVoiceClient(
             settings.discord,
@@ -264,7 +265,9 @@ class AppController:
         self._status(AppState.SHUTTING_DOWN, "關閉中…")
         future = asyncio.run_coroutine_threadsafe(self._shutdown_async(), self._loop)
         try:
-            future.result(timeout=10)
+            # Switching the shared E4B service back to its 96K base mode takes
+            # about ten seconds on this laptop; wait for that handoff to finish.
+            future.result(timeout=30)
         except Exception:  # noqa: BLE001 - shutdown must continue after any subsystem failure.
             _LOG.exception("shutdown_failed")
         self._loop.call_soon_threadsafe(self._loop.stop)

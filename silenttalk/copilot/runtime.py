@@ -71,6 +71,7 @@ class CopilotRuntime:
         on_character_text: LineCallback | None = None,
         on_agenda: AgendaCallback | None = None,
         can_type: bool = False,
+        managed_llm: bool = False,
     ) -> None:
         self._config = config
         self._owner_user_id = owner_user_id
@@ -131,6 +132,8 @@ class CopilotRuntime:
             ),
             lora_uses=config.character_lora_uses,
             memory=config.character_memory,
+            project_dir=project_dir,
+            managed_service=managed_llm,
         )
         self._stt = transcriber(
             asr_dir,

@@ -29,6 +29,12 @@ from silenttalk.copilot.character_state import (
 from silenttalk.copilot.persona import Persona, blank_persona
 from silenttalk.copilot.script import to_taiwan_traditional
 from silenttalk.copilot.types import REPLY_LANES, ConversationTurn, ReplySuggestions
+from silenttalk.edge_ai import (
+    EdgeAIError,
+    acquire_character,
+    build_server_args,
+    release_character,
+)
 
 _LOG = logging.getLogger(__name__)
 
@@ -237,6 +243,8 @@ class LocalReplyModel:
         lora_path: Path | None = None,
         lora_uses: Iterable[str] = ("called", "active", "line"),
         memory: str = "off",
+        project_dir: Path | None = None,
+        managed_service: bool = False,
     ) -> None:
         self._model_path = model_path
         self._lora_path = lora_path
@@ -254,6 +262,8 @@ class LocalReplyModel:
         self._can_type = can_type
         self._ai_honesty = ai_honesty
         self._request_timeout = max(3.0, request_timeout_seconds)
+        self._project_dir = project_dir
+        self._managed_service = managed_service and project_dir is not None
         self._process: subprocess.Popen[bytes] | None = None
         self._stderr_tail: collections.deque[str] = collections.deque(maxlen=40)
         self._base_url = f"http://127.0.0.1:{port}"
@@ -283,6 +293,14 @@ class LocalReplyModel:
         if not self._model_path.is_file():
             raise LocalLLMError(f"找不到 Copilot 模型：{self._model_path}")
 
+        if self._managed_service and self._project_dir is not None:
+            self._lora_loaded = self._lora_path is not None and self._lora_path.is_file()
+            try:
+                await asyncio.to_thread(acquire_character, self._project_dir, os.getpid())
+            except EdgeAIError as exc:
+                raise LocalLLMError(str(exc)) from exc
+            return
+
         executable = find_llama_server()
 
         threads = max(2, min(6, (os.cpu_count() or 4) // 2))
@@ -298,29 +316,18 @@ class LocalReplyModel:
         # so requests with and without it keep a slot each (_slot_field).
         # Without an adapter one slot: recent llama-server defaults to
         # several, which splits the context on a 4 GB laptop GPU.
-        slots = 2 if with_lora else 1
-        args = [
+        lora_path = self._lora_path if with_lora else None
+        args = build_server_args(
             executable,
-            "--model",
-            str(self._model_path),
-            "--host",
-            "127.0.0.1",
-            "--port",
-            str(self._port),
-            "--ctx-size",
-            str(self._context_size * slots),
-            "--threads",
-            str(threads),
-            "--n-gpu-layers",
-            str(self._gpu_layers),
-            "--parallel",
-            str(slots),
-            # Needed so chat_template_kwargs.enable_thinking reaches Qwen3's template.
-            "--jinja",
-        ]
-        if with_lora:
-            args += ["--lora", str(self._lora_path)]
-            self._lora_loaded = True
+            self._model_path,
+            port=self._port,
+            context_size=self._context_size,
+            threads=threads,
+            gpu_layers=self._gpu_layers,
+            low_vram=False,
+            lora_path=lora_path,
+        )
+        self._lora_loaded = with_lora
         _LOG.info(
             "copilot_llm_start model=%s context=%d threads=%d gpu_layers=%d low_vram=%s",
             self._model_path.name,
@@ -335,8 +342,16 @@ class LocalReplyModel:
             # needs flash attention; drivers without it fall back to f16.
             try:
                 await self._launch(
-                    args + ["--flash-attn", "on"]
-                    + ["--cache-type-k", "q8_0", "--cache-type-v", "q8_0"]
+                    build_server_args(
+                        executable,
+                        self._model_path,
+                        port=self._port,
+                        context_size=self._context_size,
+                        threads=threads,
+                        gpu_layers=self._gpu_layers,
+                        low_vram=True,
+                        lora_path=lora_path,
+                    )
                 )
                 return
             except LocalLLMError as exc:
@@ -375,6 +390,13 @@ class LocalReplyModel:
         raise LocalLLMError("llama-server 載入模型逾時。")
 
     async def stop(self) -> None:
+        if self._managed_service:
+            try:
+                await asyncio.to_thread(release_character, os.getpid())
+            except EdgeAIError:
+                _LOG.exception("general_edge_ai_restore_failed")
+            self._lora_loaded = False
+            return
         process = self._process
         self._process = None
         if process is None or process.poll() is not None:

@@ -111,10 +111,29 @@ try {
         Get-CimInstance Win32_Process -Filter "Name='pythonw.exe'" -ErrorAction SilentlyContinue |
             Where-Object { Test-SilentTalkProcess $_ }
     )
-    $copilotTargets = @(
-        Get-CimInstance Win32_Process -Filter "Name='llama-server.exe'" -ErrorAction SilentlyContinue |
-            Where-Object { Test-SilentTalkCopilotProcess $_ }
-    )
+    $managedEdgeAI = $false
+    try {
+        $edgeStatus = Invoke-RestMethod -Uri "http://127.0.0.1:18087/status" -TimeoutSec 1
+        $managedEdgeAI = ($null -ne $edgeStatus -and $edgeStatus.mode -in @("base", "character"))
+    }
+    catch {
+        $managedEdgeAI = $false
+    }
+    if ($managedEdgeAI -and $edgeStatus.mode -eq "character") {
+        # Keep the already-loaded character server alive while the replacement
+        # desktop process starts and takes over its lease.
+        Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:18087/handoff" -ContentType "application/json" -Body "{}" -TimeoutSec 2 | Out-Null
+    }
+    # The independent E4B service owns its llama-server child. Killing that
+    # child here defeats its zero-double-load lease handoff. Legacy unmanaged
+    # servers are still removed during migration.
+    $copilotTargets = @()
+    if (-not $managedEdgeAI) {
+        $copilotTargets = @(
+            Get-CimInstance Win32_Process -Filter "Name='llama-server.exe'" -ErrorAction SilentlyContinue |
+                Where-Object { Test-SilentTalkCopilotProcess $_ }
+        )
+    }
     $targets = @($targets + $copilotTargets)
 
     if ($targets.Count -gt 0) {
