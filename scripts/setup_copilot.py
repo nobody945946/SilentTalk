@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import argparse
 import hashlib
+import os
 import sys
 import urllib.error
 import urllib.request
@@ -35,7 +37,7 @@ ASSETS = (
         "ASR tokens",
         "https://huggingface.co/csukuangfj/sherpa-onnx-streaming-paraformer-bilingual-zh-en/resolve/main/tokens.txt?download=true",
         ASR_DIR / "tokens.txt",
-        None,
+        "59aba8873a2ed1e122c25fee421e25f283b63290efbde85c1f01a853d83cb6e6",
         50_000,
     ),
 )
@@ -88,14 +90,9 @@ def _is_ready(path: Path, expected_sha256: str | None, min_size: int) -> bool:
         return True
 
     marker = path.with_name(path.name + ".sha256")
-    if marker.is_file() and marker.read_text(encoding="ascii").strip() == expected_sha256:
-        return True
-
     actual = _sha256(path)
     if actual != expected_sha256:
         print(f"Existing {path.name} failed SHA256; downloading a clean copy.")
-        path.unlink(missing_ok=True)
-        marker.unlink(missing_ok=True)
         return False
 
     marker.write_text(expected_sha256 + "\n", encoding="ascii")
@@ -127,7 +124,10 @@ def _download(
     digest = hashlib.sha256()
     received = 0
     try:
-        with urllib.request.urlopen(request, timeout=60) as response, temp.open("wb") as out:
+        with (
+            urllib.request.urlopen(request, timeout=60) as response,
+            temp.open("wb") as out,
+        ):
             total = int(response.headers.get("Content-Length", "0") or "0")
             last_percent = -1
             while True:
@@ -165,10 +165,80 @@ def _download(
     print(f"[OK] {label}")
 
 
-def main() -> int:
+def check_runtime(section: dict) -> None:
+    """Verify native E4B, character leasing and return-to-base without chat data."""
+    from silenttalk import edge_ai
+
+    previous = edge_ai.service_status()
+    if previous and previous.get("mode") == "character":
+        raise RuntimeError(
+            "E4B is already leased; finish the active session before --check"
+        )
+    owner = os.getpid()
+    acquired = False
+    try:
+        base = edge_ai.ensure_service()
+        if base.get("mode") != "base":
+            raise RuntimeError("Native E4B is not in base mode")
+        configuration = {
+            "model": section.get("llm_model", "gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf"),
+            "lora": section.get("character_lora", "character-e4b-lora-v3.q8_0.gguf"),
+            "port": int(section.get("llama_port", 18088)),
+            "context_size": int(section.get("llm_context_size", 32768)),
+            "gpu_layers": int(section.get("llm_gpu_layers", 99)),
+            "low_vram": bool(section.get("llm_low_vram", True)),
+        }
+        result = edge_ai.post_json(
+            "/character", {"owner_pid": owner, "character": configuration}, timeout=360
+        )
+        acquired = True
+        if result.get("mode") != "character" or result.get("owner_pid") != owner:
+            raise RuntimeError("Character lease validation failed")
+        returned = edge_ai.release_character(owner)
+        acquired = False
+        if returned.get("mode") != "base":
+            raise RuntimeError("E4B did not return to native base mode")
+        print("[OK] Native E4B / character lease / native restore")
+    finally:
+        if acquired:
+            edge_ai.release_character(owner)
+        if previous is None and edge_ai.service_status() is not None:
+            edge_ai.post_json("/shutdown", {}, timeout=30, require_ready=False)
+
+
+def check_speech(section: dict) -> None:
+    from silenttalk.copilot.stt import StreamingTranscriber
+    from silenttalk.copilot.stt_offline import OfflineTranscriber
+
+    engine = str(section.get("stt_engine", "paraformer")).strip().lower()
+    if engine == "sensevoice":
+        transcriber = OfflineTranscriber(
+            SENSEVOICE_DIR, lambda *args: None, lambda error: None, vad_dir=VAD_DIR
+        )
+    else:
+        transcriber = StreamingTranscriber(
+            ASR_DIR, lambda *args: None, lambda error: None
+        )
+    try:
+        transcriber.start()
+        print("[OK] Speech model loaded")
+    finally:
+        transcriber.stop()
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Install SilentTalk speech assets")
+    parser.add_argument("--check-runtime", action="store_true")
+    args = parser.parse_args(argv)
     section = _copilot_section()
     if not bool(section.get("enabled", True)):
         print("Copilot is disabled; speech model deployment skipped.")
+        if args.check_runtime:
+            try:
+                check_runtime(section)
+            except (OSError, ValueError, RuntimeError) as exc:
+                print(f"ERROR: {exc}", file=sys.stderr)
+                return 1
         return 0
 
     stt_engine = str(section.get("stt_engine", "paraformer")).strip().lower()
@@ -178,7 +248,10 @@ def main() -> int:
     try:
         for asset in (*ASSETS, *stt_assets):
             _download(*asset)
-    except Exception as exc:
+        if args.check_runtime:
+            check_speech(section)
+            check_runtime(section)
+    except (OSError, ValueError, RuntimeError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
 

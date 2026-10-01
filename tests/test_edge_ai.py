@@ -53,9 +53,19 @@ def test_silenttalk_sends_character_configuration_through_http_api(
                     "low_vram": True,
                 },
             },
-            120,
+            360,
         )
     ]
+
+
+def test_e4b_command_is_found_before_a_new_terminal_is_opened(tmp_path, monkeypatch):
+    command = tmp_path / "Microsoft/WinGet/Links/e4b.cmd"
+    command.parent.mkdir(parents=True)
+    command.write_text("@echo off\n", encoding="utf-8")
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    monkeypatch.setattr(edge_ai.shutil, "which", lambda name: None)
+    if os.name == "nt":
+        assert edge_ai._global_e4b_command() == str(command)
 
 
 def test_copilot_smoke_keeps_only_model_names_for_e4b(tmp_path: Path) -> None:

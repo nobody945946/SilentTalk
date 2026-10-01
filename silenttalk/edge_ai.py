@@ -41,14 +41,19 @@ def _control_service_present(timeout: float = 0.25) -> bool:
 
 def _global_e4b_command() -> str:
     command = shutil.which("e4b.cmd") or shutil.which("e4b")
+    if command is None and os.name == "nt":
+        local = os.environ.get("LOCALAPPDATA")
+        candidate = Path(local) / "Microsoft/WinGet/Links/e4b.cmd" if local else None
+        if candidate is not None and candidate.is_file():
+            command = str(candidate)
     if command is None:
         raise EdgeAIError(
-            "找不到獨立 E4B Core；請先執行 C:\\Users\\A8fm0\\E4BCore\\開啟 E4B.cmd。"
+            "找不到獨立 E4B Core；請執行啟動 SilentTalk.cmd，自動完成首次部署。"
         )
     return command
 
 
-def ensure_service(timeout: float = 120.0) -> dict[str, object]:
+def ensure_service(timeout: float = 360.0) -> dict[str, object]:
     status = service_status()
     if status is None and not _control_service_present():
         flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
@@ -124,12 +129,12 @@ def acquire_character(project_dir: Path, owner_pid: int) -> dict[str, object]:
                 "low_vram": settings.llm_low_vram,
             },
         },
-        timeout=120,
+        timeout=360,
     )
 
 
 def release_character(owner_pid: int) -> dict[str, object]:
-    return post_json("/base", {"owner_pid": owner_pid}, timeout=120)
+    return post_json("/base", {"owner_pid": owner_pid}, timeout=360)
 
 
 def hold_restart_handoff() -> dict[str, object]:
