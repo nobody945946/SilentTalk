@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -88,6 +89,30 @@ def test_background_client_uses_the_installed_launcher_without_shell_parsing(
     assert argv[0] == "powershell.exe"
     assert argv[argv.index("-File") + 1] == str(launcher)
     assert argv[-1] == "start"
+    assert not spawn.call_args.kwargs["creationflags"] & subprocess.DETACHED_PROCESS
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows PowerShell process flags")
+def test_background_start_really_executes_the_independent_launcher(
+    tmp_path, monkeypatch
+):
+    marker = tmp_path / "started"
+    directory = tmp_path / "原生 & E4B"
+    directory.mkdir()
+    launcher = directory / "e4b-launch.ps1"
+    marker_path = str(marker).replace("'", "''")
+    launcher.write_text(
+        f"[IO.File]::WriteAllText('{marker_path}', '1')\n", encoding="utf-8-sig"
+    )
+    monkeypatch.setattr(
+        edge_ai, "service_status", lambda: {"ready": True} if marker.exists() else None
+    )
+    monkeypatch.setattr(edge_ai, "_control_service_present", lambda: False)
+    monkeypatch.setattr(
+        edge_ai, "_global_e4b_command", lambda: str(directory / "e4b.cmd")
+    )
+    assert edge_ai.ensure_service(timeout=15)["ready"] is True
+    assert marker.read_text() == "1"
 
 
 def test_copilot_smoke_keeps_only_model_names_for_e4b(tmp_path: Path) -> None:

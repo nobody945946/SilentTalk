@@ -58,7 +58,6 @@ def ensure_service(timeout: float = 360.0) -> dict[str, object]:
     if status is None and not _control_service_present():
         flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
         flags |= getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-        flags |= getattr(subprocess, "DETACHED_PROCESS", 0)
         command = _global_e4b_command()
         if os.name == "nt":
             launcher = Path(command).with_name("e4b-launch.ps1")
