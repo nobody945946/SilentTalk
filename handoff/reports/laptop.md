@@ -94,3 +94,14 @@ commit：24b73e5（copilot-story-mode）；驗收包含既有未提交修改。
 - 保留所有既有未提交修改與刪除，未改使用者設定檔。
 - e4b stop：exit code 0；模型與 GPU 記憶體已釋放。
 - 角色聊天品質與使用者感受尚未驗證，本輪不能宣稱整份交接完成。
+
+## 2026-10-02 提交與遠端保存
+
+- standalone_core_pushed：私人 repository https://github.com/nobody945946/E4BCore；分支 copilot-story-mode；3 commits；HEAD b10b007。
+- silenttalk_migration_pushed：copilot-story-mode；4 commits；HEAD 192620b。分組為服務租用、安裝啟動、開發工具、內嵌核心與重複模型移除。
+- silenttalk_pytest：204 passed、1 skipped、1 warning；exit code 0。
+- e4b_pytest：36 passed；exit code 0。包含租用保護、接管重用、重啟交接、停止釋放及保留埠保護。
+- e4b_ruff：PASS；exit code 0。
+- remote_sync_verified：兩個開發分支 ahead 0、behind 0；工作目錄 clean。
+- model_preservation_verified：外部兩個角色 LoRA 的 Git blob hash 與 SilentTalk 原有版本相同；外部模型、設定、環境及測試暫存未提交。
+- live_voice_test_pending：真人聊天測試尚未執行。
