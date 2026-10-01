@@ -61,14 +61,26 @@ def ensure_service(timeout: float = 360.0) -> dict[str, object]:
         flags |= getattr(subprocess, "DETACHED_PROCESS", 0)
         command = _global_e4b_command()
         if os.name == "nt":
-            argv = [
-                os.environ.get("COMSPEC", "cmd.exe"),
-                "/d",
-                "/c",
-                "call",
-                command,
-                "start",
-            ]
+            launcher = Path(command).with_name("e4b-launch.ps1")
+            if launcher.is_file():
+                argv = [
+                    "powershell.exe",
+                    "-NoProfile",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    str(launcher),
+                    "start",
+                ]
+            else:
+                argv = [
+                    os.environ.get("COMSPEC", "cmd.exe"),
+                    "/d",
+                    "/c",
+                    "call",
+                    command,
+                    "start",
+                ]
         else:
             argv = [command, "start"]
         subprocess.Popen(

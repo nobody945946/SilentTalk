@@ -68,6 +68,28 @@ def test_e4b_command_is_found_before_a_new_terminal_is_opened(tmp_path, monkeypa
         assert edge_ai._global_e4b_command() == str(command)
 
 
+@pytest.mark.skipif(os.name != "nt", reason="Windows independent launcher")
+def test_background_client_uses_the_installed_launcher_without_shell_parsing(
+    tmp_path, monkeypatch
+):
+    directory = tmp_path / "中文 & 路徑"
+    directory.mkdir()
+    launcher = directory / "e4b-launch.ps1"
+    launcher.write_text("# fixture launcher\n", encoding="ascii")
+    statuses = iter([None, {"ready": True, "mode": "base"}])
+    monkeypatch.setattr(edge_ai, "service_status", lambda: next(statuses))
+    monkeypatch.setattr(edge_ai, "_control_service_present", lambda: False)
+    monkeypatch.setattr(
+        edge_ai, "_global_e4b_command", lambda: str(directory / "e4b.cmd")
+    )
+    with patch("subprocess.Popen") as spawn:
+        edge_ai.ensure_service()
+    argv = spawn.call_args.args[0]
+    assert argv[0] == "powershell.exe"
+    assert argv[argv.index("-File") + 1] == str(launcher)
+    assert argv[-1] == "start"
+
+
 def test_copilot_smoke_keeps_only_model_names_for_e4b(tmp_path: Path) -> None:
     config = SimpleNamespace(
         llm_model="e4b.gguf",
