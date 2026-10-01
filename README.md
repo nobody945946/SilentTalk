@@ -8,6 +8,27 @@ Windows 本機 SilentTalk：可手動輸入文字，也可在 Discord 語音中�
 
 ## 最快使用方式
 
+首次部署支援 Windows x64。取得這個 repository 後，直接雙擊 `啟動 SilentTalk.cmd`：
+它會自動安裝 Python 3.12、各自的虛擬環境與依賴、FFmpeg、語音模型，以及獨立 E4B。
+不需要事先安裝 Git、winget、Python 或 CUDA Toolkit。E4B 的來源、環境、推論引擎、
+Gemma 4 E4B 與角色 LoRA 放在使用者家目錄的 `E4BCore`，不放進 SilentTalk。
+E4B 安裝器依已可用的 NVIDIA 驅動選擇 CUDA；否則使用 CPU。CPU 可以執行，但速度依硬體而異。
+
+首次下載私人 E4B 時，流程會請你登入有 repository 存取權的 GitHub 帳號。
+要連 Discord 時，只需輸入 Bot token 與自己的 Discord User ID；新輸入存入
+Windows 認證管理員，之後不用再輸入。既有 `.env` 優先，安裝器不修改它或其他使用者設定。
+Bot 仍需先建立並邀請到自己的 Server，這些是 Discord 帳號授權，無法由安裝器代替。
+
+首次下載約 5–6 GB，建議保留至少 12 GB 可用磁碟空間。大型模型下載可續傳，
+資產皆驗證 SHA256；網路中斷後重跑同一入口即可。重開會沿用完成的環境與資產。
+首次部署會實際載入 STT、啟動原生 E4B、租用角色模式，再驗證歸還原生模式。
+`啟動 SilentTalk.cmd --setup-only` 只部署；`啟動 SilentTalk.cmd --check` 重新驗收且不連 Discord。
+需要自訂獨立 E4B 路徑時可設定環境變數 `E4B_HOME`，必須在 SilentTalk 目錄之外。
+舊 E4B checkout 不會被覆寫；缺少新安裝器時改為建立並列安裝。
+
+完成後，直接執行 `e4b` 或 `E4BCore\開啟 E4B.cmd` 即可使用原生 E4B；
+SilentTalk 執行時只透過 localhost API 租用，結束後歸還。兩者沒有共用 Python 套件環境。
+
 1. 雙擊 `啟動 SilentTalk.cmd`。啟動後不會出現大型主視窗。
 2. 用 `.env` 內 `OWNER_USER_ID` 對應的 Discord 帳號加入一般語音頻道。
 3. Bot 會自動加入；跨 Server 時，目標 Server 也必須先安裝 Bot。
