@@ -66,7 +66,8 @@ STUDENT_HF=${STUDENT_HF:-.runtime/hf/gemma-4-E4B-it-qat}
 STUDENT_GGUF=${STUDENT_GGUF:-gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf}
 TAG=${TAG:-v3-e4b}
 LORA_DIR=.runtime/dev/lora/character-$TAG
-LORA_GGUF=.runtime/models/llm/character-$TAG.q8_0.gguf
+E4B_MODELS=${E4B_MODEL_DIR:-$HOME/E4BCore/models}
+LORA_GGUF=$E4B_MODELS/character-$TAG.q8_0.gguf
 LLAMA_SRC=.runtime/tools/llama.cpp-b11179
 LLAMA_SERVER=${LLAMA_SERVER:-.runtime/tools/llama.cpp-b11179-src/build-cuda/bin/llama-server}
 [ -x "$LLAMA_SERVER" ] || LLAMA_SERVER=llama-server
@@ -272,7 +273,7 @@ eval_pair() {
 generator() { TEACHER=$GENERATOR SERVER_SLOTS=$SLOTS; data "$@"; }
 checker() { TEACHER=$CHECKER SERVER_SLOTS=$CHECKER_SLOTS; data "$@"; }
 student() {
-    TEACHER=.runtime/models/llm/$STUDENT_GGUF SERVER_SLOTS=$SLOTS
+    TEACHER=$E4B_MODELS/$STUDENT_GGUF SERVER_SLOTS=$SLOTS
     data student --student-url "http://127.0.0.1:$TEACHER_PORT"
 }
 # The checker against the first round's gate labels. Informational: its

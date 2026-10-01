@@ -55,6 +55,9 @@ from pathlib import Path
 from typing import Any
 
 PROJECT_DIR = Path(__file__).resolve().parents[2]
+E4B_MODEL_DIR = Path(
+    os.environ.get("E4B_MODEL_DIR", Path.home() / "E4BCore" / "models")
+)
 sys.path.insert(0, str(PROJECT_DIR))
 
 DATA_PATH = Path(__file__).with_name("turn_eval_data.jsonl")
@@ -927,8 +930,8 @@ def summarize_judge(records: list[dict[str, Any]]) -> dict[str, Any]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--policy", choices=("old", "new"), default="old")
-    parser.add_argument("--model", help="gguf in .runtime/models/llm/ (default: config.toml)")
-    parser.add_argument("--lora", help="new policy only: adapter gguf in .runtime/models/llm/")
+    parser.add_argument("--model", help="gguf in E4B_MODEL_DIR (default: config.toml)")
+    parser.add_argument("--lora", help="new policy only: adapter gguf in E4B_MODEL_DIR")
     parser.add_argument("--data", type=Path, default=DATA_PATH)
     parser.add_argument("--tag", help="results name (default: <policy>-<model stem>)")
     parser.add_argument("--old-rev", default=OLD_REV,
@@ -1012,7 +1015,7 @@ def main() -> int:
 
     config = copilot_config()
     model_name = args.model or str(config["llm_model"])
-    args.model_path = PROJECT_DIR / ".runtime" / "models" / "llm" / model_name
+    args.model_path = E4B_MODEL_DIR / model_name
     if not args.model_path.is_file():
         raise SystemExit(f"model not found: {args.model_path}")
     ensure_llama_server_on_path()

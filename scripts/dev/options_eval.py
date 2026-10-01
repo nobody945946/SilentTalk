@@ -76,7 +76,7 @@ async def generate(args: argparse.Namespace) -> None:
     config = te.copilot_config()
     if args.cpu:
         config["llm_gpu_layers"] = 0
-    llm_dir = te.PROJECT_DIR / ".runtime" / "models" / "llm"
+    llm_dir = te.E4B_MODEL_DIR
     model_path = llm_dir / (args.model or config["llm_model"])
     old_path = llm_dir / args.old_model if args.old_model else model_path
     port = args.port or PORT
@@ -289,7 +289,7 @@ def main() -> int:
     gen = sub.add_parser("generate")
     gen.add_argument("--rev", required=True, help="git revision with the old options code")
     gen.add_argument("--tag", required=True)
-    gen.add_argument("--model", help="gguf in .runtime/models/llm/ (default: config.toml)")
+    gen.add_argument("--model", help="gguf in E4B_MODEL_DIR (default: config.toml)")
     gen.add_argument("--old-model", help="the old side runs this gguf instead (own server)")
     gen.add_argument("--lora", help="adapter gguf for the new side's options")
     gen.add_argument("--agenda", action="store_true",

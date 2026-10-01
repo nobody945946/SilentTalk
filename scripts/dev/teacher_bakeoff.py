@@ -45,9 +45,10 @@ sys.path.insert(0, str(PROJECT_DIR))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import turn_eval  # noqa: E402
+from bench_hw import find_llama_server  # noqa: E402
 
 from silenttalk.copilot import persona as persona_module  # noqa: E402
-from silenttalk.copilot.llm import LocalReplyModel, find_llama_server  # noqa: E402
+from silenttalk.copilot.llm import LocalReplyModel  # noqa: E402
 from silenttalk.copilot.types import ConversationTurn  # noqa: E402
 
 OUT_DIR = PROJECT_DIR / ".runtime" / "dev" / "m3"
@@ -56,7 +57,7 @@ JUDGE_PATH = OUT_DIR / "judge.json"
 TIMING_PATH = OUT_DIR / "timing.json"
 THINK_TOKENS = 3000
 PORT = 18420
-LLM_DIR = PROJECT_DIR / ".runtime" / "models" / "llm"
+LLM_DIR = turn_eval.E4B_MODEL_DIR
 TEACHER_DIR = PROJECT_DIR / ".runtime" / "models" / "teacher"
 
 # name -> (gguf, is_teacher). The student is the reference to beat.
@@ -176,7 +177,7 @@ def chat_text(point: dict[str, Any], last: int = 8) -> str:
 
 def start_server(gguf: Path) -> subprocess.Popen[bytes]:
     args = [
-        find_llama_server(),
+        find_llama_server(None),
         "--model",
         str(gguf),
         "--host",
@@ -278,11 +279,11 @@ def generate(args: argparse.Namespace) -> None:
         stages = [("plain", [name] + ([f"{name}+pick"] if is_teacher else []))]
         if is_teacher and not args.no_think:
             stages.append(("think", [f"{name}+think"]))
-        todo_by_stage = [
+        pending_by_stage = [
             (stage, [p for p in points if any(v not in lines.get(p["id"], {}) for v in variants)])
             for stage, variants in stages
         ]
-        if not any(todo for _, todo in todo_by_stage):
+        if not any(pending for _, pending in pending_by_stage):
             print(f"{name}: done", flush=True)
             continue
         if not gguf.is_file():
@@ -292,27 +293,30 @@ def generate(args: argparse.Namespace) -> None:
         server = start_server(gguf)
         print(f"{name}: server up in {time.monotonic() - started:.0f} s", flush=True)
         try:
-            for stage, todo in todo_by_stage:
-                if not todo:
+            for stage, pending in pending_by_stage:
+                if not pending:
                     continue
                 THOUGHT_SEEN.clear()
                 stage_started = time.monotonic()
                 one = _generate_one if stage == "plain" else _generate_think
                 with ThreadPoolExecutor(4) as pool:
                     job = functools.partial(one, lines, name, is_teacher)
-                    for n, _ in enumerate(pool.map(job, todo), 1):
+                    for n, _ in enumerate(pool.map(job, pending), 1):
                         if n % 10 == 0:
                             with _LOCK:
                                 _save(LINES_PATH, lines)
-                            print(f"  {name} {stage} {n}/{len(todo)}", flush=True)
+                            print(f"  {name} {stage} {n}/{len(pending)}", flush=True)
                 _save(LINES_PATH, lines)
                 seconds = time.monotonic() - stage_started
                 entry = timing.setdefault(name, {})
-                entry[f"{stage}_seconds_per_point"] = round(seconds / len(todo), 2)
+                entry[f"{stage}_seconds_per_point"] = round(seconds / len(pending), 2)
                 if stage == "think":
                     entry["reasoning_seen"] = bool(THOUGHT_SEEN)
                 _save(TIMING_PATH, timing)
-                print(f"{name} {stage}: {len(todo)} points in {seconds:.0f} s", flush=True)
+                print(
+                    f"{name} {stage}: {len(pending)} points in {seconds:.0f} s",
+                    flush=True,
+                )
         finally:
             stop_server(server)
 
@@ -393,9 +397,9 @@ def judge(args: argparse.Namespace) -> None:
         done = verdicts.setdefault(key, [])
         seen = {v["point"] for v in done}
         rng = random.Random(1000 + pass_no)
-        todo = [pid for pid in sorted(points) if pid not in seen and pid in lines]
+        pending_ids = [pid for pid in sorted(points) if pid not in seen and pid in lines]
         by_persona: dict[str, list[str]] = defaultdict(list)
-        for pid in todo:
+        for pid in pending_ids:
             by_persona[points[pid]["persona"].id].append(pid)
         for persona_id, pids in sorted(by_persona.items()):
             for start in range(0, len(pids), args.batch):
