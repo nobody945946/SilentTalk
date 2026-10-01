@@ -105,3 +105,23 @@ commit：24b73e5（copilot-story-mode）；驗收包含既有未提交修改。
 - remote_sync_verified：兩個開發分支 ahead 0、behind 0；工作目錄 clean。
 - model_preservation_verified：外部兩個角色 LoRA 的 Git blob hash 與 SilentTalk 原有版本相同；外部模型、設定、環境及測試暫存未提交。
 - live_voice_test_pending：真人聊天測試尚未執行。
+
+## 2026-10-02 首次啟動部署 pipeline
+
+- scope_override：依使用者新指示實作從零部署；真人聊天測試延後。
+- silenttalk_deployment_pushed：copilot-story-mode；HEAD 2e05865；依部署、憑證、啟動修正、CI、版本固定分組提交。
+- standalone_e4b_pushed：私人 E4BCore；copilot-story-mode；來源 HEAD e135aac；回報 HEAD de5b3a3；版本 1.1.2。
+- first_launch_automation：Windows x64；Python、Git、各自虛擬環境、FFmpeg、語音模型、獨立 E4B 模型與引擎；可重跑；校驗下載；CPU／CUDA 自動選擇。
+- credential_setup：GitHub 首次登入；Discord 憑證使用 Windows Credential Manager；未修改使用者設定。
+- standalone_ownership_verified：E4B 可原生獨立使用；SilentTalk 僅使用 localhost 租用 API。
+- cold_cuda_deployment：PASS；全新目錄／環境／模型；Unicode 路徑；語音載入、原生啟動、角色租用、原生恢復通過；exit code 0。
+- cold_cpu_cloud_deployment：PASS；run 36902829053；隔離 PATH／LOCALAPPDATA；缺少 Python／Git 自動安裝；原生啟動／停止通過。
+- source_distribution_verified：bootstrap-v4；私人來源實際下載與校驗通過；SHA256 4efb3095e47785d5e6045810c6dd816e3db568cd43ea8d120567963fcfa82e0c。
+- portable_git_worktree：PASS；原工作目錄隔離通過。
+- silenttalk_tests：214 passed、1 skipped、1 warning；exit code 0；run 36901400013；Ruff PASS。
+- e4b_tests：45 passed；exit code 0；Ruff PASS。
+- corrected_deployment_events：Unicode 無視窗 launcher、PowerShell detached suppression、CI async test dependency；修正後測試通過。
+- preexisting_test_event：50ms timing fixture 曾失敗；重跑與最終整套通過；既有 background task state exception 曾出現；未改範圍外程式。
+- final_runtime_cleanup：正式全域 e4b 指令恢復；控制／模型端口無 LISTENING。
+- privacy_preserved：未保存對話、錄音、附件、模型回覆或憑證至報告／repository。
+- live_voice_test_pending：真人聊天品質尚未驗證。
