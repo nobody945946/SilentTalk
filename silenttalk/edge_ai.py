@@ -61,7 +61,14 @@ def ensure_service(timeout: float = 360.0) -> dict[str, object]:
         flags |= getattr(subprocess, "DETACHED_PROCESS", 0)
         command = _global_e4b_command()
         if os.name == "nt":
-            argv = [os.environ.get("COMSPEC", "cmd.exe"), "/d", "/c", command, "start"]
+            argv = [
+                os.environ.get("COMSPEC", "cmd.exe"),
+                "/d",
+                "/c",
+                "call",
+                command,
+                "start",
+            ]
         else:
             argv = [command, "start"]
         subprocess.Popen(

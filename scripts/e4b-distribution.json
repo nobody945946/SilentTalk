@@ -1,6 +1,6 @@
 {
   "repository": "nobody945946/E4BCore",
-  "release": "bootstrap-v2",
-  "asset": "e4b-core-windows-source-v2.zip",
-  "sha256": "0dc98078e9e31a99462f23958b07e319380ac2c953cc4fccb2666010ac1b4672"
+  "release": "bootstrap-v3",
+  "asset": "e4b-core-windows-source-v3.zip",
+  "sha256": "7a44077b082e97451fa8fdbc79456591389cdb26b2242b7d679d621102f315fd"
 }
