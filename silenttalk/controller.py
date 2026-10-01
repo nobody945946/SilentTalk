@@ -61,7 +61,6 @@ class AppController:
                 on_character_text=self._type_as_character,
                 on_agenda=on_agenda,
                 can_type=settings.discord.text_chat,
-                managed_llm=True,
             )
         self._discord = DiscordVoiceClient(
             settings.discord,

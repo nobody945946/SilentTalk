@@ -3,8 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from silenttalk.copilot import llm
-from silenttalk.copilot.llm import LocalLLMError, LocalReplyModel
+from silenttalk.copilot.llm import LocalReplyModel
 from silenttalk.copilot.persona import PRESET_PERSONAS
 from silenttalk.copilot.types import ConversationTurn
 
@@ -193,34 +192,6 @@ def test_character_is_told_not_to_repeat_a_recent_catchphrase() -> None:
     assert "你最近已經說過" not in first
     assert "吾之右手" in second.split("你最近已經說過")[1]
     assert "口頭禪偶爾用" not in first
-
-
-def test_llama_server_found_in_winget_package_without_links_shim(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    package = (
-        tmp_path
-        / "Microsoft"
-        / "WinGet"
-        / "Packages"
-        / "ggml.llamacpp_Microsoft.Winget.Source_8wekyb3d8bbwe"
-    )
-    package.mkdir(parents=True)
-    (package / "llama-server.exe").write_bytes(b"")
-    monkeypatch.setattr(llm.shutil, "which", lambda name: None)
-    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
-
-    assert llm.find_llama_server() == str(package / "llama-server.exe")
-
-
-def test_missing_llama_server_still_raises(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(llm.shutil, "which", lambda name: None)
-    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
-
-    with pytest.raises(LocalLLMError):
-        llm.find_llama_server()
 
 
 def _chat(lines: list[tuple[str, str]]) -> list[ConversationTurn]:

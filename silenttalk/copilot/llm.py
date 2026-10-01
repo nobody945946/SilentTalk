@@ -8,18 +8,13 @@ import json
 import logging
 import os
 import re
-import shutil
-import subprocess
-import threading
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
-from typing import IO
 
-from e4b_core.runtime import build_server_args
 from silenttalk.copilot.character import asks_if_ai
 from silenttalk.copilot.character_state import (
     STATUSES,
@@ -216,11 +211,6 @@ _SUMMARY_CHARS = 640
 _END_PUNCTUATION = "？?！!。.…~～」』)）"
 _THINK_OPEN = "<think>"
 _THINK_CLOSE = "</think>"
-# llama-server stderr lines worth keeping in the app log: they prove whether
-# the model actually landed on the GPU. Conversation text never appears here.
-_DIAGNOSTIC_MARKERS = ("offloaded", "using device", "error", "failed", "out of memory")
-
-
 class LocalLLMError(RuntimeError):
     pass
 
@@ -244,7 +234,6 @@ class LocalReplyModel:
         lora_uses: Iterable[str] = ("called", "active", "line"),
         memory: str = "off",
         project_dir: Path | None = None,
-        managed_service: bool = False,
     ) -> None:
         self._model_path = model_path
         self._lora_path = lora_path
@@ -262,10 +251,11 @@ class LocalReplyModel:
         self._can_type = can_type
         self._ai_honesty = ai_honesty
         self._request_timeout = max(3.0, request_timeout_seconds)
-        self._project_dir = project_dir
-        self._managed_service = managed_service and project_dir is not None
-        self._process: subprocess.Popen[bytes] | None = None
-        self._stderr_tail: collections.deque[str] = collections.deque(maxlen=40)
+        self._project_dir = project_dir or Path.cwd()
+        # Kept as a readable invariant for callers/tests: there is no unmanaged
+        # fallback anymore. SilentTalk always leases the independent E4B Core.
+        self._managed_service = True
+        self._lease_active = False
         self._base_url = f"http://127.0.0.1:{port}"
         self._persona = blank_persona()
         # Its own life (CharacterState), part of the system prompt.
@@ -288,125 +278,25 @@ class LocalReplyModel:
         self._persona = persona
 
     async def start(self) -> None:
-        if self._process is not None and self._process.poll() is None:
+        if self._lease_active:
             return
-        if not self._model_path.is_file():
-            raise LocalLLMError(f"找不到 Copilot 模型：{self._model_path}")
-
-        if self._managed_service and self._project_dir is not None:
-            self._lora_loaded = self._lora_path is not None and self._lora_path.is_file()
-            try:
-                await asyncio.to_thread(acquire_character, self._project_dir, os.getpid())
-            except EdgeAIError as exc:
-                raise LocalLLMError(str(exc)) from exc
-            return
-
-        executable = find_llama_server()
-
-        threads = max(2, min(6, (os.cpu_count() or 4) // 2))
-        devices = await asyncio.to_thread(list_llama_devices, executable)
-        _LOG.info("copilot_llm_devices %s", " | ".join(devices) or "none(cpu-only)")
-        self._lora_loaded = False
-        if self._lora_path is not None and not self._lora_path.is_file():
-            _LOG.warning("copilot_lora_missing file=%s", self._lora_path.name)
-        with_lora = self._lora_path is not None and self._lora_path.is_file()
-        # One slot per adapter setting. llama-server drops a slot's prompt
-        # cache whenever the adapter scale differs from the last request's
-        # (measured: the whole 1.3k-token chat re-read, ~0.9 s on a 3090),
-        # so requests with and without it keep a slot each (_slot_field).
-        # Without an adapter one slot: recent llama-server defaults to
-        # several, which splits the context on a 4 GB laptop GPU.
-        lora_path = self._lora_path if with_lora else None
-        args = build_server_args(
-            executable,
-            self._model_path,
-            port=self._port,
-            context_size=self._context_size,
-            threads=threads,
-            gpu_layers=self._gpu_layers,
-            low_vram=False,
-            lora_path=lora_path,
-        )
-        self._lora_loaded = with_lora
-        _LOG.info(
-            "copilot_llm_start model=%s context=%d threads=%d gpu_layers=%d low_vram=%s",
-            self._model_path.name,
-            self._context_size,
-            threads,
-            self._gpu_layers,
-            self._low_vram,
-        )
-        if self._low_vram:
-            # 8-bit KV cache: 1.7B at ctx 4096 drops from ~1.6 GB to ~1.4 GB of
-            # VRAM, which matters next to a game on a 4 GB card. Quantized V
-            # needs flash attention; drivers without it fall back to f16.
-            try:
-                await self._launch(
-                    build_server_args(
-                        executable,
-                        self._model_path,
-                        port=self._port,
-                        context_size=self._context_size,
-                        threads=threads,
-                        gpu_layers=self._gpu_layers,
-                        low_vram=True,
-                        lora_path=lora_path,
-                    )
-                )
-                return
-            except LocalLLMError as exc:
-                _LOG.warning("copilot_llm_low_vram_fallback reason=%s", str(exc)[:160])
-        await self._launch(args)
-
-    async def _launch(self, args: list[str]) -> None:
-        self._stderr_tail.clear()
-        self._process = subprocess.Popen(
-            args,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-        )
-        if self._process.stderr is not None:
-            threading.Thread(
-                target=self._drain_stderr,
-                args=(self._process.stderr,),
-                name="copilot-llm-stderr",
-                daemon=True,
-            ).start()
-
-        deadline = asyncio.get_running_loop().time() + 60.0
-        while asyncio.get_running_loop().time() < deadline:
-            if self._process.poll() is not None:
-                code = self._process.returncode
-                self._process = None
-                raise LocalLLMError(
-                    f"llama-server 啟動失敗，exit code={code}｜{self._last_error_line()}"
-                )
-            if await asyncio.to_thread(self._health_ok):
-                return
-            await asyncio.sleep(0.25)
-
-        await self.stop()
-        raise LocalLLMError("llama-server 載入模型逾時。")
+        try:
+            await asyncio.to_thread(acquire_character, self._project_dir, os.getpid())
+        except EdgeAIError as exc:
+            raise LocalLLMError(str(exc)) from exc
+        self._lora_loaded = self._lora_path is not None
+        self._lease_active = True
 
     async def stop(self) -> None:
-        if self._managed_service:
-            try:
-                await asyncio.to_thread(release_character, os.getpid())
-            except EdgeAIError:
-                _LOG.exception("general_edge_ai_restore_failed")
-            self._lora_loaded = False
+        if not self._lease_active:
             return
-        process = self._process
-        self._process = None
-        if process is None or process.poll() is not None:
-            return
-        process.terminate()
         try:
-            await asyncio.to_thread(process.wait, 3)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            await asyncio.to_thread(process.wait)
+            await asyncio.to_thread(release_character, os.getpid())
+        except EdgeAIError:
+            _LOG.exception("general_edge_ai_restore_failed")
+        finally:
+            self._lease_active = False
+            self._lora_loaded = False
 
     async def suggest(
         self,
@@ -803,24 +693,6 @@ class LocalReplyModel:
             text = text[close_index + len(_THINK_CLOSE) :]
         return to_taiwan_traditional(" ".join(text.split()))[:_SUMMARY_CHARS]
 
-    def _drain_stderr(self, stream: IO[bytes]) -> None:
-        for raw_line in iter(stream.readline, b""):
-            line = raw_line.decode("utf-8", errors="replace").strip()
-            if not line:
-                continue
-            self._stderr_tail.append(line)
-            lower = line.lower()
-            if any(marker in lower for marker in _DIAGNOSTIC_MARKERS):
-                _LOG.info("copilot_llm_server %s", line[:300])
-        stream.close()
-
-    def _last_error_line(self) -> str:
-        for line in reversed(self._stderr_tail):
-            lower = line.lower()
-            if "error" in lower or "failed" in lower or "memory" in lower:
-                return line[:200]
-        return self._stderr_tail[-1][:200] if self._stderr_tail else "沒有輸出"
-
     def _health_ok(self) -> bool:
         try:
             request = urllib.request.Request(
@@ -960,50 +832,6 @@ def consume_stream(events: Iterable[bytes], on_lines: Callable[[str], None]) -> 
         if "\n" in piece:
             on_lines(text[: text.rfind("\n")])
     return text
-
-
-def find_llama_server() -> str:
-    executable = (
-        shutil.which("llama-server.exe")
-        or shutil.which("llama-server")
-        or _winget_llama_server()
-    )
-    if not executable:
-        raise LocalLLMError(
-            "找不到 llama-server.exe；請重新執行「啟動 SilentTalk.cmd」自動部署。"
-        )
-    return executable
-
-
-def _winget_llama_server() -> str | None:
-    """winget can unpack llama.cpp without creating its WinGet\\Links shim
-    (seen on a 3050 Ti laptop); the exe is then only in the package folder."""
-    local = os.environ.get("LOCALAPPDATA")
-    if not local:
-        return None
-    packages = Path(local) / "Microsoft" / "WinGet" / "Packages"
-    found = sorted(packages.glob("ggml.llamacpp*/**/llama-server.exe"))
-    return str(found[-1]) if found else None
-
-
-def list_llama_devices(executable: str) -> list[str]:
-    """GPUs llama.cpp can use, e.g. "Vulkan0: NVIDIA GeForce RTX 3050 Ti (4096 MiB, …)".
-
-    An empty list means the model will run on the CPU (about 3x slower).
-    """
-    try:
-        listing = subprocess.run(
-            [executable, "--list-devices"],
-            capture_output=True,
-            timeout=20,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        return []
-    output = (listing.stdout + listing.stderr).decode("utf-8", errors="replace")
-    return [
-        line.strip() for line in output.splitlines() if "MiB" in line and ":" in line
-    ]
 
 
 def quiet_for(turns: Sequence[ConversationTurn]) -> int:

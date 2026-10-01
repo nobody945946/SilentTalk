@@ -1,60 +1,21 @@
 from __future__ import annotations
 
+import io
+import json
 import os
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import pytest
 
-from e4b_core import api as core_api
-from e4b_core import runtime as core_runtime
-from e4b_core import service as core_service
-from silenttalk import edge_ai as edge_client
+from silenttalk import edge_ai
 from silenttalk.copilot import llm
+from silenttalk.copilot import smoke as copilot_smoke
 from silenttalk.copilot.llm import LocalReplyModel
 
 
-def _value_after(args: list[str], flag: str) -> str:
-    return args[args.index(flag) + 1]
-
-
-def test_base_server_is_one_full_speed_96k_slot() -> None:
-    args = core_runtime.build_server_args(
-        "llama-server",
-        Path("e4b.gguf"),
-        port=core_runtime.GENERAL_PORT,
-        context_size=core_runtime.GENERAL_CONTEXT_SIZE,
-        threads=4,
-        gpu_layers=99,
-        low_vram=True,
-    )
-
-    assert _value_after(args, "--port") == "18089"
-    assert _value_after(args, "--ctx-size") == "98304"
-    assert _value_after(args, "--parallel") == "1"
-    assert "--lora" not in args
-    assert _value_after(args, "--cache-type-k") == "q8_0"
-    assert _value_after(args, "--cache-type-v") == "q8_0"
-
-
-def test_character_server_gets_two_32k_slots_and_the_lora() -> None:
-    args = core_runtime.build_server_args(
-        "llama-server",
-        Path("e4b.gguf"),
-        port=18088,
-        context_size=32_768,
-        threads=4,
-        gpu_layers=99,
-        low_vram=True,
-        lora_path=Path("character.gguf"),
-    )
-
-    assert _value_after(args, "--ctx-size") == "65536"
-    assert _value_after(args, "--parallel") == "2"
-    assert _value_after(args, "--lora") == "character.gguf"
-
-
-def test_silenttalk_sends_character_configuration_through_core_api(
+def test_silenttalk_sends_character_configuration_through_http_api(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     config = SimpleNamespace(
@@ -67,18 +28,16 @@ def test_silenttalk_sends_character_configuration_through_core_api(
     )
     calls: list[tuple[str, dict[str, object], float]] = []
     monkeypatch.setattr(
-        edge_client,
-        "load_settings",
-        lambda project_dir: SimpleNamespace(copilot=config),
+        edge_ai, "load_settings", lambda project_dir: SimpleNamespace(copilot=config)
     )
-    monkeypatch.setattr(edge_client, "ensure_service", lambda project_dir: {})
+    monkeypatch.setattr(edge_ai, "ensure_service", dict)
     monkeypatch.setattr(
-        edge_client,
+        edge_ai,
         "post_json",
         lambda path, payload, timeout: calls.append((path, payload, timeout)) or {},
     )
 
-    edge_client.acquire_character(tmp_path, 456)
+    edge_ai.acquire_character(tmp_path, 456)
 
     assert calls == [
         (
@@ -99,16 +58,32 @@ def test_silenttalk_sends_character_configuration_through_core_api(
     ]
 
 
+def test_copilot_smoke_keeps_only_model_names_for_e4b(tmp_path: Path) -> None:
+    config = SimpleNamespace(
+        llm_model="e4b.gguf",
+        character_lora="character.gguf",
+        character_lora_uses=("options",),
+        llama_port=18088,
+        llm_context_size=32768,
+        max_reply_chars=72,
+        llm_gpu_layers=99,
+        llm_low_vram=True,
+    )
+
+    model = copilot_smoke.build_reply_model(tmp_path, config)
+
+    assert model._managed_service is True
+    assert model._project_dir == tmp_path
+    assert model._model_path == Path("e4b.gguf")
+    assert model._lora_path == Path("character.gguf")
+    assert ".runtime" not in str(model._model_path)
+
+
 @pytest.mark.asyncio
-async def test_silenttalk_borrows_and_releases_the_independent_service(
+async def test_silenttalk_always_borrows_and_releases_e4b(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    model_path = tmp_path / "e4b.gguf"
-    lora_path = tmp_path / "character.gguf"
-    model_path.write_bytes(b"model")
-    lora_path.write_bytes(b"lora")
     calls: list[tuple[str, int]] = []
-
     monkeypatch.setattr(
         llm,
         "acquire_character",
@@ -120,133 +95,70 @@ async def test_silenttalk_borrows_and_releases_the_independent_service(
         lambda owner_pid: calls.append(("release", owner_pid)),
     )
     model = LocalReplyModel(
-        model_path,
-        lora_path=lora_path,
+        Path("e4b.gguf"),
+        lora_path=Path("character.gguf"),
         project_dir=tmp_path,
-        managed_service=True,
     )
 
     await model.start()
+    assert model._lease_active is True
     assert model._lora_loaded is True
     await model.stop()
 
     assert calls == [("acquire", os.getpid()), ("release", os.getpid())]
-    assert model._lora_loaded is False
+    assert model._lease_active is False
 
 
-def test_general_entry_cannot_steal_a_live_silenttalk_lease(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    manager = core_service.E4BCore(tmp_path)
-    manager.mode = "character"
-    manager.owner_pid = 123
-    monkeypatch.setattr(core_service, "_pid_alive", lambda pid: True)
-
-    with pytest.raises(PermissionError):
-        manager.switch("base")
-
-
-def test_new_silenttalk_instance_takes_over_without_reloading(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    class Running:
-        def poll(self) -> None:
-            return None
-
-    manager = core_service.E4BCore(tmp_path)
-    manager.mode = "character"
-    manager.port = 18088
-    manager.owner_pid = 123
-    manager.process = Running()  # type: ignore[assignment]
-    monkeypatch.setattr(core_service, "_health_ok", lambda port: True)
-
-    status = manager.switch("character", 456)
-
-    assert manager.owner_pid == 456
-    assert status["ready"] is True
-
-
-def test_slow_status_never_spawns_a_second_manager(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    statuses = iter([None, {"mode": "starting", "ready": True}])
-    monkeypatch.setattr(core_api, "service_status", lambda timeout=1.0: next(statuses))
-    monkeypatch.setattr(core_api, "control_service_present", lambda: True)
-
-    def duplicate(*args: object, **kwargs: object) -> None:
-        raise AssertionError("must not spawn a duplicate manager")
-
-    monkeypatch.setattr(core_api.subprocess, "Popen", duplicate)
-
-    assert core_api.ensure_service(tmp_path)["ready"] is True
-
-
-def test_restart_handoff_temporarily_suspends_crash_restore(tmp_path: Path) -> None:
-    manager = core_service.E4BCore(tmp_path)
-    manager.mode = "character"
-
-    manager.hold_handoff()
-
-    assert manager.handoff_until > 0
-
-
-def test_stop_refuses_to_break_a_live_silenttalk_lease(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    manager = core_service.E4BCore(tmp_path)
-    manager.mode = "character"
-    manager.owner_pid = 123
-    monkeypatch.setattr(core_service, "_pid_alive", lambda pid: True)
-
-    with pytest.raises(PermissionError):
-        manager.stop_service()
-
-
-def test_stop_releases_the_base_server(tmp_path: Path) -> None:
-    class Running:
-        returncode = 0
-
-        def poll(self) -> None:
-            return None
-
-        def terminate(self) -> None:
-            return None
-
-        def wait(self, timeout: float | None = None) -> int:
-            return 0
-
-    manager = core_service.E4BCore(tmp_path)
-    manager.mode = "base"
-    manager.process = Running()  # type: ignore[assignment]
-
-    status = manager.stop_service()
-
-    assert manager.process is None
-    assert status["mode"] == "stopped"
-    assert status["ready"] is False
-
-
-def test_core_identifies_the_exact_listener_pid(
+def test_edge_client_starts_global_e4b_without_importing_core(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    listing = SimpleNamespace(
-        stdout=(
-            b"  TCP    127.0.0.1:18087    0.0.0.0:0    LISTENING    111\r\n"
-            b"  TCP    127.0.0.1:18089    0.0.0.0:0    LISTENING    222\r\n"
-        )
+    statuses = iter([None, {"ready": True, "mode": "base"}])
+    monkeypatch.setattr(edge_ai, "service_status", lambda: next(statuses))
+    monkeypatch.setattr(edge_ai, "_control_service_present", lambda: False)
+    monkeypatch.setattr(edge_ai, "_global_e4b_command", lambda: "C:/bin/e4b.cmd")
+    monkeypatch.setattr(edge_ai.time, "sleep", lambda seconds: None)
+
+    with patch("subprocess.Popen") as spawn:
+        result = edge_ai.ensure_service(timeout=1)
+
+    assert result["ready"] is True
+    command = spawn.call_args.args[0]
+    assert command[-2:] == ["C:/bin/e4b.cmd", "start"]
+
+
+def test_post_json_uses_only_the_loopback_control_api() -> None:
+    class Response(io.BytesIO):
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+    captured = {}
+
+    def fake_urlopen(request, timeout):
+        captured["url"] = request.full_url
+        captured["payload"] = json.loads(request.data.decode("utf-8"))
+        return Response(b'{"ready":true,"mode":"character"}')
+
+    with patch("urllib.request.urlopen", fake_urlopen):
+        result = edge_ai.post_json("/character", {"owner_pid": 7}, timeout=1)
+
+    assert captured == {
+        "url": "http://127.0.0.1:18087/character",
+        "payload": {"owner_pid": 7},
+    }
+    assert result["mode"] == "character"
+
+
+def test_silenttalk_source_has_no_e4b_core_import_or_local_server_builder() -> None:
+    source_root = Path(__file__).resolve().parents[1] / "silenttalk"
+    sources = "\n".join(
+        path.read_text(encoding="utf-8") for path in source_root.rglob("*.py")
     )
-    monkeypatch.setattr(core_service.subprocess, "run", lambda *args, **kwargs: listing)
 
-    assert core_service._listening_pid(18089) == 222
-
-
-def test_core_never_kills_a_non_llama_process_on_its_reserved_port(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(core_service, "_listening_pid", lambda port: 321)
-    monkeypatch.setattr(
-        core_service, "_process_image", lambda pid: Path("C:/Windows/other.exe")
-    )
-
-    with pytest.raises(RuntimeError, match="occupied by PID 321"):
-        core_service._clear_reserved_port(18089)
+    assert "from e4b_core" not in sources
+    assert "import e4b_core" not in sources
+    assert "build_server_args" not in sources

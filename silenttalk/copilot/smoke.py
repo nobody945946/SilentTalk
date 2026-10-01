@@ -1,7 +1,7 @@
 """Discord-free Copilot checks: local STT accuracy and local LLM speed/format.
 
-`python app.py --copilot-smoke` runs both gates on the real models in
-.runtime/models so a new machine (e.g. an RTX 3050 Ti laptop) can be verified
+`python app.py --copilot-smoke` runs both gates on the real ASR models and the
+independent E4B Core so a new machine (e.g. an RTX 3050 Ti laptop) can be verified
 without joining a voice channel. scripts/dev/ reuses the same helpers.
 """
 
@@ -18,11 +18,7 @@ from pathlib import Path
 
 from silenttalk.config import CopilotConfig, Settings
 from silenttalk.copilot.context import ConversationStore
-from silenttalk.copilot.llm import (
-    LocalReplyModel,
-    find_llama_server,
-    list_llama_devices,
-)
+from silenttalk.copilot.llm import LocalReplyModel
 from silenttalk.copilot.script import to_taiwan_traditional
 from silenttalk.copilot.stt import StreamingTranscriber
 from silenttalk.copilot.stt_offline import OfflineTranscriber
@@ -217,13 +213,17 @@ def build_reply_model(
     project_dir: Path, config: CopilotConfig, model_file: str | None = None
 ) -> LocalReplyModel:
     return LocalReplyModel(
-        project_dir / ".runtime" / "models" / "llm" / (model_file or config.llm_model),
-        # +7 so the check can run while SilentTalk itself holds llama_port.
-        port=config.llama_port + 7,
+        Path(model_file or config.llm_model),
+        port=config.llama_port,
         context_size=config.llm_context_size,
         max_reply_chars=config.max_reply_chars,
         gpu_layers=config.llm_gpu_layers,
         low_vram=config.llm_low_vram,
+        lora_path=(
+            Path(config.character_lora) if config.character_lora else None
+        ),
+        lora_uses=config.character_lora_uses,
+        project_dir=project_dir,
     )
 
 
@@ -288,12 +288,7 @@ async def _stt_gate(settings: Settings, project_dir: Path) -> bool:
 
 
 async def _llm_gate(settings: Settings, project_dir: Path) -> bool:
-    print("== Gate C2: 本機 LLM（llama-server + 設定中的模型）")
-    devices = await asyncio.to_thread(list_llama_devices, find_llama_server())
-    print(
-        "  llama.cpp 看到的 GPU："
-        + (" | ".join(devices) or "沒有（CPU 模式，會慢約 3 倍）")
-    )
+    print("== Gate C2: 獨立 E4B Core（設定中的模型）")
     model = build_reply_model(project_dir, settings.copilot)
     started = time.perf_counter()
     await model.start()

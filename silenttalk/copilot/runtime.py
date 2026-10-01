@@ -55,7 +55,7 @@ class _Trigger:
 
 
 class CopilotRuntime:
-    """Owns local STT, conversation context, and local reply generation."""
+    """Owns local STT/context and leases reply generation from E4B Core."""
 
     def __init__(
         self,
@@ -71,7 +71,6 @@ class CopilotRuntime:
         on_character_text: LineCallback | None = None,
         on_agenda: AgendaCallback | None = None,
         can_type: bool = False,
-        managed_llm: bool = False,
     ) -> None:
         self._config = config
         self._owner_user_id = owner_user_id
@@ -106,7 +105,7 @@ class CopilotRuntime:
             transcriber, asr_dir = OfflineTranscriber, runtime_dir / "models" / "sensevoice"
         else:
             transcriber, asr_dir = StreamingTranscriber, runtime_dir / "models" / "asr"
-        llm_model = runtime_dir / "models" / "llm" / config.llm_model
+        llm_model = Path(config.llm_model)
 
         self._context = ConversationStore(
             max_turns=config.max_session_turns,
@@ -126,14 +125,11 @@ class CopilotRuntime:
             can_type=can_type,
             ai_honesty=config.character_ai_honesty,
             lora_path=(
-                runtime_dir / "models" / "llm" / config.character_lora
-                if config.character_lora
-                else None
+                Path(config.character_lora) if config.character_lora else None
             ),
             lora_uses=config.character_lora_uses,
             memory=config.character_memory,
             project_dir=project_dir,
-            managed_service=managed_llm,
         )
         self._stt = transcriber(
             asr_dir,
