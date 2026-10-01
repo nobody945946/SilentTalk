@@ -60,3 +60,14 @@ def test_failed_runtime_check_releases_its_lease(monkeypatch):
     with pytest.raises(RuntimeError, match="lease validation"):
         setup_copilot.check_runtime({})
     assert calls == [setup_copilot.os.getpid()]
+
+
+def test_checksum_marker_does_not_hide_corrupted_speech_asset(tmp_path):
+    import hashlib
+
+    expected = hashlib.sha256(b"correct").hexdigest()
+    asset = tmp_path / "model.onnx"
+    asset.write_bytes(b"damaged")
+    asset.with_suffix(".onnx.sha256").write_text(expected, encoding="ascii")
+    assert not setup_copilot._is_ready(asset, expected, 1)
+    assert asset.read_bytes() == b"damaged"
