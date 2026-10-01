@@ -234,6 +234,12 @@ def load_settings(project_dir: Path) -> Settings:
 
     token = os.getenv("DISCORD_BOT_TOKEN", "").strip()
     owner_raw = os.getenv("OWNER_USER_ID", "").strip()
+    if not token and not owner_raw:
+        from silenttalk.credentials import read
+
+        saved = read()
+        token = token or saved.get("token", "")
+        owner_raw = owner_raw or saved.get("owner", "")
     if not token:
         raise ConfigError(".env 缺少 DISCORD_BOT_TOKEN。")
     if not owner_raw.isdecimal() or int(owner_raw) <= 0:
