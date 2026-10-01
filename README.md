@@ -9,7 +9,7 @@ Windows 本機 SilentTalk：可手動輸入文字，也可在 Discord 語音中�
 ## 最快使用方式
 
 首次部署支援 Windows x64。取得這個 repository 後，直接雙擊 `啟動 SilentTalk.cmd`：
-它會自動安裝 Python 3.12、各自的虛擬環境與依賴、FFmpeg、語音模型，以及獨立 E4B。
+它會自動安裝 Python 3.12、各自的虛擬環境與依賴、Git、FFmpeg、語音模型，以及獨立 E4B。
 不需要事先安裝 Git、winget、Python 或 CUDA Toolkit。E4B 的來源、環境、推論引擎、
 Gemma 4 E4B 與角色 LoRA 放在使用者家目錄的 `E4BCore`，不放進 SilentTalk。
 E4B 安裝器依已可用的 NVIDIA 驅動選擇 CUDA；否則使用 CPU。CPU 可以執行，但速度依硬體而異。
