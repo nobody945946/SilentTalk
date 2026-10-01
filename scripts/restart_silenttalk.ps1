@@ -76,22 +76,6 @@ function Test-SilentTalkProcess {
     return Test-LegacySilentTalkProcess $Process
 }
 
-function Test-SilentTalkCopilotProcess {
-    param([object]$Process)
-
-    if ($Process.Name -ine "llama-server.exe") {
-        return $false
-    }
-    $commandLine = [string]$Process.CommandLine
-    if ([string]::IsNullOrWhiteSpace($commandLine)) {
-        return $false
-    }
-    return (
-        $commandLine -match '(?i)\.runtime[\\/]models[\\/]llm[\\/][^"\s]+\.gguf' -and
-        $commandLine -match '(?i)(--port|-p)\s+18088'
-    )
-}
-
 $mutex = New-Object System.Threading.Mutex($false, "Local\SilentTalk.Restart")
 $hasMutex = $false
 
@@ -124,18 +108,6 @@ try {
         # desktop process starts and takes over its lease.
         Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:18087/handoff" -ContentType "application/json" -Body "{}" -TimeoutSec 2 | Out-Null
     }
-    # The independent E4B service owns its llama-server child. Killing that
-    # child here defeats its zero-double-load lease handoff. Legacy unmanaged
-    # servers are still removed during migration.
-    $copilotTargets = @()
-    if (-not $managedEdgeAI) {
-        $copilotTargets = @(
-            Get-CimInstance Win32_Process -Filter "Name='llama-server.exe'" -ErrorAction SilentlyContinue |
-                Where-Object { Test-SilentTalkCopilotProcess $_ }
-        )
-    }
-    $targets = @($targets + $copilotTargets)
-
     if ($targets.Count -gt 0) {
         Write-Host ("Stopping existing SilentTalk instance(s): " + (($targets.ProcessId) -join ", "))
 

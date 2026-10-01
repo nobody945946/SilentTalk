@@ -41,27 +41,12 @@ if errorlevel 1 (
     exit /b 1
 )
 
-rem winget can unpack llama.cpp without creating its Links shim; the exe
-rem is then only in its package folder.
-for /d %%D in ("%LOCALAPPDATA%\Microsoft\WinGet\Packages\ggml.llamacpp_*") do set "PATH=%%D;!PATH!"
-where llama-server.exe >nul 2>nul
+where e4b.cmd >nul 2>nul
 if errorlevel 1 (
-    where winget.exe >nul 2>nul
-    if errorlevel 1 (
-        echo ERROR: llama.cpp is missing and winget is unavailable.
-        echo Install llama.cpp, then run this launcher again.
-        pause
-        exit /b 1
-    )
-    echo Installing lightweight local Copilot runtime ^(llama.cpp^)...
-    winget install --id ggml.llamacpp -e --accept-source-agreements --accept-package-agreements
-    if errorlevel 1 (
-        echo ERROR: llama.cpp installation failed.
-        pause
-        exit /b 1
-    )
-    set "PATH=%LOCALAPPDATA%\Microsoft\WinGet\Links;%PATH%"
-    for /d %%D in ("%LOCALAPPDATA%\Microsoft\WinGet\Packages\ggml.llamacpp_*") do set "PATH=%%D;!PATH!"
+    echo ERROR: Independent E4B Core is not installed.
+    echo Run C:\Users\A8fm0\E4BCore\開啟 E4B.cmd once, then launch SilentTalk again.
+    pause
+    exit /b 1
 )
 
 if not exist "scripts\setup_copilot.py" (
@@ -70,18 +55,11 @@ if not exist "scripts\setup_copilot.py" (
     exit /b 1
 )
 
-echo Checking Copilot models ^(first run downloads about 1.4 GB^)...
+echo Checking SilentTalk speech models...
 ".venv\Scripts\python.exe" "scripts\setup_copilot.py"
 if errorlevel 1 (
     echo ERROR: Copilot model deployment failed.
     echo Check your network connection, then run this launcher again.
-    pause
-    exit /b 1
-)
-
-".venv\Scripts\python.exe" "scripts\install_e4b_command.py" >nul
-if errorlevel 1 (
-    echo ERROR: Could not install the global e4b command.
     pause
     exit /b 1
 )

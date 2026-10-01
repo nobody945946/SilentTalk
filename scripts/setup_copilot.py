@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import shutil
 import sys
 import urllib.error
 import urllib.request
@@ -14,7 +13,6 @@ from silenttalk.config import load_effective_tables
 
 RUNTIME_DIR = PROJECT_DIR / ".runtime"
 ASR_DIR = RUNTIME_DIR / "models" / "asr"
-LLM_DIR = RUNTIME_DIR / "models" / "llm"
 SENSEVOICE_DIR = RUNTIME_DIR / "models" / "sensevoice"
 VAD_DIR = RUNTIME_DIR / "models" / "vad"
 
@@ -69,91 +67,10 @@ SENSEVOICE_ASSETS = (
 )
 
 
-# Known reply models, keyed by the file name used in config.toml copilot.llm_model.
-# Qwen's official repos only publish Q8_0 for 0.6B/1.7B, so Q4_K_M comes from unsloth.
-# Qwen3-0.6B is deliberately absent: in benchmarks it ignored the four-line
-# format on 29 of 32 lanes and mostly parroted the transcript back.
-# Default since 2026-09-27: Gemma 4 E2B (Apache-2.0) matched Qwen3.5-4B on
-# the persona eval of the time (voice 3.54 / stance 3.25 / natural 3.01) while
-# needing ~1.4 GB of VRAM like Qwen3-1.7B; its per-layer embeddings stay in RAM.
-LLM_MODELS = {
-    "gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf": (
-        "Gemma 4 E2B QAT Q4_K_XL",
-        "https://huggingface.co/unsloth/gemma-4-E2B-it-qat-GGUF/resolve/main/gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf?download=true",
-        "e531007218dfab990486a5de7676a6932d6ea8dea233d1f698d7c21cf8a16889",
-        2_600_000_000,
-    ),
-    # Twice E2B's size: better options on the dev box, speed on a 3050 Ti
-    # still to be measured (scripts/dev/bench_hw.py --model ...).
-    "gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf": (
-        "Gemma 4 E4B QAT Q4_K_XL",
-        "https://huggingface.co/unsloth/gemma-4-E4B-it-qat-GGUF/resolve/main/gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf?download=true",
-        "df0fd4ee07072c607c29a0a1cb4f98918426cca12f45a2776bdd6ee6d09a4de3",
-        4_200_000_000,
-    ),
-    "Qwen3.5-4B-Q4_K_M.gguf": (
-        "Qwen3.5-4B Q4_K_M",
-        "https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf?download=true",
-        "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4",
-        2_700_000_000,
-    ),
-    "Qwen3-1.7B-Q4_K_M.gguf": (
-        "Qwen3-1.7B Q4_K_M",
-        "https://huggingface.co/unsloth/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q4_K_M.gguf?download=true",
-        "b139949c5bd74937ad8ed8c8cf3d9ffb1e99c866c823204dc42c0d91fa181897",
-        1_100_000_000,
-    ),
-    "Qwen3-4B-Q4_K_M.gguf": (
-        "Qwen3-4B Q4_K_M",
-        "https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf?download=true",
-        "7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5",
-        2_490_000_000,
-    ),
-}
-DEFAULT_LLM_MODEL = "gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf"
-
-
-# Small files that ship in the repo (models/) and are copied into the runtime
-# model folder: the character LoRA trained on the dev box has no download URL.
-BUNDLED = (
-    (
-        "Character LoRA v1 (q8_0)",
-        PROJECT_DIR / "models" / "character-e2b-lora-v1.q8_0.gguf",
-        LLM_DIR / "character-e2b-lora-v1.q8_0.gguf",
-        "83655e8502a1c83b5d15dd1adc2bb4b908ddde6506d436f9a93eb491c566f957",
-    ),
-    (
-        "Character LoRA v3 for E4B (q8_0)",
-        PROJECT_DIR / "models" / "character-e4b-lora-v3.q8_0.gguf",
-        LLM_DIR / "character-e4b-lora-v3.q8_0.gguf",
-        "bf7fd9e3189fe0be7c15f8b79e5ccaa45bbbd5d5f9670c695a428c5bb88ebac0",
-    ),
-)
-
-
-def _install_bundled(label: str, source: Path, target: Path, expected_sha256: str) -> None:
-    if target.is_file() and _sha256(target) == expected_sha256:
-        print(f"[OK] {label}")
-        return
-    if not source.is_file() or _sha256(source) != expected_sha256:
-        raise RuntimeError(f"{label}: {source} is missing or damaged; run git pull again")
-    target.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(source, target)
-    print(f"[OK] {label} (installed)")
-
-
 def _copilot_section() -> dict:
     raw = load_effective_tables(PROJECT_DIR)
     section = raw.get("copilot", {})
     return section if isinstance(section, dict) else {}
-
-
-def _llm_asset(model_name: str) -> tuple[str, str, Path, str | None, int] | None:
-    known = LLM_MODELS.get(model_name)
-    if known is None:
-        return None
-    label, url, sha256, min_size = known
-    return label, url, LLM_DIR / model_name, sha256, min_size
 
 
 def _sha256(path: Path) -> str:
@@ -249,44 +166,23 @@ def _download(
 
 
 def main() -> int:
-    # `setup_copilot.py <model file>` also fetches another known reply model,
-    # e.g. to benchmark it, without changing config.toml.
-    extra = [name for name in sys.argv[1:] if not name.startswith("-")]
-    unknown = [name for name in extra if name not in LLM_MODELS]
-    if unknown:
-        print(f"ERROR: unknown model {unknown}; known: " + ", ".join(LLM_MODELS), file=sys.stderr)
-        return 1
     section = _copilot_section()
     if not bool(section.get("enabled", True)):
-        print("Copilot is disabled in the effective settings; model deployment skipped.")
+        print("Copilot is disabled; speech model deployment skipped.")
         return 0
-
-    model_name = str(section.get("llm_model", DEFAULT_LLM_MODEL)).strip()
-    llm_asset = _llm_asset(model_name)
-    if llm_asset is None and not (LLM_DIR / model_name).is_file():
-        print(
-            f"ERROR: copilot.llm_model = {model_name!r} is not a known download; "
-            f"place it at {LLM_DIR / model_name} or use one of: "
-            + ", ".join(LLM_MODELS),
-            file=sys.stderr,
-        )
-        return 1
 
     stt_engine = str(section.get("stt_engine", "paraformer")).strip().lower()
     stt_assets = SENSEVOICE_ASSETS if stt_engine == "sensevoice" else ()
 
-    print("Checking SilentTalk Copilot models...")
+    print("Checking SilentTalk speech models...")
     try:
-        extra_assets = [_llm_asset(name) for name in extra]
-        for asset in (*ASSETS, *stt_assets, *([llm_asset] if llm_asset else []), *extra_assets):
+        for asset in (*ASSETS, *stt_assets):
             _download(*asset)
-        for bundled in BUNDLED:
-            _install_bundled(*bundled)
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
 
-    print("SilentTalk Copilot models are ready.")
+    print("SilentTalk speech models are ready; reply models belong to E4B Core.")
     return 0
 
 
