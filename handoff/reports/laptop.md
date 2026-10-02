@@ -125,3 +125,16 @@ commit：24b73e5（copilot-story-mode）；驗收包含既有未提交修改。
 - final_runtime_cleanup：正式全域 e4b 指令恢復；控制／模型端口無 LISTENING。
 - privacy_preserved：未保存對話、錄音、附件、模型回覆或憑證至報告／repository。
 - live_voice_test_pending：真人聊天品質尚未驗證。
+
+## 2026-10-02 E4B 資料夾選定修正
+
+- scope_override：依使用者指示除錯原生 E4B 介面與檢查相關流程。
+- folder_selection_layout：已重現確認按鈕被清單擠出 dialog；修正後 1280×600 與 480×360 可選定。
+- navigation_error_feedback：無效路徑在 modal 內顯示錯誤；禁止選定舊目錄；有效路徑可恢復。
+- address_request_race：已重現晚到的清單結果覆蓋地址輸入；修正後實测通過。
+- live_edge_regression：PASS；中文子目錄、地址、Git 分支、真實隔離 Worktree、終端輸出／持續變數／停止／清除、附件／移除、對話切換、桌面／窄視窗；瀏覽器 exception／network failure 0。
+- e4b_verification：45 passed；exit code 0；Ruff PASS；JavaScript syntax PASS。
+- core_fix_pushed：copilot-story-mode；來源 HEAD 6e58c85；版本 1.1.3；回報 HEAD a698be3。
+- deployment_fix_pushed：SilentTalk copilot-story-mode；HEAD 9c52c32；bootstrap-v5；SHA256 ddc60fb193086c9a2f90e8f1dcfc380f51c924d99302bd1c367c18c29e24f877；私人來源下載校驗通過。
+- local_install_updated：正式 E4B 與全域指令更新完成；未修改使用者設定或記錄對話。
+- test_cleanup：自行啟動的 E4B 已停止；測試專用 Edge 已關閉；18087／18088／9223 無 LISTENING。
