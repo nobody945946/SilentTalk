@@ -38,8 +38,13 @@
 - personal_adapter_framework: empty defaults; no private download; no implicit model pairing; explicit user selection retained.
 - real_optional_adapter: compatible load; removal; original Agent restoration; exit 0.
 - real_incompatible_adapter: same architecture; load rejected; original Agent restored and ready.
-- optional_adapter_ui: JavaScript syntax exit 0; real browser interaction unverified; launch tool policy rejection; browser connector empty.
-- temporary_test_cleanup: tool policy rejection; 2 fresh test environments retained under .test-tmp; excluded from release.
+- optional_adapter_ui_initial: launch tool policy rejection; interrupted followup restored original Agent; not counted as a passing run.
+- optional_adapter_ui_final: fresh real Edge CDP exit 0; 8 adapter assertions; 8 viewport sizes; unexpected runtime/console/network errors 0.
+- optional_adapter_ui_checks: empty default; architecture filtering; compatible load; removal; base-change reset; original configuration restored; original Agent ready; compact controls.
+- browser_expected_negative_case: missing-directory fixture HTTP 400; expected error log 1; request ID matched; inline recovery passed.
+- agent_verification_commit: d1621a16b4b12cd06dbd0df3044d270f7e0d30a2; copilot-story-mode; pushed; runtime release source remains 84174fe.
+- agent_followup_github_ci: success; run 37024149273.
+- temporary_test_cleanup: earlier forced-deletion tool rejection; non-forced deletion completed; 2 directories verified absent; public models retained.
 - privacy_invariant: RAM sessions; no Pi state directory/session JSONL/transcript; protected user configuration unchanged.
 - audit_ollama: 0.35.0; LoRA create HTTP 400; no equal-model throughput superiority claim.
 - lifecycle_final: service stopped; control/inference listeners 0; startup off; dedicated test Edge closed.
