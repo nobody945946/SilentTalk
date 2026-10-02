@@ -1,16 +1,17 @@
 # Laptop validation 2026-10-02
 
 - user_scope_override_applied: product remake; local coding Agent; SilentTalk inference lease.
-- product_owner: C:/Users/A8fm0/EdgeAgent; package edge_agent; command edge-agent; version 2.0.0.
-- agent_source_commit: 05c2d0ae305f3d1ed01b81db7cf4a176ebba982b; copilot-story-mode; pushed.
-- client_source_commit: cde702e2851782c830fbfd5c72a734aede885bce; copilot-story-mode; pushed.
+- product_owner: C:/Users/A8fm0/EdgeAgent; package edge_agent; command edge-agent; version 2.0.1.
+- agent_source_commit: 84174febc2f3bc1ebdefa19fd0948d0221e6ca1b; copilot-story-mode; pushed.
+- client_source_commit: 2eafb32868aceec46577a100d29507c124b60eac; copilot-story-mode; pushed.
 - agent_runtime: Pi SDK 1.0.0; llama.cpp b11193 router; models-max 1; inference 18089; control 18087.
 - default_model: Qwen3.5-4B-Q4_K_M.gguf; 16384 context; thinking off; 2740937888 bytes.
 - model_sha256: 00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4.
 - gpu_memory: 3159 MiB / 4096 MiB.
 - real_coding_cases: 2; independent tests exit 0; immutable test files; 36.47 s / 111.39 s.
 - smaller_model_no_progress: 2B; stopped 21.06 s; no completion claim.
-- core_pytest: 68 passed; exit 0; Ruff exit 0.
+- core_pytest: 74 passed; exit 0; Ruff exit 0.
+- client_full_pytest: 224 passed; 1 skipped; 1 audioop warning; exit 0.
 - client_related_pytest: 86 passed; exit 0; changed-scope Ruff exit 0.
 - client_final_manifest_related_pytest: 14 passed; exit 0.
 - client_existing_findings: DTZ005 1; BLE001 7; SlowFakeLLM.state background fixture exception; no pytest failure.
@@ -20,12 +21,24 @@
 - failure_queue_probe: paused; per-thread restore; explicit resume once; exit 0.
 - actual_character_lease: LoRA loaded; context 32768; port 18089; acquire 8.41 s; Agent restored.
 - production_installer: CUDA setup exit 0; verified model/Node/Pi/engine; global command installed.
-- source_release: nobody945946/EdgeAgent; bootstrap-v6; edge-agent-windows-source-v6.zip; 98148 bytes.
-- source_archive_sha256: 66863dce8395cab61690caa6d749a83c76e85e53f12d39a08c7571f30197b285.
+- source_release: nobody945946/EdgeAgent; bootstrap-v7; edge-agent-windows-source-v7.zip; 99548 bytes.
+- source_archive_sha256: 44fa64d20e9460d5d2389198bdeb43c4068294ee77d13bd10a698651e5ae115b.
 - fresh_distribution_acquisition: actual private download; SHA256 verified; extracted new bridge/lockfile; exit 0.
-- archive_integrity: 32 entries; private user-state entries 0; no runtime/model/transcript included.
-- agent_github_ci: success; run 36995315934.
-- client_github_ci: success; run 37002959377.
+- player_release: nobody945946/SilentTalk; windows-2026.10.02; silenttalk-windows-2026.10.02.zip; 278919 bytes; 56 entries; uploaded.
+- player_sha256: 544ecf9fb55123c75ebb660864b48a66cc92bbf015c330cb32f0f38ee9445656; GitHub asset digest matched.
+- archive_integrity: private user-state entries 0; personal adapters 0; model weights 0; conversation records 0.
+- agent_github_ci: success; run 37007697461.
+- client_github_ci: success; run 37009047246; deployment shell Windows PowerShell.
+- earlier_client_ci_failures: runs 37008277910 / 37008748547; module lookup in child Windows PowerShell; final shell correction passed.
+- bundled_source_acquisition: fresh directory; GitHub command lookup prohibited; SHA256 verified; installer extracted; exit 0.
+- fresh_player_deployment: original ZIP launcher; new client and Agent venvs; new SDK and engine; public download cache; existing Python/Git; 138.49 s; exit 0.
+- production_deployment: real STT loaded; lease acquired; original Agent restored; pip check exit 0; receipt published after validation.
+- production_warm_setup: 2.68 s; existing deployment reused; exit 0.
+- deployment_repairs: missing engine file; matching SDK receipt with broken imports; source/component changes invalidate readiness; tests passed.
+- personal_adapter_framework: empty defaults; no private download; no implicit model pairing; explicit user selection retained.
+- real_optional_adapter: compatible load; removal; original Agent restoration; exit 0.
+- real_incompatible_adapter: same architecture; load rejected; original Agent restored and ready.
+- optional_adapter_ui: JavaScript syntax exit 0; real browser interaction unverified; launch tool policy rejection; browser connector empty.
 - privacy_invariant: RAM sessions; no Pi state directory/session JSONL/transcript; protected user configuration unchanged.
 - audit_ollama: 0.35.0; LoRA create HTTP 400; no equal-model throughput superiority claim.
 - lifecycle_final: service stopped; control/inference listeners 0; startup off; dedicated test Edge closed.
