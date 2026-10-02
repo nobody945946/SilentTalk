@@ -122,7 +122,12 @@ def test_bundled_edge_source_never_requires_github_login(tmp_path, existing_vers
     )
     script = f"""
 . '{bootstrap}' -Library
-function Get-Command {{ throw 'GitHub command lookup must not occur for bundled sources' }}
+function Get-Command {{
+    [CmdletBinding()]
+    param([string]$Name)
+    if ($Name -eq 'gh.exe') {{ throw 'GitHub command lookup must not occur for bundled sources' }}
+    Microsoft.PowerShell.Core\\Get-Command @PSBoundParameters
+}}
 $installer = Get-EdgeAgentInstaller '{destination}' '{cache}'
 if (-not (Test-Path -LiteralPath $installer)) {{ throw 'Installer not extracted' }}
 if ($installer -ne '{expected / "scripts/bootstrap.ps1"}'.Replace('/', '\')) {{ throw 'Wrong installation selected' }}
