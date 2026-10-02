@@ -8,19 +8,22 @@ SilentTalk 是語音角色與回覆建議玩具；本機編程 Agent 是獨立�
 
 ## 最快使用方式
 
-首次部署支援 Windows x64。取得這個 repository 後，直接雙擊 `啟動 SilentTalk.cmd`：
+首次部署支援 Windows x64。下載 [Windows 發行包](https://github.com/nobody945946/SilentTalk/releases/tag/windows-2026.10.02) 並解壓後，直接雙擊 `啟動 SilentTalk.cmd`：
 它會自動安裝 Python 3.12、各自的虛擬環境與依賴、Git、FFmpeg、語音模型，以及 EdgeAgent。
 不需要事先安裝 Git、winget、Python 或 CUDA Toolkit。EdgeAgent 的來源、環境、推論引擎、
-Agent 模型、Gemma 4 E4B 與相容角色 LoRA 放在使用者家目錄的 `EdgeAgent`，不放進 SilentTalk。
+Agent 模型與公開的 Gemma 4 E4B 基底放在使用者家目錄的 `EdgeAgent`，不放進 SilentTalk。
 EdgeAgent 安裝器依已可用的 NVIDIA 驅動選擇 CUDA；否則使用 CPU。CPU 可以執行，但速度依硬體而異。
 
-首次下載私人來源或角色 LoRA 時，流程會請你登入有 repository 存取權的 GitHub 帳號。
+Windows 發行包已附上經 SHA256 驗證的 EdgeAgent 原始碼；啟動後不必再登入 GitHub 或另行安裝 AI。
+LoRA 是個人資產，發行包不附帶、不下載、也不預設啟用；需要時自行安裝相容 adapter。
+從 repository 原始碼啟動而未備妥 EdgeAgent 時，仍需授權取得私人來源。
 要連 Discord 時，只需輸入 Bot token 與自己的 Discord User ID；新輸入存入
 Windows 認證管理員，之後不用再輸入。既有 `.env` 優先，安裝器不修改它或其他使用者設定。
 Bot 仍需先建立並邀請到自己的 Server，這些是 Discord 帳號授權，無法由安裝器代替。
 
 首次下載約 7–8 GB，建議保留至少 16 GB 可用磁碟空間。大型模型下載可續傳，
 資產皆驗證 SHA256；網路中斷後重跑同一入口即可。重開會沿用完成的環境與資產。
+完成部署後，啟動只檢查版本與必要元件是否仍然就緒，直接啟動 SilentTalk；版本或元件改變時走原安裝流程修復。
 首次部署會實際載入 STT、啟動 EdgeAgent、租用角色模式，再驗證歸還 Agent 模型。
 `啟動 SilentTalk.cmd --setup-only` 只部署；`啟動 SilentTalk.cmd --check` 重新驗收且不連 Discord。
 需要自訂 EdgeAgent 路徑時可設定環境變數 `EDGE_AGENT_HOME`，必須在 SilentTalk 目錄之外。
@@ -29,7 +32,7 @@ Bot 仍需先建立並邀請到自己的 Server，這些是 Discord 帳號授權
 SilentTalk 執行時只透過 localhost API 租借推論服務，結束後歸還。兩者沒有共用 Python 套件環境。
 
 1. 雙擊 `啟動 SilentTalk.cmd`。啟動後不會出現大型主視窗。
-2. 用 `.env` 內 `OWNER_USER_ID` 對應的 Discord 帳號加入一般語音頻道。
+2. 用初次授權時提供的 User ID 所對應的 Discord 帳號加入一般語音頻道。
 3. Bot 會自動加入；跨 Server 時，目標 Server 也必須先安裝 Bot。
 4. 按 F8 開啟置頂輸入框，輸入文字後按 Enter。
 5. 播放途中按 F9，可停止目前語音並清空尚未播放的句子。
@@ -48,7 +51,7 @@ Discord 其他真人語音
 → 當約 650 ms 沒有新語音（或開放式麥克風下約 0.8 秒沒有新字）時視為一句完成
 → 簡體轉台灣繁體（OpenCC s2twp）
 → Session Context
-→ 本機 Gemma 4 E2B / llama.cpp（Vulkan，約 1.4 GB VRAM＋2 GB RAM）
+→ 向 EdgeAgent 租借本機角色基底（預設 Gemma 4 E4B，可在設定切換）
 → 問同一個角色「換你說話了，你會說什麼」好幾次，留下最多四句不一樣的
 ```
 
@@ -121,7 +124,7 @@ F8 視窗左側的「⚙ 設定」把 `config.toml` 能改的東西都搬進來�
 
 「對話」切到「角色」，按「開始」後，Bot 就是目前選的人設，會自己聽、自己接話，不必你選。切回「選項」或「打字」就會暫停：
 
-- **預設「被叫到才回」**：每一句都由本機模型讀整段對話來判斷是不是在對它說話（叫它、問它、回應它剛說的話），只是被提到或別人彼此在聊就不接。這個判斷用了專門訓練的角色 LoRA（跟著專案一起下載），不該回卻回的比例從約 10% 降到 1%。文字聊天裡 @提及它或回覆它的訊息一定會回。想讓它主動加入聊天，把角色畫面的「開口時機」改成「會主動加入」：安靜一陣子後它也會自己插話。
+- **預設「被叫到才回」**：每一句都由本機模型讀整段對話來判斷是不是在對它說話（叫它、問它、回應它剛說的話），只是被提到或別人彼此在聊就不接。預設使用基底模型；自行安裝相容 LoRA 後，可以設定要套用的請求。文字聊天裡 @提及它或回覆它的訊息一定會回。想讓它主動加入聊天，把角色畫面的「開口時機」改成「會主動加入」：安靜一陣子後它也會自己插話。
 - **他有自己的生活**：每次開始（或換人設）時，本機模型會照人設想出他今天心裡掛著的幾件具體小事（例如「昨天排位連輸五場還在不爽」「想揪大家週六打通宵」），顯示在角色畫面的「今天在想」，按「換一批」可以重想。聊天時接得上他就會自然帶到；這些只存在記憶體裡。
 - **冷場時會找話聊**：頻道安靜一段時間（預設 30 秒，「設定 → 聊天 → 冷場時找話聊」可調，0＝不會）後，他會說說自己在想的事，或問問大家最近怎樣；同一段冷場只開一次口，要等有人再說話才會有下一次。
 - **長聊不斷線**：對話變長時，較早的部分會自動被本機模型濃縮成一兩句重點留著，最近的對話保持原樣，所以聊很久也不會忘記前面在幹嘛，prompt 也不會越來越大。
@@ -267,29 +270,20 @@ edge-tts 官方說明：可調整 rate、volume、pitch，但不再支援自訂 
 
 1. 在 Discord Developer Portal 建立 Application 與 Bot。
 2. Bot 邀請到測試伺服器，只授予 View Channel、Connect、Speak。
-3. Developer Mode 下複製你自己的 Discord User ID，作為 `.env` 的 `OWNER_USER_ID`。
+3. Developer Mode 下複製你自己的 Discord User ID，填入初次啟動的授權介面。
 4. Bot 頁面 Reset Token 後取得 Bot Token。Application ID 與 Public Key 都不能用來登入 Bot。
 
 真正的 `.env` 已由 `.gitignore` 排除，不能提交。若 token 曾公開，請在 Portal 立刻 Reset Token，並同步更新本機 `.env`。
 
-## 安裝
+## 建立 Windows 發行包
 
-下載或 clone repository 後，直接雙擊 `啟動 SilentTalk.cmd`。啟動檔會：
+發行包由同一套啟動器部署，玩家使用方式見上方「最快使用方式」。開發者將變更 commit 後，下載 manifest 指定的 EdgeAgent 來源包，再執行：
 
-- 檢查並以 winget 安裝 Python 3.12、FFmpeg 與 llama.cpp（缺少時才安裝）。
-- 建立 `.venv`，安裝 `requirements.txt` 內的套件。
-- Copilot 開啟時，自動下載本機 ASR INT8 encoder/decoder/tokens 與 Gemma 4 E2B（`config.toml` 的 `copilot.llm_model` 可改成 `Qwen3.5-4B-Q4_K_M.gguf`，品質相近但約 2.9 GB VRAM、較慢）；第一次約 2.9 GB，之後從 `.runtime/` 直接沿用。`silenttalk.log` 的 `copilot_llm_devices` 會列出 llama.cpp 看到的 GPU；顯示 `none(cpu-only)` 代表模型跑在 CPU。
-- 模型檔使用 SHA256 / 最低大小檢查，下載中斷只留下 `.part`，不把半份模型當成功。
-- 若 `.env` 不存在，由 `.env.example` 建立並開啟記事本讓你填入憑證。
-- 驗證 `.env`、`config.toml` 與 Python source 可編譯。
-- 呼叫 `scripts/restart_silenttalk.ps1`；它會先關閉舊 SilentTalk 與該實例遺留的本機 Copilot server，再從目前這份 repo 啟動唯一的新實例。
-
-設定的責任刻意分開：一般可調參數只放 `config.toml`；只有 Discord Bot Token 與個人 User ID 放在不進版控的 `.env`。新主機第一次啟動時，在自動開啟的 `.env` 填入：
-
-```dotenv
-DISCORD_BOT_TOKEN=你的 Discord Bot Token
-OWNER_USER_ID=你的 Discord User ID
+```powershell
+python scripts/package_windows.py --edge-source <EdgeAgent來源包.zip> --output <Windows發行包.zip>
 ```
+
+打包器只讀指定 Git commit 的應用程式來源，核對 EdgeAgent SHA256，再將它放入啟動器既有下載快取。它排除個人設定、憑證、角色狀態、模型權重與 LoRA；不從工作目錄複製使用者資料。`--revision` 可指定要發行的 commit。
 
 ## 驗證與執行
 

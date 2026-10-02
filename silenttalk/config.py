@@ -20,18 +20,6 @@ MEMORY_LEVEL_CHOICES: tuple[tuple[str, str], ...] = (
 from silenttalk.settings_store import SETTINGS_FILE, SettingsStore, merge
 
 DEFAULT_LLM_MODEL = "gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf"
-# The character adapters setup installs, each with the only model it fits
-# and the requests it measured better on.
-MODEL_ADAPTERS: dict[str, tuple[str, tuple[str, ...]]] = {
-    "gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf": (
-        "character-e4b-lora-v3.q8_0.gguf",
-        ("called", "active", "line"),
-    ),
-    "gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf": (
-        "character-e2b-lora-v1.q8_0.gguf",
-        ("called",),
-    ),
-}
 STT_ENGINES = ("paraformer", "sensevoice")
 
 
@@ -178,17 +166,6 @@ def _optional_model_filename(value: object) -> str:
     return _model_filename(value) if str(value).strip() else ""
 
 
-def _adapter_for(
-    model: str, lora: str, uses: tuple[str, ...]
-) -> tuple[str, tuple[str, ...]]:
-    """A bundled adapter only loads on the model it was trained on: when the
-    settings page switches the model, the adapter follows it (or goes)."""
-    bases = {adapter: base for base, (adapter, _) in MODEL_ADAPTERS.items()}
-    if bases.get(lora, model) == model:
-        return lora, uses
-    return MODEL_ADAPTERS.get(model, ("", uses))
-
-
 def config_defaults(project_dir: Path) -> dict[str, dict[str, object]]:
     """config.toml as-is: what the settings page calls "the default"."""
     config_path = project_dir / "config.toml"
@@ -251,11 +228,8 @@ def load_settings(project_dir: Path) -> Settings:
     audio = _section(raw, "audio")
     copilot = _section(raw, "copilot")
     llm_model = _model_filename(copilot.get("llm_model", DEFAULT_LLM_MODEL))
-    character_lora, character_lora_uses = _adapter_for(
-        llm_model,
-        _optional_model_filename(copilot.get("character_lora", "")),
-        _lora_uses(copilot.get("character_lora_uses")),
-    )
+    character_lora = _optional_model_filename(copilot.get("character_lora", ""))
+    character_lora_uses = _lora_uses(copilot.get("character_lora_uses"))
     engine = str(tts.get("engine", "edge")).lower()
     if engine != "edge":
         raise ConfigError('MVP 目前只支援 tts.engine = "edge"。')

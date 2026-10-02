@@ -24,7 +24,7 @@ jobs:
       - name: Run tests
         run: python -m pytest -q
       - name: Check deployment code
-        run: python -m ruff check scripts/setup_copilot.py silenttalk/credentials.py tests/test_setup_copilot.py tests/test_credentials.py
+        run: python -m ruff check scripts/setup_copilot.py scripts/package_windows.py silenttalk/credentials.py tests/test_setup_copilot.py tests/test_package_windows.py tests/test_credentials.py
       - name: Validate the PowerShell first-launch entry point
         shell: powershell
         run: |

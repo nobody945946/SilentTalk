@@ -249,7 +249,7 @@ bounded session context
         │
         ▼
 copilot/llm.py  LocalReplyModel.suggest()
-Gemma 4 E2B（config 可換）/ persistent llama-server
+向 EdgeAgent 租借 Gemma 4 E4B（config 可換）/ 共用 llama.cpp router
 和角色模式同一段 chat（別人＝user「名字：內容」、你說過的＝assistant、人設與關係在 system），
 尾端問「換你說話了：說一句你現在會說的話」，溫度 1.0 取樣最多 7 次，
 留下最多四句彼此不像、也不重複對方的話（同一段快取，每多一句只多生成那句）
@@ -273,10 +273,10 @@ final transcript（含 Owner 自己的麥克風）
   → LocalReplyModel.character_turn()
       整場聊天是一段只往後接的 chat（和選項模式同一個格式），每句只 prefill 新的那句
       → 先問「最後一句是不是在對你說話」，文法限定只答 是／否（3050 Ti 約 80–90 ms）；
-        這一題套用由 EdgeAgent 管理的角色 LoRA：誤回從 9.6% 降到 1.0%，
-        該回的比例不變；SilentTalk repo 不保存或部署 LLM／LoRA。
+        預設不套 LoRA；使用者可自行安裝與基底相容的 GGUF adapter，
+        再由設定指定檔名與適用請求；SilentTalk repo 不保存個人 LLM／LoRA。
         EdgeAgent 原始碼：[EdgeAgent](https://github.com/nobody945946/EdgeAgent)（私人 repository）；
-        環境安裝見該 repository 的 README，啟動後由 SilentTalk 的 localhost API 租用。
+        Windows 發行包附來源，由同一啟動器自動部署，SilentTalk 透過 localhost API 租用。
         Discord @提及或回覆直接算是
       → 「會主動加入」模式：角色已經安靜 4 句以上，再問「現在插一句自然嗎」
       → 是：同一段 chat 尾端加提示寫一句；幾乎重複對方的話就丟掉；
@@ -292,7 +292,7 @@ final transcript（含 Owner 自己的麥克風）
 
 **人設給模型看的只有塑造這個人的部分**（`Persona.render_prompt_block`）：名字、身分、背景、想要、害怕、在意、最近、個性、說話感覺（去掉引號裡的詞）、幽默感、心情，加上人際關係。評審看的是完整人設（`render_system_block`）。**今天的心事**（`LocalReplyModel.make_agenda`，開始或換人設時由 runtime 在背景產生，只在記憶體）接在人設後面，也進 system prompt。
 
-LoRA 套在哪些請求由 `copilot.character_lora_uses` 決定（called／active／line／options）。v1 只有 called 有贏：它寫的台詞會硬塞人設背景、選項格式會壞，所以其餘都用原本的模型。有 LoRA 時 llama-server 開兩個 slot，套 LoRA 的請求走 slot 0、不套的走 slot 1：llama-server 在 LoRA 比例改變時會丟掉該 slot 的 prompt cache，共用一個 slot 的話每次開口都要重讀整段對話。
+LoRA 預設為空，不下載或自動配對個人 adapter。自行安裝後，套在哪些請求由 `copilot.character_lora_uses` 決定（called／active／line／options）。角色模式有 LoRA 時 llama-server 開兩個 slot，套 LoRA 的請求走 slot 0、不套的走 slot 1：llama-server 在 LoRA 比例改變時會丟掉該 slot 的 prompt cache。沒有 LoRA 的角色與編程 Agent 使用一個 slot。
 
 被問「你是不是 AI」時怎麼回，由設定 `character_ai_honesty` 決定：預設 `in_character` 不出戲，`admit` 則老實承認是 AI 扮演的角色。App 只用到 `copilot/character.py` 的設定選項和 `asks_if_ai`；裡面舊的關鍵字規則（`should_reply` 等）已不再使用。
 
@@ -655,18 +655,15 @@ disconnect old
 
 Launcher 目前負責：
 
-1. 檢查 `config.toml`。
-2. 第一次使用時從 `.env.example` 建立 `.env` 並開記事本。
-3. 尋找 Python 3.12；必要時用 winget 安裝。
-4. 建立 `.venv`。
-5. 安裝 `requirements.txt`。
-6. 尋找 FFmpeg；必要時用 winget 安裝。
-7. 用 `load_settings()` 驗證設定。
-8. Copilot 啟用時安裝/找到 llama.cpp，並以 `scripts/setup_copilot.py` 準備本機 STT/LLM 模型。
-9. 以 `compileall` 做輕量 source gate。
-10. `restart_silenttalk.ps1` 清掉舊 SilentTalk 與遺留的專用 llama-server，再以 `pythonw.exe app.py` 啟動 GUI。
+1. 從發行包快取取得經 manifest SHA256 驗證的 EdgeAgent 來源；符合最低版本的既有安裝直接沿用，舊版另行安裝並保留原目錄。
+2. 以部署來源雜湊、檔案 metadata、Python 與 Pi import probe 檢查安裝完成紀錄；符合時直接啟動，缺損時走同一安裝器修復。
+3. 由 EdgeAgent 安裝器部署 Python 3.12、獨立 venv、可攜式 Git／Node、Pi SDK、llama.cpp 與公開 Agent／角色基底；不部署個人 LoRA。
+4. SilentTalk 建立自己的 venv，安裝 `requirements.txt`、FFmpeg 和 STT 模型。
+5. 驗證 pip、source 編譯、實際載入 STT、角色租借與切回 Agent；通過後原子寫入部署完成紀錄。
+6. 初次 Discord 授權由憑證介面輸入，存入 Windows Credential Manager；既有 `.env` 可沿用，不修改。
+7. `restart_silenttalk.ps1` 按 PID 結束舊 SilentTalk，再以 `pythonw.exe app.py` 啟動唯一實例。應用程式透過 localhost 租借 EdgeAgent；不啟動自己的推論引擎。
 
-`--check` 可只驗證 launcher 前置條件而不開 GUI。
+`--setup-only` 只部署；`--check` 強制完整驗證，不啟動 Discord。`scripts/package_windows.py` 從指定 Git commit 產生同一入口的 Windows ZIP，僅包含應用程式與驗證過的 EdgeAgent 來源。
 
 ## 8. 外部依賴與信任邊界
 
@@ -679,7 +676,7 @@ python-dotenv            1.1.1
 sherpa-onnx              1.13.8
 numpy                    >=1.26,<3
 discord-ext-voice-recv   pinned DAVE-compatible commit
-llama.cpp                WinGet portable runtime
+llama.cpp                EdgeAgent pinned b11193 runtime
 ```
 
 Copilot models are not committed to Git. The launcher downloads them into `.runtime/models/` and validates the pinned hashes/sizes.

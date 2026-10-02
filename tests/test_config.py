@@ -143,38 +143,22 @@ def test_rejects_unknown_stt_engine(
 
 
 @pytest.mark.parametrize(
-    ("model", "lora", "uses"),
+    "model",
     [
-        # The shipped default: E4B with its own adapter on every decision and line.
-        (
-            "gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf",
-            "character-e4b-lora-v3.q8_0.gguf",
-            ("called", "active", "line"),
-        ),
-        # Switched to E2B on the settings page: the E2B adapter, on "called" only.
-        (
-            "gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf",
-            "character-e2b-lora-v1.q8_0.gguf",
-            ("called",),
-        ),
-        # A model no bundled adapter fits: none.
-        ("Qwen3.5-4B-Q4_K_M.gguf", "", ("called", "active", "line")),
+        "gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf",
+        "gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf",
+        "Qwen3.5-4B-Q4_K_M.gguf",
     ],
 )
-def test_the_character_adapter_follows_the_model(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, model: str, lora: str, uses: tuple
-) -> None:
+def test_model_selection_does_not_inject_a_personal_adapter(
+    tmp_path, monkeypatch, model
+):
     _write_config(tmp_path)
     with (tmp_path / "config.toml").open("a", encoding="utf-8") as handle:
-        handle.write(
-            f'[copilot]\nllm_model = "{model}"\n'
-            'character_lora = "character-e4b-lora-v3.q8_0.gguf"\n'
-            'character_lora_uses = "called,active,line"\n'
-        )
+        handle.write(f'[copilot]\nllm_model = "{model}"\n')
     monkeypatch.setenv("DISCORD_BOT_TOKEN", "test-token")
     monkeypatch.setenv("OWNER_USER_ID", "123456789")
-    copilot = load_settings(tmp_path).copilot
-    assert (copilot.character_lora, copilot.character_lora_uses) == (lora, uses)
+    assert load_settings(tmp_path).copilot.character_lora == ""
 
 
 def test_an_adapter_of_ones_own_is_kept(

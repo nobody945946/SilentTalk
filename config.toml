@@ -37,11 +37,9 @@ max_session_turns = 240
 max_reply_chars = 72
 llama_port = 18088
 auto_popup = true
-# Reply model owned and loaded by the independent E4B Core. Gemma 4 E4B
-# uses ~2.7 GB VRAM on a 3050 Ti (26.5 tokens/s) and beats E2B clearly: 60%
-# vs 36% per line, options 60% vs 32%. "gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf" is
-# the lighter choice (~1.4 GB VRAM, ~76 tokens/s; set character_lora to the
-# E2B adapter with it). An adapter only fits the model it was trained on.
+# Public reply model leased from EdgeAgent. Other supported GGUF models can
+# be installed in EdgeAgent's models directory. Adapters are optional and
+# must match the exact base model used for training.
 llm_model = "gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf"
 # Layers offloaded to the GPU; 0 = CPU only (about 3x slower, still usable).
 llm_gpu_layers = 99
@@ -49,15 +47,9 @@ llm_gpu_layers = 99
 # ~2.8 GB instead of ~3.1 GB). Falls back to the normal cache automatically if
 # the GPU driver can't do it.
 llm_low_vram = true
-# Character-mode LoRA adapter owned by E4B Core ("" = none), and which
-# requests use it: "called" / "active"
-# (the two "should I speak?" questions), "line" (what the character says),
-# "options" (the W/A/S/D choices). v3 (E4B, trained only on rows an
-# independent model checked) on called/active/line: stray replies 9.1% ->
-# 0.5%, chiming in where it shouldn't 53% -> 7.5%, and its lines beat plain
-# E4B 59% vs 40% (knowing the person 27 vs 15). With E2B use
-# "character-e2b-lora-v1.q8_0.gguf" on "called" only.
-character_lora = "character-e4b-lora-v3.q8_0.gguf"
+# Optional personal adapter filename (empty by default). No personal adapter
+# is included, downloaded or selected by the product.
+character_lora = ""
 character_lora_uses = "called,active,line"
 # When the character speaks up, decided line by line by the local model:
 # "called" = only when someone calls it, asks it or answers it; "active" = it

@@ -172,17 +172,17 @@ def check_runtime(section: dict) -> None:
     previous = agent_lease.service_status()
     if previous and previous.get("mode") == "character":
         raise RuntimeError(
-            "E4B is already leased; finish the active session before --check"
+            "EdgeAgent is already leased; finish the active session before --check"
         )
     owner = os.getpid()
     acquired = False
     try:
         base = agent_lease.ensure_service()
         if base.get("mode") != "base":
-            raise RuntimeError("Native E4B is not in base mode")
+            raise RuntimeError("EdgeAgent is not in base mode")
         configuration = {
             "model": section.get("llm_model", "gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf"),
-            "lora": section.get("character_lora", "character-e4b-lora-v3.q8_0.gguf"),
+            "lora": section.get("character_lora", ""),
             "port": int(section.get("llama_port", 18088)),
             "context_size": int(section.get("llm_context_size", 32768)),
             "gpu_layers": int(section.get("llm_gpu_layers", 99)),
@@ -197,8 +197,8 @@ def check_runtime(section: dict) -> None:
         returned = agent_lease.release_character(owner)
         acquired = False
         if returned.get("mode") != "base":
-            raise RuntimeError("E4B did not return to native base mode")
-        print("[OK] Native E4B / character lease / native restore")
+            raise RuntimeError("EdgeAgent did not return to Agent mode")
+        print("[OK] EdgeAgent / character lease / native restore")
     finally:
         if acquired:
             agent_lease.release_character(owner)
@@ -229,8 +229,35 @@ def check_speech(section: dict) -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Install SilentTalk speech assets")
     parser.add_argument("--check-runtime", action="store_true")
+    parser.add_argument("--probe-assets", action="store_true")
     args = parser.parse_args(argv)
     section = _copilot_section()
+    if args.probe_assets:
+        import discord
+        import discord.ext.voice_recv
+        import dotenv
+        import edge_tts
+        import numpy
+        import opencc
+        import sherpa_onnx
+        import sounddevice
+
+        # Importing these packages checks the installed environment without
+        # loading a model, connecting to Discord or touching user state.
+        del discord, dotenv, edge_tts, numpy, opencc, sherpa_onnx, sounddevice
+        if not bool(section.get("enabled", True)):
+            return 0
+        assets = (
+            (*ASSETS, *SENSEVOICE_ASSETS)
+            if str(section.get("stt_engine", "paraformer")).lower() == "sensevoice"
+            else ASSETS
+        )
+        return int(
+            not all(
+                path.is_file() and path.stat().st_size >= minimum
+                for _, _, path, _, minimum in assets
+            )
+        )
     if not bool(section.get("enabled", True)):
         print("Copilot is disabled; speech model deployment skipped.")
         if args.check_runtime:
