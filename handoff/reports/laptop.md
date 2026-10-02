@@ -138,3 +138,27 @@ commit：24b73e5（copilot-story-mode）；驗收包含既有未提交修改。
 - deployment_fix_pushed：SilentTalk copilot-story-mode；HEAD 9c52c32；bootstrap-v5；SHA256 ddc60fb193086c9a2f90e8f1dcfc380f51c924d99302bd1c367c18c29e24f877；私人來源下載校驗通過。
 - local_install_updated：正式 E4B 與全域指令更新完成；未修改使用者設定或記錄對話。
 - test_cleanup：自行啟動的 E4B 已停止；測試專用 Edge 已關閉；18087／18088／9223 無 LISTENING。
+
+---
+
+# 筆電回報 2026-10-02 14:08:42 +08:00
+
+- 工作範圍更新事件：程式改造；原定角色語音體驗測試未執行。
+- 程式位置：C:/Users/A8fm0/E4BCore；copilot-story-mode；基準 a698be3；程式變更未提交；既有 UI 變更保留。
+- 模型管理 UI 事件：通過。
+- 模型掃描、LoRA 排除事件：通過。
+- Hugging Face 下載事件：396705472 bytes；SHA256 驗證通過。
+- Gemma → Qwen 熱切換事件：通過。
+- Qwen 實際推論事件：通過。
+- RAM 對話與工作目錄保留事件：通過。
+- 原模型恢復事件：通過；Gemma E4B；98304 token。
+- 切換失敗恢復、小 context 記憶整理、使用中切換保護事件：測試通過。
+- E4BCore pytest：64 passed；exit code 0。
+- SilentTalk test_edge_ai / test_setup_copilot：14 passed；exit code 0。
+- Ruff：通過；exit code 0。
+- Edge CDP：通過；8 組視窗尺寸；瀏覽器錯誤 0；exit code 0。
+- Edge 手機觸控事件：通過。
+- 獨立覆核事件：通過。
+- Agent 能力提升評測事件：未執行；本輪模型切換測試未作能力評分。
+- 支援範圍：目前 llama.cpp 可載入的單檔 GGUF。
+- 回報內容稽核：無對話、轉錄、錄音、人設或角色狀態內容。
