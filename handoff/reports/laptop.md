@@ -49,3 +49,10 @@
 - audit_ollama: 0.35.0; LoRA create HTTP 400; no equal-model throughput superiority claim.
 - lifecycle_final: service stopped; control/inference listeners 0; startup off; dedicated test Edge closed.
 - capability_scope: small Python tasks validated; large-project capability not established.
+- documentation_updated: SilentTalk README / ARCHITECTURE / Windows handoff; EdgeAgent README / VALIDATION; 5 files.
+- documentation_checks: UTF-8 valid; code fences balanced; 4 local Markdown links resolved; CLI and packager help exit 0; both git diff checks exit 0.
+- documentation_independent_review: 1 finding; manual GGUF projector exclusion claim corrected; remaining specified workflows no findings.
+- documentation_client_commit: 226c3fc2296167a51df67cdaf20ab9d56eb36841; copilot-story-mode; pushed.
+- documentation_agent_commit: 8a6da4c80d4f29597bbdf35e8123228ff1b6c059; copilot-story-mode; pushed.
+- documentation_release_notes: 2 release pages updated; online documentation links added; archive payloads and digests unchanged.
+- documentation_scope: Markdown only; runtime tests not repeated; protected user data untouched; services not started.
