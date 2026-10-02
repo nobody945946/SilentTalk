@@ -25,6 +25,7 @@
 - fresh_distribution_acquisition: actual private download; SHA256 verified; extracted new bridge/lockfile; exit 0.
 - archive_integrity: 32 entries; private user-state entries 0; no runtime/model/transcript included.
 - agent_github_ci: success; run 36995315934.
+- client_github_ci: success; run 37002959377.
 - privacy_invariant: RAM sessions; no Pi state directory/session JSONL/transcript; protected user configuration unchanged.
 - audit_ollama: 0.35.0; LoRA create HTTP 400; no equal-model throughput superiority claim.
 - lifecycle_final: service stopped; control/inference listeners 0; startup off; dedicated test Edge closed.
