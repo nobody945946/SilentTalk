@@ -5,7 +5,22 @@
 
 ## 1. 一分鐘理解整個專案
 
-SilentTalk 是一個 Windows 本機桌面程式：
+SilentTalk 是 Windows 上的 Discord 語音角色玩具；編程 Agent 是獨立的 EdgeAgent。推論引擎、模型管理與 Agent 工具迴圈都由 EdgeAgent 擁有，SilentTalk 只租借服務。兩者安裝器共用部署能力，但 Python 環境分開。
+
+```text
+啟動 SilentTalk.cmd → scripts/bootstrap.ps1
+  ├─ SilentTalk：自己的 venv、FFmpeg、STT
+  └─ EdgeAgent 安裝器：自己的 venv、Pi SDK、llama.cpp、公開 GGUF 基底
+
+SilentTalk copilot/llm.py → agent_lease.py → EdgeAgent 控制 API :18087
+  → 租借角色模型 → 使用回傳的推論 API :18089 → 歸還原 Agent 配置
+
+EdgeAgent UI → Pi coding-agent SDK → 批准後執行工具 → 同一推論 API
+```
+
+推論 router 最多載入一個完整模型；角色租借時切換模型，歸還後恢復 Agent。個人 LoRA 不是部署資產。EdgeAgent 的實作與驗證見 [README](https://github.com/nobody945946/EdgeAgent/blob/copilot-story-mode/README.md) 和 [VALIDATION](https://github.com/nobody945946/EdgeAgent/blob/copilot-story-mode/VALIDATION.md)（私人 repository）。
+
+SilentTalk 手動轉語音的資料流：
 
 1. 使用者按全域快捷鍵開啟輸入框。
 2. UI 把文字交給 Controller。
@@ -56,17 +71,21 @@ speech_queue.py            FIFO / cancel / job lifecycle
 | 角色模式何時開口 | `silenttalk/copilot/llm.py` 的 `character_turn`、`_GATE_QUESTION` | `copilot/runtime.py`, `copilot/character.py`（設定選項） |
 | 人設欄位、預設人設 | `silenttalk/copilot/persona.py` | `silenttalk/persona_ui.py` |
 | 選項的四個位置與按鍵對應 | `silenttalk/copilot/types.py` 的 `REPLY_LANES` | `silenttalk/copilot/llm.py` 的 `suggest`、`_OPTIONS_ASK` |
-| Copilot 模型檔、GPU layers | `config.toml` `[copilot]` | `scripts/setup_copilot.py` |
+| 角色基底、選用 LoRA、GPU layers | `config.toml` `[copilot]` | `silenttalk/config.py`, `silenttalk/agent_lease.py` |
+| 共用推論的租借、歸還、重啟交接 | `silenttalk/agent_lease.py` | EdgeAgent `edge_agent/service.py` |
+| STT 下載與角色租借驗收 | `scripts/setup_copilot.py` | `silenttalk/copilot/stt.py`, `stt_offline.py` |
+| 編程 Agent、模型下載與熱切換 | EdgeAgent `edge_agent/service.py`, `web.py` | `models.py`, `chat.py`, `agent_bridge.mjs` |
 | 文字長度、空白、換行規則 | `silenttalk/text.py` | `silenttalk/config.py` |
 | TTS 聲音、速度、音高、音量 | `config.toml` | `silenttalk/tts/edge.py` |
 | 換另一個 TTS 引擎 | `silenttalk/tts/base.py` | `silenttalk/tts/edge.py`, `controller.py`, `config.py` |
 | 播放順序、排隊、取消 | `silenttalk/speech_queue.py` | `controller.py` |
 | Bot 跟隨 Owner 的邏輯 | `silenttalk/discord_voice.py` | `config.py` |
 | Discord 連線 / 重連 / 換頻道 | `silenttalk/discord_voice.py` | `controller.py` |
-| Bot Token / Owner ID | `.env` | `silenttalk/config.py` |
+| Bot Token / Owner ID | `silenttalk/credentials.py` | `silenttalk/config.py`；Windows 認證管理員／既有 `.env` |
 | 一般可調參數 | `config.toml` | `silenttalk/config.py` |
 | 程式啟動與元件組裝 | `app.py` | `controller.py` |
-| Windows 第一次安裝流程 | `啟動 SilentTalk.cmd` | `requirements.txt` |
+| Windows 第一次安裝與修復 | `scripts/bootstrap.ps1` | EdgeAgent `scripts/bootstrap.ps1`；`edge-agent-distribution.json` |
+| Windows 發行包 | `scripts/package_windows.py` | Git commit allowlist；EdgeAgent manifest 與來源包 |
 | 啟動 / TTS / Voice 實機檢查 | `silenttalk/smoke.py` | `app.py` |
 | Log 格式與寫入位置 | `silenttalk/logging_setup.py` | 各模組的 `logging` 呼叫 |
 | App 狀態名稱 | `silenttalk/state.py` | UI / queue / Discord 模組 |
@@ -82,9 +101,17 @@ SilentTalk/
 ├─ requirements-dev.txt         # Test / lint dependencies
 ├─ 啟動 SilentTalk.cmd           # Windows bootstrap / launcher
 ├─ README.md                    # 使用方式
+├─ scripts/
+│  ├─ bootstrap.ps1             # 部署、完成紀錄、缺損修復
+│  ├─ edge-agent-distribution.json # EdgeAgent 最低版本、來源包與 SHA256
+│  ├─ package_windows.py        # 從 Git commit 打包，不收使用者資料
+│  ├─ setup_copilot.py          # STT 資產與角色租借驗收
+│  └─ restart_silenttalk.ps1    # 依 PID 重啟唯一實例
 │
 ├─ silenttalk/
 │  ├─ __init__.py
+│  ├─ agent_lease.py            # localhost 控制 API client，不擁有引擎
+│  ├─ credentials.py            # 初次授權與 Windows 認證管理員
 │  ├─ config.py                 # 設定模型、載入與驗證
 │  ├─ controller.py             # UI 與 async backend 的協調層
 │  ├─ discord_voice.py          # Discord Voice routing + playback
@@ -292,7 +319,7 @@ final transcript（含 Owner 自己的麥克風）
 
 **人設給模型看的只有塑造這個人的部分**（`Persona.render_prompt_block`）：名字、身分、背景、想要、害怕、在意、最近、個性、說話感覺（去掉引號裡的詞）、幽默感、心情，加上人際關係。評審看的是完整人設（`render_system_block`）。**今天的心事**（`LocalReplyModel.make_agenda`，開始或換人設時由 runtime 在背景產生，只在記憶體）接在人設後面，也進 system prompt。
 
-LoRA 預設為空，不下載或自動配對個人 adapter。自行安裝後，套在哪些請求由 `copilot.character_lora_uses` 決定（called／active／line／options）。角色模式有 LoRA 時 llama-server 開兩個 slot，套 LoRA 的請求走 slot 0、不套的走 slot 1：llama-server 在 LoRA 比例改變時會丟掉該 slot 的 prompt cache。沒有 LoRA 的角色與編程 Agent 使用一個 slot。
+LoRA 預設為空，不下載或自動配對個人 adapter。使用者將相容 GGUF adapter 放在 EdgeAgent 的 `models` 目錄，以 `copilot.character_lora` 指定檔名；套在哪些請求由 `copilot.character_lora_uses` 決定（called／active／line／options）。角色模式有 LoRA 時 llama-server 開兩個 slot，套 LoRA 的請求走 slot 0、不套的走 slot 1：llama-server 在 LoRA 比例改變時會丟掉該 slot 的 prompt cache。沒有 LoRA 的角色與編程 Agent 使用一個 slot。
 
 被問「你是不是 AI」時怎麼回，由設定 `character_ai_honesty` 決定：預設 `in_character` 不出戲，`admit` 則老實承認是 AI 扮演的角色。App 只用到 `copilot/character.py` 的設定選項和 `asks_if_ai`；裡面舊的關鍵字規則（`should_reply` 等）已不再使用。
 
@@ -303,9 +330,9 @@ LoRA 預設為空，不下載或自動配對個人 adapter。自行安裝後，�
 - Discord receive callback 只複製 PCM 丟給 STT queue，不能在 voice receive thread 做推理。
 - 每位 Discord speaker 有獨立的 streaming STT stream，不需要額外 diarization。
 - 未採用的 AI 候選不進 context。
-- 同一時間只有一個 LLM 生成（`_suggestion_worker`）；生成期間新進的句子只保留最新一句作為下一個 trigger。llama-server 以 `--parallel 1` 啟動，不讓多個 slot 分掉 4 GB GPU 的 context。
+- 同一時間只有一個 LLM 生成（`_suggestion_worker`）；生成期間新進的句子只保留最新一句作為下一個 trigger。推論 slot 數由 EdgeAgent 決定：角色有 LoRA 用兩個 slot，其他情況用一個；並不代表同時載入兩個完整模型。
 - 少於 2 個字的句子（「嗯」「好」）只進 context，不觸發生成。
-- 啟動前先跑 `llama-server --list-devices`，把看到的 GPU 記成 `copilot_llm_devices`（沒有裝置＝CPU 模式）。llama-server 的 stderr 只留在記憶體尾端 40 行，只有含 error／failed／out of memory 的行寫入 `silenttalk.log`；不提高 verbosity，避免 prompt 內容落地。
+- 模型子程序由 EdgeAgent 管理；router stdout/stderr 不寫入 SilentTalk log。SilentTalk 只記錄租借事件、延遲與錯誤類型，不能另開引擎或保存模型 prompt。
 - Streaming Paraformer 每約 0.6 s 才吐一次字；句尾若只補 0.2 s 靜音，最後 1–3 字會掉（實測 CER 14.7% → 補 0.66 s 後 7.1%）。
 - DAVE（Discord 語音 E2EE）握手完成前收到的封包仍是密文，解出來是雜訊，`discord_voice.py` 會直接丟掉；沒有 `dave_session` 的連線（例如 Stage 頻道）不啟動接收，避免 voice_recv fork 的 decoder 崩潰後觸發重連迴圈。
 - 使用者按送出後也不立刻寫成 self turn；只有 SpeechQueue 完成 Discord playback 後，`on_done` 才記錄「你真的說過這句」。
@@ -405,7 +432,7 @@ shutdown()
 負責：
 
 - Discord Gateway 連線。
-- 只開啟 `guilds` 與 `voice_states` intents。
+- 預設開啟 `guilds` 與 `voice_states`；啟用語音頻道文字聊天時才要求 `message_content`。
 - 尋找 `OWNER_USER_ID` 所在的語音頻道。
 - Owner 換頻道時跟隨。
 - Owner 跨 Server 時斷舊連新。
@@ -439,7 +466,7 @@ config.toml          預設值，保留註解，升級時帶來新預設
 
 ### `silenttalk/config.py` — 設定邊界
 
-敏感資料來自 `.env`：
+Bot Token 與 Owner ID 優先來自既有 `.env`，缺少時讀 Windows 認證管理員。初次授權由 `silenttalk/credentials.py` 寫入認證管理員，安裝器不改 `.env`：
 
 ```dotenv
 DISCORD_BOT_TOKEN=
@@ -452,6 +479,7 @@ OWNER_USER_ID=
 - `[tts]`
 - `[discord]`
 - `[audio]`
+- `[copilot]`（含角色模型與 LoRA 租借配置）
 
 最後轉成 immutable dataclass：
 
@@ -460,7 +488,8 @@ Settings
 ├─ AppConfig
 ├─ TTSConfig
 ├─ DiscordConfig
-└─ AudioConfig
+├─ AudioConfig
+└─ CopilotConfig
 ```
 
 `Settings.validate_runtime()` 目前主要檢查 FFmpeg。
@@ -476,7 +505,7 @@ Settings
 - `update(index, text)`
 - `delete(index)`
 
-資料存在 repo 根目錄的 `quick_phrases.json`，使用 UTF-8 JSON 字串陣列。寫入時先寫 `.tmp` 再 replace，避免一般寫入途中留下半份 JSON。
+資料存在應用程式根目錄的 `quick_phrases.json`，每筆包含 `text` 與 `voice_style`；讀取時仍相容舊版字串陣列。寫入時先寫 `.tmp` 再 replace，避免一般寫入途中留下半份 JSON。全域語速等 UI 偏好存在 `ui_preferences.json`。
 
 `ui.py` 只負責「怎麼顯示、怎麼操作」，不自己處理 JSON。快捷句送出時仍呼叫原有 submit callback，因此 Controller / Queue / TTS / Discord 不需要知道文字來源。
 
@@ -679,7 +708,7 @@ discord-ext-voice-recv   pinned DAVE-compatible commit
 llama.cpp                EdgeAgent pinned b11193 runtime
 ```
 
-Copilot models are not committed to Git. The launcher downloads them into `.runtime/models/` and validates the pinned hashes/sizes.
+STT 模型位於 SilentTalk 的 `.runtime/models/`。編程與角色 GGUF 基底、個人 LoRA 位於 EdgeAgent 的 `models/`；引擎、Node 與 Pi SDK 位於 EdgeAgent 的 `.runtime/`。安裝資產不提交 Git；公開固定版本資產驗證 SHA256，個人 adapter 只由使用者安裝。
 
 外部系統：
 
@@ -687,7 +716,8 @@ Copilot models are not committed to Git. The launcher downloads them into `.runt
 SilentTalk
 ├─ Discord Gateway / Voice
 ├─ EdgeTTS 所使用的外部語音服務
-└─ FFmpeg executable
+├─ FFmpeg executable
+└─ EdgeAgent localhost 控制／推論 API
 ```
 
 本機敏感資料：
@@ -695,7 +725,7 @@ SilentTalk
 - Discord Bot Token
 - Owner Discord User ID
 
-Token 應只存在本機 `.env`，且 `.env` 必須維持在 Git ignore 範圍內。
+Token 存在本機 Windows 認證管理員或既有 `.env`；`.env` 必須維持在 Git ignore 範圍內，不得包含於發行包。對話、轉錄與推論 prompt 不落地；合成音訊在播放期間使用暫存檔並於結束清除。使用者選用的角色自身狀態可以保存，不能包含任何人的對話原文。
 
 ## 9. 測試如何對應架構
 
@@ -712,9 +742,11 @@ Token 應只存在本機 `.env`，且 `.env` 必須維持在 Git ignore 範圍�
 | `test_text.py` | 文字 normalization / validation |
 | `test_voice_config.py` | voice reconnect 參數 |
 | `test_voice_monitor.py` | monitor task shutdown |
-| `test_voice_receive.py` | Discord receive 過濾 Owner / bot，只轉真人 PCM |
+| `test_voice_receive.py` | Discord receive 接收 Owner 與其他真人、排除 Bot；DAVE 就緒前丟棄密文 |
 | `test_copilot_context.py` | bounded context 與較早 self turns |
-| `test_copilot_llm.py` | 固定三槽 parser、HUMOR SKIP、長度限制 |
+| `test_copilot_llm.py` | 四種角色回覆、逐行顯示、共用角色 context、LoRA 請求分流 |
+| `test_agent_lease.py` | 單一 localhost 租借 client、歸還、租借失敗與重啟交接 |
+| `test_package_windows.py` | 僅打包 Git 來源、來源包雜湊、排除個人／不安全檔案 |
 
 執行：
 
