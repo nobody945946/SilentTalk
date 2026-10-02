@@ -162,3 +162,22 @@ commit：24b73e5（copilot-story-mode）；驗收包含既有未提交修改。
 - Agent 能力提升評測事件：未執行；本輪模型切換測試未作能力評分。
 - 支援範圍：目前 llama.cpp 可載入的單檔 GGUF。
 - 回報內容稽核：無對話、轉錄、錄音、人設或角色狀態內容。
+---
+
+# Agent 架構審查事件 2026-10-02 14:18:36 +08:00
+
+- 程式碼審查事件：chat.py、service.py、deploy.py、runtime.py、api.py、models.py、web.py。
+- 相關 pytest 事件：52 passed；exit code 0。
+- 工具迴圈上限重現事件：12 輪後例外；中途記憶整理檢查 1 次。
+- 失敗後狀態分離重現事件：訊息 0；檔案修改保留；修改紀錄 1。
+- 輸出截斷重現事件：模型 length 結束；應用 done；錯誤事件 0。
+- 工具呼叫配對拆分重現事件：通過重現；使用合成 token 計數。
+- Agent Shell 時限審查事件：預設 10 秒；上限 60 秒。
+- GPU 檢查事件：RTX 3050 Ti Laptop；VRAM 4096 MiB。
+- RAM 檢查事件：8072528 KiB。
+- Ollama 官方 API、工具呼叫、模型管理、context 文件審查事件：已執行。
+- OpenCode 官方整合、權限、磁碟會話保存文件審查事件：已執行。
+- 架構判定事件：採用 Ollama 模型後端方向；Agent 執行層需同步處理。
+- 速度 A/B 事件：未執行。
+- 遷移事件：未執行；程式碼無本輪變更。
+- 回報內容稽核：無對話、prompt、人設或角色狀態內容。
