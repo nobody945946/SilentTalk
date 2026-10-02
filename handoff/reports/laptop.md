@@ -39,6 +39,7 @@
 - real_optional_adapter: compatible load; removal; original Agent restoration; exit 0.
 - real_incompatible_adapter: same architecture; load rejected; original Agent restored and ready.
 - optional_adapter_ui: JavaScript syntax exit 0; real browser interaction unverified; launch tool policy rejection; browser connector empty.
+- temporary_test_cleanup: tool policy rejection; 2 fresh test environments retained under .test-tmp; excluded from release.
 - privacy_invariant: RAM sessions; no Pi state directory/session JSONL/transcript; protected user configuration unchanged.
 - audit_ollama: 0.35.0; LoRA create HTTP 400; no equal-model throughput superiority claim.
 - lifecycle_final: service stopped; control/inference listeners 0; startup off; dedicated test Edge closed.
