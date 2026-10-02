@@ -273,9 +273,9 @@ final transcript（含 Owner 自己的麥克風）
   → LocalReplyModel.character_turn()
       整場聊天是一段只往後接的 chat（和選項模式同一個格式），每句只 prefill 新的那句
       → 先問「最後一句是不是在對你說話」，文法限定只答 是／否（3050 Ti 約 80–90 ms）；
-        這一題套用由獨立 E4B Core 管理的角色 LoRA：誤回從 9.6% 降到 1.0%，
+        這一題套用由 EdgeAgent 管理的角色 LoRA：誤回從 9.6% 降到 1.0%，
         該回的比例不變；SilentTalk repo 不保存或部署 LLM／LoRA。
-        獨立核心原始碼：[E4BCore](https://github.com/nobody945946/E4BCore)（私人 repository）；
+        EdgeAgent 原始碼：[EdgeAgent](https://github.com/nobody945946/EdgeAgent)（私人 repository）；
         環境安裝見該 repository 的 README，啟動後由 SilentTalk 的 localhost API 租用。
         Discord @提及或回覆直接算是
       → 「會主動加入」模式：角色已經安靜 4 句以上，再問「現在插一句自然嗎」

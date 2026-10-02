@@ -1,6 +1,6 @@
 # SilentTalk
 
-Windows 本機 SilentTalk：可手動輸入文字，也可在 Discord 語音中即時聽取其他真人發言，使用本機 STT + 本機小模型產生四種回覆建議，再由 EdgeTTS 透過 Bot 說進語音頻道。程式不讀寫 Discord 文字頻道；收到的語音與轉錄內容只用於當次執行的 Copilot，不寫入歷史檔。
+SilentTalk 是語音角色與回覆建議玩具；本機編程 Agent 是獨立產品 EdgeAgent。SilentTalk 可手動輸入文字，也可在 Discord 語音中即時聽取真人發言，使用本機 STT，再向 EdgeAgent 租借模型產生回覆，由 EdgeTTS 透過 Bot 說進語音頻道。程式不讀寫 Discord 文字頻道；語音與轉錄內容不寫入歷史檔。
 
 ## 開發者導覽
 
@@ -9,25 +9,24 @@ Windows 本機 SilentTalk：可手動輸入文字，也可在 Discord 語音中�
 ## 最快使用方式
 
 首次部署支援 Windows x64。取得這個 repository 後，直接雙擊 `啟動 SilentTalk.cmd`：
-它會自動安裝 Python 3.12、各自的虛擬環境與依賴、Git、FFmpeg、語音模型，以及獨立 E4B。
-不需要事先安裝 Git、winget、Python 或 CUDA Toolkit。E4B 的來源、環境、推論引擎、
-Gemma 4 E4B 與角色 LoRA 放在使用者家目錄的 `E4BCore`，不放進 SilentTalk。
-E4B 安裝器依已可用的 NVIDIA 驅動選擇 CUDA；否則使用 CPU。CPU 可以執行，但速度依硬體而異。
+它會自動安裝 Python 3.12、各自的虛擬環境與依賴、Git、FFmpeg、語音模型，以及 EdgeAgent。
+不需要事先安裝 Git、winget、Python 或 CUDA Toolkit。EdgeAgent 的來源、環境、推論引擎、
+Agent 模型、Gemma 4 E4B 與相容角色 LoRA 放在使用者家目錄的 `EdgeAgent`，不放進 SilentTalk。
+EdgeAgent 安裝器依已可用的 NVIDIA 驅動選擇 CUDA；否則使用 CPU。CPU 可以執行，但速度依硬體而異。
 
-首次下載私人 E4B 時，流程會請你登入有 repository 存取權的 GitHub 帳號。
+首次下載私人來源或角色 LoRA 時，流程會請你登入有 repository 存取權的 GitHub 帳號。
 要連 Discord 時，只需輸入 Bot token 與自己的 Discord User ID；新輸入存入
 Windows 認證管理員，之後不用再輸入。既有 `.env` 優先，安裝器不修改它或其他使用者設定。
 Bot 仍需先建立並邀請到自己的 Server，這些是 Discord 帳號授權，無法由安裝器代替。
 
-首次下載約 5–6 GB，建議保留至少 12 GB 可用磁碟空間。大型模型下載可續傳，
+首次下載約 7–8 GB，建議保留至少 16 GB 可用磁碟空間。大型模型下載可續傳，
 資產皆驗證 SHA256；網路中斷後重跑同一入口即可。重開會沿用完成的環境與資產。
-首次部署會實際載入 STT、啟動原生 E4B、租用角色模式，再驗證歸還原生模式。
+首次部署會實際載入 STT、啟動 EdgeAgent、租用角色模式，再驗證歸還 Agent 模型。
 `啟動 SilentTalk.cmd --setup-only` 只部署；`啟動 SilentTalk.cmd --check` 重新驗收且不連 Discord。
-需要自訂獨立 E4B 路徑時可設定環境變數 `E4B_HOME`，必須在 SilentTalk 目錄之外。
-舊 E4B checkout 不會被覆寫；缺少新安裝器時改為建立並列安裝。
+需要自訂 EdgeAgent 路徑時可設定環境變數 `EDGE_AGENT_HOME`，必須在 SilentTalk 目錄之外。
 
-完成後，直接執行 `e4b` 或 `E4BCore\開啟 E4B.cmd` 即可使用原生 E4B；
-SilentTalk 執行時只透過 localhost API 租用，結束後歸還。兩者沒有共用 Python 套件環境。
+完成後，直接執行 `edge-agent` 或 `EdgeAgent\開啟 EdgeAgent.cmd` 即可使用本機編程 Agent；
+SilentTalk 執行時只透過 localhost API 租借推論服務，結束後歸還。兩者沒有共用 Python 套件環境。
 
 1. 雙擊 `啟動 SilentTalk.cmd`。啟動後不會出現大型主視窗。
 2. 用 `.env` 內 `OWNER_USER_ID` 對應的 Discord 帳號加入一般語音頻道。

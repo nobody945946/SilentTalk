@@ -55,7 +55,7 @@ class _Trigger:
 
 
 class CopilotRuntime:
-    """Owns local STT/context and leases reply generation from E4B Core."""
+    """Owns local STT/context and leases reply generation from EdgeAgent."""
 
     def __init__(
         self,

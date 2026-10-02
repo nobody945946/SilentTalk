@@ -90,7 +90,7 @@ class CopilotConfig:
     llm_model: str = DEFAULT_LLM_MODEL
     llm_gpu_layers: int = 99
     llm_low_vram: bool = True
-    # Character-mode LoRA adapter owned by E4B Core ("" = none), and
+    # Character-mode LoRA adapter owned by EdgeAgent ("" = none), and
     # which requests use it (copilot.llm.LORA_PARTS); summaries never do.
     character_lora: str = ""
     character_lora_uses: tuple[str, ...] = ("called",)
@@ -154,7 +154,7 @@ def _model_filename(value: object) -> str:
     name = str(value).strip()
     if not name.lower().endswith(".gguf") or Path(name).name != name:
         raise ConfigError(
-            "copilot.llm_model 必須是 E4B Core models 目錄內的 .gguf 檔名。"
+            "copilot.llm_model 必須是 EdgeAgent models 目錄內的 .gguf 檔名。"
         )
     return name
 

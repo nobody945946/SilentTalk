@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 import pytest
 
-from silenttalk import edge_ai
+from silenttalk import agent_lease
 from silenttalk.copilot import llm
 from silenttalk.copilot import smoke as copilot_smoke
 from silenttalk.copilot.llm import LocalReplyModel
@@ -29,16 +29,18 @@ def test_silenttalk_sends_character_configuration_through_http_api(
     )
     calls: list[tuple[str, dict[str, object], float]] = []
     monkeypatch.setattr(
-        edge_ai, "load_settings", lambda project_dir: SimpleNamespace(copilot=config)
+        agent_lease,
+        "load_settings",
+        lambda project_dir: SimpleNamespace(copilot=config),
     )
-    monkeypatch.setattr(edge_ai, "ensure_service", dict)
+    monkeypatch.setattr(agent_lease, "ensure_service", dict)
     monkeypatch.setattr(
-        edge_ai,
+        agent_lease,
         "post_json",
         lambda path, payload, timeout: calls.append((path, payload, timeout)) or {},
     )
 
-    edge_ai.acquire_character(tmp_path, 456)
+    agent_lease.acquire_character(tmp_path, 456)
 
     assert calls == [
         (
@@ -60,13 +62,13 @@ def test_silenttalk_sends_character_configuration_through_http_api(
 
 
 def test_e4b_command_is_found_before_a_new_terminal_is_opened(tmp_path, monkeypatch):
-    command = tmp_path / "Microsoft/WinGet/Links/e4b.cmd"
+    command = tmp_path / "Microsoft/WinGet/Links/edge-agent.cmd"
     command.parent.mkdir(parents=True)
     command.write_text("@echo off\n", encoding="utf-8")
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
-    monkeypatch.setattr(edge_ai.shutil, "which", lambda name: None)
+    monkeypatch.setattr(agent_lease.shutil, "which", lambda name: None)
     if os.name == "nt":
-        assert edge_ai._global_e4b_command() == str(command)
+        assert agent_lease._global_agent_command() == str(command)
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows independent launcher")
@@ -75,16 +77,16 @@ def test_background_client_uses_the_installed_launcher_without_shell_parsing(
 ):
     directory = tmp_path / "中文 & 路徑"
     directory.mkdir()
-    launcher = directory / "e4b-launch.ps1"
+    launcher = directory / "edge-agent-launch.ps1"
     launcher.write_text("# fixture launcher\n", encoding="ascii")
     statuses = iter([None, {"ready": True, "mode": "base"}])
-    monkeypatch.setattr(edge_ai, "service_status", lambda: next(statuses))
-    monkeypatch.setattr(edge_ai, "_control_service_present", lambda: False)
+    monkeypatch.setattr(agent_lease, "service_status", lambda: next(statuses))
+    monkeypatch.setattr(agent_lease, "_control_service_present", lambda: False)
     monkeypatch.setattr(
-        edge_ai, "_global_e4b_command", lambda: str(directory / "e4b.cmd")
+        agent_lease, "_global_agent_command", lambda: str(directory / "edge-agent.cmd")
     )
     with patch("subprocess.Popen") as spawn:
-        edge_ai.ensure_service()
+        agent_lease.ensure_service()
     argv = spawn.call_args.args[0]
     assert argv[0] == "powershell.exe"
     assert argv[argv.index("-File") + 1] == str(launcher)
@@ -99,19 +101,21 @@ def test_background_start_really_executes_the_independent_launcher(
     marker = tmp_path / "started"
     directory = tmp_path / "原生 & E4B"
     directory.mkdir()
-    launcher = directory / "e4b-launch.ps1"
+    launcher = directory / "edge-agent-launch.ps1"
     marker_path = str(marker).replace("'", "''")
     launcher.write_text(
         f"[IO.File]::WriteAllText('{marker_path}', '1')\n", encoding="utf-8-sig"
     )
     monkeypatch.setattr(
-        edge_ai, "service_status", lambda: {"ready": True} if marker.exists() else None
+        agent_lease,
+        "service_status",
+        lambda: {"ready": True} if marker.exists() else None,
     )
-    monkeypatch.setattr(edge_ai, "_control_service_present", lambda: False)
+    monkeypatch.setattr(agent_lease, "_control_service_present", lambda: False)
     monkeypatch.setattr(
-        edge_ai, "_global_e4b_command", lambda: str(directory / "e4b.cmd")
+        agent_lease, "_global_agent_command", lambda: str(directory / "edge-agent.cmd")
     )
-    assert edge_ai.ensure_service(timeout=15)["ready"] is True
+    assert agent_lease.ensure_service(timeout=15)["ready"] is True
     assert marker.read_text() == "1"
 
 
@@ -144,7 +148,9 @@ async def test_silenttalk_always_borrows_and_releases_e4b(
     monkeypatch.setattr(
         llm,
         "acquire_character",
-        lambda project_dir, owner_pid: calls.append(("acquire", owner_pid)),
+        lambda project_dir, owner_pid: (
+            calls.append(("acquire", owner_pid)) or {"port": 18089}
+        ),
     )
     monkeypatch.setattr(
         llm,
@@ -160,6 +166,7 @@ async def test_silenttalk_always_borrows_and_releases_e4b(
     await model.start()
     assert model._lease_active is True
     assert model._lora_loaded is True
+    assert model._base_url == "http://127.0.0.1:18089"
     await model.stop()
 
     assert calls == [("acquire", os.getpid()), ("release", os.getpid())]
@@ -170,17 +177,19 @@ def test_edge_client_starts_global_e4b_without_importing_core(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     statuses = iter([None, {"ready": True, "mode": "base"}])
-    monkeypatch.setattr(edge_ai, "service_status", lambda: next(statuses))
-    monkeypatch.setattr(edge_ai, "_control_service_present", lambda: False)
-    monkeypatch.setattr(edge_ai, "_global_e4b_command", lambda: "C:/bin/e4b.cmd")
-    monkeypatch.setattr(edge_ai.time, "sleep", lambda seconds: None)
+    monkeypatch.setattr(agent_lease, "service_status", lambda: next(statuses))
+    monkeypatch.setattr(agent_lease, "_control_service_present", lambda: False)
+    monkeypatch.setattr(
+        agent_lease, "_global_agent_command", lambda: "C:/bin/edge-agent.cmd"
+    )
+    monkeypatch.setattr(agent_lease.time, "sleep", lambda seconds: None)
 
     with patch("subprocess.Popen") as spawn:
-        result = edge_ai.ensure_service(timeout=1)
+        result = agent_lease.ensure_service(timeout=1)
 
     assert result["ready"] is True
     command = spawn.call_args.args[0]
-    assert command[-2:] == ["C:/bin/e4b.cmd", "start"]
+    assert command[-2:] == ["C:/bin/edge-agent.cmd", "start"]
 
 
 def test_post_json_uses_only_the_loopback_control_api() -> None:
@@ -201,7 +210,7 @@ def test_post_json_uses_only_the_loopback_control_api() -> None:
         return Response(b'{"ready":true,"mode":"character"}')
 
     with patch("urllib.request.urlopen", fake_urlopen):
-        result = edge_ai.post_json("/character", {"owner_pid": 7}, timeout=1)
+        result = agent_lease.post_json("/character", {"owner_pid": 7}, timeout=1)
 
     assert captured == {
         "url": "http://127.0.0.1:18087/character",
@@ -210,12 +219,12 @@ def test_post_json_uses_only_the_loopback_control_api() -> None:
     assert result["mode"] == "character"
 
 
-def test_silenttalk_source_has_no_e4b_core_import_or_local_server_builder() -> None:
+def test_silenttalk_source_has_no_edge_agent_import_or_local_server_builder() -> None:
     source_root = Path(__file__).resolve().parents[1] / "silenttalk"
     sources = "\n".join(
         path.read_text(encoding="utf-8") for path in source_root.rglob("*.py")
     )
 
-    assert "from e4b_core" not in sources
-    assert "import e4b_core" not in sources
+    assert "from edge_agent" not in sources
+    assert "import edge_agent" not in sources
     assert "build_server_args" not in sources

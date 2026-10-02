@@ -36,8 +36,8 @@ import urllib.request
 from pathlib import Path
 
 PROJECT_DIR = Path(__file__).resolve().parents[2]
-E4B_MODEL_DIR = Path(
-    os.environ.get("E4B_MODEL_DIR", Path.home() / "E4BCore" / "models")
+EDGE_AGENT_MODEL_DIR = Path(
+    os.environ.get("EDGE_AGENT_MODEL_DIR", Path.home() / "EdgeAgent" / "models")
 )
 PORT = 18399
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
@@ -109,7 +109,7 @@ def main() -> int:
     parser.add_argument(
         "--model",
         default="gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf",
-        help="file name in E4B_MODEL_DIR or a path",
+        help="file name in EDGE_AGENT_MODEL_DIR or a path",
     )
     parser.add_argument("--gpu-layers", type=int, default=99, help="0 = CPU only")
     parser.add_argument(
@@ -126,7 +126,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--lora",
-        help="adapter (file in E4B_MODEL_DIR or a path): time the app's LoRA gate + reply",
+        help="adapter (file in EDGE_AGENT_MODEL_DIR or a path): time the app's LoRA gate + reply",
     )
     parser.add_argument(
         "--lora-uses",
@@ -232,14 +232,14 @@ def bench_llm(
 ) -> None:
     model = Path(args.model)
     if not model.is_file():
-        model = E4B_MODEL_DIR / args.model
+        model = EDGE_AGENT_MODEL_DIR / args.model
     if not model.is_file():
         raise BenchError(f"找不到模型 {model}")
     lora = None
     if args.lora:
         lora = Path(args.lora)
         if not lora.is_file():
-            lora = E4B_MODEL_DIR / args.lora
+            lora = EDGE_AGENT_MODEL_DIR / args.lora
         if not lora.is_file():
             raise BenchError(f"找不到 LoRA {lora}")
     exe = find_llama_server(args.llama_server)

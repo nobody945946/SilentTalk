@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from scripts import setup_copilot
-from silenttalk import edge_ai
+from silenttalk import agent_lease
 from silenttalk.settings_store import SettingsStore
 
 
@@ -26,8 +26,8 @@ def test_setup_uses_settings_page_override(
 def test_runtime_check_verifies_lease_and_restores_service(monkeypatch):
     calls = []
     statuses = iter([None, {"mode": "base"}])
-    monkeypatch.setattr(edge_ai, "service_status", lambda: next(statuses))
-    monkeypatch.setattr(edge_ai, "ensure_service", lambda: {"mode": "base"})
+    monkeypatch.setattr(agent_lease, "service_status", lambda: next(statuses))
+    monkeypatch.setattr(agent_lease, "ensure_service", lambda: {"mode": "base"})
 
     def post(path, payload, **kwargs):
         calls.append(path)
@@ -35,9 +35,9 @@ def test_runtime_check_verifies_lease_and_restores_service(monkeypatch):
             return {"mode": "stopped"}
         return {"mode": "character", "owner_pid": payload["owner_pid"]}
 
-    monkeypatch.setattr(edge_ai, "post_json", post)
+    monkeypatch.setattr(agent_lease, "post_json", post)
     monkeypatch.setattr(
-        edge_ai,
+        agent_lease,
         "release_character",
         lambda owner: calls.append("release") or {"mode": "base"},
     )
@@ -46,17 +46,21 @@ def test_runtime_check_verifies_lease_and_restores_service(monkeypatch):
 
 
 def test_runtime_check_does_not_steal_existing_lease(monkeypatch):
-    monkeypatch.setattr(edge_ai, "service_status", lambda: {"mode": "character"})
+    monkeypatch.setattr(agent_lease, "service_status", lambda: {"mode": "character"})
     with pytest.raises(RuntimeError, match="already leased"):
         setup_copilot.check_runtime({})
 
 
 def test_failed_runtime_check_releases_its_lease(monkeypatch):
     calls = []
-    monkeypatch.setattr(edge_ai, "service_status", lambda: {"mode": "base"})
-    monkeypatch.setattr(edge_ai, "ensure_service", lambda: {"mode": "base"})
-    monkeypatch.setattr(edge_ai, "post_json", lambda *args, **kwargs: {"mode": "wrong"})
-    monkeypatch.setattr(edge_ai, "release_character", lambda owner: calls.append(owner))
+    monkeypatch.setattr(agent_lease, "service_status", lambda: {"mode": "base"})
+    monkeypatch.setattr(agent_lease, "ensure_service", lambda: {"mode": "base"})
+    monkeypatch.setattr(
+        agent_lease, "post_json", lambda *args, **kwargs: {"mode": "wrong"}
+    )
+    monkeypatch.setattr(
+        agent_lease, "release_character", lambda owner: calls.append(owner)
+    )
     with pytest.raises(RuntimeError, match="lease validation"):
         setup_copilot.check_runtime({})
     assert calls == [setup_copilot.os.getpid()]

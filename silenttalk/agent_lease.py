@@ -12,12 +12,12 @@ from pathlib import Path
 
 from silenttalk.config import load_settings
 
-# SilentTalk is an E4B Core API client. It never owns or launches llama-server.
+# SilentTalk is an EdgeAgent API client. It never owns or launches llama-server.
 CONTROL_PORT = 18_087
 
 
-class EdgeAIError(RuntimeError):
-    """Raised when the independent E4B service cannot satisfy a request."""
+class AgentLeaseError(RuntimeError):
+    """Raised when the EdgeAgent service cannot satisfy a request."""
 
 
 def service_status(timeout: float = 1.0) -> dict[str, object] | None:
@@ -39,16 +39,18 @@ def _control_service_present(timeout: float = 0.25) -> bool:
         return False
 
 
-def _global_e4b_command() -> str:
-    command = shutil.which("e4b.cmd") or shutil.which("e4b")
+def _global_agent_command() -> str:
+    command = shutil.which("edge-agent.cmd") or shutil.which("edge-agent")
     if command is None and os.name == "nt":
         local = os.environ.get("LOCALAPPDATA")
-        candidate = Path(local) / "Microsoft/WinGet/Links/e4b.cmd" if local else None
+        candidate = (
+            Path(local) / "Microsoft/WinGet/Links/edge-agent.cmd" if local else None
+        )
         if candidate is not None and candidate.is_file():
             command = str(candidate)
     if command is None:
-        raise EdgeAIError(
-            "找不到獨立 E4B Core；請執行啟動 SilentTalk.cmd，自動完成首次部署。"
+        raise AgentLeaseError(
+            "找不到獨立 EdgeAgent；請執行啟動 SilentTalk.cmd，自動完成首次部署。"
         )
     return command
 
@@ -58,9 +60,9 @@ def ensure_service(timeout: float = 360.0) -> dict[str, object]:
     if status is None and not _control_service_present():
         flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
         flags |= getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-        command = _global_e4b_command()
+        command = _global_agent_command()
         if os.name == "nt":
-            launcher = Path(command).with_name("e4b-launch.ps1")
+            launcher = Path(command).with_name("edge-agent-launch.ps1")
             if launcher.is_file():
                 argv = [
                     "powershell.exe",
@@ -98,9 +100,9 @@ def ensure_service(timeout: float = 360.0) -> dict[str, object]:
         if last is not None and last.get("ready") is True:
             return last
         if last is not None and last.get("error"):
-            raise EdgeAIError(str(last["error"]))
+            raise AgentLeaseError(str(last["error"]))
         time.sleep(0.25)
-    raise EdgeAIError(f"E4B core did not become ready: {last}")
+    raise AgentLeaseError(f"EdgeAgent did not become ready: {last}")
 
 
 def post_json(
@@ -121,13 +123,13 @@ def post_json(
             value = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
-        raise EdgeAIError(f"E4B core request failed ({exc.code}): {detail}") from exc
+        raise AgentLeaseError(f"EdgeAgent request failed ({exc.code}): {detail}") from exc
     except (OSError, ValueError, urllib.error.URLError) as exc:
-        raise EdgeAIError(f"E4B core request failed: {exc}") from exc
+        raise AgentLeaseError(f"EdgeAgent request failed: {exc}") from exc
     if not isinstance(value, dict) or (
         require_ready and value.get("ready") is not True
     ):
-        raise EdgeAIError(f"E4B core request did not become ready: {value}")
+        raise AgentLeaseError(f"EdgeAgent request did not become ready: {value}")
     return value
 
 

@@ -167,9 +167,9 @@ def _download(
 
 def check_runtime(section: dict) -> None:
     """Verify native E4B, character leasing and return-to-base without chat data."""
-    from silenttalk import edge_ai
+    from silenttalk import agent_lease
 
-    previous = edge_ai.service_status()
+    previous = agent_lease.service_status()
     if previous and previous.get("mode") == "character":
         raise RuntimeError(
             "E4B is already leased; finish the active session before --check"
@@ -177,7 +177,7 @@ def check_runtime(section: dict) -> None:
     owner = os.getpid()
     acquired = False
     try:
-        base = edge_ai.ensure_service()
+        base = agent_lease.ensure_service()
         if base.get("mode") != "base":
             raise RuntimeError("Native E4B is not in base mode")
         configuration = {
@@ -188,22 +188,22 @@ def check_runtime(section: dict) -> None:
             "gpu_layers": int(section.get("llm_gpu_layers", 99)),
             "low_vram": bool(section.get("llm_low_vram", True)),
         }
-        result = edge_ai.post_json(
+        result = agent_lease.post_json(
             "/character", {"owner_pid": owner, "character": configuration}, timeout=360
         )
         acquired = True
         if result.get("mode") != "character" or result.get("owner_pid") != owner:
             raise RuntimeError("Character lease validation failed")
-        returned = edge_ai.release_character(owner)
+        returned = agent_lease.release_character(owner)
         acquired = False
         if returned.get("mode") != "base":
             raise RuntimeError("E4B did not return to native base mode")
         print("[OK] Native E4B / character lease / native restore")
     finally:
         if acquired:
-            edge_ai.release_character(owner)
-        if previous is None and edge_ai.service_status() is not None:
-            edge_ai.post_json("/shutdown", {}, timeout=30, require_ready=False)
+            agent_lease.release_character(owner)
+        if previous is None and agent_lease.service_status() is not None:
+            agent_lease.post_json("/shutdown", {}, timeout=30, require_ready=False)
 
 
 def check_speech(section: dict) -> None:
@@ -255,7 +255,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
 
-    print("SilentTalk speech models are ready; reply models belong to E4B Core.")
+    print("SilentTalk speech models are ready; reply models belong to EdgeAgent.")
     return 0
 
 

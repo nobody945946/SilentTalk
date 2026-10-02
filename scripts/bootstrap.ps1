@@ -1,6 +1,6 @@
 param(
     [string]$ProjectDir = (Split-Path $PSScriptRoot -Parent),
-    [string]$E4BDir = $env:E4B_HOME,
+    [string]$AgentDir = $env:EDGE_AGENT_HOME,
     [switch]$SetupOnly,
     [switch]$Check,
     [switch]$Library
@@ -10,18 +10,18 @@ $ErrorActionPreference = 'Stop'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $ProgressPreference = 'SilentlyContinue'
 
-function Get-E4BInstaller {
+function Get-EdgeAgentInstaller {
     param([string]$Destination, [string]$CacheDir)
     $installer = Join-Path $Destination 'scripts\bootstrap.ps1'
     if (Test-Path -LiteralPath $installer) { return $installer }
     # Before the independent installer exists, only fetch its distribution.
     # Python, inference engines, models and adapters belong to that installer.
-    $manifest = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'e4b-distribution.json') -Raw | ConvertFrom-Json
+    $manifest = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'edge-agent-distribution.json') -Raw | ConvertFrom-Json
     New-Item -ItemType Directory -Force -Path $CacheDir | Out-Null
     $ghCommand = Get-Command gh.exe -ErrorAction SilentlyContinue
     if ($ghCommand) { $gh = $ghCommand.Source }
     else {
-        $ghDir = Join-Path $env:LOCALAPPDATA 'E4B\GitHubCLI\2.102.0'
+        $ghDir = Join-Path $env:LOCALAPPDATA 'EdgeAgent\GitHubCLI\2.102.0'
         $gh = Join-Path $ghDir 'bin\gh.exe'
         if (-not (Test-Path -LiteralPath $gh)) {
             $ghZip = Join-Path $CacheDir 'gh_2.102.0_windows_amd64.zip'
@@ -34,7 +34,7 @@ function Get-E4BInstaller {
     $env:PATH = "$(Split-Path $gh -Parent);$env:PATH"
     & $gh auth status *> $null
     if ($LASTEXITCODE -ne 0) {
-        Write-Host 'Sign in once to obtain the private independent E4B distribution.'
+        Write-Host 'Sign in once to obtain the private EdgeAgent distribution.'
         & $gh auth login --hostname github.com --git-protocol https --web
         if ($LASTEXITCODE -ne 0) { throw 'GitHub login was not completed.' }
     }
@@ -43,9 +43,9 @@ function Get-E4BInstaller {
         $staging = Join-Path $CacheDir ([Guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory -Path $staging | Out-Null
         & $gh release download $manifest.release --repo $manifest.repository --pattern $manifest.asset --dir $staging
-        if ($LASTEXITCODE -ne 0) { throw 'E4B distribution download failed; retry this launcher.' }
+        if ($LASTEXITCODE -ne 0) { throw 'EdgeAgent distribution download failed; retry this launcher.' }
         $downloaded = Join-Path $staging $manifest.asset
-        if ((Get-FileHash -LiteralPath $downloaded).Hash -ine $manifest.sha256) { throw 'E4B distribution SHA256 mismatch' }
+        if ((Get-FileHash -LiteralPath $downloaded).Hash -ine $manifest.sha256) { throw 'EdgeAgent distribution SHA256 mismatch' }
         Move-Item -LiteralPath $downloaded -Destination $archive -Force
     }
     if (Test-Path -LiteralPath $Destination) {
@@ -54,8 +54,8 @@ function Get-E4BInstaller {
             $Destination = "$Destination-$($manifest.release)"
             $installer = Join-Path $Destination 'scripts\bootstrap.ps1'
             if (Test-Path -LiteralPath $installer) { return $installer }
-            if ((Test-Path -LiteralPath $Destination) -and @(Get-ChildItem -LiteralPath $Destination -Force).Count -gt 0) { throw 'The side-by-side E4B installation is incomplete; select another E4B_HOME.' }
-            Write-Host "Preserving previous checkout; installing independent E4B at $Destination"
+            if ((Test-Path -LiteralPath $Destination) -and @(Get-ChildItem -LiteralPath $Destination -Force).Count -gt 0) { throw 'The side-by-side EdgeAgent installation is incomplete; select another EDGE_AGENT_HOME.' }
+            Write-Host "Preserving previous checkout; installing EdgeAgent at $Destination"
         }
     }
     Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -75,15 +75,15 @@ function Get-E4BInstaller {
 function Install-SilentTalk {
     param([string]$Root, [string]$CoreRoot, [bool]$Verify)
     $Root = [IO.Path]::GetFullPath($Root)
-    if ([string]::IsNullOrWhiteSpace($CoreRoot)) { $CoreRoot = Join-Path ([Environment]::GetFolderPath('UserProfile')) 'E4BCore' }
+    if ([string]::IsNullOrWhiteSpace($CoreRoot)) { $CoreRoot = Join-Path ([Environment]::GetFolderPath('UserProfile')) 'EdgeAgent' }
     $CoreRoot = [IO.Path]::GetFullPath($CoreRoot)
-    if ($CoreRoot -eq $Root -or $CoreRoot.StartsWith($Root.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'E4B_HOME must be outside SilentTalk.' }
+    if ($CoreRoot -eq $Root -or $CoreRoot.StartsWith($Root.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'EDGE_AGENT_HOME must be outside SilentTalk.' }
     $cache = Join-Path $Root '.runtime\downloads'
-    $installer = Get-E4BInstaller $CoreRoot $cache
+    $installer = Get-EdgeAgentInstaller $CoreRoot $cache
     $CoreRoot = Split-Path (Split-Path $installer -Parent) -Parent
-    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer -CoreDir $CoreRoot -SetupOnly
-    if ($LASTEXITCODE -ne 0) { throw 'Independent E4B installation failed.' }
-    # Import deployment helpers only; the application never imports E4B Python.
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer -CoreDir $CoreRoot -SetupOnly -CharacterAssets
+    if ($LASTEXITCODE -ne 0) { throw 'EdgeAgent installation failed.' }
+    # Import deployment helpers only; the application never imports the Agent package.
     . $installer -Library
     $python = Ensure-Python312 $cache
     $venv = Join-Path $Root '.venv\Scripts\python.exe'
@@ -128,7 +128,7 @@ try {
     try { $held = $mutex.WaitOne([TimeSpan]::FromMinutes(30)) }
     catch [Threading.AbandonedMutexException] { $held = $true }
     if (-not $held) { throw 'Another SilentTalk installation is still running.' }
-    Install-SilentTalk $ProjectDir $E4BDir $Check.IsPresent
+    Install-SilentTalk $ProjectDir $AgentDir $Check.IsPresent
 } finally {
     if ($held) { $mutex.ReleaseMutex() }
     $mutex.Dispose()

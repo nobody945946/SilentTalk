@@ -15,6 +15,11 @@ from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 
+from silenttalk.agent_lease import (
+    AgentLeaseError,
+    acquire_character,
+    release_character,
+)
 from silenttalk.copilot.character import asks_if_ai
 from silenttalk.copilot.character_state import (
     STATUSES,
@@ -25,11 +30,6 @@ from silenttalk.copilot.character_state import (
 from silenttalk.copilot.persona import Persona, blank_persona
 from silenttalk.copilot.script import to_taiwan_traditional
 from silenttalk.copilot.types import REPLY_LANES, ConversationTurn, ReplySuggestions
-from silenttalk.edge_ai import (
-    EdgeAIError,
-    acquire_character,
-    release_character,
-)
 
 _LOG = logging.getLogger(__name__)
 
@@ -216,7 +216,7 @@ class LocalLLMError(RuntimeError):
 
 
 class LocalReplyModel:
-    """Persistent llama.cpp server for tiny local reply generation."""
+    """Leased inference client for local character replies."""
 
     def __init__(
         self,
@@ -253,7 +253,7 @@ class LocalReplyModel:
         self._request_timeout = max(3.0, request_timeout_seconds)
         self._project_dir = project_dir or Path.cwd()
         # Kept as a readable invariant for callers/tests: there is no unmanaged
-        # fallback anymore. SilentTalk always leases the independent E4B Core.
+        # fallback anymore. SilentTalk always leases the independent EdgeAgent.
         self._managed_service = True
         self._lease_active = False
         self._base_url = f"http://127.0.0.1:{port}"
@@ -281,8 +281,17 @@ class LocalReplyModel:
         if self._lease_active:
             return
         try:
-            await asyncio.to_thread(acquire_character, self._project_dir, os.getpid())
-        except EdgeAIError as exc:
+            lease = await asyncio.to_thread(
+                acquire_character, self._project_dir, os.getpid()
+            )
+            port = lease.get("port") if isinstance(lease, dict) else None
+            if (
+                isinstance(port, int)
+                and not isinstance(port, bool)
+                and 1024 <= port <= 65535
+            ):
+                self._base_url = f"http://127.0.0.1:{port}"
+        except AgentLeaseError as exc:
             raise LocalLLMError(str(exc)) from exc
         self._lora_loaded = self._lora_path is not None
         self._lease_active = True
@@ -292,8 +301,8 @@ class LocalReplyModel:
             return
         try:
             await asyncio.to_thread(release_character, os.getpid())
-        except EdgeAIError:
-            _LOG.exception("general_edge_ai_restore_failed")
+        except AgentLeaseError:
+            _LOG.exception("agent_lease_return_failed")
         finally:
             self._lease_active = False
             self._lora_loaded = False

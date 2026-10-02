@@ -1,7 +1,7 @@
 """Discord-free Copilot checks: local STT accuracy and local LLM speed/format.
 
 `python app.py --copilot-smoke` runs both gates on the real ASR models and the
-independent E4B Core so a new machine (e.g. an RTX 3050 Ti laptop) can be verified
+independent EdgeAgent so a new machine (e.g. an RTX 3050 Ti laptop) can be verified
 without joining a voice channel. scripts/dev/ reuses the same helpers.
 """
 
@@ -288,7 +288,7 @@ async def _stt_gate(settings: Settings, project_dir: Path) -> bool:
 
 
 async def _llm_gate(settings: Settings, project_dir: Path) -> bool:
-    print("== Gate C2: 獨立 E4B Core（設定中的模型）")
+    print("== Gate C2: 獨立 EdgeAgent（設定中的模型）")
     model = build_reply_model(project_dir, settings.copilot)
     started = time.perf_counter()
     await model.start()
