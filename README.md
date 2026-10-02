@@ -1,389 +1,124 @@
 # SilentTalk
 
-SilentTalk 是 Discord 語音角色與回覆建議玩具，安裝時會一起部署獨立的本機編程 Agent：[EdgeAgent](https://github.com/nobody945946/EdgeAgent)。SilentTalk 使用本機語音辨識，向 EdgeAgent 租借模型產生角色回覆，再由 EdgeTTS 透過 Bot 說進語音頻道。預設只使用語音；可另外開啟所在語音頻道的文字聊天。對話與轉錄只留在記憶體。
+SilentTalk 是 Discord 語音角色與回覆建議玩具。下載後啟動同一個入口，即會自動部署依賴與獨立的本機編程 Agent：[EdgeAgent](https://github.com/nobody945946/EdgeAgent)。
 
 | 產品 | 用途 | 啟動入口 |
 |---|---|---|
-| SilentTalk | Discord 角色聊天、回覆選項、打字轉語音 | `啟動 SilentTalk.cmd` |
+| SilentTalk | 角色聊天、回覆選項、打字轉語音 | `啟動 SilentTalk.cmd` |
 | EdgeAgent | 讀取專案、修改程式、執行驗證、審閱修改 | `開啟 EdgeAgent.cmd` 或 `edge-agent` |
 
-兩者共用一個模型管理與推論服務，各自使用獨立的 Python 環境。SilentTalk 租借期間使用角色模型，歸還後恢復原本的 Agent 配置；不會同時載入兩個完整模型。
+兩者共用 EdgeAgent 的模型管理與推論服務，各自使用獨立 Python 環境。SilentTalk 租借角色模型，歸還後恢復原 Agent 配置；最多載入一個完整模型。對話與轉錄只留在記憶體。
 
-## 開發者導覽
+## 下載、安裝與啟動
 
-如果你要修改程式而不是只使用它，先看 [ARCHITECTURE.md](ARCHITECTURE.md)，裡面有「想改什麼 → 去哪個檔案」、核心資料流、執行緒模型與測試對照表。給接手的 agent（Codex、Claude Code）：入口只有 [AGENTS.md](AGENTS.md)。
+支援 Windows x64。下載 [Windows 發行包](https://github.com/nobody945946/SilentTalk/releases/tag/windows-2026.10.02)，解壓到要使用的資料夾，雙擊 `啟動 SilentTalk.cmd`。
 
-## 最快使用方式
+首次啟動會自動準備 Python 3.12、各自的 venv 與依賴、Git、Node／Pi SDK、推論引擎、公開 Agent 與角色基底、FFmpeg，以及語音辨識模型。不需預裝 Python、Git、winget 或 CUDA Toolkit；已有可用 NVIDIA 驅動時選擇 CUDA，否則使用 CPU，速度依硬體而異。
 
-首次部署支援 Windows x64。下載 [Windows 發行包](https://github.com/nobody945946/SilentTalk/releases/tag/windows-2026.10.02) 並解壓後，直接雙擊 `啟動 SilentTalk.cmd`：
-它會自動安裝 Python 3.12、各自的虛擬環境與依賴、Git、FFmpeg、語音模型，以及 EdgeAgent。
-不需要事先安裝 Git、winget、Python 或 CUDA Toolkit。EdgeAgent 的來源、環境、推論引擎、
-Agent 模型與公開的 Gemma 4 E4B 基底放在使用者家目錄的 `EdgeAgent`，不放進 SilentTalk。
-EdgeAgent 安裝器依已可用的 NVIDIA 驅動選擇 CUDA；否則使用 CPU。CPU 可以執行，但速度依硬體而異。
+首次下載約 7–8 GB，建議保留至少 16 GB 可用磁碟空間。固定版本下載會驗證 SHA256；大型模型可續傳。中斷時重跑同一啟動器，完成的資產會沿用。後續啟動檢查部署完成紀錄與必要元件；元件缺損或版本改變時，由同一安裝流程修復。
 
-目前兩個 repository 與 GitHub 發行頁都是私人的，取得發行包需有存取權限。Windows 發行包已附上經 SHA256 驗證的 EdgeAgent 原始碼；取得 ZIP 後，啟動不必再登入 GitHub 或另行安裝 AI。
-LoRA 是個人資產，發行包不附帶、不下載、也不預設啟用；需要時自行安裝相容 adapter。
-從 repository 原始碼啟動而未備妥 EdgeAgent 時，仍需授權取得私人來源。
-要連 Discord 時，只需輸入 Bot token 與自己的 Discord User ID；新輸入存入
-Windows 認證管理員，之後不用再輸入。既有 `.env` 優先，安裝器不修改它或其他使用者設定。
-Bot 仍需先建立並邀請到自己的 Server，這些是 Discord 帳號授權，無法由安裝器代替。
+目前 repository 與 GitHub 發行頁是私人的，取得 ZIP 需有存取權限。玩家 ZIP 已附驗證過的 EdgeAgent 來源，取得後不必再登入 GitHub。直接從 repository 原始碼啟動而未備妥 EdgeAgent 時，仍需授權取得私人來源。
 
-首次下載約 7–8 GB，建議保留至少 16 GB 可用磁碟空間。大型模型下載可續傳，
-資產皆驗證 SHA256；網路中斷後重跑同一入口即可。重開會沿用完成的環境與資產。
-完成部署後，啟動只檢查版本與必要元件是否仍然就緒，直接啟動 SilentTalk；版本或元件改變時走原安裝流程修復。
-首次部署會實際載入 STT、啟動 EdgeAgent、租用角色模式，再驗證歸還 Agent 模型。
-`啟動 SilentTalk.cmd --setup-only` 只部署；`啟動 SilentTalk.cmd --check` 重新驗收且不連 Discord。
-需要自訂 EdgeAgent 路徑時可設定環境變數 `EDGE_AGENT_HOME`，必須在 SilentTalk 目錄之外。
-
-完成後，直接執行 `edge-agent`，或在 `%USERPROFILE%\EdgeAgent` 雙擊 `開啟 EdgeAgent.cmd`，即可使用本機編程 Agent；
-SilentTalk 執行時只透過 localhost API 租借推論服務，結束後歸還。兩者沒有共用 Python 套件環境。
-
-1. 雙擊 `啟動 SilentTalk.cmd`。啟動後不會出現大型主視窗。
-2. 用初次授權時提供的 User ID 所對應的 Discord 帳號加入一般語音頻道。
-3. Bot 會自動加入；跨 Server 時，目標 Server 也必須先安裝 Bot。
-4. 按 F8 開啟置頂輸入框，輸入文字後按 Enter。
-5. 播放途中按 F9，可停止目前語音並清空尚未播放的句子。
-6. 要關閉程式時，按 F8，再點「退出 SilentTalk」。
-
-### 玩 SilentTalk，也能獨立使用本機 Agent
-
-開啟 EdgeAgent 後，在介面選擇專案資料夾，再輸入要完成的編程工作。讀取專案後，Agent 可以提出修改與執行測試；寫檔、編輯和 PowerShell 執行會先要求批准。Plan 模式只使用讀取工具。批准機制不是作業系統沙盒，執行程式仍具有目前帳號的權限。
-
-預設編程模型是 `Qwen3.5-4B-Q4_K_M.gguf`，context 為 16,384 token，關閉 thinking。RTX 3050 Ti 4 GB 已通過兩個小型 Python 修碼案例；這不代表大型專案或所有 Agent 工作都能勝任。選擇較小模型可以減少記憶體需求，但不保證更適合編程。實測與限制見 [EdgeAgent 驗證文件](https://github.com/nobody945946/EdgeAgent/blob/copilot-story-mode/VALIDATION.md)。
-
-### 在同一個介面換模型
-
-1. 在 EdgeAgent 右上角「⋯」選「模型模組」。
-2. 填入 Hugging Face 的 `作者/模型庫`，點「列出檔案」，選擇 GGUF，再點「下載模型」。也可自行將模型放入 EdgeAgent 的 `models` 目錄，再點「重新掃描」。
-3. 下載並驗證完成後，在「已下載的模型」選擇模型，設定 context 與 GPU 層數，點「套用並切換」。下載完成不會自動替換目前模型。
-4. 等待載入完成後，可在原對話繼續工作。切換會卸載舊模型並載入新模型；失敗時會嘗試恢復原配置。
-
-支援的是目前 llama.cpp 能載入的**單檔 GGUF**，不是任意模型格式。Agent 正在工作或 SilentTalk 正在租借時不能切換；先結束工作或退出 SilentTalk。模型可用的工具格式也不保證它有足夠的編程能力。
-
-SilentTalk 的「設定 → 本機模型」選擇的是**下次租借的角色基底**，改完需重開。先透過 EdgeAgent 下載相同檔名的模型；首次部署預設只準備編程 4B 與角色 E4B 基底，不會自動下載設定頁列出的所有替代模型。
-
-### 自行安裝 LoRA（選用）
-
-LoRA 屬於使用者，產品只提供載入框架。不附帶、下載或自動配對任何個人 adapter；不使用 LoRA 也能完成安裝與使用。
-
-- **編程 Agent：**把自己準備的 GGUF LoRA 放進 EdgeAgent 的 `models` 目錄。在「模型模組」點「重新掃描」，選擇訓練時使用的基底，再從「LoRA（選用）」選 adapter，點「套用並切換」。選「不使用」後套用即可移除；切換基底會清除舊 adapter 選擇。
-- **SilentTalk 角色：**同樣把 adapter 放進 EdgeAgent 的 `models`，在 SilentTalk 的 `config.toml` 的 `[copilot]` 設定 `character_lora` 為 adapter 檔名，並確認 `llm_model` 是訓練基底。`character_lora_uses` 可指定 `called`（被叫到判斷）、`active`（主動插話判斷）、`line`（角色回覆）、`options`（回覆選項）。重開 SilentTalk 後生效；設為空字串即可停用。既有 `settings.json` 的同名項目優先於 `config.toml`。
-
-選單的架構篩選只是最低檢查：同架構的不同基底也可能不相容。不能把 E4B 的 LoRA 直接套到 Qwen 或任意其他模型；無法相容的載入會報錯並嘗試恢復原 Agent。
-
-### Copilot：聽 Discord 後自動給四種回覆
-
-Copilot 預設開啟。你進入 Discord 一般語音頻道後，Bot 除了能播放 TTS，也會接收同頻道其他真人的語音。它不需要麥克風，也不使用 OpenAI API 或其他付費 LLM API。
-
-流程：
-
-```text
-Discord 其他真人語音
-→ 本機 Streaming Paraformer zh-en INT8（CPU）
-→ 每位說話者獨立轉錄
-→ 當約 650 ms 沒有新語音（或開放式麥克風下約 0.8 秒沒有新字）時視為一句完成
-→ 簡體轉台灣繁體（OpenCC s2twp）
-→ Session Context
-→ 向 EdgeAgent 租借本機角色基底（預設 Gemma 4 E4B，可在設定切換）
-→ 問同一個角色「換你說話了，你會說什麼」好幾次，留下最多四句不一樣的
-```
-
-四個選項是這個角色自己會說的四種說法，不再是「同意／追問／反對／玩笑」四個固定方向：固定方向逼小模型為反對而反對、硬擠笑話，盲評輸給現在的做法（接得上對話 2.94 對 2.56，能用的句子 1.68 對 1.43／4）。選項和角色模式讀的是同一段聊天（別人說的話、你說過的話、人設與人際關係），所以兩個模式裡是同一個人。
-
-對話很密時，同一時間只會有一個生成在跑；跑完後直接跳到「最新的一句」，中間的句子只進 context、不各自生成，避免在 4 GB 筆電 GPU 上排隊。「嗯」「好」這種一個字的回應只進 context，不觸發生成。
-
-建議產生後會自動浮出 SilentTalk 視窗，但不強制搶走目前程式的輸入焦點。
-
-#### 視窗怎麼找東西
-
-F8 視窗左側只有三個入口：**對話**、**人設**、**設定**。
-
-「對話」最上面是現在的人設（點一下就到人設頁）和心情選單，右上角切換三種模式：
-
-- **角色**：Bot 自己就是這個人設，自己聽、自己決定要不要接話（見下面「角色模式」）。
-- **選項**：替你想四個回覆，按 W/A/S/D 選。
-- **打字**：自己打字讓 Bot 說；Copilot 的建議有的時候才會出現，快捷句收在最下面，平常用 Ctrl+1～9 就好。
-
-三種模式共用同一段對話紀錄。程式會記住你上次用「選項」還是「打字」，下次按 F8 直接進入；「角色」每次打開都是暫停的。不常改的設定都收在「設定」裡，更少用的再收進各頁的「進階」。
-
-#### 選項模式（WASD）
-
-中間的對話框是選項在回的那一句，下方是十字排列的四個選項。選項是逐行出現的，第一個出現就可以先選。按「⌨ 快捷鍵」可以打開按鍵說明。
-
-**正在看的選項不會被蓋掉：**選項出現後、或你最後一次按鍵後 6 秒內，別人又說話產生的新選項會先等著（狀態列會說「新選項好了」）；按 `R` 馬上換過去，停手幾秒它會自己換。
-
-- `W / A / S / D`（或方向鍵）：選擇選項。**同一個鍵再按一次**或按 `Enter` / `Space`：由 Bot 說出。
-- `R`：有新選項在等就換過去；沒有的話，針對最新一句重新產生。
-- `E`：把選中的選項帶到「打字」的文字框，改完再送。
-- `M`：切換你現在的心情（開心、累、煩躁……），下一次的選項會帶這個語氣。
-- `Esc`：收起視窗。
-- 聲線與語速在「設定 → 聲音」，所有模式共用；人設有自己的聲音時以人設為準。
-- 注音等中文輸入法在中文模式下會吃掉 W/A/S/D；進入選項模式時程式會暫時關閉這個視窗的輸入法，離開後恢復。若仍無反應，切成英數或改用方向鍵。
-
-#### 設定頁
-
-F8 視窗左側的「⚙ 設定」把 `config.toml` 能改的東西都搬進來了，依類別分頁，不用再手動編檔案：
-
-| 分頁 | 內容 |
+| 項目 | 預設位置 |
 |---|---|
-| 聊天 | 角色開口時機（被叫到才回／會主動加入）、記憶與自動壓縮、回覆長度 |
-| Discord | 文字聊天、跟隨與離開緩衝、重連節奏 |
-| 聲音 | 預設聲線、語速／音高／音量微調、合成與播放逾時、FFmpeg 路徑 |
-| 聽力 | 語音辨識引擎、斷句靜音 |
-| 本機模型 | 啟用 Copilot、下次租借的角色模型、GPU 層數、省 VRAM、context；改完需重開 |
-| 快捷鍵 | 叫出視窗、停止播放 |
+| SilentTalk 程式、自己的 venv、FFmpeg、STT | 解壓的 SilentTalk 資料夾 |
+| EdgeAgent 程式、自己的 venv 與 runtime | `%USERPROFILE%\EdgeAgent` |
+| 編程／角色 GGUF 與個人 LoRA | EdgeAgent 的 `models` 目錄 |
 
-- 改完**自動存檔**，不用按儲存。能立刻生效的就立刻生效，其餘標示「需重開」。
-- 改過的項目旁邊會出現「回預設」，按一下就還原。
-- `config.toml` 不會被改寫（保留註解，升級時仍帶來新預設值）；你改的東西存在 `settings.json`。
+可用環境變數 `EDGE_AGENT_HOME` 指定其他 Agent 安裝位置，必須在 SilentTalk 目錄之外。已存在但版本過舊的 Agent 目錄會保留，另行安裝符合版本的來源。
 
-#### 人設
-
-「人設」頁寫的是**這個人是誰、想要什麼**：名字、暱稱、身分、人際關係；想要的、害怕的、在意的、最近發生的事、背景；個性滑桿、說話的感覺、幽默感。最重要的是「他想要什麼」那一段：他會聊什麼、冷場時說什麼、別人怎麼認識他，都從這裡來。頁面底部會顯示 AI 實際看到的人設文字。人設存在 `personas.json`（不含任何對話內容）。
-
-不用寫他「常說哪些詞」：小模型會把列出來的詞每句照抄（人設寫了「常說『真的啦』」的角色，八成的句子都帶「啦」），所以說話方式裡引號中的詞不會交給 AI，口頭禪、代表台詞這些欄位也拿掉了（舊人設裡寫過的內容還在，只是不再顯示、不再送給 AI）。
-
-每個人設也可以有自己的**聲音**：14 種微軟中文聲線（台灣、大陸、粵語、東北／陝西腔）、音高、語速與音效（厚重低沉、空間回音、無線電、機械電子）。設定後 Bot 說的每句話都用這個聲音；「▶ 試聽」只在這台電腦播放，不會送進 Discord。音效已補償音量，不會比其他聲音小聲。沒設定聲音的人設沿用「聲音」頁的選擇。
-
-#### 文字聊天（打字也能聊）
-
-`config.toml` 的 `[discord] text_chat = true` 之後，Bot 也會讀寫**它所在語音頻道內建的文字聊天**（不碰伺服器其他文字頻道）。打進來的字和語音一樣只留在記憶體，不寫入任何檔案。
-
-- **角色模式：** 有人在聊天室打字問它，它就打字回；用講的問它，它就用講的回。
-- **選項模式：** 多一個 `T` 鍵 — 把選中的選項**打字送出**（原本的同鍵兩下／Enter 仍然是用說的）。
-- **需要先做一次：** Discord Developer Portal → 你的 Bot → Privileged Gateway Intents → 打開 **Message Content Intent**；Bot 也要有那個頻道的「發送訊息」權限。沒開的話 SilentTalk 只走語音，並在 `silenttalk.log` 寫明原因。
-
-#### 角色模式（Bot 自己當角色聊天）
-
-「對話」切到「角色」，按「開始」後，Bot 就是目前選的人設，會自己聽、自己接話，不必你選。切回「選項」或「打字」就會暫停：
-
-- **預設「被叫到才回」**：每一句都由本機模型讀整段對話來判斷是不是在對它說話（叫它、問它、回應它剛說的話），只是被提到或別人彼此在聊就不接。預設使用基底模型；自行安裝相容 LoRA 後，可以設定要套用的請求。文字聊天裡 @提及它或回覆它的訊息一定會回。想讓它主動加入聊天，把角色畫面的「開口時機」改成「會主動加入」：安靜一陣子後它也會自己插話。
-- **他有自己的生活**：每次開始（或換人設）時，本機模型會照人設想出他今天心裡掛著的幾件具體小事（例如「昨天排位連輸五場還在不爽」「想揪大家週六打通宵」），顯示在角色畫面的「今天在想」，按「換一批」可以重想。聊天時接得上他就會自然帶到；這些只存在記憶體裡。
-- **冷場時會找話聊**：頻道安靜一段時間（預設 30 秒，「設定 → 聊天 → 冷場時找話聊」可調，0＝不會）後，他會說說自己在想的事，或問問大家最近怎樣；同一段冷場只開一次口，要等有人再說話才會有下一次。
-- **長聊不斷線**：對話變長時，較早的部分會自動被本機模型濃縮成一兩句重點留著，最近的對話保持原樣，所以聊很久也不會忘記前面在幹嘛，prompt 也不會越來越大。
-- 不搶話：Bot 還在說話時不會再排下一句；它想好之前對話已經往下走了，就不說過期的話。
-- **被問「你是不是 AI」時預設不出戲**：當成朋友在開玩笑，用角色的方式笑著帶過或反問回去（NPC 不會自己宣布是程式）。設定頁可以改成「承認自己是 AI」。
-- 每次啟動都是暫停的；`F9` 隨時停止播放。聲線與語速用「設定 → 聲音」。
-- 角色模式下你的麥克風也算對話的一部分（你就是頻道裡的一個朋友）。
-- **想要老婆就老婆、想要小孩就小孩**：人設的「人際關係」加一行，名字填**你自己的 Discord 顯示名稱**，關係從角色的角度寫，例如「阿明：我老公」「阿明：我爸」「阿明：我兄弟，認識十幾年」。角色會把你當成這個人，你用「老婆」「爸」「兄弟」叫它也知道是在叫它；朋友也可以一起寫進去。
-- 它知道自己只是個在頻道裡聊天的角色：不會幫你寫程式、寫作業、查資料或當祕書，被這樣要求時會用角色的方式推掉（這條和上面的「不出戲」不衝突：它不承認自己是程式，但也不會假裝做得到做不到的事）。
-
-#### 打字模式的建議清單
-
-- `↑ / ↓`：在四個選項間選擇。
-- `Tab`：把選中的建議填入文字框，可再手改。
-- `Enter`：當焦點在建議清單時直接說出選中建議；在文字框時送出目前文字。
-- `Esc`：關閉視窗，不採用建議。
-
-**Context 規則：**聊天只在記憶體中累積；開啟自動壓縮後，較早的內容會濃縮成摘要，保留最近的原文。預設角色 context 是 32,768 token，編程 Agent 則是 16,384 token，兩者分開設定。未被選中的候選不進 context；Discord 播放失敗的句子也不算你說過，只有真正播放完成後才記錄。
-
-這個 Copilot 的 STT 與 LLM 都在本機。EdgeTTS 仍是外部語音服務，但 SilentTalk 不需要額外的付費 API key / API 帳單。
-
-### UI 聲線選單與預設語音包
-
-F8 視窗現在有「聲線」下拉選單與獨立「語速」滑桿。下拉選單只放真正的聲線 / 角色 preset，不再混入「快速、慢速」這類速度選項；語速統一由 60%～140% 滑桿控制。選定語速會套用到手打文字與 Ctrl+1～Ctrl+9，並保存在本機 `ui_preferences.json`。快捷句仍各自記住自己的聲線。
-
-第一次使用、且本機尚未建立 `quick_phrases.json` 時，會自帶四句快捷句：
-
-1. `For the Emperor!` — 星際戰士。
-2. `The Emperor protects!` — 星際戰士。
-3. `For the Omnissiah!` — 機械神甫。
-4. `Faith is my shield!` — 戰鬥修女。
-
-目前聲線下拉選單只保留「一般、星際戰士、機械神甫、戰鬥修女」。星際戰士與機械神甫是已經過實際聽感驗收的基準；戰鬥修女採成熟、冷峻、堅定的女聲取向，不做甜美或高音角色化。舊的 `/slow`、`/fast`、`/deep`、`/cute` 文字前綴仍保留相容性，但不顯示於聲線下拉選單。
-
-快捷鍵：
-
-- F8：開啟輸入框。
-- Enter：送出文字。
-- Shift+Enter：在輸入框中換行。
-- Ctrl+1～Ctrl+9：直接播放前九個快捷句。
-- 雙擊快捷句：直接播放該句。
-- Esc：關閉輸入框並清空尚未送出的文字。
-- F9：停止目前播放並清空 queue；Bot 不會因此退出頻道。
-
-### 快捷句
-
-F8 視窗內有一個可編輯的快捷句清單。快捷句仍走原本的「文字驗證 → queue → EdgeTTS → Discord Voice」流程，不會繞過既有播放邏輯。
-
-使用方式：
-
-1. 在上方文字框輸入一句常用文字。
-2. 點「新增目前文字」保存。
-3. 選取快捷句後可「載入選取」、「更新選取」或「刪除選取」。
-4. 前九句會自動對應 Ctrl+1～Ctrl+9；也可以直接雙擊任一句播放。
-
-快捷句保存在本機 `quick_phrases.json`，每筆包含 `text` 與 `voice_style`。語速是全域 UI 偏好，另外保存在 `ui_preferences.json`，因此把語速調成 80% 後，所有快捷句都會一起變慢。兩個本機檔案都不會跟著 Git commit。舊版純字串快捷句陣列仍可直接讀取。
-
-## 如何輸入抑揚頓挫
-
-SilentTalk 會把輸入文字交給 EdgeTTS。標點會影響斷句與語氣，但效果由 Microsoft 語音模型決定，並不是精確的音樂節拍控制。
-
-| 輸入方式 | 通常產生的效果 | 範例 |
-|---|---|---|
-| `，` | 短停頓，適合一句內換氣 | `等一下，我馬上回來。` |
-| `。` | 明確結句，停頓通常比逗號長 | `我知道了。等等再說。` |
-| `；` | 介於逗號和句號之間的分段 | `我可以處理；但需要一點時間。` |
-| `：` | 引出後面的內容 | `重點是：先不要離開。` |
-| `？` | 疑問語氣；是否明顯上揚取決於 voice | `你確定嗎？` |
-| `！` | 較有力的結句；不保證一定提高音量 | `快跑！` |
-| `……` | 猶豫、留白或較長停頓 | `我想想……應該可以。` |
-| `——` | 突然停住、轉折或拉開兩段話 | `等等——先別按。` |
-| 換行 | 把內容分成較明確的語意段落 | `第一件事。` 換行後輸入 `第二件事。` |
-
-推薦寫法：
-
-```text
-平靜敘述：我知道了，等一下就過去。
-驚訝語氣：真的假的？你確定嗎！
-猶豫語氣：這個嘛……讓我想一下。
-強烈轉折：等等——先不要動！
-分段說明：第一件事，先存檔；第二件事，重新啟動。
-```
-
-### 拖長音怎麼寫
-
-EdgeTTS 沒有可靠的「把某個中文字母精確拉長 N 秒」輸入符號。以下只能做近似效果：
-
-```text
-好——喔……
-不要——
-等、等一下！
-真的嗎……？
-```
-
-- `——` 通常是拉開語句或增加停頓，不保證延長前一個母音。
-- `……` 通常是留白或猶豫，不等於固定秒數的休止。
-- 重複文字，例如 `好好好`，通常會被當成三個字念出，不是真正的長音。
-- `~~~`、`～～～`、大量重複標點可能被忽略、念成符號或產生不自然結果，不建議依賴。
-- `<break>`、`<prosody>` 等 SSML 標籤不要輸入；目前 edge-tts 不接受自訂 SSML，可能直接把它當文字或拒絕請求。
-
-一般使用不必再為語速修改 `config.toml`；F8 視窗的語速滑桿會乘在聲線 preset 的原始速度上。若要修改整個程式的底層預設值，才需要調整 `config.toml`：
-
-```toml
-[tts]
-voice = "zh-TW-YunJheNeural"
-rate = "-10%"
-pitch = "-20Hz"
-volume = "+0%"
-```
-
-- `rate`：整段語速；負值較慢，正值較快。
-- `pitch`：整段音高；負值更低沉，正值更高。
-- `volume`：整段音量。
-- 修改後要退出並重新啟動 SilentTalk 才會生效。
-- 這些設定作用於整句，無法只套用到句子中的某幾個字。
-
-edge-tts 官方說明：可調整 rate、volume、pitch，但不再支援自訂 SSML：[edge-tts README](https://github.com/rany2/edge-tts#custom-ssml)。
-
-## 目前範圍
-
-- EdgeTTS、單一 FIFO queue、F8 輸入框、可編輯快捷句、F9 停止與清空。
-- Bot 只追蹤授權時設定的 Owner User ID（Windows 認證管理員或既有 `.env`），Owner 換台時跟隨、離開時斷線。
-- Bot 加入後會保持同一條 Voice 連線；每句播放不會重新加入或離開頻道。
-- Voice state 事件先做防抖，Owner 暫時從 cache 消失時有離線寬限期；手動重連失敗採指數退避，避免網路不穩時 Bot 瘋狂進出頻道。另有每 20 秒一次的 watchdog 處理漏事件與 stale cache。
-- 預設 Gateway 只啟用 `guilds` 與 `voice_states`；開啟語音頻道文字聊天時才要求 Message Content Intent。
-- `--voice-smoke` 會播放固定 440 Hz 測試音，作為 Gate 1 實機 runner。
-- STT 預設在 CPU 執行，角色與 Agent 推論由 EdgeAgent 選擇 CUDA 或 CPU；TTS 使用 EdgeTTS 外部服務。
-
-## Bot 何時加入或退出
-
-- SilentTalk 正在運行，而且 Owner 加入語音頻道：Bot 自動加入。
-- Owner 在同一 Server 換頻道：Bot 直接移動。
-- Owner 跨 Server：Bot 先退出舊 Server，再加入新 Server。
-- 播放完一句或暫時沒有輸入：Bot 保持連線，不會反覆進出。
-- Owner 離開語音、退出 SilentTalk、電腦關機或權限被撤銷：Bot 退出。
-- 網路短暫中斷：先由 discord.py 自動恢復；SilentTalk 會合併短時間內的 voice-state 事件，Owner 暫時消失不會立刻退出。播放前會等待 Voice 恢復；如果播放確認 transport 已斷，該句不重播，但會立即丟棄半死 VoiceClient 並重建連線，讓下一句接續。Gateway resume 時也會立即重新核對語音狀態。
-
-每個需要使用的 Server 都要加入 Bot，最低權限只有 View Channel、Connect、Speak：
-
-[邀請 SilentTalk Bot](https://discord.com/oauth2/authorize?client_id=1552128066719981608&scope=bot&permissions=3146752&integration_type=0)
-
-## 準備 Discord Bot
+### 首次 Discord 授權
 
 1. 在 Discord Developer Portal 建立 Application 與 Bot。
-2. Bot 邀請到測試伺服器，只授予 View Channel、Connect、Speak。
-3. Developer Mode 下複製你自己的 Discord User ID，填入初次啟動的授權介面。
-4. Bot 頁面 Reset Token 後取得 Bot Token。Application ID 與 Public Key 都不能用來登入 Bot。
+2. 邀請 Bot 到要使用的 Server，授予 View Channel、Connect、Speak。
+3. 取得 Bot Token，並在 Discord Developer Mode 複製自己的 User ID。
+4. 初次啟動時，在授權介面輸入這兩項資料。
 
-真正的 `.env` 已由 `.gitignore` 排除，不能提交。若 token 曾公開，請在 Portal 立刻 Reset Token，並同步更新本機 `.env`。
+新輸入存入 Windows 認證管理員，之後不用重填。既有 `.env` 優先，安裝器不修改它或其他使用者設定。Application ID 與 Public Key 不能代替 Bot Token。建立 Bot 與帳號授權仍是必要的一次性步驟。
 
-## 建立 Windows 發行包
+預設只使用語音。要啟用所在語音頻道的內建文字聊天，需在設定開啟文字聊天，於 Developer Portal 開啟 Message Content Intent，並授予該頻道的發送訊息權限；不會讀寫其他文字頻道。
 
-發行包由同一套啟動器部署，玩家使用方式見上方「最快使用方式」。開發者將變更 commit 後，下載 manifest 指定的 EdgeAgent 來源包，再執行：
+## 日常使用
+
+啟動後沒有大型主視窗。使用授權的 Discord 帳號加入一般語音頻道，Bot 會跟隨；跨 Server 時，目標 Server 也需先安裝 Bot。Stage Channel 不在目前支援範圍。
+
+| 操作 | 按鍵／入口 |
+|---|---|
+| 開啟置頂視窗 | F8 |
+| 送出文字／換行 | Enter／Shift+Enter |
+| 停止目前播放並清空待播句子 | F9 |
+| 播放前九個快捷句 | Ctrl+1～9 |
+| 收起視窗 | Esc |
+| 關閉 SilentTalk | F8 →「退出 SilentTalk」 |
+
+左側只有「對話」「人設」「設定」三個入口。「對話」有三種模式，共用同一段記憶體中的對話：
+
+- **角色：**按「開始」後，Bot 以目前人設自行判斷是否接話。預設被叫到才回；可改成主動加入，或在冷場時找話題。每次啟動角色模式都是暫停的，切到其他模式也會暫停。
+- **選項：**產生最多四種角色會說的回覆。W／A／S／D 或方向鍵選擇，同鍵再按一次、Enter 或 Space 說出。R 換到待顯示的新選項，沒有時重新產生；E 帶到打字框修改，M 切換心情。中文輸入法若攔截按鍵，可改用方向鍵。
+- **打字：**手動輸入後讓 Bot 說出。建議清單可用上下鍵選擇、Tab 帶入文字框；快捷句可新增、更新、刪除或雙擊播放。
+
+開啟文字聊天後，角色依觸發來源用文字或語音回答；選項模式可用 T 將選中回覆送到所在語音頻道的文字聊天。
+
+人設頁設定角色的名字、身分、背景、想要的事、個性、人際關係與聲音。角色不是編程工具；編程工作使用 EdgeAgent。聲線、語速與音效可試聽，試聽只在本機播放。標點會影響 EdgeTTS 的斷句與語氣，但不保證精確停頓或拉長音。
+
+設定頁提供聊天、Discord、聲音、聽力、本機模型與快捷鍵。變更自動保存；標示「需重開」的項目下次啟動生效。預設值在 `config.toml`，使用者變更在 `settings.json`，同名項目以後者優先。
+
+## 編程 Agent 與模型切換
+
+部署完成後執行 `edge-agent`，或在 Agent 安裝目錄雙擊 `開啟 EdgeAgent.cmd`。在介面選擇專案資料夾，輸入編程工作，查看工具操作與修改審閱。寫檔、編輯與 PowerShell 執行會先要求批准；Plan 模式只使用讀取工具。批准機制不是作業系統沙盒，執行程式仍具有目前帳號的權限。
+
+Agent 預設為 `Qwen3.5-4B-Q4_K_M.gguf`、16,384 token context、thinking off。RTX 3050 Ti 4 GB 已通過兩個小型 Python 修碼案例，大型專案能力尚未建立。較小模型可減少記憶體需求，但不保證更適合 Agent 工作。
+
+模型下載與熱切換使用 EdgeAgent 右上角「⋯ → 模型模組」：從 Hugging Face 列出檔案、下載並驗證後，選擇模型再「套用並切換」。下載完成不會自動切換。支援目前 llama.cpp 可載入的單檔 GGUF；切換失敗會嘗試恢復原配置。工作或角色租借中不能切換，先結束工作或退出 SilentTalk。
+
+完整操作與實測由 EdgeAgent 文件維護：[使用與模型管理](https://github.com/nobody945946/EdgeAgent/blob/copilot-story-mode/README.md)、[驗證與限制](https://github.com/nobody945946/EdgeAgent/blob/copilot-story-mode/VALIDATION.md)。
+
+### SilentTalk 的角色模型與 LoRA
+
+「設定 → 本機模型」設定下次租借的角色基底，改完需重開。模型先放進 EdgeAgent 的 `models`，可透過 Agent 介面下載。首次部署只準備預設編程 4B 與公開 Gemma 4 E4B，不會下載下拉選單內所有替代模型。自訂角色模型可在 `config.toml` 的 `[copilot]` 以 `llm_model` 指定已安裝檔名，仍受使用者設定覆蓋。
+
+LoRA 是個人資產。產品只提供載入框架，不附帶、下載或自動配對；不用 LoRA 也能安裝和使用。
+
+- **Agent adapter：**放入 EdgeAgent 的 `models`，在「模型模組」重新掃描，選訓練基底與「LoRA（選用）」後套用。選「不使用」後套用即可移除；換基底會清除舊 adapter 選擇。
+- **角色 adapter：**放入同一 `models`，在 SilentTalk `config.toml` 的 `[copilot]` 設定 `character_lora` 為檔名，確認 `llm_model` 是訓練基底，重開後生效。設為空字串停用；`settings.json` 的同名項目仍優先。
+
+`character_lora_uses` 指定套用請求：`called`（被叫到判斷）、`active`（主動插話判斷）、`line`（角色回覆）、`options`（回覆選項）。Agent 的 adapter 選擇與角色配置分開，彼此不會直接沿用。
+
+架構篩選只是最低檢查；同架構不同基底也可能不相容。E4B 的 adapter 不能任意套在 Qwen 或其他模型。
+
+## 資料與外部服務
+
+語音辨識與模型推論在本機。Discord 與 EdgeTTS 需要網路；EdgeTTS 會將要合成的文字送到外部語音服務，但不需要額外付費 API key。
+
+對話、轉錄、候選與摘要只在 RAM，關閉後不恢復。未採用候選不進 context；語音播放或文字送出成功後才記錄為已說出的回覆。自動壓縮可濃縮較早內容，保留近期原文。角色與 Agent context 各自設定，預設分別為 32,768 與 16,384 token。
+
+程式保存使用者設定、人設、快捷句、UI 偏好；選用角色長期狀態時，可保存角色自己的近況與心情，不能包含人的對話原文。合成音訊在播放期間使用暫存檔並於結束清除。log 只記事件與數字，不記對話全文或 token。
+
+發行包排除個人設定、憑證、角色狀態、模型與 LoRA；不把使用者資料交給打包器。
+
+## 常見問題與驗收
+
+- **下載中斷／元件損壞：**重跑同一啟動器。只部署用 `啟動 SilentTalk.cmd --setup-only`；完整驗收用 `--check`，會實際載入 STT、租借角色並歸還，不連 Discord。正在租借時先退出會話。
+- **Bot 沒加入：**確認 Owner ID、Bot 已邀請到 Server，以及 View Channel／Connect／Speak 權限。
+- **F8 無反應：**確認已啟動，並檢查其他程式是否占用快捷鍵。
+- **播放中斷線：**已開始的句子不自動重播以避免回音；程式恢復連線後讓下一句接續。
+- **換模型失敗：**確認沒有 Agent 工作或角色租借，且模型已下載完整、格式與引擎相容。
+- **退出後仍占顯存：**歸還會重新載入原 Agent。要釋放顯存，執行 `edge-agent stop` 或在 Agent 的「⋯」選「關閉EdgeAgent」。
+
+## 開發與發行
+
+架構與責任地圖見 [ARCHITECTURE.md](ARCHITECTURE.md)。Agent 工作入口是 [AGENTS.md](AGENTS.md)，Windows 交接見其指定工作檔。開發分支為 `copilot-story-mode`。
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q
+```
+
+真人 Discord 播放驗收需已有授權與語音連線；可分別執行 `app.py --voice-smoke` 與 `app.py --tts-smoke`，不要與不連 Discord 的部署 `--check` 混淆。
+
+commit 後，用 manifest 指定且已驗證的 EdgeAgent 來源包建立玩家 ZIP：
 
 ```powershell
 python scripts/package_windows.py --edge-source <EdgeAgent來源包.zip> --output <Windows發行包.zip>
 ```
 
-打包器只讀指定 Git commit 的應用程式來源，核對 EdgeAgent SHA256，再將它放入啟動器既有下載快取。它排除個人設定、憑證、角色狀態、模型權重與 LoRA；不從工作目錄複製使用者資料。`--revision` 可指定要發行的 commit。
-
-## 驗證與執行
-
-先加入一個 Discord 語音頻道，再跑 Gate 1：
-
-```powershell
-.\.venv\Scripts\python app.py --voice-smoke
-```
-
-聽到固定測試音後啟動完整應用：
-
-```powershell
-.\.venv\Scripts\python app.py --tts-smoke
-```
-
-聽到「等一下，我馬上回來。」後啟動完整應用：
-
-```powershell
-.\.venv\Scripts\python app.py
-```
-
-平常直接雙擊 `啟動 SilentTalk.cmd`。若舊版 SilentTalk 還在執行，啟動器會先結束舊實例再啟動目前 pull 下來的版本，因此不需要先手動退出。程式不會顯示大型主視窗；按 F8 會開啟輸入框，視窗內的「退出 SilentTalk」可以正常關閉程式。
-
-- F8：開啟置頂輸入框
-- Enter：送出；Shift+Enter：換行
-- Ctrl+1～Ctrl+9：播放前九個快捷句
-- Esc：關閉並清空輸入框
-- F9：停止播放並清空 queue
-
-執行自動測試：
-
-```powershell
-.\.venv\Scripts\python -m pytest -q
-```
-
-`silenttalk.log` 只記錄事件、job id、字數、延遲與錯誤類型；不記錄輸入全文、token 或音訊。
-
-## 常見問題
-
-### 第一次下載中斷或元件損壞
-
-重新雙擊同一個啟動器，會沿用完成的資產並修復缺少的元件。要強制完整驗收，執行 `啟動 SilentTalk.cmd --check`；這會載入語音模型、驗證角色租借與歸還，不連 Discord。EdgeAgent 若正在租借中，先退出使用它的 SilentTalk。
-
-### 模型無法切換，或下載後沒有出現在 SilentTalk
-
-EdgeAgent 工作中、切換中或角色租借中會拒絕新的切換。結束工作、退出 SilentTalk 後再套用。SilentTalk 的角色模型下拉選單是預設選項清單，不是下載管理器；自訂模型需在 `config.toml` 的 `[copilot] llm_model` 指定已安裝的檔名，且仍受使用者設定覆蓋。
-
-### 退出 SilentTalk 後還有模型占用顯存
-
-正常歸還會重新載入原 Agent，讓你接著使用編程功能。要關閉整個服務並釋放顯存，執行 `edge-agent stop`，或在 EdgeAgent 的「⋯」選「關閉EdgeAgent」。
-
-### 按 F8 沒反應
-
-- 確認已雙擊 `啟動 SilentTalk.cmd`。
-- 正常透過 `啟動 SilentTalk.cmd` 啟動時會維持單一實例；若 F8/F9 仍被占用，檢查是否有其他程式使用相同快捷鍵。
-- 檢查其他程式是否占用了 F8 或 F9。
-
-### Bot 沒有加入語音頻道
-
-- 確認 Owner User ID 正確。
-- 確認 Bot 已加入目前的 Server。
-- 確認 Bot 在該頻道有 View Channel、Connect、Speak。
-- Stage Channel 不在目前支援範圍；請使用一般 Voice Channel。
-
-### 播放中途斷線
-
-- 已開始播放的句子不會自動重播，避免產生回音。
-- 下一句開始前會等待 Voice 恢復，預設最多 12 秒；短暫重連不需要手動重送。
-- 播放中若 transport 真的掉線，該句不自動重播以避免回音，但 SilentTalk 會立即重建 VoiceClient。
-- 自我修復正常以事件驅動處理，另有每 20 秒一次的保險檢查；重連失敗採指數退避，預設從 2 秒開始、最長 60 秒。
+打包器從 Git commit 讀取應用程式 allowlist，核對 EdgeAgent SHA256，再放入既有下載快取；可用 `--revision` 指定 commit。產品與模型管理只有同一套部署／啟動流程。

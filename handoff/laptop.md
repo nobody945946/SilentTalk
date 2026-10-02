@@ -23,7 +23,7 @@
 - EdgeAgent 原始碼發行為 `bootstrap-v7`；Windows 玩家包為 `windows-2026.10.02`。manifest 由 `scripts/edge-agent-distribution.json` 管理。
 - 玩家 ZIP 含已驗證的 EdgeAgent 來源；取得 ZIP 後，部署不再要求 GitHub 登入。repository／發行頁仍是私人的，下載時需要存取權限。
 - 首次啟動部署各自的 venv、Python／Git、Node／Pi、推論引擎、公開基底、FFmpeg 與 STT。重開沿用完成紀錄，元件改變或缺損走同一安裝流程。
-- EdgeAgent pytest 74 passed、Ruff 通過；SilentTalk 完整 pytest 224 passed、1 skipped。SilentTalk 原有背景 fixture 例外與八項 Ruff 基線問題另有報告，不當成新功能已修復。
+- 歷史實測：EdgeAgent pytest 74 passed、Ruff 通過；SilentTalk 完整 pytest 224 passed、1 skipped。文件更新後的 SilentTalk CI 37026837937 為 223 passed、1 failed、1 skipped，失敗為既有冷場回覆測試；本次未改 runtime，未宣稱已修復。原有背景 fixture 例外與八項 Ruff 基線問題另有報告。
 - 兩個小型 Python 修碼案例通過獨立驗證；大型專案能力尚未建立。較小的 2B 模型曾因無進展停止，不算完成工作。
 - 真實 Edge 驗證通過模型切換、LoRA 載入與移除、基底變更清除 adapter、原 Agent 恢復，以及八種視窗尺寸。未預期瀏覽器錯誤為零；不存在資料夾的 HTTP 400 是已確認的負向案例。
 - 新目錄部署成功，沿用既有 Python／Git 與公開下載快取；不是乾淨 OS 安裝實測。自行建立的兩個部署測試目錄已刪除。
