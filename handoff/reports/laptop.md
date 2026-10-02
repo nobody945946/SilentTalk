@@ -49,10 +49,14 @@
 - audit_ollama: 0.35.0; LoRA create HTTP 400; no equal-model throughput superiority claim.
 - lifecycle_final: service stopped; control/inference listeners 0; startup off; dedicated test Edge closed.
 - capability_scope: small Python tasks validated; large-project capability not established.
-- documentation_updated: SilentTalk README / ARCHITECTURE / Windows handoff; EdgeAgent README / VALIDATION; 5 files.
-- documentation_checks: UTF-8 valid; code fences balanced; 4 local Markdown links resolved; CLI and packager help exit 0; both git diff checks exit 0.
-- documentation_independent_review: 1 finding; manual GGUF projector exclusion claim corrected; remaining specified workflows no findings.
-- documentation_client_commit: 226c3fc2296167a51df67cdaf20ab9d56eb36841; copilot-story-mode; pushed.
-- documentation_agent_commit: 8a6da4c80d4f29597bbdf35e8123228ff1b6c059; copilot-story-mode; pushed.
-- documentation_release_notes: 2 release pages updated; online documentation links added; archive payloads and digests unchanged.
-- documentation_scope: Markdown only; runtime tests not repeated; protected user data untouched; services not started.
+- documentation_updated: SilentTalk README / ARCHITECTURE / Windows handoff / AGENTS; EdgeAgent README / VALIDATION; 6 files.
+- documentation_ownership: complete guides rewritten at existing owners; superseded architecture removed; no new document path or backup directory; rewrite standard recorded in AGENTS rule 8.
+- documentation_checks: 6 UTF-8 documents valid; code fences balanced; 4 local Markdown links resolved; role guide anchor correct; 8 owner/test paths verified; CLI and packager help exit 0; both git diff checks exit 0.
+- documentation_independent_review: 2 rounds; 3 findings corrected; Hub classification guarantees limited to implementation; STT and root entry paths corrected.
+- documentation_client_commit: f9378f747003a9f1252a76982ac22ec436d7b6ab; copilot-story-mode; pushed.
+- documentation_agent_commit: 2b5927274982f0dc2d5c465191548f4a639f7d0f; copilot-story-mode; pushed.
+- documentation_initial_client_ci: 37026837937; failure; existing lull timing test; 223 passed / 1 failed / 1 skipped; runtime unchanged; failure retained in validation notes.
+- documentation_final_client_ci: 37028224785; success; f9378f7.
+- documentation_final_agent_ci: 37028224969; success; 2b59272.
+- documentation_release_notes: 2 release pages updated with final documentation commits; archive payloads and digests unchanged.
+- documentation_scope: Markdown only; local runtime tests not repeated; automatic CI observed; protected user data untouched; services not started.
