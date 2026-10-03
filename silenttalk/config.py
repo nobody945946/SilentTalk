@@ -95,6 +95,10 @@ class CopilotConfig:
     # The character may hand the owner's tasks to the EdgeAgent Agent (what
     # it may then do is EdgeAgent's Discord permission profile).
     character_agent: bool = False
+    # The Agent's results and approval details go to the owner's DMs; the
+    # channel only hears whether it worked. True: the character says the
+    # result aloud in the channel.
+    agent_report_public: bool = False
     character_engagement: str = "called"
     # Character mode: after this many seconds with nobody talking, the
     # character opens a topic of its own (0 = never).
@@ -326,6 +330,7 @@ def load_settings(project_dir: Path) -> Settings:
                 "character_ai_honesty",
             ),
             character_agent=bool(copilot.get("character_agent", False)),
+            agent_report_public=bool(copilot.get("agent_report_public", False)),
             character_engagement=_one_of(
                 copilot.get("character_engagement", "called"),
                 [mode for mode, _ in ENGAGEMENT_MODES],

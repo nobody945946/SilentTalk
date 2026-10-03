@@ -13,7 +13,12 @@ from silenttalk.config import CopilotConfig
 from silenttalk.copilot.character import CharacterPolicy
 from silenttalk.copilot.character_state import STATE_FILE, CharacterStateStore
 from silenttalk.copilot.context import ConversationStore
-from silenttalk.copilot.llm import LocalReplyModel
+from silenttalk.copilot.llm import (
+    APPROVAL_KINDS,
+    PRIVATE_APPROVAL,
+    PRIVATE_REPORTS,
+    LocalReplyModel,
+)
 from silenttalk.copilot.persona import Persona, blank_persona
 from silenttalk.copilot.stt import StreamingTranscriber
 from silenttalk.copilot.stt_offline import OfflineTranscriber
@@ -57,6 +62,17 @@ class _Trigger:
     speaker_id: int = 0
 
 
+def _approval_kind(payload: dict[str, object]) -> str:
+    """The kind of step an approval is for, in words the channel may hear."""
+    explicit = str(payload.get("explicit", ""))
+    if explicit in APPROVAL_KINDS:
+        return APPROVAL_KINDS[explicit]
+    tool = str(payload.get("tool", ""))
+    category = {"edit": "edit", "write": "edit", "powershell": "shell", "bash": "shell",
+                "web_search": "web", "web_fetch": "web"}.get(tool, "shell")
+    return APPROVAL_KINDS[category]
+
+
 class CopilotRuntime:
     """Owns local STT/context and leases reply generation from EdgeAgent."""
 
@@ -77,6 +93,7 @@ class CopilotRuntime:
         agent_tasks: AgentTaskClient | None = None,
         on_agent_approval: Callable[[dict[str, object]], Awaitable[None]] | None = None,
         on_agent_line: LineCallback | None = None,
+        on_agent_private: Callable[[str], Awaitable[bool]] | None = None,
     ) -> None:
         self._config = config
         self._owner_user_id = owner_user_id
@@ -90,9 +107,12 @@ class CopilotRuntime:
         self._agent_tasks = agent_tasks
         self._on_agent_approval = on_agent_approval
         self._on_agent_line = on_agent_line or on_character_line
+        # The owner's DMs: the Agent's results and errors go here, never to
+        # the channel unless copilot.agent_report_public. False = not sent.
+        self._on_agent_private = on_agent_private
         self._agent_job: asyncio.Task[None] | None = None
         self._task_hints: deque[tuple[str, str]] = deque()
-        self._owner_tasks: deque[tuple[_Trigger, tuple[ConversationTurn, ...], str]] = deque()
+        self._owner_tasks: deque[tuple[_Trigger, tuple[ConversationTurn, ...]]] = deque()
         self._task_result = ""
         self._agent_epoch = 0
         self._agenda_task: asyncio.Task[None] | None = None
@@ -145,6 +165,8 @@ class CopilotRuntime:
             memory=config.character_memory,
             project_dir=project_dir,
             agent_dispatch=config.character_agent,
+            owner_id=owner_user_id,
+            report_public=config.agent_report_public,
         )
         self._stt = transcriber(
             asr_dir,
@@ -331,8 +353,12 @@ class CopilotRuntime:
                 copilot.get("character_lull_seconds", self._config.character_lull_seconds)
             ),
             character_agent=bool(copilot.get("character_agent", self._config.character_agent)),
+            agent_report_public=bool(
+                copilot.get("agent_report_public", self._config.agent_report_public)
+            ),
         )
         self._llm.set_agent_dispatch(self._config.character_agent)
+        self._llm.set_report_public(self._config.agent_report_public)
         if not self._config.character_agent:
             self._invalidate_agent_task()
         policy = self._character_policy
@@ -413,7 +439,7 @@ class CopilotRuntime:
 
         if speaker_id == self._owner_user_id:
             # Whose work the character may take (copilot.character_agent).
-            self._llm.set_owner_name(speaker_name)
+            self._llm.set_owner(speaker_id, speaker_name)
         turn = ConversationTurn.now(speaker_id, speaker_name, text, via=via)
         self._context.append(turn)
         self._emit_turn(turn)
@@ -438,7 +464,9 @@ class CopilotRuntime:
         # queued trigger instead of stacking requests on a small GPU.
         self._latest_trigger = trigger
         if self._character_mode and self._config.character_agent and speaker_id == self._owner_user_id:
-            self._owner_tasks.append((trigger, tuple(self._context.snapshot()), self._context.summary))
+            # The only way into the Agent: a line whose Discord user ID is the
+            # configured owner's (names can be copied, IDs cannot).
+            self._owner_tasks.append((trigger, tuple(self._context.snapshot())))
             self._wake.set()
             return
         self._pending = trigger
@@ -500,8 +528,8 @@ class CopilotRuntime:
                 self._wake.set()
                 continue
             if self._owner_tasks and self._character_mode and self._config.character_agent:
-                owner_trigger, turns, summary = self._owner_tasks.popleft()
-                if not await self._dispatch_owner(turns, summary):
+                owner_trigger, turns = self._owner_tasks.popleft()
+                if not await self._dispatch_owner(turns):
                     await self._speak(owner_trigger)
                 self._wake.set()
                 continue
@@ -528,14 +556,14 @@ class CopilotRuntime:
         if job is not None:
             await asyncio.gather(job, return_exceptions=True)
 
-    async def _dispatch_owner(self, turns: tuple[ConversationTurn, ...], summary: str) -> bool:
+    async def _dispatch_owner(self, turns: tuple[ConversationTurn, ...]) -> bool:
         if self._agent_tasks is None:
             return False
         epoch = self._agent_epoch
         started = time.monotonic()
         try:
             instruction = await self._llm.task_from_owner(
-                turns=turns, summary=summary, engagement=self._character_policy.mode,
+                turns=turns, engagement=self._character_policy.mode,
             )
             _LOG.info("agent_task_decision latency_ms=%d dispatched=%s",
                       round((time.monotonic() - started) * 1000), bool(instruction))
@@ -562,7 +590,7 @@ class CopilotRuntime:
         except Exception as exc:  # noqa: BLE001 - task failures must reach the character
             _LOG.warning("agent_task_dispatch_failed error_type=%s", type(exc).__name__)
             if epoch == self._agent_epoch:
-                await self._task_line("report", str(exc))
+                await self._task_line("report", await self._report_detail("error", str(exc)))
             return True
 
     async def _run_agent_task(self, instruction: str, workspace: str, epoch: int) -> None:
@@ -590,19 +618,40 @@ class CopilotRuntime:
                 await self._on_agent_approval(payload)
             except Exception as exc:  # noqa: BLE001 - failed approval delivery must deny the operation
                 await self._agent_tasks.approve(str(payload["call_id"]), False)
-                self._task_hints.append(("report", "批准訊息送不出去，操作已拒絕。"))
+                self._task_hints.append(("report", PRIVATE_REPORTS["approval_undelivered"]))
                 _LOG.warning("agent_approval_failed error_type=%s", type(exc).__name__)
             else:
                 if epoch != self._agent_epoch:
                     return
-                detail = str(payload.get("arguments", payload.get("tool", "")))[:1500]
-                self._task_hints.append(("approval", detail))
+                # The tool's arguments (paths, commands) went to the owner's
+                # DMs with the buttons; the channel only hears what kind of step.
+                self._task_hints.append(("approval", PRIVATE_APPROVAL.format(kind=_approval_kind(payload))))
         elif kind in {"done", "error", "cancelled"}:
             result = self._task_result if kind == "done" else str(payload.get("message", "工作已取消。"))
-            self._task_hints.append(("report", result or "工作完成。"))
             self._task_result = ""
+            detail = await self._report_detail(kind, result or "工作完成。")
+            if epoch != self._agent_epoch:
+                return
+            self._task_hints.append(("report", detail))
         if self._wake is not None:
             self._wake.set()
+
+    async def _report_detail(self, kind: str, result: str) -> str:
+        """What the character is told of a finished task: the result itself
+        with copilot.agent_report_public, otherwise only the outcome, after
+        the result has gone to the owner's DMs."""
+        if self._config.agent_report_public:
+            return result
+        if kind == "cancelled":
+            return PRIVATE_REPORTS["cancelled"]
+        delivered = False
+        if self._on_agent_private is not None:
+            try:
+                delivered = await self._on_agent_private(result)
+            except Exception as exc:  # noqa: BLE001 - an undelivered result is reported as such
+                _LOG.warning("agent_private_failed error_type=%s", type(exc).__name__)
+        _LOG.info("agent_result_private kind=%s delivered=%s", kind, delivered)
+        return PRIVATE_REPORTS[kind if delivered else "undelivered"]
 
     async def _task_line(self, kind: str, detail: str) -> None:
         if not self._character_mode or not self._config.character_agent:

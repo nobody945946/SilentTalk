@@ -59,6 +59,8 @@ character_lora_uses = "called,active,line"
 character_ai_honesty = "in_character"
 # Owner-only Agent dispatch; requires Discord access/workspace in EdgeAgent.
 character_agent = false
+# Agent results go to the owner's DMs; true = the character says them aloud.
+agent_report_public = false
 character_engagement = "called"
 # Character mode: after this many seconds of silence the character brings up
 # something on its mind today or asks after someone (0 = never).

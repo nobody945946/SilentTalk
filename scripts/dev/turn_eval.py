@@ -526,6 +526,9 @@ async def run_new(args: argparse.Namespace, test_set: TestSet) -> list[dict[str,
             if args.agenda:
                 agenda = await model.make_agenda()
             ids = speaker_ids(conv)
+            if agent_persona() and hasattr(model, "set_owner"):
+                # Only the owner's lines (by ID) can become the Agent's work.
+                model.set_owner(ids.get(OWNER_NAME, -1), OWNER_NAME)
             turns: list[Any] = []
             now = time.time()
             for index, line in enumerate(conv.lines):

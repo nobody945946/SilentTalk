@@ -36,8 +36,11 @@ class SlowFakeLLM:
     def set_state(self, state):
         self.state = state
 
-    def set_owner_name(self, name: str) -> None:
+    def set_owner(self, user_id: int, name: str) -> None:
         self.owner_name = name
+
+    def set_report_public(self, public: bool) -> None:
+        self.report_public = public
 
     async def suggest(
         self, *, turns, summary: str = "", trigger_speaker: str, trigger_text: str,

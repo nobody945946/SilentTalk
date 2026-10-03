@@ -167,21 +167,43 @@ class DiscordVoiceClient(discord.Client):
             return False
         return True
 
+    async def _owner_dm(self) -> discord.abc.Messageable:
+        """The owner's DMs, the only place the Agent's details are sent.
+        Fails (discord.Forbidden) when the owner does not accept DMs from
+        server members; then nothing is sent anywhere else instead."""
+        owner_id = self._config.owner_user_id
+        user = self.get_user(owner_id) or await self.fetch_user(owner_id)
+        return user.dm_channel or await user.create_dm()
+
+    async def send_private(self, text: str) -> bool:
+        """Send the owner a DM (split at Discord's limit). False if it could
+        not be delivered."""
+        try:
+            dm = await self._owner_dm()
+            for start in range(0, max(len(text), 1), MAX_TEXT_CHARS):
+                await dm.send(text[start:start + MAX_TEXT_CHARS],
+                              allowed_mentions=discord.AllowedMentions.none())
+        except discord.HTTPException as exc:
+            _LOG.warning("private_send_failed status=%s", getattr(exc, "status", "?"))
+            return False
+        return True
+
     async def send_approval(self, payload: dict[str, object],
                             decide: Callable[[str, bool], Awaitable[bool]]) -> None:
-        voice = self.active_voice()
-        channel = getattr(voice, "channel", None)
-        if channel is None or not hasattr(channel, "send"):
-            raise RuntimeError("沒有可發送批准訊息的語音頻道。")
-        reason = {"protected": "碰到受保護檔案", "destructive": "刪除或清除資料"}.get(
+        """The approval buttons and the exact operation, in the owner's DMs
+        only. Raises when the DM cannot be sent; the caller then denies it."""
+        reason = {"protected": "碰到受保護檔案", "destructive": "刪除或清除資料",
+                  # EdgeAgent: a URL nobody gave it; it could carry data out.
+                  "new_url": "開啟一個不是你給的網址"}.get(
             str(payload.get("explicit", "")), "需要主人批准")
         if payload.get("after_web"):
             reason += "；讀過網頁之後的操作"
         details = json.dumps(payload.get("arguments", {}), ensure_ascii=False)[:1500]
         view = AgentApprovalView(self._config.owner_user_id, str(payload["call_id"]), decide)
         try:
-            await channel.send(f"{reason} · {payload.get('tool', '')}\n{details}\n僅准許一次。",
-                               view=view, allowed_mentions=discord.AllowedMentions.none())
+            dm = await self._owner_dm()
+            await dm.send(f"{reason} · {payload.get('tool', '')}\n{details}\n僅准許一次。",
+                          view=view, allowed_mentions=discord.AllowedMentions.none())
         except Exception:
             view.stop()
             raise

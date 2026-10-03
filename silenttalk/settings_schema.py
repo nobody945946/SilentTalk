@@ -78,6 +78,11 @@ PAGES: tuple[Page, ...] = (
                     "由角色接令、請主人批准並回報。先在 EdgeAgent 權限頁開啟 Discord，"
                     "設定可用資料夾，並讓 Agent 與角色使用相同基底和 LoRA。",
                 ),
+                Setting(
+                    "copilot", "agent_report_public", "在頻道公開 Agent 的結果", "bool",
+                    "關閉時（建議）：結果和要批准的細節只私訊給主人，角色在頻道只說成功或失敗。"
+                    "開啟後角色會在頻道唸出結果，頻道裡的人都聽得到。",
+                ),
             ),
         ),
         Group(
