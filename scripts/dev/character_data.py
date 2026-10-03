@@ -40,6 +40,7 @@ import sys
 import threading
 import time
 import urllib.request
+from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
@@ -788,7 +789,9 @@ def make_scripts(args: argparse.Namespace) -> None:
                 )[0],
                 "{",
             )
-            lines, reason = check_script(data, persona.name, spec)
+            lines, reason = check_script(
+                data, persona.name, spec, re.split(r"[、/／,，]", persona.nickname)
+            )
         except (ValueError, TypeError, AttributeError) as exc:
             lines, reason = [], type(exc).__name__
         if reason:
@@ -818,16 +821,21 @@ def make_scripts(args: argparse.Namespace) -> None:
 
 
 def check_script(
-    data: dict[str, Any], name: str, spec: dict[str, Any]
+    data: dict[str, Any], name: str, spec: dict[str, Any], aliases: Iterable[str] = ()
 ) -> tuple[list[dict[str, Any]], str]:
-    """Normalize a teacher script; a reason string when it is unusable."""
+    """Normalize a teacher script; a reason string when it is unusable.
+    `aliases` (the persona's nicknames) name the character too: the teacher
+    writes "馬基納" for "Machina-Prime-09A" now and then."""
     speakers = set(spec["humans"]) | {name}
+    alias = {a.strip(): name for a in aliases if a.strip() and a.strip() not in speakers}
     lines: list[dict[str, Any]] = []
     for raw in data.get("lines", []):
-        speaker = str(raw.get("s", "")).strip()
+        speaker = alias.get(str(raw.get("s", "")).strip(), str(raw.get("s", "")).strip())
         text = to_taiwan_traditional(str(raw.get("t", "")).strip())
         target = str(raw.get("to", "")).strip()
+        target = alias.get(target, target)
         if not text or speaker not in speakers:
+            print(f"unknown speaker {speaker!r}", flush=True)
             return [], "unknown speaker"
         typed = text.startswith("[打字]")
         text = text.removeprefix("[打字]").strip()
