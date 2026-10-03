@@ -395,3 +395,19 @@ def test_agent_character_rows_follow_what_the_app_asks(chardata: Path) -> None:
     assert not any(r["kind"] == "line" and r["index"] == 3 for r in rows)
     system = rows[0]["messages"][0]["content"]
     assert "主人「阿誠」的電腦（思考機）" in system and "坦然以機器的身分自居" in system
+
+
+def test_a_nickname_names_the_character() -> None:
+    """The teacher sometimes writes the persona's nickname as the speaker."""
+    spec = _script([])["spec"]
+    chat = [{"s": "阿誠", "t": f"第{i}句", "to": "阿豪"} for i in range(8)]
+    data = {"lines": [
+        {"s": "阿誠", "t": "雯雯 在嗎", "to": "雯雯"}, {"s": "雯雯", "t": "在啊", "to": "阿誠"},
+        {"s": "阿豪", "t": "雯雯 晚點打嗎", "to": "雯雯"}, {"s": "雯雯", "t": "好啊", "to": "阿豪"},
+        {"s": "小芸", "t": "雯雯 你來嗎", "to": "雯雯"}, {"s": "雯雯", "t": "來", "to": "小芸"},
+        *chat]}
+    kept, reason = character_data.check_script(data, NAME, spec, ["雯雯"])
+    assert reason == ""
+    assert {line["s"] for line in kept} == {"阿誠", "阿豪", "小芸", NAME}
+    assert kept[0]["to"] == NAME
+    assert character_data.check_script(data, NAME, spec)[1] == "unknown speaker"

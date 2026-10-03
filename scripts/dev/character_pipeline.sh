@@ -47,7 +47,12 @@ export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 HF_DATASETS_OFFLINE=1
 export PYTHONUNBUFFERED=1
 
-DIR=.runtime/dev/chardata-v3
+# CHARDATA picks the round's folder. FIXED_PERSONA=1: the folder already holds
+# the one persona to train (e.g. the machine spirit, personas.jsonl written by
+# machine_spirit.py pick); calibrate and the persona steps are skipped and the
+# script count per persona scales to ~2000 kept lines instead.
+DIR=${CHARDATA:-.runtime/dev/chardata-v3}
+FIXED_PERSONA=${FIXED_PERSONA:-0}
 export CHARDATA_DIR="$REPO/$DIR"
 V1=.runtime/dev/chardata
 STATE=$DIR/state
@@ -59,6 +64,7 @@ PER_PERSONA=${PER_PERSONA:-2}
 GENERATOR=${GENERATOR:-.runtime/models/teacher/Qwen3.6-27B-UD-IQ3_XXS.gguf}
 CHECKER=${CHECKER:-.runtime/models/teacher/gemma-4-31B-it-UD-IQ3_XXS.gguf}
 PILOT_PERSONAS=30
+PILOT_SCRIPTS=${PILOT_SCRIPTS:-30}  # FIXED_PERSONA: scripts in the pilot
 HARD_LINES=1500  # character_data.HARD_CHECK["lines_kept"], scaled for the pilot
 TEACHER=$GENERATOR  # whichever model the data step needs; one at a time
 TEACHER_PORT=18200
@@ -79,6 +85,9 @@ LLAMA_SERVER=${LLAMA_SERVER:-.runtime/tools/llama.cpp-b11179-src/build-cuda/bin/
 SLOTS=${SLOTS:-12}
 CHECKER_SLOTS=${CHECKER_SLOTS:-2}
 SERVER_SLOTS=$SLOTS
+# Context per slot: the machine spirit's script prompt (agent rules, lore)
+# plus a 3000-token script does not fit in 4096.
+SLOT_CTX=${SLOT_CTX:-4096}
 
 log() { echo "$(date '+%F %T') $*" | tee -a "$LOG"; }
 
@@ -145,7 +154,7 @@ teacher_up() {
     fi
     log "starting $(basename "$TEACHER") ($(free_mib) MiB free)"
     nohup "$LLAMA_SERVER" -m "$TEACHER" --host 127.0.0.1 --port "$TEACHER_PORT" \
-        -ngl 99 --fit off -c $((SERVER_SLOTS * 4096)) --parallel "$SERVER_SLOTS" -fa on \
+        -ngl 99 --fit off -c $((SERVER_SLOTS * SLOT_CTX)) --parallel "$SERVER_SLOTS" -fa on \
         --cache-type-k q8_0 --cache-type-v q8_0 --jinja -t 12 \
         > "$LOGS/teacher.log" 2>&1 9>&- &
     for _ in $(seq 300); do
@@ -305,26 +314,52 @@ pilot = int(sys.argv[2])
 print(max(pilot, min(300, math.ceil(2000 * pilot / max(kept, 1)))))
 PY
 }
+# FIXED_PERSONA: scripts for ~2000 kept lines at the pilot's yield.
+full_scripts() {
+    python3 - "$DIR/filter.json" "$PILOT_SCRIPTS" <<'PY'
+import json, math, sys
+kept = json.load(open(sys.argv[1]))["lines_kept"]
+pilot = int(sys.argv[2])
+print(max(pilot, min(1000, math.ceil(2000 * pilot / max(kept, 1)))))
+PY
+}
 render() { .venv/bin/python scripts/dev/character_data.py render; }
 filter() { .venv/bin/python scripts/dev/character_data.py filter "$@"; }
 
-stage calibrate calibrate
-# Exit 3 from a filter = refused by HARD_CHECK: marked blocked at once.
-stage pilot_personas personas "$PILOT_PERSONAS"
-stage pilot_scripts generator scripts --per-persona "$PER_PERSONA"
+if [ "$FIXED_PERSONA" = 1 ]; then
+    [ -s "$DIR/personas.jsonl" ] || { log "FIXED_PERSONA needs $DIR/personas.jsonl"; exit 1; }
+    stage pilot_scripts generator scripts --per-persona "$PILOT_SCRIPTS"
+else
+    stage calibrate calibrate
+    # Exit 3 from a filter = refused by HARD_CHECK: marked blocked at once.
+    stage pilot_personas personas "$PILOT_PERSONAS"
+    stage pilot_scripts generator scripts --per-persona "$PER_PERSONA"
+fi
 stage pilot_refine generator refine
 stage pilot_render render
 stage pilot_student student
 stage pilot_check checker check
-stage pilot_filter filter --min-lines $((HARD_LINES * PILOT_PERSONAS / 300))
-stage personas personas "$(full_count)"
-stage scripts generator scripts --per-persona "$PER_PERSONA"
+if [ "$FIXED_PERSONA" = 1 ]; then
+    stage pilot_filter filter --min-lines $((HARD_LINES * PILOT_SCRIPTS / 600))
+    stage scripts generator scripts --per-persona "$(full_scripts)"
+else
+    stage pilot_filter filter --min-lines $((HARD_LINES * PILOT_PERSONAS / 300))
+    stage personas personas "$(full_count)"
+    stage scripts generator scripts --per-persona "$PER_PERSONA"
+fi
 stage refine generator refine
 stage render render
 stage student student
 stage check checker check
 teacher_down
 stage filter filter
+if [ "$FIXED_PERSONA" = 1 ]; then
+    # The agent character's adapter trains on these rows together with the
+    # Agent trajectories (EdgeAgent bench/dataset.py) and is judged on its own
+    # eval set (machine_spirit_eval.jsonl): not this round's training stages.
+    log "character data ready: $DIR/train-checked.jsonl"
+    exit 0
+fi
 
 # CPU preflight (offline): the loss must cover exactly the answer tokens.
 stage train_check env CUDA_VISIBLE_DEVICES= .runtime/train-venv/bin/python \
