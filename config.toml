@@ -57,7 +57,8 @@ character_lora_uses = "called,active,line"
 # Asked "are you an AI?": "in_character" keeps the act (an NPC does not
 # announce it is scripted), "admit" owns up when sincerely asked.
 character_ai_honesty = "in_character"
-# Owner-only Agent dispatch; requires Discord access/workspace in EdgeAgent.
+# The owner's typed lines (needs [discord] text_chat) can hand work to the
+# EdgeAgent Agent; requires Discord access/workspace in EdgeAgent.
 character_agent = false
 # Agent results go to the owner's DMs; true = the character says them aloud.
 agent_report_public = false

@@ -75,7 +75,8 @@ PAGES: tuple[Page, ...] = (
                 ),
                 Setting(
                     "copilot", "character_agent", "讓主人交代 Agent 工作", "bool",
-                    "由角色接令、請主人批准並回報。先在 EdgeAgent 權限頁開啟 Discord，"
+                    "主人在語音頻道的聊天室打字下令（要開「讀寫文字聊天」），用說的不算；"
+                    "角色接令，批准和結果私訊主人。先在 EdgeAgent 權限頁開啟 Discord，"
                     "設定可用資料夾，並讓 Agent 與角色使用相同基底和 LoRA。",
                 ),
                 Setting(

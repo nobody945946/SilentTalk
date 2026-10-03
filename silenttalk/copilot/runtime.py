@@ -463,9 +463,15 @@ class CopilotRuntime:
         # Latest wins: while a generation is running, newer lines replace the
         # queued trigger instead of stacking requests on a small GPU.
         self._latest_trigger = trigger
-        if self._character_mode and self._config.character_agent and speaker_id == self._owner_user_id:
-            # The only way into the Agent: a line whose Discord user ID is the
-            # configured owner's (names can be copied, IDs cannot).
+        if (
+            self._character_mode
+            and self._config.character_agent
+            and speaker_id == self._owner_user_id
+            and via == "text"
+        ):
+            # The only way into the Agent: a line typed by the configured
+            # owner's Discord user ID (names can be copied, IDs cannot; a
+            # voice can come from anyone near the owner's microphone).
             self._owner_tasks.append((trigger, tuple(self._context.snapshot())))
             self._wake.set()
             return

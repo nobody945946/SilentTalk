@@ -27,7 +27,7 @@
 |---|---|
 | 權限可調＋上網工具＋刪檔／受保護檔案要單次批准（EdgeAgent） | ✅ 已合併進遠端 `copilot-story-mode`（在 `/home/clawd/EdgeAgent-dev` 做的）。**開發機主工作樹刻意還沒 pull**：佇列 `phase1b.sh` 的考場（老師試跑、提示變體、thinking）要和基準用同一版產品，跑完才 pull |
 | 筆電 | ✅ Windows 整合做完（`laptop-report`「Windows integration 2026-10-04」）；✅ Discord 自動實測（「Discord live verification 2026-10-04」：記憶體注入主人指令的唯讀任務，全程 9.4 s）。⬜ 使用者開口實測＋私訊批准＋人設匯入：`handoff/laptop.md` 已改寫，等使用者在筆電說「開工」 |
-| Discord 防話術（2026-10-04） | ✅ SilentTalk `54ed05a`：派工判斷／工作指示只讀主人 ID 的話（`owner_messages`，不含他人、角色自己、摘要）；批准與結果只私訊主人（私訊失敗就拒絕）；角色只拿固定字句 `PRIVATE_REPORTS`／`PRIVATE_APPROVAL`（`copilot.agent_report_public` 才公開）；訓練資料同樣只用主人的話和固定字句（`check_script` 擋不是固定字句的 report/approval）。EdgeAgent `fa5b134`：模型自己組的網址要單次批准（`new_url`）。**機魂 pilot v3 的劇本要用這版重新產生** |
+| Discord 防話術（2026-10-04） | ✅ SilentTalk：**只有主人打字的話能派工**（使用者不要用語音下令；語音只聊天），派工判斷／工作指示只讀主人 ID 的打字內容（`owner_messages`，不含他人、主人用說的、角色自己、摘要），其他人照常能聊天；批准與結果只私訊主人（私訊失敗就拒絕）；角色只拿固定字句 `PRIVATE_REPORTS`／`PRIVATE_APPROVAL`（`copilot.agent_report_public` 才公開）；訓練資料同樣只用主人打字的話和固定字句（機魂劇本 `can_type` 一律開；`check_script` 擋沒打字的 task、不是固定字句的 report/approval）；`machine_spirit_eval.jsonl` v2：主人的工作改成打字，另加一句用說的。EdgeAgent `fa5b134`：模型自己組的網址要單次批准（`new_url`）。**機魂 pilot v3 的劇本要用這版重新產生** |
 | 機魂的角色邏輯（SilentTalk `llm.py`） | ✅ 已在 `copilot-story-mode`：誠實模式 `machine`、`copilot.character_agent`（預設 off）、派工判斷 `task`、`task_text_messages`、提示 `TASK_HINTS`（ack/approval/report） |
 | 角色資料管線的機魂模式（`character_data.py`） | ✅ 已在 `copilot-story-mode`，單元測試過，**還沒用老師真的跑過** |
 | 機魂人設卡 | ✅ 使用者選草稿 2「Machina-Prime-09A（馬基納）」並改成文雅（polish 1），背景保留老師的創意；在 `.runtime/dev/chardata-ms1/personas.jsonl`（9 條核對過的 40K 用語）。產品裡的人設要使用者自己建（`personas.json` 受保護），下一輪請筆電做「匯入人設」 |

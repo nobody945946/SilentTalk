@@ -87,7 +87,7 @@ receive callback 不做推理，只複製 PCM 到 queue。生成期間新句子�
 
 角色 LoRA 的套用請求由 `character_lora_uses` 決定。EdgeAgent 在角色有 LoRA 時分兩個 slot，區分套用與未套用的 cache；其他情況角色用一個 slot。基底與 LoRA 相同時另加 Agent 專用 slot，角色請求固定 slot 0／1，Agent 使用下一個 slot。每個 slot 的 context 保留兩個用戶端要求的較大容量。slot 數不代表完整模型數。
 
-`character_agent` 開啟時，runtime 為 Owner 的輸入保存 RAM 快照並判斷派工；其他人只走角色聊天。派工判斷與工作指示只讀 `LocalReplyModel.owner_messages`：Discord 使用者 ID 等於 Owner、且不是角色自己的最近 12 句，不含他人的話與摘要。批准（`send_approval`）與結果（`send_private`）只私訊 Owner，私訊失敗時拒絕操作、結果不改走頻道；角色只拿到 `PRIVATE_APPROVAL`／`PRIVATE_REPORTS` 的固定字句（`copilot.agent_report_public` 開啟才給完整結果）。接令、批准提醒及結果由既有 SpeechQueue 可靠排隊，任務 SSE 在獨立 asyncio task 接收，角色生成 worker 可繼續接話。關閉角色或派工會清除待派工作並取消 active task。`discord_voice.py` 的批准 View 驗證 Owner ID、禁止重複決定並在逾時拒絕；按鈕不要求 Message Content intent。所有工作內容與 SSE 資料只在 RAM。
+`character_agent` 開啟時，runtime 為 Owner 的輸入保存 RAM 快照並判斷派工；其他人只走角色聊天。只有 Owner 打字的行（`via == "text"`）會進派工；派工判斷與工作指示只讀 `LocalReplyModel.owner_messages`：Discord 使用者 ID 等於 Owner、打字、且不是角色自己的最近 12 句，不含他人的話、Owner 用說的話與摘要。其他人的話照常進角色聊天。批准（`send_approval`）與結果（`send_private`）只私訊 Owner，私訊失敗時拒絕操作、結果不改走頻道；角色只拿到 `PRIVATE_APPROVAL`／`PRIVATE_REPORTS` 的固定字句（`copilot.agent_report_public` 開啟才給完整結果）。接令、批准提醒及結果由既有 SpeechQueue 可靠排隊，任務 SSE 在獨立 asyncio task 接收，角色生成 worker 可繼續接話。關閉角色或派工會清除待派工作並取消 active task。`discord_voice.py` 的批准 View 驗證 Owner ID、禁止重複決定並在逾時拒絕；按鈕不要求 Message Content intent。所有工作內容與 SSE 資料只在 RAM。
 
 ### 租借生命週期
 
