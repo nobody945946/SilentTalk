@@ -20,7 +20,7 @@ SilentTalk copilot/llm.py
 EdgeAgent UI → Pi SDK → 批准後執行工具 → 同一推論 API
 ```
 
-router 最多載入一個完整模型，不能同時租借角色與執行編程工作。Agent 工作或角色租借中禁止切換模型。個人 LoRA 不屬於部署資產；只能引用使用者安裝在 EdgeAgent `models` 的相容 adapter。
+router 最多載入一個完整模型。租借角色與 Agent 設定使用相同基底及相同 LoRA 時，可共用同一推論服務；不同時拒絕 Agent 工作。Agent 工作或角色租借中禁止切換模型。個人 LoRA 不屬於部署資產；只能引用使用者安裝在 EdgeAgent `models` 的相容 adapter。
 
 ## 責任地圖
 
@@ -41,6 +41,7 @@ router 最多載入一個完整模型，不能同時租借角色與執行編程�
 | 角色模式排程 | `copilot/runtime.py` | 時機、冷場、過期回覆、取消 |
 | 人設與角色狀態 | `copilot/persona.py`、`copilot/character_state.py` | 使用者檔案；不保存對話原文 |
 | 推論租借與重啟交接 | `agent_lease.py` | localhost client；無引擎所有權 |
+| Discord Agent 任務傳輸 | `agent_tasks.py` | Controller 擁有；SSE、單次批准、取消；權限由 EdgeAgent 執行 |
 | 設定載入與驗證 | `config.py` | TOML＋使用者差異 |
 | 設定頁項目與保存 | `settings_schema.py`、`settings_store.py`、`settings_ui.py` | schema 驅動 UI |
 | 初次 Discord 授權 | `credentials.py` | Windows 認證管理員；沿用既有 env |
@@ -84,7 +85,9 @@ receive callback 不做推理，只複製 PCM 到 queue。生成期間新句子�
 
 文字聊天啟用時，只接收 Bot 所在語音頻道的內建文字聊天，排除其他 Bot。文字與語音共用 context；依來源用文字或語音回覆，文字送出成功後才記錄 self turn。
 
-角色 LoRA 的套用請求由 `character_lora_uses` 決定。EdgeAgent 在角色有 LoRA 時分兩個 slot，區分套用與未套用的 cache；其他情況用一個 slot。slot 數不代表完整模型數。
+角色 LoRA 的套用請求由 `character_lora_uses` 決定。EdgeAgent 在角色有 LoRA 時分兩個 slot，區分套用與未套用的 cache；其他情況角色用一個 slot。基底與 LoRA 相同時另加 Agent 專用 slot，角色請求固定 slot 0／1，Agent 使用下一個 slot。每個 slot 的 context 保留兩個用戶端要求的較大容量。slot 數不代表完整模型數。
+
+`character_agent` 開啟時，runtime 為 Owner 的輸入保存 RAM 快照並判斷派工；其他人只走角色聊天。接令、批准提醒及結果由既有 SpeechQueue 可靠排隊，任務 SSE 在獨立 asyncio task 接收，角色生成 worker 可繼續接話。關閉角色或派工會清除待派工作並取消 active task。`discord_voice.py` 的批准 View 驗證 Owner ID、禁止重複決定並在逾時拒絕；按鈕不要求 Message Content intent。所有工作內容與 SSE 資料只在 RAM。
 
 ### 租借生命週期
 
@@ -138,6 +141,7 @@ Bot Token 與 Owner ID 優先沿用既有 `.env`，缺少時讀 Windows 認證�
 | `test_copilot_context.py`、`test_copilot_llm.py` | RAM context、回覆選項、角色請求與 LoRA 分流 |
 | `test_copilot_runtime.py` | 角色時機、冷場與過期回覆 |
 | `test_agent_lease.py` | API client、租借／歸還與重啟交接 |
+| `test_agent_tasks.py` | 離線 SSE、Owner 批准、拒絕／逾時、背景派工及失敗回報 |
 | `test_package_windows.py` | Git 來源、雜湊、拒絕個人／不安全檔案 |
 | `app.py --voice-smoke`／`--tts-smoke` | 真實 Discord 播放；需要授權與頻道 |
 | `啟動 SilentTalk.cmd --check` | 部署、STT load、實際租借與歸還，不連 Discord |

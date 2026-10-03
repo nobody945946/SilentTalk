@@ -73,6 +73,11 @@ PAGES: tuple[Page, ...] = (
                     "角色比較完整。承認：認真被問時老實說自己是 AI 扮演的角色。",
                     choices=AI_HONESTY_MODES,
                 ),
+                Setting(
+                    "copilot", "character_agent", "讓主人交代 Agent 工作", "bool",
+                    "由角色接令、請主人批准並回報。先在 EdgeAgent 權限頁開啟 Discord，"
+                    "設定可用資料夾，並讓 Agent 與角色使用相同基底和 LoRA。",
+                ),
             ),
         ),
         Group(

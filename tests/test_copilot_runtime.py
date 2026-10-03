@@ -24,6 +24,17 @@ class SlowFakeLLM:
         # What character_turn answers; "" means the model chose SKIP.
         self.character_line = "收到"
         self.owner_name = ""
+        self.state = CharacterState()
+        self.agenda = ()
+
+    def set_agent_dispatch(self, enabled: bool) -> None:
+        self.agent_dispatch = enabled
+
+    async def fill_concerns(self, state):
+        return state
+
+    def set_state(self, state):
+        self.state = state
 
     def set_owner_name(self, name: str) -> None:
         self.owner_name = name

@@ -10,6 +10,7 @@ from pathlib import Path
 
 import discord
 
+from silenttalk.agent_tasks import AgentTaskClient
 from silenttalk.config import Settings
 from silenttalk.copilot.persona import Persona
 from silenttalk.copilot.runtime import CopilotRuntime, ThinkingCallback, TurnCallback
@@ -48,6 +49,7 @@ class AppController:
         )
         self._temp = tempfile.TemporaryDirectory(prefix="silenttalk-")
         self._copilot: CopilotRuntime | None = None
+        self._agent_tasks = AgentTaskClient()
         if settings.copilot.enabled and suggestions is not None:
             self._copilot = CopilotRuntime(
                 project_dir,
@@ -61,6 +63,9 @@ class AppController:
                 on_character_text=self._type_as_character,
                 on_agenda=on_agenda,
                 can_type=settings.discord.text_chat,
+                agent_tasks=self._agent_tasks,
+                on_agent_approval=self._agent_approval,
+                on_agent_line=self._speak_agent_line,
             )
         self._discord = DiscordVoiceClient(
             settings.discord,
@@ -212,6 +217,26 @@ class AppController:
             return
         self._schedule(self._send_text(text))
 
+    async def _agent_approval(self, payload: dict[str, object]) -> None:
+        session_id = self._agent_tasks.session_id
+
+        async def decide(call_id: str, approved: bool) -> bool:
+            if self._agent_tasks.session_id != session_id:
+                return False
+            return await self._agent_tasks.approve(call_id, approved)
+
+        await self._discord.send_approval(payload, decide)
+
+    def _speak_agent_line(self, line: str) -> None:
+        """Task acknowledgments and reports wait behind current speech."""
+        if self._closing:
+            return
+        text = normalize_text(line[:self._settings.app.max_text_length],
+                              self._settings.app.max_text_length)
+        style, rate = self._character_voice
+        self._schedule(self._queue.enqueue(text, voice_style=self._persona_voice or style,
+                                          rate_multiplier=rate))
+
     def _speak_as_character(self, line: str) -> None:
         """Runs on the backend loop. Never talks over itself: if something is
         still being said (or the owner queued text), this line is dropped."""
@@ -335,6 +360,8 @@ class AppController:
             self._status(AppState.ERROR, f"Discord 連線失敗：{exc}")
 
     async def _shutdown_async(self) -> None:
+        if self._copilot is not None:
+            await self._copilot.stop_agent_task()
         await self._queue.shutdown()
         if not self._discord.is_closed():
             await self._discord.close()
