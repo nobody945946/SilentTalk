@@ -299,7 +299,9 @@ class _Scripted(LocalReplyModel):
         # A list scripts one answer per question, in order.
         return self.gate.pop(0) if isinstance(self.gate, list) else self.gate
 
-    def _request_messages(self, messages, on_lines=None, max_tokens=240, character=False):
+    def _request_messages(
+        self, messages, on_lines=None, max_tokens=240, character=False, temperature=0.65
+    ):
         self.requests.append(("line", messages))
         return self.line
 
@@ -424,3 +426,59 @@ async def test_joining_in_is_not_told_it_was_called() -> None:
     line = model.requests[-1][1][-1]["content"]
     assert "（沒有人叫你，你決定自然地插一句話）" in line
     assert "在叫你" not in line
+
+
+class _Dispatching(_Scripted):
+    """A machine character that may hand the owner's work to the Agent."""
+
+    def __init__(self, gate, line="遵命") -> None:
+        super().__init__(gate=gate, line=line)
+        self._agent_dispatch = True
+        self._ai_honesty = "machine"
+        self.set_owner_name("Rex")
+
+
+def test_dispatch_and_machine_rules_replace_the_voice_only_rules() -> None:
+    model = _Dispatching(gate="否")
+    system = model.character_messages(turns=_chat(CHAT))[0]["content"]
+    assert "主人「Rex」的電腦（思考機）" in system and "只有主人能交代你工作" in system
+    assert "坦然以機器的身分自居" in system
+    assert "不能打字、寫程式" not in system
+    plain = _Scripted(gate="否").character_messages(turns=_chat(CHAT))[0]["content"]
+    assert "思考機" not in plain and "不能打字、寫程式" in plain
+
+
+@pytest.mark.asyncio
+async def test_owner_chat_is_not_a_task() -> None:
+    model = _Dispatching(gate="否")
+    assert await model.task_from_owner(turns=_chat(CHAT)) == ""
+    assert [kind for kind, _ in model.requests] == ["gate"]
+    assert "主人最後這句是不是要你用思考機替他做一件事" in model.requests[0][1][-1]["content"]
+
+
+@pytest.mark.asyncio
+async def test_owner_task_becomes_agent_instructions_on_the_same_chat() -> None:
+    model = _Dispatching(gate="是", line="<think>x</think> 修好 parser.py 的切割錯誤，跑測試後回報結果。")
+    task = await model.task_from_owner(turns=_chat(CHAT))
+    assert task == "修好 parser.py 的切割錯誤，跑測試後回報結果。"
+    (_, gate), (_, ask) = model.requests
+    assert gate[:-1] == ask[:-1]  # same cached chat, only the tail differs
+    assert ask[-1]["content"].endswith("只輸出指示本身）")
+
+
+@pytest.mark.asyncio
+async def test_tasks_need_the_agent_setting() -> None:
+    model = _Scripted(gate="是")
+    assert await model.task_from_owner(turns=_chat(CHAT)) == ""
+    assert model.requests == []
+
+
+@pytest.mark.asyncio
+async def test_task_hints_make_the_character_speak_without_a_gate() -> None:
+    model = _Dispatching(gate="否", line="校驗完畢，三項測試皆已通過。")
+    line = await model.character_turn(
+        turns=_chat(CHAT), task_hint=("report", "3 個測試通過，parser.py 改了 1 行")
+    )
+    assert line == "校驗完畢，三項測試皆已通過。"
+    assert [kind for kind, _ in model.requests] == ["line"]
+    assert "（思考機回報工作結果：3 個測試通過，parser.py 改了 1 行。" in model.requests[0][1][-1]["content"]

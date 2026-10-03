@@ -23,6 +23,10 @@ class SlowFakeLLM:
         self.release = asyncio.Event()
         # What character_turn answers; "" means the model chose SKIP.
         self.character_line = "收到"
+        self.owner_name = ""
+
+    def set_owner_name(self, name: str) -> None:
+        self.owner_name = name
 
     async def suggest(
         self, *, turns, summary: str = "", trigger_speaker: str, trigger_text: str,

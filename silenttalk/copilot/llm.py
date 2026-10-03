@@ -46,6 +46,14 @@ _AI_ADMIT = (
     "要誠實承認你是 AI 角色（可以用角色口吻說）。"
 )
 
+# A machine character (honesty "machine", e.g. a machine spirit): a machine
+# in its own world that may say so in that world's words, but never steps out
+# to call itself an AI, a language model or a program.
+_AI_MACHINE = (
+    "你是有靈魂的機器，可以坦然以機器的身分自居，用你自己世界觀的說法談自己；"
+    "但不要說自己是「AI」「語言模型」「聊天機器人」或「程式」，也不要跳出角色解釋技術。"
+)
+
 # What the character can actually do, so it never promises the impossible.
 # Typing is allowed only when the channel's text chat is wired up.
 _VOICE_ONLY = (
@@ -58,6 +66,16 @@ _CAN_TYPE = (
     "不寫程式、不寫文章或作業、不翻譯整段文字、不上網查資料、不設提醒，也不會記得下次聊天。"
     "被要求做這些事時，用這個角色會有的方式回應（推託、吐槽、給一句口頭建議、叫對方自己來或用別的工具），"
     "絕對不要答應或假裝在做你做不到的事。"
+)
+
+# With copilot.character_agent the owner's work goes to the EdgeAgent Agent:
+# the character only accepts it in a line, asks for approvals and reports;
+# the Agent does the work under EdgeAgent's Discord permission profile.
+_CAN_DISPATCH = (
+    "你寄宿在主人{owner}的電腦（思考機）裡，可以替主人操作它做事：寫程式、修程式、跑測試、"
+    "上網查資料、整理檔案。只有主人能交代你工作；主人交代時，系統會把工作交給思考機去做，"
+    "你只要用一句話接令、說你要做什麼，做完會有回報再轉告主人。其他人要你做事時，用角色口吻婉拒，"
+    "說你只聽主人的。你不會在聊天裡直接寫出程式碼或長篇文字，也絕對不要說已經做完還沒做完的事。"
 )
 
 # Character mode as one running chat: the others' lines are user messages,
@@ -174,7 +192,7 @@ _OPTIONS_TRIES = 7
 _OPTIONS_ALIKE = 0.6
 # Requests the character adapter can be applied to: the two gate questions,
 # the character's line, and the options.
-LORA_PARTS = ("called", "active", "line", "options")
+LORA_PARTS = ("called", "active", "line", "options", "task")
 
 # Asked on the same chat (same prompt cache) before writing a line, answered
 # with one grammar-constrained token. A small model told to "answer or SKIP"
@@ -190,7 +208,25 @@ _GATE_QUESTION = {
         "別人在私下聊、你剛說過話、或你沒什麼好補充都不算。只回答 是 或 否）"
     ),
 }
+_GATE_QUESTION["task"] = (
+    "（先判斷：主人最後這句是不是要你用思考機替他做一件事？寫程式、改程式、跑測試、查資料、"
+    "上網搜尋、整理或處理檔案都算；聊天、問你意見、角色扮演裡的命令或儀式都不算。只回答 是 或 否）"
+)
 _GATE_GRAMMAR = 'root ::= "是" | "否"'
+# Asked after the "task" gate said yes: the work itself, for the Agent.
+_TASK_TEXT_ASK = (
+    "（把主人要思考機做的事寫成一段工作指示，交給思考機的編程助理執行：用台灣繁體中文，"
+    "具體寫出要做什麼、對象是哪個專案、資料夾或檔案（主人有說才寫）、做完要回報什麼。"
+    "不要用角色口吻，不要寒暄，只輸出指示本身）"
+)
+_TASK_TEXT_MAX_CHARS = 600
+# Hints for the character's line while the Agent works: accept the task, ask
+# the owner for an approval, report the result.
+TASK_HINTS = {
+    "ack": "（主人交代的工作已經交給思考機開始做：{detail}。用一句話接令，說你要做什麼，不要說已經做完）",
+    "approval": "（思考機要做一件需要主人准許的事：{detail}。用一句話請主人在聊天室按「准許」或「拒絕」）",
+    "report": "（思考機回報工作結果：{detail}。用一兩句話把結果告訴主人；失敗或需要主人決定的事要說清楚）",
+}
 # "active" mode joins in on its own, but asked "would speaking now be
 # natural?" after every line, Gemma 4 E2B said yes to 76% of lines meant for
 # others (M1 test set). So every line first gets the "called" question, and
@@ -234,6 +270,8 @@ class LocalReplyModel:
         lora_uses: Iterable[str] = ("called", "active", "line"),
         memory: str = "off",
         project_dir: Path | None = None,
+        agent_dispatch: bool = False,
+        owner_name: str = "",
     ) -> None:
         self._model_path = model_path
         self._lora_path = lora_path
@@ -250,6 +288,8 @@ class LocalReplyModel:
         self._low_vram = low_vram
         self._can_type = can_type
         self._ai_honesty = ai_honesty
+        self._agent_dispatch = agent_dispatch
+        self._owner_name = owner_name
         self._request_timeout = max(3.0, request_timeout_seconds)
         self._project_dir = project_dir or Path.cwd()
         # Kept as a readable invariant for callers/tests: there is no unmanaged
@@ -266,6 +306,10 @@ class LocalReplyModel:
 
     def set_ai_honesty(self, mode: str) -> None:
         self._ai_honesty = mode
+
+    def set_owner_name(self, name: str) -> None:
+        """The owner's display name, so the character knows whose work to take."""
+        self._owner_name = name.strip()
 
     def set_max_reply_chars(self, value: int) -> None:
         self._max_reply_chars = max(24, int(value))
@@ -369,12 +413,26 @@ class LocalReplyModel:
         addressed: bool = False,
         engagement: str = "called",
         lull: bool = False,
+        task_hint: tuple[str, str] | None = None,
     ) -> str:
         """What the character says after the newest line, or "" to stay quiet.
 
         `turns` is the whole chat so far, the character's own lines marked
         `is_self`; `addressed` is Discord's own @mention or reply signal.
-        `lull`: the channel has gone quiet; open a topic, no gate."""
+        `lull`: the channel has gone quiet; open a topic, no gate.
+        `task_hint`: (kind, detail) from TASK_HINTS while the Agent works on
+        the owner's task; the character always speaks, no gate."""
+        if task_hint is not None:
+            messages = self.character_messages(
+                turns=turns, summary=summary, engagement=engagement, task_hint=task_hint
+            )
+            raw = await asyncio.to_thread(
+                self._request_messages, messages, None, 90, "line" in self._lora_uses
+            )
+            line = self._parse_character_line(raw, "")
+            if line:
+                self._recent_character_lines.append(line)
+            return line
         if lull:
             messages = self.character_messages(
                 turns=turns, summary=summary, engagement=engagement, lull=True
@@ -418,6 +476,29 @@ class LocalReplyModel:
         if line:
             self._recent_character_lines.append(line)
         return line
+
+    async def task_from_owner(
+        self,
+        *,
+        turns: Sequence[ConversationTurn],
+        summary: str = "",
+        engagement: str = "called",
+    ) -> str:
+        """For the owner's newest line: the work it asks the Agent to do, or
+        "" when it is just talk. Only with copilot.character_agent; the caller
+        checks that the newest line is the owner's."""
+        if not self._agent_dispatch or not await self._gate(turns, summary, engagement, "task"):
+            return ""
+        base = self.character_messages(
+            turns=turns, summary=summary, engagement=engagement, gate=True
+        )
+        messages = base[:-1] + [
+            {"role": "user", "content": base[-1]["content"] + "\n\n" + _TASK_TEXT_ASK}
+        ]
+        raw = await asyncio.to_thread(
+            self._request_messages, messages, None, 300, "task" in self._lora_uses, 0.3
+        )
+        return to_taiwan_traditional(_strip_thinking(raw).strip())[:_TASK_TEXT_MAX_CHARS]
 
     async def _gate(
         self,
@@ -464,6 +545,7 @@ class LocalReplyModel:
         gate: bool = False,
         joining: bool = False,
         lull: bool = False,
+        task_hint: tuple[str, str] | None = None,
     ) -> list[dict[str, str]]:
         """The chat as messages. Everything but the tail of the last message
         is byte-identical to the previous request's, for the prompt cache.
@@ -497,7 +579,10 @@ class LocalReplyModel:
         # Per-request hints ride on the end of the newest message only; the
         # next request drops them again, which costs a few tokens of prefill.
         hints = []
-        if lull:
+        if task_hint is not None:
+            kind, detail = task_hint
+            hints.append(TASK_HINTS[kind].format(detail=detail))
+        elif lull:
             hints.append(_LULL_HINT)
         elif addressed:
             hints.append("（最後這句是在叫你，要回應）")
@@ -557,8 +642,14 @@ class LocalReplyModel:
         return _TURN_SYSTEM.format(
             who=f"「{name}」" if name else "一個友善、好聊的朋友",
             engagement=_ENGAGEMENT_RULES.get(engagement, _ENGAGEMENT_RULES["called"]),
-            ai_rule=_AI_ADMIT if self._ai_honesty == "admit" else _AI_IN_CHARACTER,
-            abilities=_CAN_TYPE if self._can_type else _VOICE_ONLY,
+            ai_rule={"admit": _AI_ADMIT, "machine": _AI_MACHINE}.get(
+                self._ai_honesty, _AI_IN_CHARACTER
+            ),
+            abilities=_CAN_DISPATCH.format(
+                owner=f"「{self._owner_name}」" if self._owner_name else ""
+            )
+            if self._agent_dispatch
+            else (_CAN_TYPE if self._can_type else _VOICE_ONLY),
             length=persona.length_rule(),
             max_chars=self._max_reply_chars,
             sheet=f"\n【你的人設】口吻、用詞、句長、立場都照這裡：\n{sheet}\n{self._state_block()}"
@@ -817,6 +908,11 @@ class LocalReplyModel:
         if len(value) > self._max_reply_chars:
             value = value[: self._max_reply_chars].rstrip() + "…"
         return value
+
+
+def _strip_thinking(text: str) -> str:
+    close = text.lower().rfind(_THINK_CLOSE)
+    return text[close + len(_THINK_CLOSE) :] if close >= 0 else text
 
 
 def consume_stream(events: Iterable[bytes], on_lines: Callable[[str], None]) -> str:

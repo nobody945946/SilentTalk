@@ -89,8 +89,12 @@ class CopilotConfig:
     compact_context: bool = True
     compact_keep_turns: int = 96
     compact_batch_turns: int = 32
-    # Asked whether it is an AI: "in_character" keeps the act, "admit" owns up.
+    # Asked whether it is an AI: "in_character" keeps the act, "admit" owns up,
+    # "machine" is a machine in its own world (it may say so, never "an AI").
     character_ai_honesty: str = "in_character"
+    # The character may hand the owner's tasks to the EdgeAgent Agent (what
+    # it may then do is EdgeAgent's Discord permission profile).
+    character_agent: bool = False
     character_engagement: str = "called"
     # Character mode: after this many seconds with nobody talking, the
     # character opens a topic of its own (0 = never).
@@ -321,6 +325,7 @@ def load_settings(project_dir: Path) -> Settings:
                 [mode for mode, _ in AI_HONESTY_MODES],
                 "character_ai_honesty",
             ),
+            character_agent=bool(copilot.get("character_agent", False)),
             character_engagement=_one_of(
                 copilot.get("character_engagement", "called"),
                 [mode for mode, _ in ENGAGEMENT_MODES],

@@ -130,6 +130,7 @@ class CopilotRuntime:
             lora_uses=config.character_lora_uses,
             memory=config.character_memory,
             project_dir=project_dir,
+            agent_dispatch=config.character_agent,
         )
         self._stt = transcriber(
             asr_dir,
@@ -389,6 +390,9 @@ class CopilotRuntime:
         if speaker_id == self._owner_user_id and not self._character_mode:
             return
 
+        if speaker_id == self._owner_user_id:
+            # Whose work the character may take (copilot.character_agent).
+            self._llm.set_owner_name(speaker_name)
         turn = ConversationTurn.now(speaker_id, speaker_name, text, via=via)
         self._context.append(turn)
         self._emit_turn(turn)

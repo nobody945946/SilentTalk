@@ -39,6 +39,7 @@ _GENERIC_NAMES = ("機器人", "bot", "ai")
 AI_HONESTY_MODES: tuple[tuple[str, str], ...] = (
     ("in_character", "照角色演（不承認）"),
     ("admit", "承認自己是 AI"),
+    ("machine", "機器角色（自認是機器，不說是 AI）"),
 )
 
 ENGAGEMENT_MODES: tuple[tuple[str, str], ...] = (
