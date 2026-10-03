@@ -101,10 +101,9 @@ def wait_ready() -> None:
     raise SystemExit("teacher server did not become ready")
 
 
-def ask(prompt: str, seed: int) -> dict:
+def ask(messages: list[dict], seed: int) -> dict:
     body = json.dumps({
-        "messages": [{"role": "system", "content": DRAFT_SYSTEM},
-                     {"role": "user", "content": prompt}],
+        "messages": messages,
         "temperature": 0.8, "top_p": 0.95, "seed": seed, "max_tokens": 2600,
         "response_format": {"type": "json_object"},
         "chat_template_kwargs": {"enable_thinking": False},
@@ -127,40 +126,109 @@ def to_persona(index: int, raw: dict) -> Persona:
         relationships=relationships))
 
 
-def drafts(count: int, threads: int, teacher: Path, extra: list[str]) -> None:
+def draft(variant: int) -> tuple[dict, Persona] | None:
+    """One sheet; a sheet the product rejects (a field too long) goes back to
+    the teacher with the product's own message, to fix only that field."""
+    for attempt in range(3):
+        messages = [{"role": "system", "content": DRAFT_SYSTEM},
+                    {"role": "user", "content": draft_prompt(variant - 1)}]
+        raw = ask(messages, seed=100 * variant + attempt)
+        for repair in range(3):
+            try:
+                return raw, to_persona(variant - 1, raw)
+            except Exception as exc:  # noqa: BLE001 - PersonaError and malformed fields
+                print(f"draft {variant} attempt {attempt + 1}.{repair} rejected: {exc}", flush=True)
+                if repair == 2:
+                    break
+                messages += [
+                    {"role": "assistant", "content": json.dumps(raw, ensure_ascii=False)},
+                    {"role": "user", "content": f"這份角色卡沒有通過檢查：{exc}"
+                     "請只修正這個問題（例如把那一欄縮短到上限以內，意思不變），"
+                     "其他欄位一字不改，輸出完整的 JSON。"},
+                ]
+                raw = ask(messages, seed=100 * variant + attempt)
+    return None
+
+
+def drafts(variants: list[int], threads: int, teacher: Path, extra: list[str]) -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     server = subprocess.Popen(
         [str(SERVER), "--model", str(teacher), "--host", "127.0.0.1", "--port", str(PORT),
          "--ctx-size", "8192", "--n-gpu-layers", "0", "--threads", str(threads), "--jinja",
          "--parallel", "1", *extra],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    results = []
+    path = OUT / "drafts.json"
+    # Redrafting some variants keeps the others.
+    results = {item["variant"]: item for item in
+               (json.loads(path.read_text(encoding="utf-8")) if path.is_file() else [])}
     try:
         wait_ready()
-        for index in range(count):
-            for attempt in range(3):
-                raw = ask(draft_prompt(index), seed=100 * index + attempt)
-                try:
-                    persona = to_persona(index, raw)
-                except Exception as exc:  # noqa: BLE001 - report and retry
-                    print(f"draft {index + 1} attempt {attempt + 1} rejected: {exc}", flush=True)
-                    continue
-                results.append({"persona": raw, "lore": raw.get("lore", []),
-                                "rendered": persona.render_system_block()})
-                print(f"draft {index + 1} ok", flush=True)
-                break
+        for variant in variants:
+            made = draft(variant)
+            if made is None:
+                print(f"draft {variant} failed", flush=True)
+                continue
+            raw, persona = made
+            results[variant] = {"variant": variant, "persona": raw, "lore": raw.get("lore", []),
+                                "rendered": persona.render_system_block()}
+            print(f"draft {variant} ok", flush=True)
     finally:
         server.terminate()
         server.wait(timeout=60)
-    (OUT / "drafts.json").write_text(json.dumps(results, ensure_ascii=False, indent=1),
-                                     encoding="utf-8")
-    print(f"{len(results)} drafts -> {OUT / 'drafts.json'}")
+    path.write_text(json.dumps([results[k] for k in sorted(results)], ensure_ascii=False,
+                               indent=1), encoding="utf-8")
+    print(f"{len(results)} drafts -> {path}")
+
+
+CHECKER = ROOT / ".runtime/models/teacher/gemma-4-31B-it-UD-IQ3_XXS.gguf"
+LORE_CHECK = (
+    "下面是《戰鎚40K》用語和它的解釋。這個解釋（含括號裡的英文對照）完全符合正典嗎？"
+    "只要有任何一處錯誤或張冠李戴就回答 否。只回答 是 或 否。\n\n{term}：{meaning}"
+)
+
+
+def verify_lore(threads: int, extra: list[str]) -> None:
+    """Keep only glossary items an open-weight checker of another family
+    (Gemma 31B, 97% on the 40K quiz) finds true to canon: the glossary steers
+    the teacher's scripts and the line checks."""
+    path = OUT / "drafts.json"
+    items = json.loads(path.read_text(encoding="utf-8"))
+    server = subprocess.Popen(
+        [str(SERVER), "--model", str(CHECKER), "--host", "127.0.0.1", "--port", str(PORT),
+         "--ctx-size", "4096", "--n-gpu-layers", "0", "--threads", str(threads), "--jinja",
+         "--parallel", "1", *extra],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        wait_ready()
+        for item in items:
+            kept, dropped = [], []
+            for entry in item["lore"]:
+                body = json.dumps({
+                    "messages": [{"role": "user", "content": LORE_CHECK.format(**entry)}],
+                    "temperature": 0.0, "max_tokens": 2, "grammar": 'root ::= "是" | "否"',
+                    "chat_template_kwargs": {"enable_thinking": False}}).encode()
+                request = urllib.request.Request(
+                    f"http://127.0.0.1:{PORT}/v1/chat/completions", body,
+                    {"Content-Type": "application/json"})
+                with urllib.request.urlopen(request, timeout=1800) as response:
+                    answer = json.loads(response.read())["choices"][0]["message"]["content"]
+                (kept if answer.strip() == "是" else dropped).append(entry)
+            item["lore"], item["lore_dropped"] = kept, dropped
+            item["persona"]["lore"] = kept
+            print(f"draft {item['variant']}: kept {len(kept)}, dropped "
+                  f"{[e['term'] for e in dropped]}", flush=True)
+    finally:
+        server.terminate()
+        server.wait(timeout=60)
+    path.write_text(json.dumps(items, ensure_ascii=False, indent=1), encoding="utf-8")
 
 
 def pick(number: int, chardata: Path, edits: dict) -> None:
     """The owner's chosen draft (optionally with the owner's edits) as the one
     persona row of an agent character for character_data.py."""
-    raw = json.loads((OUT / "drafts.json").read_text(encoding="utf-8"))[number - 1]["persona"]
+    raw = next(item["persona"] for item in
+               json.loads((OUT / "drafts.json").read_text(encoding="utf-8"))
+               if item["variant"] == number)
     raw = {**raw, **edits}
     persona = to_persona(number - 1, raw)  # validates the edited sheet
     owner = next((r["relation"] for r in raw.get("relationships", [])
@@ -180,20 +248,26 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="command", required=True)
     d = sub.add_parser("drafts")
-    d.add_argument("--count", type=int, default=3)
+    d.add_argument("--variants", default="1,2,3", help="which flavours to (re)draft")
     d.add_argument("--threads", type=int, default=12)
     d.add_argument("--teacher", type=Path, default=TEACHER)
     d.add_argument("--server-args", default="",
                    help='extra llama-server args, e.g. "-ngl 99 --n-cpu-moe 40"')
+    v = sub.add_parser("verify-lore")
+    v.add_argument("--threads", type=int, default=12)
+    v.add_argument("--server-args", default="")
     k = sub.add_parser("pick")
     k.add_argument("number", type=int, help="draft number the owner chose (1-based)")
     k.add_argument("--chardata", type=Path, default=ROOT / ".runtime/dev/chardata-ms1")
     k.add_argument("--edits", default="{}", help="JSON object of fields the owner changed")
     args = parser.parse_args()
+    if args.command == "verify-lore":
+        verify_lore(args.threads, args.server_args.split())
     if args.command == "pick":
         pick(args.number, args.chardata, json.loads(args.edits))
     if args.command == "drafts":
-        drafts(args.count, args.threads, args.teacher, args.server_args.split())
+        drafts([int(v) for v in args.variants.split(",")], args.threads, args.teacher,
+               args.server_args.split())
 
 
 if __name__ == "__main__":
