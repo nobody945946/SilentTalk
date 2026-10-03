@@ -127,12 +127,12 @@ def to_persona(index: int, raw: dict) -> Persona:
         relationships=relationships))
 
 
-def drafts(count: int, threads: int, teacher: Path) -> None:
+def drafts(count: int, threads: int, teacher: Path, extra: list[str]) -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     server = subprocess.Popen(
         [str(SERVER), "--model", str(teacher), "--host", "127.0.0.1", "--port", str(PORT),
          "--ctx-size", "8192", "--n-gpu-layers", "0", "--threads", str(threads), "--jinja",
-         "--parallel", "1"],
+         "--parallel", "1", *extra],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     results = []
     try:
@@ -157,6 +157,25 @@ def drafts(count: int, threads: int, teacher: Path) -> None:
     print(f"{len(results)} drafts -> {OUT / 'drafts.json'}")
 
 
+def pick(number: int, chardata: Path, edits: dict) -> None:
+    """The owner's chosen draft (optionally with the owner's edits) as the one
+    persona row of an agent character for character_data.py."""
+    raw = json.loads((OUT / "drafts.json").read_text(encoding="utf-8"))[number - 1]["persona"]
+    raw = {**raw, **edits}
+    persona = to_persona(number - 1, raw)  # validates the edited sheet
+    owner = next((r["relation"] for r in raw.get("relationships", [])
+                  if isinstance(r, dict) and r.get("name") == "主人"), "主人，侍奉的技術神甫")
+    row = {**{k: getattr(persona, k) for k in ("id", "name", *TEXT_FIELDS, "reply_length")},
+           "traits": persona.traits, "agent": True, "owner_relation": owner,
+           "lore": [item for item in raw.get("lore", []) if isinstance(item, dict)
+                    and item.get("term") and item.get("meaning")],
+           "stt_variants": [], "role": "machine spirit"}
+    chardata.mkdir(parents=True, exist_ok=True)
+    (chardata / "personas.jsonl").write_text(json.dumps(row, ensure_ascii=False) + "\n",
+                                             encoding="utf-8")
+    print(f"{persona.name} -> {chardata / 'personas.jsonl'}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="command", required=True)
@@ -164,9 +183,17 @@ def main() -> None:
     d.add_argument("--count", type=int, default=3)
     d.add_argument("--threads", type=int, default=12)
     d.add_argument("--teacher", type=Path, default=TEACHER)
+    d.add_argument("--server-args", default="",
+                   help='extra llama-server args, e.g. "-ngl 99 --n-cpu-moe 40"')
+    k = sub.add_parser("pick")
+    k.add_argument("number", type=int, help="draft number the owner chose (1-based)")
+    k.add_argument("--chardata", type=Path, default=ROOT / ".runtime/dev/chardata-ms1")
+    k.add_argument("--edits", default="{}", help="JSON object of fields the owner changed")
     args = parser.parse_args()
+    if args.command == "pick":
+        pick(args.number, args.chardata, json.loads(args.edits))
     if args.command == "drafts":
-        drafts(args.count, args.threads, args.teacher)
+        drafts(args.count, args.threads, args.teacher, args.server_args.split())
 
 
 if __name__ == "__main__":

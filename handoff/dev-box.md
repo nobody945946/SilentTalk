@@ -29,7 +29,7 @@
 | 機魂的角色邏輯（SilentTalk `llm.py`） | ✅ 已在 `copilot-story-mode`：誠實模式 `machine`、`copilot.character_agent`（預設 off）、派工判斷 `task`、`task_text_messages`、提示 `TASK_HINTS`（ack/approval/report） |
 | 角色資料管線的機魂模式（`character_data.py`） | ✅ 已在 `copilot-story-mode`，單元測試過，**還沒用老師真的跑過** |
 | 機魂人設卡 | ⚠️ 35B-A3B 寫的 3 份草稿不能用（40K 設定淺、有錯、滑桿方向搞反）。提示已修、已換成使用者的新描述（第四面牆），**要等 40K 測驗選出老師再重寫**，然後給使用者挑 |
-| 40K 背景測驗（`scripts/dev/lore_quiz.py`） | 進行中（§5.3）：學生與老師候選誰懂 40K |
+| 40K 背景測驗（`scripts/dev/lore_quiz.py`） | ✅（§5.3）：老師 35B-A3B 94.7%、檢查員 Gemma 31B 97.4%；學生 E4B 75% 最高 |
 | Agent 考場第一階段（基底選擇） | 進行中（§5.2）：ComfyUI 搶 GPU，非常慢 |
 | 寫程式訓練題 | 519 題（8 個開源庫），還沒寫請求文字（`make_tasks.py describe`） |
 | 中性電子音 | 5 個候選已量清晰度（§5.4），等使用者試聽挑選 |
@@ -79,7 +79,7 @@ cd /home/clawd/EdgeAgent-dev && .venv/bin/python -m pytest -q     # Linux：只�
 
 ## 4. 接下來（依序；前一步沒過不做下一步）
 
-**A. 40K 測驗 → 選老師、刷掉不懂 40K 的學生**（`.runtime/dev/lore-quiz.sh` 正在跑，結果 `.runtime/dev/lore-quiz.jsonl`）
+**A. 40K 測驗 → 選老師、刷掉不懂 40K 的學生**（✅ 做完，§5.3；結果在 `.runtime/dev/lore-quiz.jsonl`）
 - 老師的 `known_both_orders` 要高到能寫出正確設定，否則資料只會教錯。最好的老師用來重寫人設卡和寫劇本。
 - 檢查員要是**不同家族**的開源模型（Qwen 老師配 Gemma 31B 檢查員，或反過來）。
 - 學生（筆電跑得動的）分數太低：
@@ -150,7 +150,17 @@ cd /home/clawd/EdgeAgent-dev && .venv/bin/python -m pytest -q     # Linux：只�
 
 ### 5.3 40K 背景測驗（76 題，正反兩種選項順序都答對才算懂，亂猜 1/16）
 
-（待填：`.runtime/dev/lore-quiz.jsonl`）
+| 模型 | 角色 | 兩次都答對 | 單次答對 |
+|---|---|---|---|
+| Gemma 4 31B IQ3 | 檢查員 | **97.4%** | 98.7% |
+| Qwen3.6-35B-A3B Q4_K_XL | 老師 | **94.7%** | 96.7% |
+| Qwen3.6-27B IQ3 | （老師候選） | 92.1% | 94.1% |
+| Gemma 4 E4B | 學生 | 75.0% | 82.9% |
+| Qwen3.5-9B IQ3 | 學生（筆電會部分放 CPU） | 72.4% | 80.3% |
+| Qwen3.5-4B | 學生（現在的 Agent） | 64.5% | 77.0% |
+| Qwen3-4B-2507 | 學生 | 60.5% | 68.4% |
+
+→ **老師 35B-A3B**（懂、最快、專家放 CPU 能和 ComfyUI 共存）、**檢查員 Gemma 31B**（最懂、不同家族）。學生裡 E4B 最懂 40K，連 9B 都贏。第一批人設草稿寫得淺，是提示和舊描述的問題，不是老師不懂。
 
 ### 5.4 中性電子音（SenseVoice 錯字率，`stt_eval.py` 的 12 句）
 
