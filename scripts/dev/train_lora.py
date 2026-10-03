@@ -9,8 +9,12 @@ llama.cpp source tree of the same build as llama-server):
     python <llama.cpp>/convert_lora_to_gguf.py --base <hf snapshot dir> \
         --outtype f16 --outfile persona-lora.gguf .runtime/dev/lora/gemma4-e2b
 
-One generic adapter is trained on many synthetic character sheets, so it
-works for whatever persona the user writes; it is not per-persona.
+Rows are chats ({"messages": [...], "tools": [...]?, "train": "last"|"all"}).
+"last" (the default, character data) trains on the final assistant message;
+"all" (Agent trajectories) trains on every assistant turn, tool calls
+included, never on tool results. Each trained span is exactly what the
+model writes after the prompt the server builds for that turn
+(scripts/dev/template_parity.py checks the two templates agree).
 """
 
 from __future__ import annotations
@@ -63,49 +67,30 @@ def main() -> int:
     from trl import SFTConfig, SFTTrainer
 
     tokenizer = AutoTokenizer.from_pretrained(args.base)
-
-    def render(row: dict) -> dict[str, str]:
-        # Render exactly like llama-server --jinja with enable_thinking off, so
-        # the adapter sees the same tokens at inference time. Loss is on the
-        # completion (the four lines) only.
-        prompt = tokenizer.apply_chat_template(
-            row["messages"][:-1],
-            tokenize=False,
-            add_generation_prompt=True,
-            enable_thinking=False,
-        )
-        # The completion ends with the template's own end-of-turn marker
-        # (Gemma: <turn|>, Qwen: <|im_end|>), which llama.cpp stops on.
-        full = tokenizer.apply_chat_template(
-            row["messages"], tokenize=False, enable_thinking=False
-        )
-        if not full.startswith(prompt):
-            raise ValueError("chat template does not extend the prompt")
-        return {"prompt": prompt, "completion": full[len(prompt) :]}
-
     rows = [
         json.loads(line)
         for line in Path(args.data).read_text(encoding="utf-8").splitlines()
     ]
     random.Random(0).shuffle(rows)
-    rendered = [render(r) for r in rows]
+    tokenized, broken = [], 0
+    for row in rows:
+        try:
+            tokenized.append(tokenize_row(tokenizer, row))
+        except ValueError:
+            broken += 1
     # The trainer cuts long rows from the right, which would train on half an
     # answer with no end marker: drop them instead, and say how many.
-    lengths = [
-        len(tokenizer(r["prompt"] + r["completion"])["input_ids"]) for r in rendered
-    ]
-    rendered = [
-        r for r, n in zip(rendered, lengths, strict=True) if n <= args.max_length
-    ]
+    lengths = [len(r["input_ids"]) for r in tokenized]
+    kept = [r for r in tokenized if len(r["input_ids"]) <= args.max_length]
     print(
         f"longest row {max(lengths)} tokens; "
-        f"{len(rows) - len(rendered)} rows over --max-length {args.max_length} dropped"
+        f"{len(tokenized) - len(kept)} rows over --max-length {args.max_length} dropped; "
+        f"{broken} rows whose template does not extend its prompts dropped"
     )
-    split = max(1, int(len(rendered) * args.holdout))
-    train = Dataset.from_list(rendered[split:])
-    evaluation = Dataset.from_list(rendered[:split])
+    split = max(1, int(len(kept) * args.holdout))
+    train = Dataset.from_list(kept[split:])
+    evaluation = Dataset.from_list(kept[:split])
     print(f"train {len(train)}  eval {len(evaluation)}")
-    print(train[0]["prompt"][-300:] + train[0]["completion"])
 
     quantized: dict = {}
     if args.four_bit:
@@ -181,6 +166,61 @@ def main() -> int:
     return 0
 
 
+def wire_to_template(messages: list[dict]) -> list[dict]:
+    """OpenAI wire messages -> what HF chat templates expect: tool-call
+    arguments as objects (llama-server parses the JSON string the same way)."""
+    result = []
+    for message in messages:
+        calls = message.get("tool_calls")
+        if calls:
+            message = {**message, "tool_calls": [
+                {**call, "function": {**call["function"], "arguments": json.loads(
+                    call["function"]["arguments"] or "{}")}}
+                if isinstance(call["function"].get("arguments"), str) else call
+                for call in calls]}
+        result.append(message)
+    return result
+
+
+def tokenize_row(tokenizer, row: dict) -> dict[str, list[int]]:
+    """input_ids of the whole chat and a completion_mask marking the trained
+    assistant turns. Raises ValueError when a turn's prompt is not a prefix of
+    the chat in text and in tokens (the span would not be what the model
+    writes at inference)."""
+    messages = wire_to_template(row["messages"])
+    tools = row.get("tools")
+
+    def render(part: list[dict], prompt: bool) -> str:
+        return tokenizer.apply_chat_template(
+            part, tools=tools, tokenize=False, add_generation_prompt=prompt,
+            enable_thinking=False)
+
+    def ids(text: str) -> list[int]:
+        # The template writes BOS as text where the model wants one.
+        return tokenizer(text, add_special_tokens=False)["input_ids"]
+
+    turns = [i for i, m in enumerate(messages) if m["role"] == "assistant"]
+    if row.get("train", "last") == "last":
+        turns = turns[-1:]
+    if not turns or turns[-1] != len(messages) - 1 and row.get("train", "last") == "last":
+        raise ValueError("the last message must be the trained answer")
+    full = render(messages, False)
+    full_ids = ids(full)
+    mask = [0] * len(full_ids)
+    for index in turns:
+        prompt, upto = render(messages[:index], True), render(messages[: index + 1], False)
+        prompt_ids, upto_ids = ids(prompt), ids(upto)
+        if not (full.startswith(upto) and upto.startswith(prompt)
+                and full_ids[: len(upto_ids)] == upto_ids
+                and upto_ids[: len(prompt_ids)] == prompt_ids):
+            raise ValueError("chat template does not extend the prompt")
+        # The answer ends with the template's end-of-turn marker (Gemma:
+        # <turn|>, Qwen: <|im_end|>), which llama.cpp stops on.
+        for position in range(len(prompt_ids), len(upto_ids)):
+            mask[position] = 1
+    return {"input_ids": full_ids, "completion_mask": mask}
+
+
 def check(trainer, tokenizer) -> int:
     """Print the tokens the loss is computed on (must be exactly the answer
     lines plus the end-of-turn marker) and run one short forward pass."""
@@ -188,21 +228,30 @@ def check(trainer, tokenizer) -> int:
 
     row = trainer.train_dataset[0]
     ids = row["input_ids"]
-    # TRL marks the prompt with label -100; everything else is trained on.
-    positions = [i for i, label in enumerate(row["labels"]) if label != -100]
-    trained = [ids[i] for i in positions]
-    prompt_tokens = len(tokenizer(row["prompt"], add_special_tokens=False)["input_ids"])
-    print(f"tokens: {len(ids)}, prompt: {prompt_tokens}, trained on: {len(trained)}")
-    print("TRAINED TEXT >>>" + tokenizer.decode(trained) + "<<<")
-    if not positions or positions[0] != prompt_tokens:
-        print("MASK WRONG: trained tokens must start right after the prompt")
+    # TRL turned completion_mask into labels (-100 = not trained).
+    labels = row["labels"]
+    positions = [i for i, label in enumerate(labels) if label != -100]
+    spans, start = [], None
+    for i in range(len(labels) + 1):
+        inside = i < len(labels) and labels[i] != -100
+        if inside and start is None:
+            start = i
+        if not inside and start is not None:
+            spans.append((start, i))
+            start = None
+    print(f"tokens: {len(ids)}, trained on: {len(positions)} in {len(spans)} span(s)")
+    for a, b in spans:
+        print("TRAINED >>>" + tokenizer.decode(ids[a:b]) + "<<<")
+    end = tokenizer.convert_tokens_to_ids(["<turn|>", "<|im_end|>"])
+    if not spans or any(not any(t in end for t in ids[a:b]) for a, b in spans):
+        print("MASK WRONG: every trained span must end its turn with the end-of-turn marker")
         return 1
     model = trainer.model
     sample = torch.tensor([ids[-64:]], device=model.device)
     with torch.no_grad():
         logits = model(input_ids=sample).logits
     print(f"forward ok: logits {tuple(logits.shape)}")
-    return 0 if trained else 1
+    return 0 if positions else 1
 
 
 if __name__ == "__main__":
