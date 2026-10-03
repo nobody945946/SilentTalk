@@ -178,3 +178,32 @@
 - B_search_deployment: rg 15.2.0; fd 10.5.0; pinned release SHA256; deployment exit 0.
 - B_search_after: true Pi SDK; grep/find 2 passed; 4.96 s; exit 0.
 - integration_checkpoint: C/D/E implementation in progress; browser/hardware/Discord end-to-end pending; no user configuration read or changed.
+
+## Integration verification 2026-10-04
+
+- A_web_actual: Qwen3.5-4B; true Pi Agent; web_search 1 finished; web_fetch 1 finished; result JSON characters 2059/12948; terminal done; errors 0; HTTP-error markers 0; elapsed 67516 ms.
+- B_search_actual: Qwen3.5-4B; true Pi Agent; grep 1 finished; find 1 finished; result JSON characters 73/51; terminal done; errors 0; elapsed 22344 ms.
+- C_edge_actual: dedicated Edge/CDP; permissions ui/discord save-and-restore passed; explicit once/deny and after_web cards passed; viewports 8 passed; touch interactions passed; unexpected errors 0; expected directory HTTP 400 / error log 1; browser exit 0; model-dialog screenshot reviewed.
+- D_shared_contract: same base plus same LoRA sharing; Agent independent slot; different base/LoRA refused; 2/3-slot configurations tested; configured context preserved; busy model-switch rejection passed.
+- D_hardware_initial_8192: slots 2; VRAM total-used sample 3501 MiB; Agent read 1 finished; Agent 5172 ms; role 391 ms; role output 3 tokens; terminal done.
+- D_hardware_initial_16384: slots 2; VRAM total-used sample 3813 MiB; Agent 4219 ms; role 344 ms; role output 3 tokens; terminal done; reused session; read tool 0; excluded from fresh-task comparison.
+- D_hardware_initial_32768: slots 2; VRAM total-used sample 3771 MiB; Agent 46031 ms; role 797 ms; role output 3 tokens; terminal done; reused session; read tool 0; excluded from fresh-task comparison.
+- D_http_fresh_8192: slots 2; client discord; VRAM total-used sample 3405 MiB; Agent read 1 finished; Agent 6328 ms; role 562 ms; role output 5 tokens; concurrent base HTTP 409 in 16 ms; terminal done; errors 0.
+- D_http_fresh_16384: slots 2; client discord; VRAM total-used sample 3762 MiB; Agent read 1 finished; Agent 4875 ms; role 406 ms; role output 5 tokens; concurrent base HTTP 409 in less than 1 ms; terminal done; errors 0.
+- D_http_fresh_32768: slots 2; client discord; VRAM total-used sample 3772 MiB; Agent read 1 finished; Agent 54750 ms; role 1093 ms; role output 5 tokens; concurrent base HTTP 409 in less than 1 ms; terminal done; errors 0.
+- D_hardware_scope: GPU RTX 3050 Ti 4 GiB; context per slot; LoRA empty; VRAM sample includes other GPU clients; no peak or net-allocation measurement; no full-context occupancy test; personal LoRA hardware test not run; short role-output sample limits throughput claims.
+- D_lease_cleanup: lease returned ready true; first runner exit 1; Windows transient empty-directory lock; empty directory subsequently removed; cleanup runner exit 0; listeners 18087/18090/9223 absent; dedicated Edge profile removed; own node/llama processes absent; GPU total-used sample 230 MiB.
+- E_transport: controller-owned RAM-only task client; POST chat client discord/agent true; first configured workspace; SSE/approve/cancel; permission enforcement retained in EdgeAgent owner.
+- E_offline: fake SSE/Discord; owner-only dispatch/buttons; once denial; approval timeout; missing workspace; background chat and failure report; speech notice queues while busy; disable/re-enable cancellation at decision/workspace/ack; focused 13 passed; 1.00 s; exit 0.
+- E_review: independent read-only review rounds 3; busy-speech notice loss corrected; queued and in-flight stale dispatch corrected; final unresolved correctness findings 0.
+- E_settings_tk: real Tk; editors 37; character_agent toggle passed; machine choice passed; protected settings store not loaded; exit 0.
+- E_discord_live: not run; available bot credential false; application ID unavailable; agreed test channel unavailable; dispatch/ack/task/approval live latency unavailable; reinvite URL requires application ID; README Send Messages and OAuth2 URL Generator documented.
+- final_silenttalk_pytest: 247 passed; 1 skipped; 8.09 s; exit 0; baseline EdgeTTS HTTP 503 not reproduced; audioop deprecation warning 1.
+- final_edgeagent_pytest: 114 passed; 45.93 s; exit 0; incremental owner tests 80 passed; 39.53 s; exit 0.
+- final_edgeagent_ruff: edge_agent/tests; exit 0; windows runner format check exit 0; JavaScript syntax checks exit 0; actual PowerShell shell_guard exit 0; git diff check exit 0.
+- final_silenttalk_ruff: new task client/tests exit 0; touched existing files 16 pre-existing diagnostics; exit 1; no new diagnostics; git diff check exit 0.
+- final_archive: git archive; entries 48; bench entries 0; private configuration entries 0; exit 0; temporary archive removed; player release not published; bootstrap-v7 manifest unchanged.
+- final_merge: normal push first rejected; remote concurrent commits retained; SilentTalk 8bcffa0; EdgeAgent adb4bfe; conflict count 0; post-merge full tests passed.
+- final_source_silenttalk: integration 38e4343; merged head a37b5045746b90878030c33a52e52a611773a26f; copilot-story-mode normal push exit 0.
+- final_source_edgeagent: integration 7a20154; merged head 9766eb7f17d742597e60b77018e21c3f924be4d6; copilot-story-mode normal push exit 0.
+- final_privacy: user .env/settings/personas/character_state and conversation log not read or changed; prompts/audio/transcripts/task output not stored in report or test assets; live Discord verification pending.
