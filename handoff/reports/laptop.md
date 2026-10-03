@@ -152,3 +152,11 @@
 - windows_ram_final_samples: available physical 706/756/798 MiB; available commit 19179/19204/19302 MiB; 3 measurements; own inference stopped; no 6.7-GiB physical-RAM release claim.
 - memory_cleanup: own service stopped; control/inference/debug listeners 0; own Edge closed; own profile/Agent/folder fixtures absent; Pi state absent.
 - memory_privacy: conversation/media/model output in RAM; protected user configuration untouched; no model prompt/output added to report.
+- windows_optimization_assessment: completed; permanent new-profile deployments 0; source/runtime changes 0.
+- windows_light_script: ApplyLight; RestoreLight; PlanLight; BeginAI; EndAI; single existing maintenance owner; atomic snapshot writes.
+- windows_light_verification: exit 0; checks passed 30; real Win32 visual round trip restored; service operations isolated; test registry and JSON removed.
+- windows_light_restore_cases: existing DWORD; existing ExpandString; absent value; mixed visual values; repeated apply; repeated restore; injected failure; Search session; delayed automatic start; launcher path with spaces.
+- windows_assessment_service_working_sets: SysMain 6.8 MiB; WSearch 29.1 MiB; DiagTrack 29.4 MiB; not net physical-RAM gains.
+- windows_assessment_services_final: SysMain Auto/Running; WSearch Auto/Running; DiagTrack Auto/Running; wuauserv Manual/Stopped; WlanSvc Auto/Running; Sense count 0.
+- windows_assessment_packages: Copilot/Cortana/WebExperience matches 0; Chrome active processes 0; no package removal.
+- windows_light_performance_ab: not run; measured new-profile RAM/VRAM net gains unavailable.
