@@ -86,3 +86,31 @@
 - multimodal_lifecycle: service stopped; control/inference/debug listeners 0; dedicated Edge closed; task profile absent; superseded task projector removed.
 - multimodal_privacy: conversations/prompts/recordings in RAM; Pi state directory absent; protected user configuration untouched.
 - multimodal_client_scope: SilentTalk runtime unchanged; runtime tests not repeated; player release assets unchanged.
+
+# Laptop context validation 2026-10-03
+
+- context_agent_source_commit: 954c201368bf60a52477a3b5ca24472776ea55de; copilot-story-mode; pushed.
+- context_owner: EdgeAgent; SilentTalk runtime unchanged; character lease context and GPU settings independent.
+- context_hardware: physical RAM 8266268672 bytes; RTX 3050 Ti 4096 MiB.
+- context_default: 131072; output ceiling 8192; GPU layers -1 auto; q8 KV; fit margin 512 MiB.
+- context_actual_engine: Qwen3.5-4B 131072; E4B 131072; native props verified; context mismatch rejected by service.
+- context_manual_gpu_agent: 75.09 s; 4 tool operations; independent pytest exit 0; test SHA256 unchanged.
+- context_auto_gpu_agent: 186.67 s; read/read/edit/powershell; done; independent pytest exit 0; test SHA256 unchanged; no output truncation; free physical RAM approximately 140 MiB.
+- context_cap_scope: allocated 128K; small Agent workflow validated; full 100K input quality and large-project capability not established.
+- context_output_root_cause: former bridge ceiling 4096; Pi safety reserve 4096; real SDK old 4096 context request cap 1; earlier capability attribution corrected.
+- context_output_controls: separate context/output fields; effective ceiling; actual request cap and usage reported; assistant snapshot preserved across later summary notification.
+- context_sdk_checks: changing output budget rebuilds process; RAM history retained; real media request cap 8192; installed pinned SDK tests passed.
+- context_legacy_migration: old 4096..8191 context raised to 8192 in RAM; existing model/adapter/GPU preferences preserved; user file not overwritten during read.
+- context_gpu_negative: manual 99-layer restore failed under increased device use; original Agent restored with auto GPU; user applications not closed.
+- context_ui_poll_negative: native picker interrupted by periodic option recreation; existing base/adapter/projector option owner rewritten.
+- context_ui_poll_regression: RAM synthetic catalog; empty LoRA selection retained; no personal adapter loaded/downloaded/modified.
+- context_multimodal_final: 17 passed / 17 total; E4B native mixed media recognition; 131072 context; auto GPU; 8 viewports; exit 0; unexpected runtime/console/network errors 0.
+- context_baseline_browser_negative: extension connection exceptions 2; isolated Edge extensions disabled; later transient local connection errors 4; failed runs not counted as pass.
+- context_baseline_browser_final: 8 viewports; touch actions; output controls; empty LoRA polling; exit 0; unexpected errors 0; expected directory HTTP 400 / error log 1.
+- context_pytest: 87 passed; 58.27 s; exit 0.
+- context_checks: Ruff check/format exit 0; JavaScript syntax 2 exit 0; git diff check exit 0.
+- context_agent_github_ci: 37098895701; completed; success; 954c201; unit 45 s; workflow-dispatch first-launch skipped.
+- context_review: independent read-only incremental review; remaining blockers 0.
+- context_retained_configuration: Qwen3.5-4B; context 131072; output 8192; GPU -1; low VRAM 1; LoRA empty; explicit projector empty.
+- context_cleanup: own service stopped; control/inference/debug listeners 0; own Edge closed; own profile and Agent fixture absent; Pi state absent.
+- context_privacy: prompts/media/output in RAM; protected user configuration untouched; source repos clean after commit; no SilentTalk runtime change.
