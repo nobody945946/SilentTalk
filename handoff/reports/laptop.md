@@ -114,3 +114,41 @@
 - context_retained_configuration: Qwen3.5-4B; context 131072; output 8192; GPU -1; low VRAM 1; LoRA empty; explicit projector empty.
 - context_cleanup: own service stopped; control/inference/debug listeners 0; own Edge closed; own profile and Agent fixture absent; Pi state absent.
 - context_privacy: prompts/media/output in RAM; protected user configuration untouched; source repos clean after commit; no SilentTalk runtime change.
+
+# Laptop RAM memory and Windows maintenance 2026-10-03
+
+- memory_source_commit: db7aaec6d13af16f9412a7078e3c1d25143f965b; EdgeAgent; copilot-story-mode; pushed.
+- memory_github_ci: 37102283588; exact db7aaec6d13af16f9412a7078e3c1d25143f965b; success; unit 83 passed / 9 skipped; 17.27 s; skipped pinned-runtime cases passed locally; workflow-dispatch first-launch skipped.
+- memory_client_scope: SilentTalk runtime unchanged; character lease settings independent.
+- memory_capacity: engine 131072; output 8192; working target 32768; working target adjustable to engine capacity; GPU auto; q8 KV.
+- memory_compaction: Pi owner; threshold 20480; recent target 6826; whole-message boundaries; target not hard truncation; event owner compaction_end.
+- memory_archive: original Pi tree in RAM; archived lexical/CJK retrieval; 4 excerpts; 6000 text characters; no media/thinking search; no cross-session recall; no recall duplication in archive.
+- memory_explicit_tool: search_history; actual pinned SDK execution verified; no mutation approval requested.
+- memory_cache: actual preset cache-ram 256 MiB; ctx-checkpoints 2; cache_prompt enabled; active KV allocation separate.
+- memory_native_cache_first: prompt 517; cached 0; processed 517; output 2; elapsed 9.12 s.
+- memory_native_cache_second: prompt 534; cached 513; processed 21; output 2; elapsed 1.61 s.
+- memory_actual_agent: 106.81 s; read/find/ls/edit/powershell; done; independent pytest 1 passed; exit 0; 3 assertions; test SHA256 unchanged; no output truncation.
+- memory_actual_agent_usage: input 36; cacheRead 2947; output 21; total 3004.
+- memory_sdk_regressions: working-target compaction; archive retention; bounded recall; actual lookup tool; process rebuild after target change; session isolation; media/thinking exclusion; passed.
+- memory_local_pytest: 92 passed; 39.61 s; exit 0; later incremental RAM contract checks 3 passed; exit 0.
+- memory_actual_edge: memory assertions 5; viewports 8; exit 0; unexpected runtime/console/network errors 0; expected directory HTTP 400 / error log 1.
+- memory_ui_negative: initial missing working-target field; actual browser failure observed; owner HTML corrected; subsequent browser run passed.
+- memory_checks: Ruff check/format exit 0; JavaScript syntax exit 0; git diff check exit 0; model-dialog screenshot reviewed.
+- memory_configuration: Qwen3.5-4B; context 131072; output 8192; working target 32768; GPU -1; low VRAM 1; LoRA empty; explicit projector empty.
+- windows_snapshot_owner: C:/Users/A8fm0/.codex/windows-ai-maintenance/maintain.ps1; original-state.json; after-state.json; final-memory-samples.json.
+- windows_original_wlan: PID 4796; private commit 6865 MiB; working set approximately 23 MiB; Wi-Fi connected.
+- windows_restart_wlan: PID 6760; private commit approximately 4 MiB initially; 30 MiB at 19 min; temporary reset insufficient.
+- windows_wifi_extension: AX201; driver 24.70.0.3; WPA2-Personal; exact ExtensibilityDLL registration disabled; original value/type retained; driver package and DLL retained.
+- windows_wifi_validation: DNS passed; GitHub HTTPS 200; WlanSvc Auto/Running; WLANExt process count 0; final connected adapters 1.
+- windows_wifi_followup: 2026-10-03T06:14:20Z; extension registration absent; WLANExt count 0; WlanSvc Running; connected adapters 1.
+- windows_startup: Discord Run removed; Steam Run removed; Edge Run removed; original values/types retained.
+- windows_edge_background: StartupBoostEnabled 0; BackgroundModeEnabled 0; original values/existence retained.
+- windows_asus_owner_negative: force-stopped diagnostic processes restarted by service recovery; tasks re-enabled; corrected at service owner.
+- windows_asus_final: ASUSSystemAnalysis Manual/Stopped; ASUSSystemDiagnosis Manual/Stopped; diagnostic tasks Disabled 2; original Auto/Running and task states retained.
+- windows_steam: no active game process observed; graceful shutdown; remaining Steam processes 0; application retained.
+- windows_rollback: actual registry/task/service/Wi-Fi extension Restore and exact state comparison passed; final Apply and Wi-Fi probe passed.
+- windows_script_negative: WLAN process-stop race/confirmation failure; corrected with exact PID/CIM identity and Force; final scoped restart and connection probe passed.
+- windows_retained: Defender; Windows Update; pagefile; memory compression; Wi-Fi core driver; ASUS thermal/power/hotkey services; active Edge/VSCode/Discord; remote access.
+- windows_ram_final_samples: available physical 706/756/798 MiB; available commit 19179/19204/19302 MiB; 3 measurements; own inference stopped; no 6.7-GiB physical-RAM release claim.
+- memory_cleanup: own service stopped; control/inference/debug listeners 0; own Edge closed; own profile/Agent/folder fixtures absent; Pi state absent.
+- memory_privacy: conversation/media/model output in RAM; protected user configuration untouched; no model prompt/output added to report.
