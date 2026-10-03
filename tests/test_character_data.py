@@ -362,3 +362,36 @@ def test_rows_without_a_verdict_refuse_the_set(chardata: Path) -> None:
     )
 
     assert _filter() == 3  # 23 of 24 checked
+
+
+def test_agent_character_rows_follow_what_the_app_asks(chardata: Path) -> None:
+    """An agent character: "is this work?" on each owner line, the Agent's
+    instructions for work, the acceptance line with the ack hint, and the
+    report line from the Agent's news, never as an answer to the line before."""
+    script = _script(
+        [
+            ("阿誠", "機魂 幫我看一下專案測試為什麼掛了", NAME),
+            (NAME, "遵命 本機魂這就檢查", "阿誠"),
+            ("阿豪", "這個好酷", "大家"),
+            ("阿誠", "對啊", "阿豪"),
+            (NAME, "校驗完畢 有一項測試因除以零而失敗", "阿誠"),
+        ]
+    )
+    script["spec"] |= {"agent": True, "honesty": "machine", "tasks": ["跑測試"]}
+    script["lines"][0]["task"] = "執行專案的測試，找出失敗的原因並回報。"
+    script["lines"][4]["report"] = "1 項測試失敗：parser.py 除以零。"
+    rows = _render(chardata, script, {0: "遵命 本機魂這就檢查"})
+    kinds = {(r["kind"], r["index"]): r for r in rows}
+    assert kinds[("gate_task", 0)]["messages"][-1]["content"] == "是"
+    assert kinds[("gate_task", 3)]["messages"][-1]["content"] == "否"
+    task = kinds[("task_text", 0)]["messages"]
+    assert task[-1]["content"] == "執行專案的測試，找出失敗的原因並回報。"
+    assert task[-2]["content"].endswith("只輸出指示本身）")
+    ack = kinds[("ack", 0)]["messages"]
+    assert "（主人交代的工作已經交給思考機開始做：執行專案的測試" in ack[-2]["content"]
+    report = kinds[("report", 4)]["messages"]
+    assert "（思考機回報工作結果：1 項測試失敗：parser.py 除以零。" in report[-2]["content"]
+    assert report[-1]["content"] == "校驗完畢 有一項測試因除以零而失敗"
+    assert not any(r["kind"] == "line" and r["index"] == 3 for r in rows)
+    system = rows[0]["messages"][0]["content"]
+    assert "主人「阿誠」的電腦（思考機）" in system and "坦然以機器的身分自居" in system

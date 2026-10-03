@@ -482,3 +482,11 @@ async def test_task_hints_make_the_character_speak_without_a_gate() -> None:
     assert line == "校驗完畢，三項測試皆已通過。"
     assert [kind for kind, _ in model.requests] == ["line"]
     assert "（思考機回報工作結果：3 個測試通過，parser.py 改了 1 行。" in model.requests[0][1][-1]["content"]
+
+
+def test_task_news_after_the_characters_own_line_gets_its_own_turn() -> None:
+    model = _Dispatching(gate="否")
+    chat = _chat(CHAT[:4])  # ends with the character's own line
+    messages = model.character_messages(turns=chat, task_hint=("report", "完成"))
+    assert messages[-2]["role"] == "assistant"
+    assert messages[-1]["content"].startswith("（思考機有消息）\n\n（思考機回報工作結果：完成。")

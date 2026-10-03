@@ -489,16 +489,27 @@ class LocalReplyModel:
         checks that the newest line is the owner's."""
         if not self._agent_dispatch or not await self._gate(turns, summary, engagement, "task"):
             return ""
-        base = self.character_messages(
-            turns=turns, summary=summary, engagement=engagement, gate=True
-        )
-        messages = base[:-1] + [
-            {"role": "user", "content": base[-1]["content"] + "\n\n" + _TASK_TEXT_ASK}
-        ]
+        messages = self.task_text_messages(turns=turns, summary=summary, engagement=engagement)
         raw = await asyncio.to_thread(
             self._request_messages, messages, None, 300, "task" in self._lora_uses, 0.3
         )
         return to_taiwan_traditional(_strip_thinking(raw).strip())[:_TASK_TEXT_MAX_CHARS]
+
+    def task_text_messages(
+        self,
+        *,
+        turns: Sequence[ConversationTurn],
+        summary: str = "",
+        engagement: str = "called",
+    ) -> list[dict[str, str]]:
+        """The request for the Agent's instructions: the cached chat with the
+        task ask on the end (same prefix as the "task" gate)."""
+        base = self.character_messages(
+            turns=turns, summary=summary, engagement=engagement, gate=True
+        )
+        return base[:-1] + [
+            {"role": "user", "content": base[-1]["content"] + "\n\n" + _TASK_TEXT_ASK}
+        ]
 
     async def _gate(
         self,
@@ -574,6 +585,9 @@ class LocalReplyModel:
         if lull and messages[-1]["role"] != "user":
             # The character spoke last; the lull itself is the new "message".
             messages.append({"role": "user", "content": "（安靜）"})
+        if task_hint is not None and messages[-1]["role"] != "user":
+            # The Agent's news arrives after the character's own line.
+            messages.append({"role": "user", "content": "（思考機有消息）"})
         if messages[-1]["role"] != "user" or gate:
             return messages
         # Per-request hints ride on the end of the newest message only; the
