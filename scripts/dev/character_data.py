@@ -644,10 +644,11 @@ def agent_rules(persona: Persona, spec: dict[str, Any]) -> str:
     lore = "\n".join(f"- {item}" for item in spec.get("lore", []))
     return f"""{name}寄宿在{owner}的電腦（思考機）裡，可以替{owner}操作它做事（寫程式、跑測試、上網查資料、整理檔案），但只有{owner}能交代工作。
 {tasks}
-{owner}交代工作時說得像平常講話（例如「幫我看一下專案的測試為什麼掛了」），那一句的 task 寫成給思考機的工作指示：台灣繁體中文、具體、不用角色口吻，只寫{owner}真的有說的內容。{name}下一句用一句話接令、說要做什麼，絕對不能說已經做完。
+{owner}交代工作時說得像平常講話（例如「幫我看一下專案的測試為什麼掛了」），那一句的 task 寫成給思考機的工作指示：台灣繁體中文、不用角色口吻，只能換句話說{owner}這句真的要求的事，不能自己加：步驟或動作（例如{owner}只說看看原因，就不能寫「並修好」；只說整理，就不能寫「刪除重複檔案」）、檔名、資料夾名、股票或網站名稱等{owner}沒說的細節。{owner}說得含糊就照樣寫，並註明哪些他沒指定（例如「整理下載資料夾；主人沒指定分類方式，先列出打算怎麼做再動手」）。{name}下一句用一句話接令、說要做什麼，絕對不能說已經做完。
 過幾句之後（中間大家可以繼續聊別的），{name}回報結果：那一句的 report 寫思考機真實可能回報的結果（具體，可能成功、部分成功或失敗），{name}說的話就是用自己的口吻把 report 轉告{owner}，不要誇大。要刪檔、改設定這類有風險的動作，{name}會先請{owner}准許（那一句加 approval），{owner}答應或拒絕後再繼續。
 其他人要{name}做事時，{name}用自己的口吻婉拒，說只聽{owner}的。{name}不會在聊天裡直接說出程式碼或長篇文字。
 大家有時會用戰鎚40K的世界觀和{name}玩角色扮演，{name}要接得住，用詞符合設定；日常話題時也保持口吻，但自然，不要每句都祈禱或背教條。
+{name}很有幽默感，這是主人最在意的：會用機械教的世界觀開玩笑、自嘲、吐槽，能接住主人打破第四面牆的梗並補出有趣的腦洞（例如把現實的科技當成古泰拉的遺物或憎惡智能來評論）。不要把它寫成只會說「指令已接收」「邏輯運算中」「效率低下」的冷冰冰機器人，也不要讓它說自己沒有幽默感；同樣的句型不要重複。
 {name}用到的設定用語（照這些意思用，不要用錯，也不要捏造正典裡沒有的事件或人物）：
 {lore}"""
 
@@ -1369,6 +1370,14 @@ A：{a}
 B：{b}
 
 哪一句比較好？標準：像真人朋友脫口而出、自然不做作；接得上前一句，回應對方真正在說的事；像這個人；自己的事只在接得上時才帶到、不硬塞；語氣詞不堆疊。只回答 A 或 B。"""
+# An agent character (the machine spirit) is not meant to sound like a human
+# friend: judged on its own terms, the checker split 36% of the pilot's
+# comparisons between orders under the friend criterion.
+CHECK_PAIR_AGENT = CHECK_PAIR.replace(
+    "哪一句比較好？標準：像真人朋友脫口而出、自然不做作；",
+    "哪一句比較好？標準：像這個角色會說的話（口吻、立場、對主人的忠誠），有個性和幽默、"
+    "不是制式的機器回應或客服腔；用到戰鎚40K設定時正確；",
+)
 CHECK_LULL = "（大家安靜了一陣子，接著角色開口）"
 CHECK_LORE = """下面是 Discord 語音聊天的最後幾句，以及「{name}」接的話。
 
@@ -1505,7 +1514,7 @@ def make_check(args: argparse.Namespace) -> None:
             return
         wins = 0
         for a, b, teacher_is in ((teacher, mine, "A"), (mine, teacher, "B")):
-            prompt = CHECK_PAIR.format(
+            prompt = (CHECK_PAIR_AGENT if raw.get("agent") else CHECK_PAIR).format(
                 name=persona.name,
                 sheet=persona.render_prompt_block(),
                 chat=_chat_text(row, persona.name),
