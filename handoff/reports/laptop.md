@@ -207,3 +207,17 @@
 - final_source_silenttalk: integration 38e4343; merged head a37b5045746b90878030c33a52e52a611773a26f; copilot-story-mode normal push exit 0.
 - final_source_edgeagent: integration 7a20154; merged head 9766eb7f17d742597e60b77018e21c3f924be4d6; copilot-story-mode normal push exit 0.
 - final_privacy: user .env/settings/personas/character_state and conversation log not read or changed; prompts/audio/transcripts/task output not stored in report or test assets; live Discord verification pending.
+
+## Discord live verification 2026-10-04
+
+- credential_exception_authorized: .env DISCORD_BOT_TOKEN/OWNER_USER_ID only; RAM-only login; existing no-read rule overridden for those 2 keys; credential contents not printed or persisted; protected files unchanged.
+- channel_resolution: supplied ID 729722190857240717; guild ID; channel HTTP 404 / code 10003; guild membership confirmed; unique voice channel 729722190857240721; human count 0; view/connect/speak/send permissions true.
+- bot_authentication: bot ID 1552128066719981608; login passed; required invite permission bitset 3148800; channel permissions already satisfied.
+- live_setup_initial: runner character-port conflict; ValueError; exit 1; test setup corrected to character port 18088 / returned inference port 18090; base lease restored; own listeners absent; temporary directory removed.
+- live_read_initial: context 16384 per slot; output limit 512; decision 1969 ms; ack generation 625 ms; ack sent at 3016 ms; read calls 2; Agent error event 1; Agent elapsed 38938 ms; report generation 2031 ms; notices sent 2; full elapsed 44329 ms; exit 1; error reason not captured; no successful-read claim.
+- live_read_pass: Qwen3.5-4B; LoRA empty; context 16384 per slot; default output limit 8192; Agent slot 1; isolated permission profile edit/shell/web deny; permitted workspace fixture; owner instruction injected in RAM; read calls 1; fixture basename/path existence confirmed; missing-file/permission-error markers false; result JSON characters 65; done events 1; Agent error events 0; exit 0.
+- live_latency_pass: decision 1641 ms; ack generation 531 ms; ack delivered 2594 ms after trigger; Agent elapsed 6125 ms; report generation 750 ms; full read-and-report elapsed 9438 ms; text notices sent 2.
+- live_approval_scope: read-only task; approval events 0; real approval roundtrip not measured; offline owner-only/once-denial checks remain passed.
+- live_delivery_scope: actual Discord voice connection and channel text delivery; generated voice/TTS playback and actual human speech/STT input not exercised; character/persona quality not evaluated; runtime/service code unchanged.
+- live_cleanup: Discord connection closed; base lease returned ready true; own control/inference listeners 18087/18090 absent; temporary directory removed; occupied VSCode port 18089 untouched.
+- live_privacy: generated task/ack/result stayed in RAM except authorized Discord delivery; no conversation/prompt/audio/transcript stored in report/test assets; settings/personas/character_state and conversation log not read or changed.
