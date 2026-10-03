@@ -54,6 +54,12 @@ def main() -> int:
         help="QLoRA: load the base in 4-bit (nf4); E4B in bf16 does not fit next to other tenants",
     )
     parser.add_argument(
+        "--liger",
+        action="store_true",
+        help="fused linear + cross-entropy (liger-kernel): long Agent rows never "
+        "materialize logits over a 250k vocabulary for every token",
+    )
+    parser.add_argument(
         "--check",
         action="store_true",
         help="build everything, show which tokens are trained on, one short forward; no training",
@@ -141,6 +147,7 @@ def main() -> int:
         report_to=[],
         completion_only_loss=True,
         max_length=args.max_length,
+        use_liger_kernel=args.liger,
     )
     trainer = SFTTrainer(
         model=model,
