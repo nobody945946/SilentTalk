@@ -27,3 +27,14 @@ def test_every_effect_restores_loudness_and_limits_peaks() -> None:
     for key, (_label, chain) in VOICE_EFFECTS.items():
         if key:
             assert chain is not None and chain.endswith("alimiter=limit=0.95")
+
+
+def test_every_effect_survives_discord_option_splitting() -> None:
+    import shlex
+
+    # DiscordAudioPlayer wraps the chain in double quotes and discord.py
+    # shlex-splits the options: the chain must come back as one argument.
+    for key, (_label, chain) in VOICE_EFFECTS.items():
+        if chain:
+            assert '"' not in chain, key
+            assert shlex.split(f'-vn -af "{chain}"') == ["-vn", "-af", chain], key

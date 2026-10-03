@@ -119,6 +119,17 @@ VOICE_EFFECTS: dict[str, tuple[str, str | None]] = {
         "機械電子",
         str(VOICE_STYLES["mechanicus"].ffmpeg_filter) + _LEVEL.format(gain=6.5),
     ),
+    # The machine spirit's voice, chosen by the owner by ear (2026-10-04):
+    # 48 Hz ring modulation and a short metallic echo, band-limited. Meant for
+    # zh-TW-YunJheNeural at +22 Hz (between a male and a female voice). It
+    # keeps Mandarin tones: SenseVoice CER 7.4% on stt_eval's 12 sentences,
+    # dry voice 7.2%; robotizing the pitch flat cost 19-27%.
+    "machine_spirit": (
+        "機魂電子音",
+        "aeval='val(0)*(0.72+0.28*sin(2*PI*48*t))':c=same,aecho=0.8:0.55:9:0.32,"
+        "highpass=f=140,lowpass=f=6800,"
+        "acompressor=threshold=-20dB:ratio=3:attack=4:release=70" + _LEVEL.format(gain=10),
+    ),
 }
 PITCH_STEPS: tuple[tuple[int, str], ...] = (
     (-30, "很低"), (-15, "低"), (0, "一般"), (15, "高"), (30, "很高")
