@@ -30,13 +30,15 @@ SilentTalk 是 Discord 語音角色與回覆建議玩具。下載後啟動同一
 ### 首次 Discord 授權
 
 1. 在 Discord Developer Portal 建立 Application 與 Bot。
-2. 邀請 Bot 到要使用的 Server，授予 View Channel、Connect、Speak。
+2. 邀請 Bot 到要使用的 Server，授予 View Channel、Connect、Speak、Send Messages（所在語音頻道的聊天室）。
 3. 取得 Bot Token，並在 Discord Developer Mode 複製自己的 User ID。
 4. 初次啟動時，在授權介面輸入這兩項資料。
 
 新輸入存入 Windows 認證管理員，之後不用重填。既有 `.env` 優先，安裝器不修改它或其他使用者設定。Application ID 與 Public Key 不能代替 Bot Token。建立 Bot 與帳號授權仍是必要的一次性步驟。
 
 預設只使用語音。要啟用所在語音頻道的內建文字聊天，需在設定開啟文字聊天，於 Developer Portal 開啟 Message Content Intent，並授予該頻道的發送訊息權限；不會讀寫其他文字頻道。
+
+既有 Bot 使用 Agent 派工前需重新邀請一次，補上 Send Messages。使用 [Discord 邀請頁](https://discord.com/developers/applications) 中該 Application 的 OAuth2 URL Generator，選 bot 與上述四個權限。批准按鈕不需要 Message Content Intent；只有讀取一般聊天文字時才需要。
 
 ## 日常使用
 
@@ -59,7 +61,9 @@ SilentTalk 是 Discord 語音角色與回覆建議玩具。下載後啟動同一
 
 開啟文字聊天後，角色依觸發來源用文字或語音回答；選項模式可用 T 將選中回覆送到所在語音頻道的文字聊天。
 
-人設頁設定角色的名字、身分、背景、想要的事、個性、人際關係與聲音。角色不是編程工具；編程工作使用 EdgeAgent。聲線、語速與音效可試聽，試聽只在本機播放。標點會影響 EdgeTTS 的斷句與語氣，但不保證精確停頓或拉長音。
+人設頁設定角色的名字、身分、背景、想要的事、個性、人際關係與聲音。開啟「設定 → 聊天 → 讓主人交代 Agent 工作」後，角色可接令並透過 EdgeAgent 做事。聲線、語速與音效可試聽，試聽只在本機播放。標點會影響 EdgeTTS 的斷句與語氣，但不保證精確停頓或拉長音。
+
+在 EdgeAgent「⋯ → 權限」開啟 Discord Agent，設定寫檔、執行指令、上網及可用資料夾；派工使用第一個資料夾，沒有設定時角色會請主人先設定。Agent 與角色需選同一基底與同一 LoRA，才能在角色租借期間共用推論。只有 Owner 的話能派工；批准訊息只接受 Owner 的按鈕互動，每次准許只涵蓋該操作。讀過網頁後重新要求寫檔／指令批准，刪除或受保護檔案指令固定單次批准。任務結果由角色回報，背景執行時仍可聊天。
 
 設定頁提供聊天、Discord、聲音、聽力、本機模型與快捷鍵。變更自動保存；標示「需重開」的項目下次啟動生效。預設值在 `config.toml`，使用者變更在 `settings.json`，同名項目以後者優先。
 
@@ -67,7 +71,7 @@ SilentTalk 是 Discord 語音角色與回覆建議玩具。下載後啟動同一
 
 部署完成後執行 `edge-agent`，或在 Agent 安裝目錄雙擊 `開啟 EdgeAgent.cmd`。在介面選擇專案資料夾，輸入編程工作，查看工具操作與修改審閱。寫檔、編輯與 PowerShell 執行會先要求批准；Plan 模式只使用讀取工具。批准機制不是作業系統沙盒，執行程式仍具有目前帳號的權限。
 
-Agent 預設為 `Qwen3.5-4B-Q4_K_M.gguf`、16,384 token context、thinking off。RTX 3050 Ti 4 GB 已通過兩個小型 Python 修碼案例，大型專案能力尚未建立。較小模型可減少記憶體需求，但不保證更適合 Agent 工作。
+Agent 預設為 `Qwen3.5-4B-Q4_K_M.gguf`、131,072 token context、thinking off，日常工作記憶目標為 32,768 token。RTX 3050 Ti 4 GB 已通過兩個小型 Python 修碼案例，大型專案能力尚未建立。較小模型可減少記憶體需求，但不保證更適合 Agent 工作。
 
 模型下載與熱切換使用 EdgeAgent 右上角「⋯ → 模型模組」：從 Hugging Face 列出檔案、下載並驗證後，選擇模型再「套用並切換」。下載完成不會自動切換。支援目前 llama.cpp 可載入的單檔 GGUF；切換失敗會嘗試恢復原配置。工作或角色租借中不能切換，先結束工作或退出 SilentTalk。
 
@@ -90,7 +94,7 @@ LoRA 是個人資產。產品只提供載入框架，不附帶、下載或自動
 
 語音辨識與模型推論在本機。Discord 與 EdgeTTS 需要網路；EdgeTTS 會將要合成的文字送到外部語音服務，但不需要額外付費 API key。
 
-對話、轉錄、候選與摘要只在 RAM，關閉後不恢復。未採用候選不進 context；語音播放或文字送出成功後才記錄為已說出的回覆。自動壓縮可濃縮較早內容，保留近期原文。角色與 Agent context 各自設定，預設分別為 32,768 與 16,384 token。
+對話、轉錄、候選與摘要只在 RAM，關閉後不恢復。未採用候選不進 context；語音播放或文字送出成功後才記錄為已說出的回覆。自動壓縮可濃縮較早內容，保留近期原文。角色與 Agent context 各自設定，預設分別為 32,768 與 131,072 token。共用時每個 slot 以兩者較大值部署，不縮小設定的 context；所需記憶體可能增加，載入失敗會回報。
 
 程式保存使用者設定、人設、快捷句、UI 偏好；選用角色長期狀態時，可保存角色自己的近況與心情，不能包含人的對話原文。合成音訊在播放期間使用暫存檔並於結束清除。log 只記事件與數字，不記對話全文或 token。
 
@@ -99,7 +103,7 @@ LoRA 是個人資產。產品只提供載入框架，不附帶、下載或自動
 ## 常見問題與驗收
 
 - **下載中斷／元件損壞：**重跑同一啟動器。只部署用 `啟動 SilentTalk.cmd --setup-only`；完整驗收用 `--check`，會實際載入 STT、租借角色並歸還，不連 Discord。正在租借時先退出會話。
-- **Bot 沒加入：**確認 Owner ID、Bot 已邀請到 Server，以及 View Channel／Connect／Speak 權限。
+- **Bot 沒加入：**確認 Owner ID、Bot 已邀請到 Server，以及 View Channel／Connect／Speak／Send Messages 權限。
 - **F8 無反應：**確認已啟動，並檢查其他程式是否占用快捷鍵。
 - **播放中斷線：**已開始的句子不自動重播以避免回音；程式恢復連線後讓下一句接續。
 - **換模型失敗：**確認沒有 Agent 工作或角色租借，且模型已下載完整、格式與引擎相容。

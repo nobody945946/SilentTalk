@@ -477,6 +477,9 @@ class LocalReplyModel:
             self._recent_character_lines.append(line)
         return line
 
+    def set_agent_dispatch(self, enabled: bool) -> None:
+        self._agent_dispatch = enabled
+
     async def task_from_owner(
         self,
         *,
@@ -866,7 +869,7 @@ class LocalReplyModel:
         loaded adapter to requests that leave it out) and the slot kept for
         that scale, so switching does not throw away the other's cache."""
         if not self._lora_loaded:
-            return {}
+            return {"id_slot": 0}
         return {
             "lora": [{"id": 0, "scale": 1.0 if character else 0.0}],
             "id_slot": 0 if character else 1,

@@ -3,10 +3,12 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from collections.abc import Callable
+from collections import deque
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
 
+from silenttalk.agent_tasks import AgentTaskClient
 from silenttalk.config import CopilotConfig
 from silenttalk.copilot.character import CharacterPolicy
 from silenttalk.copilot.character_state import STATE_FILE, CharacterStateStore
@@ -52,6 +54,7 @@ class _Trigger:
     # time.monotonic() when the line came in, to log how long an answer took
     # including any wait behind the previous generation.
     heard_at: float = 0.0
+    speaker_id: int = 0
 
 
 class CopilotRuntime:
@@ -71,6 +74,9 @@ class CopilotRuntime:
         on_character_text: LineCallback | None = None,
         on_agenda: AgendaCallback | None = None,
         can_type: bool = False,
+        agent_tasks: AgentTaskClient | None = None,
+        on_agent_approval: Callable[[dict[str, object]], Awaitable[None]] | None = None,
+        on_agent_line: LineCallback | None = None,
     ) -> None:
         self._config = config
         self._owner_user_id = owner_user_id
@@ -81,6 +87,14 @@ class CopilotRuntime:
         self._on_character_line = on_character_line
         self._on_character_text = on_character_text
         self._on_agenda = on_agenda
+        self._agent_tasks = agent_tasks
+        self._on_agent_approval = on_agent_approval
+        self._on_agent_line = on_agent_line or on_character_line
+        self._agent_job: asyncio.Task[None] | None = None
+        self._task_hints: deque[tuple[str, str]] = deque()
+        self._owner_tasks: deque[tuple[_Trigger, tuple[ConversationTurn, ...], str]] = deque()
+        self._task_result = ""
+        self._agent_epoch = 0
         self._agenda_task: asyncio.Task[None] | None = None
         self._memory = config.character_memory
         self._states = CharacterStateStore(project_dir / STATE_FILE)
@@ -150,6 +164,7 @@ class CopilotRuntime:
         _LOG.info("copilot_runtime_ready")
 
     async def stop(self) -> None:
+        await self.stop_agent_task()
         worker = self._worker
         self._worker = None
         if worker is not None:
@@ -315,7 +330,11 @@ class CopilotRuntime:
             character_lull_seconds=float(
                 copilot.get("character_lull_seconds", self._config.character_lull_seconds)
             ),
+            character_agent=bool(copilot.get("character_agent", self._config.character_agent)),
         )
+        self._llm.set_agent_dispatch(self._config.character_agent)
+        if not self._config.character_agent:
+            self._invalidate_agent_task()
         policy = self._character_policy
         self._character_policy = CharacterPolicy(
             mode=str(copilot.get("character_engagement", policy.mode)),
@@ -355,6 +374,8 @@ class CopilotRuntime:
         if enabled == self._character_mode:
             return
         self._character_mode = enabled
+        if not enabled:
+            self._invalidate_agent_task()
         self._pending = None
         _LOG.info("copilot_character_mode enabled=%s", enabled)
 
@@ -410,12 +431,16 @@ class CopilotRuntime:
         # whole chat and decides whether it is being talked to (SKIP if not).
         # Keyword rules could not tell "阿凱你在嗎" from "我剛才跟阿凱講話".
         trigger = _Trigger(
-            speaker_name, text, self._turn_seq, mentioned, via, time.monotonic()
+            speaker_name, text, self._turn_seq, mentioned, via, time.monotonic(), speaker_id
         )
 
         # Latest wins: while a generation is running, newer lines replace the
         # queued trigger instead of stacking requests on a small GPU.
         self._latest_trigger = trigger
+        if self._character_mode and self._config.character_agent and speaker_id == self._owner_user_id:
+            self._owner_tasks.append((trigger, tuple(self._context.snapshot()), self._context.summary))
+            self._wake.set()
+            return
         self._pending = trigger
         self._wake.set()
 
@@ -469,6 +494,17 @@ class CopilotRuntime:
                     await self._update_life()
                 continue
             self._wake.clear()
+            if self._task_hints and self._character_mode:
+                kind, detail = self._task_hints.popleft()
+                await self._task_line(kind, detail)
+                self._wake.set()
+                continue
+            if self._owner_tasks and self._character_mode and self._config.character_agent:
+                owner_trigger, turns, summary = self._owner_tasks.popleft()
+                if not await self._dispatch_owner(turns, summary):
+                    await self._speak(owner_trigger)
+                self._wake.set()
+                continue
             trigger, self._pending = self._pending, None
             self._maybe_compact()
             if trigger is None:
@@ -477,6 +513,116 @@ class CopilotRuntime:
                 await self._speak(trigger)
             else:
                 await self._generate(trigger)
+
+    def _invalidate_agent_task(self) -> None:
+        self._agent_epoch += 1
+        self._task_hints.clear()
+        self._owner_tasks.clear()
+        self._task_result = ""
+        if self._agent_job is not None:
+            self._agent_job.cancel()
+
+    async def stop_agent_task(self) -> None:
+        self._invalidate_agent_task()
+        job, self._agent_job = self._agent_job, None
+        if job is not None:
+            await asyncio.gather(job, return_exceptions=True)
+
+    async def _dispatch_owner(self, turns: tuple[ConversationTurn, ...], summary: str) -> bool:
+        if self._agent_tasks is None:
+            return False
+        epoch = self._agent_epoch
+        started = time.monotonic()
+        try:
+            instruction = await self._llm.task_from_owner(
+                turns=turns, summary=summary, engagement=self._character_policy.mode,
+            )
+            _LOG.info("agent_task_decision latency_ms=%d dispatched=%s",
+                      round((time.monotonic() - started) * 1000), bool(instruction))
+            if epoch != self._agent_epoch:
+                return True
+            if not instruction or not self._character_mode or not self._config.character_agent:
+                return False
+            if self._agent_job is not None and not self._agent_job.done():
+                await self._task_line("report", "目前工作仍在進行，請等完成後再交代下一件。")
+                return True
+            workspace = await self._agent_tasks.workspace()
+            if epoch != self._agent_epoch:
+                return True
+            await self._task_line("ack", instruction)
+            if epoch != self._agent_epoch or not self._character_mode or not self._config.character_agent:
+                return True
+            self._task_result = ""
+            self._agent_job = asyncio.create_task(
+                self._run_agent_task(instruction, workspace, epoch), name="discord-agent-task",
+            )
+            return True
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - task failures must reach the character
+            _LOG.warning("agent_task_dispatch_failed error_type=%s", type(exc).__name__)
+            if epoch == self._agent_epoch:
+                await self._task_line("report", str(exc))
+            return True
+
+    async def _run_agent_task(self, instruction: str, workspace: str, epoch: int) -> None:
+        assert self._agent_tasks is not None
+        started = time.monotonic()
+        async def on_event(kind: str, payload: dict[str, object]) -> None:
+            if epoch == self._agent_epoch:
+                await self._agent_event(kind, payload)
+        try:
+            await self._agent_tasks.run(instruction, workspace, on_event)
+        finally:
+            _LOG.info("agent_task_finished elapsed_ms=%d", round((time.monotonic() - started) * 1000))
+
+    async def _agent_event(self, kind: str, payload: dict[str, object]) -> None:
+        epoch = self._agent_epoch
+        if kind == "delta":
+            self._task_result = (self._task_result + str(payload.get("text", "")))[-2400:]
+            return
+        if kind == "approval":
+            assert self._agent_tasks is not None
+            if self._on_agent_approval is None:
+                await self._agent_tasks.approve(str(payload["call_id"]), False)
+                return
+            try:
+                await self._on_agent_approval(payload)
+            except Exception as exc:  # noqa: BLE001 - failed approval delivery must deny the operation
+                await self._agent_tasks.approve(str(payload["call_id"]), False)
+                self._task_hints.append(("report", "批准訊息送不出去，操作已拒絕。"))
+                _LOG.warning("agent_approval_failed error_type=%s", type(exc).__name__)
+            else:
+                if epoch != self._agent_epoch:
+                    return
+                detail = str(payload.get("arguments", payload.get("tool", "")))[:1500]
+                self._task_hints.append(("approval", detail))
+        elif kind in {"done", "error", "cancelled"}:
+            result = self._task_result if kind == "done" else str(payload.get("message", "工作已取消。"))
+            self._task_hints.append(("report", result or "工作完成。"))
+            self._task_result = ""
+        if self._wake is not None:
+            self._wake.set()
+
+    async def _task_line(self, kind: str, detail: str) -> None:
+        if not self._character_mode or not self._config.character_agent:
+            return
+        epoch = self._agent_epoch
+        started = time.monotonic()
+        try:
+            line = await self._llm.character_turn(
+                turns=self._context.snapshot(), summary=self._context.summary,
+                engagement=self._character_policy.mode, task_hint=(kind, detail),
+            )
+            if line and epoch == self._agent_epoch and self._character_mode and self._config.character_agent and self._on_agent_line is not None:
+                self._on_agent_line(line)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - preserve the worker when notice generation fails
+            _LOG.warning("agent_character_report_failed error_type=%s", type(exc).__name__)
+            self._on_error("角色的工作回報暫時無法產生。")
+        _LOG.info("agent_character_notice kind=%s latency_ms=%d", kind,
+                  round((time.monotonic() - started) * 1000))
 
     def _lull_due(self) -> bool:
         seconds = self._config.character_lull_seconds

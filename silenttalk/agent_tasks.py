@@ -1,0 +1,119 @@
+"""RAM-only EdgeAgent task transport; EdgeAgent owns all permission decisions."""
+
+from __future__ import annotations
+
+import asyncio
+import json
+from collections.abc import Awaitable, Callable
+from uuid import uuid4
+
+import aiohttp
+
+from silenttalk.agent_lease import CONTROL_PORT, AgentLeaseError
+
+TaskEvent = Callable[[str, dict[str, object]], Awaitable[None]]
+
+
+class AgentTaskClient:
+    def __init__(self, base_url: str | None = None) -> None:
+        self.base_url = base_url or f"http://127.0.0.1:{CONTROL_PORT}"
+        self.session_id: str | None = None
+
+    async def workspace(self) -> str:
+        async with (
+            aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as client,
+            client.get(self.base_url + "/config") as response,
+        ):
+            response.raise_for_status()
+            profile = (await response.json())["permissions"]["discord"]
+        if not profile.get("enabled"):
+            raise AgentLeaseError("請主人先在 EdgeAgent 的權限頁開啟 Discord Agent。")
+        roots = profile.get("workspaces", [])
+        if not roots:
+            raise AgentLeaseError(
+                "請主人先在 EdgeAgent 的 Discord 權限設定工作資料夾。"
+            )
+        return str(roots[0])
+
+    async def run(self, text: str, workspace: str, on_event: TaskEvent) -> None:
+        if self.session_id is not None:
+            raise AgentLeaseError("Agent 工作正在進行。")
+        session_id = self.session_id = str(uuid4())
+        terminal = False
+        try:
+            timeout = aiohttp.ClientTimeout(total=None, sock_connect=10, sock_read=330)
+            async with (
+                aiohttp.ClientSession(timeout=timeout) as client,
+                client.post(
+                    self.base_url + "/chat",
+                    json={
+                        "session_id": session_id,
+                        "text": text,
+                        "client": "discord",
+                        "agent": True,
+                        "working_dir": workspace,
+                    },
+                ) as response,
+            ):
+                response.raise_for_status()
+                event, lines = "message", []
+                async for raw in response.content:
+                    line = raw.decode("utf-8").rstrip("\r\n")
+                    if not line:
+                        if lines:
+                            payload = json.loads("\n".join(lines))
+                            if not isinstance(payload, dict):
+                                raise ValueError("invalid task event")
+                            await on_event(event, payload)
+                            if event in {"done", "error", "cancelled"}:
+                                terminal = True
+                                return
+                        event, lines = "message", []
+                    elif line.startswith("event:"):
+                        event = line[6:].strip()
+                    elif line.startswith("data:"):
+                        lines.append(line[5:].lstrip(" "))
+                raise AgentLeaseError("Agent 連線結束，沒有完成事件。")
+        except asyncio.CancelledError:
+            raise
+        except (aiohttp.ClientError, OSError, ValueError, AgentLeaseError) as exc:
+            await on_event("error", {"message": str(exc)})
+        finally:
+            if not terminal:
+                try:
+                    await self.cancel()
+                except (aiohttp.ClientError, OSError, TimeoutError):
+                    pass
+            self.session_id = None
+
+    async def _control(
+        self, path: str, payload: dict[str, object]
+    ) -> dict[str, object]:
+        if self.session_id is None:
+            return {"accepted": False}
+        async with (
+            aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as client,
+            client.post(
+                self.base_url + path,
+                json={
+                    "session_id": self.session_id,
+                    **payload,
+                },
+            ) as response,
+        ):
+            response.raise_for_status()
+            return await response.json()
+
+    async def approve(self, call_id: str, approved: bool) -> bool:
+        result = await self._control(
+            "/chat/approve",
+            {
+                "call_id": call_id,
+                "approved": approved,
+                "scope": "once",
+            },
+        )
+        return result.get("accepted") is True
+
+    async def cancel(self) -> None:
+        await self._control("/chat/cancel", {})

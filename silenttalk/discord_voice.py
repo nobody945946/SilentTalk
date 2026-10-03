@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 import discord
@@ -26,6 +27,53 @@ PCMCallback = Callable[[int, str, bytes], None]
 TextCallback = Callable[[int, str, str, bool], None]
 # Discord's own limit; a character's line is far shorter, but a paste is not.
 MAX_TEXT_CHARS = 2000
+
+
+class AgentApprovalView(discord.ui.View):
+    """Only the configured owner can decide; every approval covers one call."""
+    def __init__(self, owner_id: int, call_id: str,
+                 decide: Callable[[str, bool], Awaitable[bool]]) -> None:
+        super().__init__(timeout=290)
+        self.owner_id, self.call_id, self.decide = owner_id, call_id, decide
+        self.answered = False
+        self.started = time.monotonic()
+        for label, approved in (("准許", True), ("拒絕", False)):
+            button = discord.ui.Button(label=label, style=(
+                discord.ButtonStyle.success if approved else discord.ButtonStyle.secondary))
+
+            async def callback(interaction: discord.Interaction, choice: bool = approved) -> None:
+                if interaction.user.id != self.owner_id:
+                    await interaction.response.send_message("只有主人能決定這件事。", ephemeral=True)
+                    return
+                if self.answered:
+                    await interaction.response.send_message("這個請求已經處理。", ephemeral=True)
+                    return
+                self.answered = True
+                await interaction.response.defer()
+                try:
+                    accepted = await self.decide(self.call_id, choice)
+                    result = ("已准許這次操作。" if choice else "已拒絕這次操作。") if accepted else "這個請求已結束。"
+                except Exception as exc:  # noqa: BLE001 - Discord callback must report delivery failures
+                    _LOG.warning("agent_approval_response_failed error_type=%s", type(exc).__name__)
+                    result = "批准未送達，操作仍須等待或逾時拒絕。"
+                for child in self.children:
+                    child.disabled = True
+                await interaction.edit_original_response(content=result, view=self)
+                self.stop()
+                _LOG.info("agent_approval_decided approved=%s roundtrip_ms=%d", choice,
+                          round((time.monotonic() - self.started) * 1000))
+
+            button.callback = callback
+            self.add_item(button)
+
+    async def on_timeout(self) -> None:
+        if not self.answered:
+            self.answered = True
+            try:
+                await self.decide(self.call_id, False)
+            except Exception as exc:  # noqa: BLE001 - timed-out operations must remain denied
+                _LOG.warning("agent_approval_timeout_failed error_type=%s", type(exc).__name__)
+
 
 
 class DiscordVoiceClient(discord.Client):
@@ -118,6 +166,25 @@ class DiscordVoiceClient(discord.Client):
             _LOG.warning("text_send_failed status=%s", getattr(exc, "status", "?"))
             return False
         return True
+
+    async def send_approval(self, payload: dict[str, object],
+                            decide: Callable[[str, bool], Awaitable[bool]]) -> None:
+        voice = self.active_voice()
+        channel = getattr(voice, "channel", None)
+        if channel is None or not hasattr(channel, "send"):
+            raise RuntimeError("沒有可發送批准訊息的語音頻道。")
+        reason = {"protected": "碰到受保護檔案", "destructive": "刪除或清除資料"}.get(
+            str(payload.get("explicit", "")), "需要主人批准")
+        if payload.get("after_web"):
+            reason += "；讀過網頁之後的操作"
+        details = json.dumps(payload.get("arguments", {}), ensure_ascii=False)[:1500]
+        view = AgentApprovalView(self._config.owner_user_id, str(payload["call_id"]), decide)
+        try:
+            await channel.send(f"{reason} · {payload.get('tool', '')}\n{details}\n僅准許一次。",
+                               view=view, allowed_mentions=discord.AllowedMentions.none())
+        except Exception:
+            view.stop()
+            raise
 
     async def on_ready(self) -> None:
         self._event_loop = asyncio.get_running_loop()

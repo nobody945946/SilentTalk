@@ -57,6 +57,8 @@ character_lora_uses = "called,active,line"
 # Asked "are you an AI?": "in_character" keeps the act (an NPC does not
 # announce it is scripted), "admit" owns up when sincerely asked.
 character_ai_honesty = "in_character"
+# Owner-only Agent dispatch; requires Discord access/workspace in EdgeAgent.
+character_agent = false
 character_engagement = "called"
 # Character mode: after this many seconds of silence the character brings up
 # something on its mind today or asks after someone (0 = never).

@@ -387,7 +387,7 @@ def test_a_line_that_mostly_repeats_what_was_said_is_dropped() -> None:
 
 def test_only_character_requests_use_the_lora() -> None:
     model = LocalReplyModel(Path("unused.gguf"), lora_path=Path("adapter.gguf"))
-    assert model._lora_field(True) == {}  # not loaded until the server starts with it
+    assert model._lora_field(True) == {"id_slot": 0}  # role cache stays separate from Agent
     model._lora_loaded = True
     # Each scale keeps its own slot: llama-server drops a slot's prompt cache
     # when the scale changes.
