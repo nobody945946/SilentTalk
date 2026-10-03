@@ -78,12 +78,15 @@ def main() -> int:
         for line in Path(args.data).read_text(encoding="utf-8").splitlines()
     ]
     random.Random(0).shuffle(rows)
-    tokenized, broken = [], 0
+    tokenized, broken, quiet = [], 0, 0
     for row in rows:
         try:
-            tokenized.append(tokenize_row(tokenizer, row))
+            item = tokenize_row(tokenizer, row)
         except ValueError:
             broken += 1
+            continue
+        quiet += item.pop("narration_dropped", 0)
+        tokenized.append(item)
     # The trainer cuts long rows from the right, which would train on half an
     # answer with no end marker: drop them instead, and say how many.
     lengths = [len(r["input_ids"]) for r in tokenized]
@@ -91,7 +94,8 @@ def main() -> int:
     print(
         f"longest row {max(lengths)} tokens; "
         f"{len(tokenized) - len(kept)} rows over --max-length {args.max_length} dropped; "
-        f"{broken} rows whose template does not extend its prompts dropped"
+        f"{broken} rows whose template does not extend its prompts dropped; "
+        f"{quiet} rows trained without narration on tool-call turns"
     )
     split = max(1, int(len(kept) * args.holdout))
     train = Dataset.from_list(kept[split:])
@@ -193,8 +197,26 @@ def tokenize_row(tokenizer, row: dict) -> dict[str, list[int]]:
     """input_ids of the whole chat and a completion_mask marking the trained
     assistant turns. Raises ValueError when a turn's prompt is not a prefix of
     the chat in text and in tokens (the span would not be what the model
-    writes at inference)."""
+    writes at inference).
+
+    Gemma 4's template moves the text of a turn that also calls tools behind
+    the tool results once they exist, so that turn is never a prefix of the
+    finished chat. Then the narration on tool-call turns ("讓我先看一下…") is
+    left out and the calls themselves are trained; final answers keep their
+    text. Templates that keep the order (Qwen) are rendered as recorded."""
     messages = wire_to_template(row["messages"])
+    try:
+        return _tokenize(tokenizer, messages, row)
+    except ValueError:
+        quiet = [{**m, "content": ""} if m["role"] == "assistant" and m.get("tool_calls") else m
+                 for m in messages]
+        if quiet == messages:
+            raise
+        out = _tokenize(tokenizer, quiet, row)
+        return {**out, "narration_dropped": 1}
+
+
+def _tokenize(tokenizer, messages: list[dict], row: dict) -> dict[str, list[int]]:
     tools = row.get("tools")
 
     def render(part: list[dict], prompt: bool) -> str:
