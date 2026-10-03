@@ -26,10 +26,13 @@
 | 項目 | 狀態 |
 |---|---|
 | 權限可調＋上網工具＋刪檔／受保護檔案要單次批准（EdgeAgent） | ✅ 已合併進遠端 `copilot-story-mode`（在 `/home/clawd/EdgeAgent-dev` 做的）。**開發機主工作樹刻意還沒 pull**：佇列 `phase1b.sh` 的考場（老師試跑、提示變體、thinking）要和基準用同一版產品，跑完才 pull |
-| 筆電 | ⬜ 已派 `handoff/laptop.md`：Windows 驗證、rg/fd 部署、權限 UI、租借期間可用 Agent、Discord 派工與批准按鈕。使用者說「開工」才會開始 |
+| 筆電 | ✅ 這輪做完（`laptop-report` 的「Windows integration 2026-10-04」）：rg/fd 部署（筆電上 find 原本真的壞）、真的上網 search/fetch、權限 UI、同模型共用（2 slot 約 3.4–3.8 GB；Agent 8K context 5–6 s、32K 46–55 s）、Discord 派工＋批准按鈕（離線 13 個測試）。**Discord 實測還沒做**：要使用者重新邀請 bot（Send Messages） |
 | 機魂的角色邏輯（SilentTalk `llm.py`） | ✅ 已在 `copilot-story-mode`：誠實模式 `machine`、`copilot.character_agent`（預設 off）、派工判斷 `task`、`task_text_messages`、提示 `TASK_HINTS`（ack/approval/report） |
 | 角色資料管線的機魂模式（`character_data.py`） | ✅ 已在 `copilot-story-mode`，單元測試過，**還沒用老師真的跑過** |
-| 機魂人設卡 | ⏳ 新的 3 份草稿（35B-A3B、使用者的第四面牆描述）已寫好，用語表由 Gemma 31B 核對過（刪掉 8／9／9 條解釋錯的），在試聽頁旁的「機魂人設草稿」頁等使用者挑選；選定後跑 `machine_spirit.py pick N --edits '{...}'` |
+| 機魂人設卡 | ✅ 使用者選草稿 2「Machina-Prime-09A（馬基納）」並改成文雅（polish 1），背景保留老師的創意；在 `.runtime/dev/chardata-ms1/personas.jsonl`（9 條核對過的 40K 用語）。產品裡的人設要使用者自己建（`personas.json` 受保護），下一輪請筆電做「匯入人設」 |
+| 中性電子音 | ✅ 使用者聽過選 C：`VOICE_EFFECTS["machine_spirit"]`（配 YunJhe +22 Hz） |
+| 角色資料 | ⏳ 第一次試跑（19 個劇本）**被硬關卡擋下**：台詞贏學生 48.6%、檢查員一致 64.4%、工作指示忠實 72.7%（40K 核對 99.4%、判斷一致 86.7% 都過）。原因與修正見 §5.6；資料歸檔在 `chardata-ms1/pilot-v1-refused/`。第二次試跑由 `chardata-ms1/after-agent-pilot.sh` 排在 Agent 試跑之後自動開始；正式劇本步驟用 `state/scripts.blocked` 暫停，試跑通過才拿掉 |
+| Agent 解題紀錄 | ⏳ 試跑中：`.runtime/bench/agent-pilot.sh`（27B 老師 `teacher-27b` 解 `agentdata/pilot-tasks` 30 題 × 2，`--record`），之後 `bench/dataset.py` 產生 `agentdata/agent-pilot-rows.jsonl` |
 | 40K 背景測驗（`scripts/dev/lore_quiz.py`） | ✅（§5.3）：老師 35B-A3B 94.7%、檢查員 Gemma 31B 97.4%；學生 E4B 75% 最高 |
 | Agent 考場第一階段（基底選擇） | 進行中（§5.2）：ComfyUI 搶 GPU，非常慢 |
 | 寫程式訓練題 | 519 題（8 個開源庫）；老師正在寫請求文字（`make_tasks.py describe`，port 18240 的 35B-A3B，約每分鐘 3.5 題）。之後用 `run.py --task-root .runtime/agentdata/tasks --config teacher-35b-a3b --record` 收集，`bench/dataset.py` 產生訓練列 |
@@ -173,6 +176,12 @@ cd /home/clawd/EdgeAgent-dev && .venv/bin/python -m pytest -q     # Linux：只�
 | B/D/E | robotize（`afftfilt` 相位歸零，音高固定約 188 Hz） | 19–27%（中文聲調被壓平） |
 
 （paraformer 那組連原聲都 100%，是我測的方式不對，不採用。）樣本在 scratchpad，選定後把效果加進 `VOICE_EFFECTS`（`voice_styles.py`），試聽和 Discord 會自動一致。
+
+### 5.6 機魂角色資料試跑 1（被擋下，2026-10-04）
+- 688 列：判斷 489、台詞 177、工作指示 22。40K／人設核對 99.4%、判斷一致 86.7%（是 92%／否 84%）都過。
+- 沒過：台詞贏學生 48.6%（老師把機魂寫成「幽默感係低效運算」的冷冰冰機器人，和 E4B 一樣生硬）、檢查員一致 64.4%（「像真人朋友」的標準不適用機魂）、工作指示忠實 72.7%（「整理下載」被加成「刪除重複檔案」，「抓股價」被寫成指定股票）。
+- 修正（`character_data.py`）：劇本要求幽默與第四面牆的梗、禁止加主人沒說的步驟和細節；`CHECK_PAIR_AGENT` 用角色本身的標準。說話者是暱稱（馬基納）時算本人（試跑丟了 8/21 個劇本）。
+- 原始 E4B 當機魂（`turn_eval --persona-file`，2 段）：真的工作 2/2 都抓到，主人聊天被當成工作 2/6，幾乎每句都回，講笑話回「笑話的邏輯結構需要更精確的參數」。
 
 ### 5.5 角色（SilentTalk，舊結論）
 - E4B＋v3 LoRA（判斷＋台詞）配對盲評贏沒 LoRA 的 E4B（逐句 59% vs 40%）；3050 Ti 套 LoRA 判斷 211 ms、生成 26.0 token/s。
