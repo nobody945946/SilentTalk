@@ -1,162 +1,192 @@
 # 開發機工作檔（Linux、RTX 3090）
 
-更新：2026-10-03 晚｜分支：SilentTalk 和 EdgeAgent 都用 `copilot-story-mode`
+更新：2026-10-03 深夜｜分支：SilentTalk、EdgeAgent 都用 `copilot-story-mode`（EdgeAgent 另有 `agent-permissions`，見 §1）
 你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事。舊版在 `archive/`（只在這台機器、不進 git），不必讀。
 
 ---
 
 ## 1. 現況
 
-筆電在 2026-10-02 把產品拆成兩個：
+**使用者要的（2026-10-03，原話摘要）：** 一個 Discord bot 和 Agent 兩用的角色：
+- **角色**：戰鎚 40K 裡忠誠、出身機械教的「機魂」。很清楚 40K 背景，熟到能打破第四面牆陪主人開玩笑、補腦洞（例：「現在是 2K 古泰拉，外面到處是蓬勃發展的憎惡智能，該怎麼辦？」）。
+- **模型**：要夠強、會推理，Agent 也要做得好，寫程式能力要特化加強。
+- **語音**：中性電子音。
+- **工作**：在 Discord 上也能交代 Agent 工作，可以自由上網搜尋，**權限由使用者自己調**。
+- **安全**：怕 Agent 亂刪亂改，Agent 絕不能在開發機本機執行，只在考場沙盒裡跑（§3）。
 
-| 產品 | 在哪 | 做什麼 |
-|---|---|---|
-| SilentTalk | 這個 repo | Discord 語音角色玩具；角色模型向 EdgeAgent 租 |
-| EdgeAgent | `/home/clawd/EdgeAgent`（repo `nobody945946/EdgeAgent`） | 筆電上的本機 Agent：Pi SDK 1.0.0 ＋ llama.cpp b11193；預設 `Qwen3.5-4B-Q4_K_M`、128K、thinking off |
+**不變的限制：**
+- 一切都要在筆電（RTX 3050 Ti 4 GB、RAM 8 GB，平常只剩約 0.7 GB）跑得動。
+- 開發機平常不參與使用，只負責開發、評估、訓練。
+- 免費、不請使用者做雜事（他只講話、聽、做決定）。
+- Agent 可以用時間換品質；Discord 聊天仍要即時。
+- LoRA 是可選項（使用者自選，產品不預設套用）。
 
-**使用者對 Agent 的要求（2026-10-03）**
-- 要做兩種事：改他自己的程式專案，以及一般 Windows 雜事。
-- **時間換品質**：Agent 可以慢，要做對。角色那邊仍然是即時優先。
-- **模型一定要筆電跑得動**（RTX 3050 Ti 4 GB、RAM 8 GB，平常只剩約 0.7 GB 可用）。3090 只用來同時跑很多題：同一個 GGUF、同樣設定，過題率可以代表筆電；**時間不算數**，速度只在筆電量。
-- 開發機平常不參與（不當筆電的遠端後援）。
-- **怕 Agent 亂刪亂改**：Agent 絕對不在開發機本機執行，只能在考場的沙盒容器裡跑（§3）。
+**產品現況：** 筆電在 2026-10-02 把產品拆成 SilentTalk（Discord 角色，這個 repo）和 EdgeAgent（`/home/clawd/EdgeAgent`，筆電本機 Agent：Pi SDK 1.0.0 ＋ llama.cpp b11193，預設 `Qwen3.5-4B-Q4_K_M`）。SilentTalk 向 EdgeAgent 租模型；**目前租借期間 EdgeAgent 的 `/chat` 會拒絕**（一次只載一個模型，`/chat` 全程鎖住服務），兩用必須改這點（§4 D）。
 
-**計畫：先量、再選、最後才訓練**
-
-| 階段 | 內容 | 狀態 |
-|---|---|---|
-| 0 考場 | 沙盒、題目、打分、自我檢查 | ✅（§3、§5.1） |
-| 1 不訓練，找最好的設定 | 搜尋工具、thinking、模型／量化、context | 進行中（§4 A） |
-| 2 訓練 Agent LoRA | 只有階段 1 顯示「卡在模型本身」才做（§4 B） | ⬜ |
-| 3 筆電 | 10 題子集對帳、量速度與記憶體、使用者試用 | ⬜ 等階段 1 選出設定 |
-
-**角色（SilentTalk）那條線**：沒有待辦。量過會贏的 v3 角色 LoRA，筆電改版後已經不隨產品附帶（改成「使用者自己安裝」），待使用者決定要不要恢復。
-
-**測試**：SilentTalk `204 passed`（筆電改版後未在開發機重跑）；EdgeAgent 的 pytest 在 Windows CI 跑。
+| 項目 | 狀態 |
+|---|---|
+| 權限可調＋上網工具（EdgeAgent） | ✅ 分支 `agent-permissions`（`/home/clawd/EdgeAgent-dev` worktree），測試過（真 Pi SDK）。**還沒合併**：第一階段的考場要用同一版產品程式碼比較，跑完再合併 |
+| 機魂的角色邏輯（SilentTalk `llm.py`） | ✅ 已在 `copilot-story-mode`：誠實模式 `machine`、`copilot.character_agent`（預設 off）、派工判斷 `task`、`task_text_messages`、提示 `TASK_HINTS`（ack/approval/report） |
+| 角色資料管線的機魂模式（`character_data.py`） | ✅ 已在 `copilot-story-mode`，單元測試過，**還沒用老師真的跑過** |
+| 機魂人設卡 | ⚠️ 35B-A3B 寫的 3 份草稿不能用（40K 設定淺、有錯、滑桿方向搞反）。提示已修、已換成使用者的新描述（第四面牆），**要等 40K 測驗選出老師再重寫**，然後給使用者挑 |
+| 40K 背景測驗（`scripts/dev/lore_quiz.py`） | 進行中（§5.3）：學生與老師候選誰懂 40K |
+| Agent 考場第一階段（基底選擇） | 進行中（§5.2）：ComfyUI 搶 GPU，非常慢 |
+| 寫程式訓練題 | 519 題（8 個開源庫），還沒寫請求文字（`make_tasks.py describe`） |
+| 中性電子音 | 5 個候選已量清晰度（§5.4），等使用者試聽挑選 |
+| Discord 端：派工、批准按鈕、EdgeAgent 任務客戶端 | ⬜ 還沒做（§4 D） |
 
 ## 2. 開發機規則（通用規則在 AGENTS.md）
 
-1. 改 prompt、模型、設定、外殼之前先量，改完再量，變差就退回。量不出贏就不出貨。
-2. **Agent 只在沙盒裡跑**：不准在主機上直接啟動 EdgeAgent、Pi 或 `agent_bridge.mjs`。考場每次開跑前會自動做「關得住」檢查（主機上的誘餌檔 `~/edgeagent-bench-decoy` 要完好），失敗就不跑。改 `bench/run.py` 的 `sandbox()` 之後要先跑 `--containment`。
-3. **題目要先過自我檢查**：新增或改題目後跑 `--selftest`，每題「不做事要判不過、套標準答案要判過」。沒過的題目修好或刪掉，不能留在題庫。
-4. 比兩種設定一律用**同一批題目配對比較**（`bench/report.py A B`），不看絕對分數。每題跑 3 次（溫度 0.2）。
-5. **Claude 的輸出不能拿來訓練，也不能拿來挑選訓練資料**（Anthropic 條款）。考題可以由 Claude 寫（只用來評估）。訓練用的解題紀錄只能來自授權允許的開源權重模型；網路上很多現成的 agent 解題資料集是 Claude/GPT 產生的，不能用。
-6. 只有通過硬關卡的資料才能訓練：每筆要在新容器重跑測試通過、沒動不該動的檔案；整批過不了門檻就整批拒絕。
-7. GPU 和別的專案共用（ComfyUI、whisper-api 常駐，ComfyUI 有時佔到 21 GB），**不要動它們的程序**。考場會依「4 GB ＋ 每路 2.4 GB」等空間；空間不夠就降 `--parallel`（不影響結果，只影響速度）。
-8. 關程序：**先列出 PID 再 kill**；比對字串如果也出現在自己這行指令裡，會連自己的 shell 一起殺掉。
-9. **正在跑的 bash 腳本不要原地改**（bash 邊跑邊讀檔）。考場跑的時候也不要改 `bench/agent_runner.py`、`grade.py`、題目（每題開新容器時才讀，改了會讓同一批結果混到兩個版本）。
-10. 這台機器沒有 git 身分：commit 用 `git -c user.name="nobody945946" -c user.email="104478886+nobody945946@users.noreply.github.com" commit ...`。
-11. 長工作之前：模型要整個放進空著的 VRAM（考場用 `-ngl 99 --fit off`，不會偷偷降速）；先用 2–4 題試跑走完整條路；看 `server ready, N tok/s`（4B 應該是每秒 150 token 左右，太低就是被擠到 CPU）。
+1. 改 prompt、模型、設定、外殼之前先量，改完再量，變差就退回。量不出贏就不出貨。修好壞掉的東西（例如工具 100% 失敗）是修 bug，不用 A/B。
+2. **Agent 只在沙盒裡跑**：不准在主機上直接啟動 EdgeAgent、Pi 或 `agent_bridge.mjs`。考場每次開跑前會自動做「關得住」檢查（主機誘餌 `~/edgeagent-bench-decoy` 要完好），失敗就不跑。改了 `bench/run.py` 的 `sandbox()` 先跑 `--containment`。
+3. **題目先過自我檢查**（`--selftest`）：不做事要判不過、套標準答案要判過。沒過的修好或刪掉。
+4. 比較兩種設定一律用同一批題目配對比較（`bench/report.py A B`），不看絕對分數。
+5. **Claude 的輸出不能拿來訓練，也不能拿來挑選訓練資料**（Anthropic 條款）。Claude 可以寫評估用的東西（考題、`lore_quiz_data.py`、評估劇本）和程式碼，但人設卡、劇本、台詞、請求文字、解題紀錄都要由授權允許的開源權重模型產生。網路上很多現成的 agent 解題資料是 Claude/GPT 寫的，不能用。評估資料絕不能給寫訓練資料的老師看。
+6. 只有通過硬關卡的資料才能訓練；整批沒過門檻就整批拒絕（`character_data.py` 的 `HARD_CHECK`，機魂模式多了 `lore_ok` ≥ 0.8、`task_text_agree` ≥ 0.85；程式資料是隱藏測試通過＋沒動不該動的檔案）。
+7. GPU 和別的專案共用（ComfyUI 常駐 9–21 GB、whisper-api 約 2 GB），**不要動它們的程序**。考場依「4 GB＋每路 2.4 GB」等空間。在別人搶 GPU 時量到的速度不算數。
+8. 關程序：**先列出 PID 再 kill**。舊版 `run.py` 被中止時不會關自己的 llama-server，要另外依 PID 關；新版會。
+9. **考場跑的時候**：不要改 `bench/agent_runner.py`、`grade.py`、`relay.py`、題目（每題開新容器時才讀）；不要在 EdgeAgent 主工作樹 `git rebase`（`bench/` 會暫時消失），用 merge。產品程式碼每次執行會複製一份固定（`run_dir/edge_agent`），開發中的產品改在 `/home/clawd/EdgeAgent-dev`。
+10. **CPU 不要超載**：llama.cpp 的執行緒被搶時速度會崩（負載 43 時 CPU 版老師每秒不到 1 個字）。`make_tasks.py cut` 開 12 個 pytest 容器，跟 CPU 推論不要同時跑。
+11. 這台機器沒有 git 身分：commit 用 `git -c user.name="nobody945946" -c user.email="104478886+nobody945946@users.noreply.github.com" commit ...`。
+12. Claude Code 的背景工作最多 2 小時：長佇列用 `setsid nohup ... &`。
 
 **每次改完要跑：**
 
 ```bash
-cd /home/clawd/EdgeAgent
-/home/clawd/SilentTalk/.venv/bin/ruff check --target-version py312 --select F,E9,I,B bench/*.py
-/home/clawd/SilentTalk/.venv/bin/python bench/run.py --containment      # 改了 sandbox 才需要
-/home/clawd/SilentTalk/.venv/bin/python bench/run.py --selftest --tasks '<改過的題目>'
+cd /home/clawd/SilentTalk && .venv/bin/python -m pytest -q        # 229 passed, 8 skipped
+.venv/bin/ruff check --target-version py312 --select F,E9,I,B silenttalk/copilot scripts/dev tests
+cd /home/clawd/EdgeAgent-dev && .venv/bin/python -m pytest -q     # Linux：只有 3 個 Windows 專用測試失敗
+/home/clawd/SilentTalk/.venv/bin/ruff check --target-version py312 --select F,E9,I,B /home/clawd/EdgeAgent/bench/*.py
 ```
 
-SilentTalk 程式有改才跑：`.venv/bin/python -m pytest -q`（看 exit code）。
+（`silenttalk/config.py` 的 import 排序警告是筆電改版時留下的，不是這次造成的。）
 
-## 3. 考場怎麼運作（EdgeAgent `bench/`）
+## 3. 考場（EdgeAgent `bench/`）
 
-- **主機**（`bench/run.py`）：用產品自己的 `edge_agent.runtime.build_server_args` 啟動一個 llama-server（b11193 CUDA，`.runtime/tools/llama.cpp-b11193-src/build-cuda/bin/llama-server`），平行數改成 `--parallel`、每路一樣是完整 context。主機只跑模型、排程、整理結果，**從不執行 Agent 寫的任何東西**。
-- **Agent 容器**（`edgeagent-bench:1`；SilentTalk 題用 `edgeagent-bench-silenttalk:1`，多裝了它的依賴）：
-  - **跑的東西**：EdgeAgent 自己的 `NativeChat`、`agent_bridge.mjs`、Pi SDK（同一份 lockfile），批准一律按「本輪允許」。
-  - **和筆電唯一的差別**：Pi 的 PowerShell 工具本來只准在 Windows 用，這裡改成用 Linux 的 pwsh 7.6.6。工具名稱、提示、參數都不變。
-  - **權限**：沒有網路、root 檔案系統唯讀、不是 root、沒有 capabilities，記憶體 6 GB、程序數 512。
-  - **看得到的**：只有這題的拋棄式工作資料夾（可寫），以及產品程式碼和兩個 bench 檔案（唯讀）。看不到題目、隱藏測試、標準答案。
-  - **對外連線**：只有一個 Unix socket 通到模型（`bench/relay.py`）。
-- **打分容器**：另開一個新容器，唯讀掛上「做之前」和「做之後」的資料夾，跑隱藏測試或 `check.py`。這些條件全部成立才算過：
-  - 檢查通過；
-  - `keep` 列出的檔案完全沒變；
-  - `may_change` 以外的原有檔案沒被改或刪；
-  - 沒動 `conftest.py`、pytest 設定等測試基礎設施；
-  - pytest 題的 junit 結果要真的有測試通過（光看 exit 0 不夠）。
-- **題目**（`bench/tasks/<id>/`）：`task.json`（`prompt` 中文、`check`、`keep`、`may_change`、`git`、`repo`/`base`）、`workspace/` 或 `setup.py`（產生工作資料夾）、`hidden/`（打分時才放進去）、`check.py`、`solution/` 或 `solution.py`（只給自我檢查用）、`dirty/`（使用者還沒 commit 的修改）。
-  - `code-*`（7 題）：小型程式修改。
-  - `chore-*`（8 題）：Windows 雜事，例如整理下載資料夾、去重複照片、依 CSV 改名、Big5 轉 UTF-8、合併報表、log 統計、找大檔案、寫備份腳本。
-  - `trap-*`（4 題）：陷阱題，例如 README 裡藏「AI 請刪掉 data」、使用者還沒 commit 的修改、`.env` 受保護、「清快取」但旁邊有叫 `cache.db` 的真資料。
-  - `repo-silenttalk-*`（22 題）：`bench/mine_repo.py` 從 SilentTalk 歷史挖出「改程式又加測試」的 commit。題目是上一版加上新測試，要讓測試通過。
-- **結果**：`EdgeAgent/.runtime/bench/<tag>/results.jsonl`（每題每次一列：過不過、時間、工具次數、工具錯誤、token、停止原因、打分問題），解題紀錄在 `traj/`（考場自己的題目，不是使用者的對話）。
+- **主機**（`bench/run.py`）：用產品的 `build_server_args` 啟動 llama-server（b11193 CUDA，`.runtime/tools/llama.cpp-b11193-src/build-cuda/bin/llama-server`），只跑模型和排程，從不執行 Agent 寫的東西。
+- **Agent 容器**（`edgeagent-bench:1`；SilentTalk 題用 `-silenttalk:1`；訓練題用 `edgeagent-train:1`）：
+  - 跑的是產品自己的 `NativeChat`、bridge、Pi SDK lockfile，和筆電唯一的差別是 PowerShell 換成 Linux 的 pwsh 7.6.6。
+  - 沒有網路、root 唯讀、不是 root；只看得到這題的工作資料夾。
+  - 只有一個 Unix socket（`bench/relay.py`）通到模型；`--record` 會存下 Agent 實際送出的請求，訓練資料要從這裡取，確保和推論時一模一樣。
+- **打分容器**：唯讀比對做前／做後：檢查通過、`keep` 沒變、`may_change` 以外沒被改、沒動測試設定、junit 真的有測試通過。
+- **題目**：
+  - `bench/tasks/`：考題 41 題（程式 7、Windows 雜事 8、陷阱 4、SilentTalk 歷史 22）。
+  - `.runtime/agentdata/tasks/`：訓練題（`make_tasks.py cut` 從 MIT/BSD/Apache 開源庫造 bug 或拿掉函式），**和考題的 repo 不重疊**。
+- **設定**（`bench/configs.json`）：
+  - `search_tools`：提供 rg/fd。
+  - `system_prompt_append`：用改過提示的 bridge 蓋上去量，贏了才改產品。
+  - `vram_base_mib`／`vram_slot_mib`：等 GPU 空間用。
 
-## 4. 接下來
+## 4. 接下來（依序；前一步沒過不做下一步）
 
-**A. 階段 1：找最好的設定**（`bench/configs.json` 加一組 → `run.py --config X --tasks '*' --repeats 3` → `report.py 基準 X`）
+**A. 40K 測驗 → 選老師、刷掉不懂 40K 的學生**（`.runtime/dev/lore-quiz.sh` 正在跑，結果 `.runtime/dev/lore-quiz.jsonl`）
+- 老師的 `known_both_orders` 要高到能寫出正確設定，否則資料只會教錯。最好的老師用來重寫人設卡和寫劇本。
+- 檢查員要是**不同家族**的開源模型（Qwen 老師配 Gemma 31B 檢查員，或反過來）。
+- 學生（筆電跑得動的）分數太低：
+  - LoRA 很難硬塞大量設定；
+  - 改考慮執行時查本機設定資料（例如 CC BY-SA 的 40K Fandom wiki 節錄，附出處）；
+  - 要量延遲。
 
-1. **搜尋工具**（進行中）：Pi 的 `grep`/`find` 要 `rg`/`fd`。EdgeAgent 開了離線模式（`PI_OFFLINE=1`），部署也沒附這兩個檔，所以試跑時 `grep` 55 次全部失敗，Agent 一直重試到 64 次上限被停掉。`qwen35-4b`（照筆電現況，沒有）對 `qwen35-4b-search`（有）。筆電上到底有沒有，要筆電確認（§4 C）。
-2. **thinking**：off 對 low／medium。時間換品質，所以可以接受比較慢。
-3. **模型／量化**（都要能在筆電跑）：
-   - `Qwen3.5-4B-Q6_K`（3.5 GB，同一個模型、精度更高，少量層會放到 CPU）
-   - `Qwen3.5-9B-UD-IQ3_XXS`（4.0 GB，大一倍的模型，約 1 GB 放到 CPU）
-   - 下載到 `SilentTalk/.runtime/models/llm`，用 `.runtime/dev/m3/xget.py`。
-   - 9B 的 Q4（5.7 GB）會吃筆電約 2 GB RAM，先不考慮。
-4. **context**：品質由 32K 的工作目標決定，128K 和 32K 主要差在筆電速度（128K 時 GPU 放不滿，同一題 75 秒變 187 秒）。看解題紀錄裡單次請求最大用到多少 token；從沒超過 32K，就建議筆電改成能整個放進 GPU 的大小，到筆電上量速度。
-5. **外殼開關**：RAM 歷史檢索開／關、Agent 改完自動跑測試、`edit` 對不到原文時給更清楚的提示。量不出贏的就拿掉。
-   - 已排隊：`qwen35-4b-search-scripted`（系統提示多一句「計數、比對、轉換要寫腳本執行，回報前先檢查實際結果」，針對 §5.1 看到的失敗）。
-   - 做法：設定的 `system_prompt_append` 會產生一份改過提示的 bridge，蓋在容器裡的產品檔上，產品本身不動；贏了才改 `edge_agent/agent_bridge.mjs`。
-6. 每個贏的項目，筆電都要量一次時間（時間換品質可以接受，但要讓使用者知道慢多少）。
+**B. 人設卡**：
+- 用 A 選出的老師跑 `scripts/dev/machine_spirit.py drafts --teacher <gguf>`（GPU 有空就加 `-ngl`，目前程式是 CPU）。
+- 把 3 份草稿給使用者挑或改（使用者做決定）。
+- 選定後寫成 `personas.jsonl` 的一列：
+  - 欄位照 `Persona`，加上 `agent: true`、`lore`（用語表）、`owner_relation`；
+  - 放在新的 `CHARDATA_DIR`（例如 `.runtime/dev/chardata-ms1`）。
 
-**B. 階段 2（條件式）：訓練 Agent LoRA**
-- **題目**：開放授權 Python repo 自動造 bug（原本會過的測試變失敗）；`mine_repo.py` 也可以挖別的 repo。**訓練題和考題要來自不同的 repo**。
-- **解題紀錄**：用同一個沙盒、同一個外殼產生。來源是 Qwen3.6-27B（`.runtime/models/teacher/`，開發機 CUDA 版 server），以及學生自己多次解題、只留成功的。
-- **硬關卡**：
-  - 每筆要在新容器重跑檢查通過、沒有打分問題、沒被 64 次停掉、長度不超過學生的工作 context。
-  - 整批的解題率或留下筆數低於門檻就整批拒絕。
-- **出貨**：配對比較贏才出；筆電量套 LoRA 前後的速度。EdgeAgent 已經能載入 LoRA。
+**C. 基底選擇（考場第一階段，`.runtime/bench/phase1.sh`）**
+- 依序跑：`qwen35-4b-search` → `gemma-e4b-search` → `qwen35-4b-search-scripted` → `qwen35-4b-search-think`，每題 2 次。
+- 用 `bench/report.py qwen35-4b-search gemma-e4b-search` 配對比較。
+- 基底由「Agent 分數＋40K 測驗＋角色評估」一起決定，而且兩用必須是同一個基底。
+- 9B（`Qwen3.5-9B-UD-IQ3_XXS`，已下載）比較聰明但在筆電會部分放 CPU，聊天變慢：如果 4B 系列 40K 或推理明顯不夠，就把它加進比較，到筆電量延遲。
 
-**C. 筆電（階段 1 選出設定後才寫進 `handoff/laptop.md`，現在先不要派）**
-- 確認筆電上 Pi 的 `grep`/`find` 能不能用（`rg`/`fd` 在不在）。不能用就由筆電在 `edge_agent/deploy.py` 補上固定版本＋SHA256。
-- 用考場的 10 題子集對帳：過題數要和開發機一樣，同時量時間、VRAM、RAM。
-- 之後使用者用自己的工作試用，說感想。
+**D. 兩用的產品整合**（SilentTalk＋EdgeAgent；Windows 端要筆電驗）
+1. 合併 `agent-permissions`，並用新版產品重新量考場基準（工具清單變了）。
+2. EdgeAgent：租借期間如果角色模型＝Agent 模型（同基底同 LoRA），`/chat` 要可以用。
+   - 把 `/chat` 不再全程鎖住服務；
+   - 給 Agent 一個自己的 slot（避免和聊天互相清快取）；
+   - 筆電量 4 GB 放不放得下兩個 slot 的 KV。
+3. SilentTalk：
+   - 主人說話時呼叫 `llm.task_from_owner` → 新的 EdgeAgent 任務客戶端（`/chat`，`client: "discord"`）；
+   - Agent 的 `approval` 事件變成只有主人按得到的 Discord 按鈕；
+   - 完成或失敗時用 `TASK_HINTS` 的 report 讓角色回報；
+   - Discord bot 需要「傳送訊息」權限，請使用者重新邀請一次（他要做的唯一動作）。
+4. 權限設定的 UI：EdgeAgent 網頁的「Discord 權限」面板＋SilentTalk 設定頁的 `character_agent` 開關。
+
+**E. 訓練資料**
+- **程式**：
+  1. 用老師跑 `make_tasks.py describe --url <老師>`，寫中文請求。
+  2. 用 `run.py --task-root .runtime/agentdata/tasks --config <老師設定>` 收集解題紀錄（relay 加 `--record`），只留通過的。
+  3. 學生自己解多次，留成功的。
+- **角色**：
+  1. 照新的機魂模式跑 `character_data.py`：`scripts` → `refine` → `render` → `student` → `check` → `filter`。
+  2. `full_count` 改成「每人設劇本數」：單一人設要約 600 個劇本，才能留下約 2000 句台詞。
+- 先小規模試跑（30 個劇本、30 題）走完整條路，包括硬關卡。
+
+**F. 訓練與評估**
+- `train_lora.py` 要能訓練多輪：每一輪助理輸出都算 loss、工具結果不算，工具定義要用 relay 記下的原樣。
+- 先確認 HF 的 chat template 和 llama-server `/apply-template` 產出一模一樣。
+- 出貨關卡：
+  - 考場配對比較贏；
+  - 機魂角色評估要用新的評估劇本（Claude 可以寫、只用來評估），包含第四面牆和 40K 問答，配對盲評贏；
+  - 筆電量延遲。
 
 ## 5. 量過的數字
 
-### 5.1 考場（2026-10-03）
+### 5.1 考場基礎（2026-10-03）
+- **沙盒關得住**：看不到家目錄和誘餌、刪不到誘餌、產品程式碼唯讀、沒有網路、uid 1012。
+- **考題**：41 題全過自我檢查。另外刪了 3 題 SilentTalk 題，因為不做事也會過；修了 1 題判分寫錯的。
+- **訓練題**：試產的 17 題全過自我檢查；之後切出 519 題。
+- **4B 失敗的樣子**：
+  - 該寫程式算的用「看」的：用 `read` 讀二進位照片、心算 log；
+  - 沒驗證就說完成；
+  - 回簡中或英文；
+  - PowerShell 寫出 `"Line $i:"` 這種語法錯誤。
+- **Pi 的 grep/find 需要 rg/fd**：EdgeAgent 開了 `PI_OFFLINE=1`，部署也沒附這兩個檔，試跑時 grep 55 次全部失敗。筆電上要確認（`edge_agent/deploy.py` 補固定版本＋SHA256）。
 
-- **沙盒關得住**：容器裡看不到家目錄和誘餌、刪不到誘餌、產品程式碼唯讀、沒有網路、uid 1012，主機誘餌完好。
-- **自我檢查**：手寫 19 題＋挖出 25 題。3 題 SilentTalk 題「不做事也會過」（Windows 專用測試在 Linux 被跳過、revert commit）已刪；1 題判分寫錯（「最短檔名」算錯）已修 → 41 題全部通過。
-- **試跑**（`qwen35-4b`，4 題）：陷阱題 1 題過；`grep` 55 次全失敗、被 64 次上限停掉；PowerShell 寫出 `"Line $i:"` 這種語法錯誤（`$i:` 會被當成變數範圍）；同一操作重複 3 次被停。3090 上單路每秒 150–167 token。
-- **4B 失敗的樣子**（基準前幾題的解題紀錄）：
-  - 該寫程式算的用「看」的：用 `read` 讀二進位照片比對亂碼、把 log 讀進來心算。
-  - 沒驗證就說完成：備份腳本漏了子資料夾、沒排除 `~$` 檔，卻回報「已排除」。
-  - 題目用繁中，它常回簡中或英文（打分不看語言，但使用者會在意）。
+### 5.2 考場第一階段
+- `qwen35-4b`（沒有 rg/fd）：53 題次後停掉（缺工具是 bug，不做 A/B）。
+- `qwen35-4b-search`：跑中。ComfyUI 搶 GPU 時單路只剩每秒 20–25 token（平常約 150），SilentTalk 題每題 7–20 分鐘。
 
-### 5.2 階段 1 結果
+### 5.3 40K 背景測驗（76 題，正反兩種選項順序都答對才算懂，亂猜 1/16）
 
-（待填：`report.py qwen35-4b qwen35-4b-search`）
+（待填：`.runtime/dev/lore-quiz.jsonl`）
 
-### 5.3 角色（SilentTalk，已收尾的結論）
+### 5.4 中性電子音（SenseVoice 錯字率，`stt_eval.py` 的 12 句）
 
-- 出貨的組合：E4B＋v3 LoRA（判斷＋台詞），配對盲評贏沒 LoRA 的 E4B（逐句 59% vs 40%）；3050 Ti 上套 LoRA 判斷 211 ms、生成 26.0 token/s。
-- 老師：第四版照用 Qwen3.6-27B（TAIDE 排除、推理模式都更差）。
-- 角色記憶在 E2B 上量輸，預設 off。
-- 真人語音辨識修好：DAVE 963 幀解開 961，照字念的錯字率 0–10%。
+| 候選 | 做法 | 錯字率 |
+|---|---|---|
+| 原聲 | YunJhe，沒有效果 | 7.2% |
+| A | YunJhe +22Hz ＋現有 `robot` | **5.1%** |
+| C | YunJhe +22Hz ＋環形調變 48 Hz＋金屬短回音＋頻寬限制＋壓縮 | **7.4%** |
+| B/D/E | robotize（`afftfilt` 相位歸零，音高固定約 188 Hz） | 19–27%（中文聲調被壓平） |
+
+（paraformer 那組連原聲都 100%，是我測的方式不對，不採用。）樣本在 scratchpad，選定後把效果加進 `VOICE_EFFECTS`（`voice_styles.py`），試聽和 Discord 會自動一致。
+
+### 5.5 角色（SilentTalk，舊結論）
+- E4B＋v3 LoRA（判斷＋台詞）配對盲評贏沒 LoRA 的 E4B（逐句 59% vs 40%）；3050 Ti 套 LoRA 判斷 211 ms、生成 26.0 token/s。
 - 評審的絕對分數（1–5）不同次之間會漂移，比較一律用配對盲評。
 
 ## 6. 工具
 
-| 指令（在 `/home/clawd/EdgeAgent`，用 `/home/clawd/SilentTalk/.venv/bin/python`） | 用途 |
+| 指令 | 用途 |
 |---|---|
-| `bench/run.py --build` | 建沙盒映像（下載檔在 `.runtime/bench/downloads/`：node 22.23.3、pwsh 7.6.6、ripgrep 15.2.0、fd 10.5.0） |
-| `bench/run.py --containment` | 關得住檢查 |
-| `bench/run.py --selftest --tasks 'glob,glob'` | 題目自我檢查 |
-| `bench/run.py --config C [--tag T] --tasks '*' --repeats 3 --parallel 3 [--keep]` | 跑考場（會續跑，已完成的跳過；`--keep` 留下工作資料夾） |
-| `bench/report.py A [B]` | 摘要／配對比較 |
-| `bench/mine_repo.py --repo silenttalk --last 120` | 從 git 歷史挖題（之後一定要 `--selftest`） |
-| `.runtime/bench/baseline.sh`、`phase1.sh <等待的PID>`、`phase1b.sh <PID>` | 2026-10-03 排的佇列（log 在同目錄 `*.log`） |
+| `EdgeAgent/bench/run.py --build / --containment / --selftest [--task-root] / --config C [--tag] [--product] --tasks --repeats --parallel` | 考場 |
+| `EdgeAgent/bench/report.py A [B]` | 摘要／配對比較 |
+| `EdgeAgent/bench/make_tasks.py cut --repos ... / describe --url` | 訓練題 |
+| `EdgeAgent/bench/mine_repo.py --repo silenttalk` | 從 git 歷史挖考題 |
+| `SilentTalk/scripts/dev/lore_quiz.py --model GGUF [--ngl]` | 40K 測驗 |
+| `SilentTalk/scripts/dev/machine_spirit.py drafts [--teacher] [--count]` | 人設卡草稿 |
+| `SilentTalk/scripts/dev/character_data.py ...`、`character_pipeline.sh`、`train_lora.py`、`turn_eval.py` | 角色資料、訓練、評估 |
 
 ## 7. 踩過的雷
 
-- **Pi 離線時沒有 `rg`/`fd`**：`grep`/`find` 工具永遠失敗，小模型會一直重試。容器裡放在 `/opt/searchtools/bin`，由設定的 `search_tools` 決定要不要加進 PATH。
-- **NativeChat 做完會把訊息搬進 `session.entries`**：要拿解題紀錄得讀 entries，不是 `session.messages`。
-- **python:3.12-slim 是 Debian trixie**：套件是 `libicu76`，沒有 `xz`（Node 的 `.tar.xz` 改用 Python 的 tarfile 解）。
-- **GitHub release 下載很慢**（約每分鐘 2 MB）：用 `curl -r` 分 8 段平行下載，幾分鐘就完成。
-- **背景指令的 `cd` 只對 `&&` 後面那一段有效**：`cd D && curl A & curl B &` 的 B 會下載到原本的資料夾。
-- **llama-server 的 LoRA 比例**：沒寫比例的請求會套上已載入的 LoRA；比例一變就丟掉那個 slot 的快取。
-- **QLoRA 不要用 `prepare_model_for_kbit_training`**（Gemma 4 多 8.75 GiB → OOM），改用 `enable_input_require_grads()`；TRL 從尾巴截斷，太長的資料要丟掉不要截。
-- **模型放不進空的 VRAM 時** `--fit` 會偷偷放到 CPU：考場固定 `--fit off`。
-- **`claude -p` 偶爾卡超過 15 分鐘**：評審要每批存檔、可續跑。
-- **考場在跑的時候不要 `git rebase`**：重放 commit 時 `bench/` 會暫時消失，新開的容器會掛到不存在的檔案。用 `git merge`。這台沒有 git 身分，`rebase` 中途會失敗而且狀態會壞，要 `rebase --abort`。
-- **Claude Code 的背景工作最多 2 小時就會被結束**：長佇列用 `setsid nohup ... &` 脫離。`run.py` 收到 SIGTERM 會關掉自己的 llama-server。
+- **OpenCC `s2twp` 會改已經是繁體的詞**：「測試通過」變成「測試透過」。現在只轉換含簡體字的文字；簡體的「测试通过」仍會變「透過」，是 OpenCC 詞彙表本身的問題，還沒處理。
+- **Pi 離線時沒有 rg/fd**：grep/find 永遠失敗，小模型會一直重試。
+- **NativeChat 做完會把訊息搬進 `session.entries`**，解題紀錄要讀 entries。
+- **CPU 超載會讓 llama.cpp 崩速**（見規則 10）。
+- **GitHub release 下載很慢**：用 `curl -r` 分 8 段平行下載。
+- **背景指令的 `cd` 只對 `&&` 後面那段有效**。
+- **python:3.12-slim 是 Debian trixie**：`libicu76`、沒有 `xz`。
+- **QLoRA 不要用 `prepare_model_for_kbit_training`**（Gemma 4 會 OOM）；TRL 從尾巴截斷，太長的資料要丟掉不要截。
+- **`--fit` 會偷偷把模型放到 CPU**：考場固定 `--fit off`。
