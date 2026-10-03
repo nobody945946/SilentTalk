@@ -451,8 +451,12 @@ def _pool(workers: int, work: Any, jobs: list[Any]) -> None:
 
 
 def held_out() -> tuple[set[str], set[str]]:
-    """Persona and human names the M1 test set uses; never in training data."""
-    meta = json.loads(EVAL_DATA.read_text(encoding="utf-8").splitlines()[0])["meta"]
+    """Persona and human names the eval sets use; never in training data."""
+    metas = [json.loads(path.read_text(encoding="utf-8").splitlines()[0])["meta"]
+             for path in (EVAL_DATA, EVAL_DATA.with_name("machine_spirit_eval.jsonl"))
+             if path.is_file()]
+    meta = {key: [name for m in metas for name in m.get(key, [])]
+            for key in ("persona_names_used", "human_names_used")}
     personas = set(meta.get("persona_names_used", []))
     personas |= {p.name for p in PRESET_PERSONAS}
     personas |= {n for p in PRESET_PERSONAS for n in p.nickname.split("、") if n}
