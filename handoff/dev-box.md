@@ -25,13 +25,14 @@
 
 | 項目 | 狀態 |
 |---|---|
-| 權限可調＋上網工具（EdgeAgent） | ✅ 分支 `agent-permissions`（`/home/clawd/EdgeAgent-dev` worktree），測試過（真 Pi SDK）。**還沒合併**：第一階段的考場要用同一版產品程式碼比較，跑完再合併 |
+| 權限可調＋上網工具＋刪檔／受保護檔案要單次批准（EdgeAgent） | ✅ 已合併進遠端 `copilot-story-mode`（在 `/home/clawd/EdgeAgent-dev` 做的）。**開發機主工作樹刻意還沒 pull**：佇列 `phase1b.sh` 的考場（老師試跑、提示變體、thinking）要和基準用同一版產品，跑完才 pull |
+| 筆電 | ⬜ 已派 `handoff/laptop.md`：Windows 驗證、rg/fd 部署、權限 UI、租借期間可用 Agent、Discord 派工與批准按鈕。使用者說「開工」才會開始 |
 | 機魂的角色邏輯（SilentTalk `llm.py`） | ✅ 已在 `copilot-story-mode`：誠實模式 `machine`、`copilot.character_agent`（預設 off）、派工判斷 `task`、`task_text_messages`、提示 `TASK_HINTS`（ack/approval/report） |
 | 角色資料管線的機魂模式（`character_data.py`） | ✅ 已在 `copilot-story-mode`，單元測試過，**還沒用老師真的跑過** |
-| 機魂人設卡 | ⚠️ 35B-A3B 寫的 3 份草稿不能用（40K 設定淺、有錯、滑桿方向搞反）。提示已修、已換成使用者的新描述（第四面牆），**要等 40K 測驗選出老師再重寫**，然後給使用者挑 |
+| 機魂人設卡 | ⏳ 新的 3 份草稿（35B-A3B、使用者的第四面牆描述）已寫好，用語表由 Gemma 31B 核對過（刪掉 8／9／9 條解釋錯的），在試聽頁旁的「機魂人設草稿」頁等使用者挑選；選定後跑 `machine_spirit.py pick N --edits '{...}'` |
 | 40K 背景測驗（`scripts/dev/lore_quiz.py`） | ✅（§5.3）：老師 35B-A3B 94.7%、檢查員 Gemma 31B 97.4%；學生 E4B 75% 最高 |
 | Agent 考場第一階段（基底選擇） | 進行中（§5.2）：ComfyUI 搶 GPU，非常慢 |
-| 寫程式訓練題 | 519 題（8 個開源庫），還沒寫請求文字（`make_tasks.py describe`） |
+| 寫程式訓練題 | 519 題（8 個開源庫）；老師正在寫請求文字（`make_tasks.py describe`，port 18240 的 35B-A3B，約每分鐘 3.5 題）。之後用 `run.py --task-root .runtime/agentdata/tasks --config teacher-35b-a3b --record` 收集，`bench/dataset.py` 產生訓練列 |
 | 中性電子音 | 5 個候選已量清晰度（§5.4），等使用者試聽挑選 |
 | Discord 端：派工、批准按鈕、EdgeAgent 任務客戶端 | ⬜ 還沒做（§4 D） |
 
