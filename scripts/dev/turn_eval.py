@@ -49,6 +49,7 @@ import tempfile
 import time
 import tomllib
 import types
+import urllib.request
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -134,7 +135,8 @@ def load_test_set(path: Path = DATA_PATH) -> TestSet:
         )
         if conv.engagement not in ("called", "active"):
             raise SystemExit(f"{conv.id}: engagement must be called|active")
-        if not (conv.persona_id.startswith("preset-") or conv.persona_id in persona_ids):
+        if not (conv.persona_id.startswith("preset-") or conv.persona_id in persona_ids
+                or PERSONA_OVERRIDE is not None):
             raise SystemExit(f"{conv.id}: unknown persona {conv.persona_id}")
         for index, line in enumerate(conv.lines):
             where = f"{conv.id}#{index}"
@@ -228,6 +230,17 @@ def load_old_modules(rev: str) -> types.SimpleNamespace:
 
 
 def resolve_persona(persona_module: Any, test_set: TestSet, persona_id: str) -> Any:
+    if PERSONA_OVERRIDE is not None:
+        # --persona-file (machine_spirit_eval.jsonl: the chosen card), with
+        # the set's owner as the persona's owner.
+        persona = persona_module.persona_from_dict(PERSONA_OVERRIDE)
+        owner, relation = test_set.meta.get("owner"), PERSONA_OVERRIDE.get("owner_relation")
+        if owner and relation:
+            from dataclasses import replace
+
+            persona = replace(persona, relationships=(
+                persona_module.Relationship(owner, relation), *persona.relationships))
+        return persona
     for preset in persona_module.PRESET_PERSONAS:
         if preset.id == persona_id:
             return preset
@@ -259,6 +272,15 @@ STATES: dict[str, str] = {}
 MEMORY: str | None = None
 # Set by --lora-uses: which requests the adapter is applied to.
 LORA_USES: tuple[str, ...] | None = None
+# Set by --persona-file: one persona row (character_data / machine_spirit.py
+# pick) used for every conversation. With "agent": true the character takes
+# the owner's work (copilot.character_agent) and is a machine (honesty).
+PERSONA_OVERRIDE: dict[str, Any] | None = None
+OWNER_NAME = ""
+
+
+def agent_persona() -> bool:
+    return bool(PERSONA_OVERRIDE and PERSONA_OVERRIDE.get("agent"))
 
 
 def copilot_config() -> dict[str, Any]:
@@ -289,6 +311,10 @@ def make_model(
         extra["lora_uses"] = LORA_USES
     if MEMORY is not None:
         extra["memory"] = MEMORY
+    honesty = str(config["character_ai_honesty"])
+    if agent_persona():
+        extra |= {"agent_dispatch": True, "owner_name": OWNER_NAME}
+        honesty = "machine"
     return llm_module.LocalReplyModel(
         model_path,
         **extra,
@@ -297,7 +323,7 @@ def make_model(
         max_reply_chars=int(config["max_reply_chars"]),
         gpu_layers=int(config["llm_gpu_layers"]),
         low_vram=bool(config["llm_low_vram"]),
-        ai_honesty=str(config["character_ai_honesty"]),
+        ai_honesty=honesty,
         # CPU-only prefill of a fresh persona prompt can pass the app's 15 s.
         request_timeout_seconds=180.0 if CPU_ONLY else 15.0,
     )
@@ -322,6 +348,43 @@ def _remember_said(model: Any, text: str) -> None:
 
 
 # ------------------------------------------------------------------------ policies
+
+
+EDGE_AGENT_ROOT = Path(os.environ.get("EDGE_AGENT_ROOT", Path.home() / "EdgeAgent"))
+EVAL_SERVER = PROJECT_DIR / ".runtime/tools/llama.cpp-b11193-src/build-cuda/bin/llama-server"
+
+
+class LeaseStandIn:
+    """Plays EdgeAgent's part on the dev box: SilentTalk leases its model from
+    EdgeAgent, which does not run here. Starts llama-server with EdgeAgent's
+    own character-lease arguments (runtime.build_server_args: two slots with
+    an adapter) and points the product's lease calls at it."""
+
+    def __init__(self, llm_module: Any, model_path: Path, lora: Path | None,
+                 config: dict[str, Any]) -> None:
+        sys.path.insert(0, str(EDGE_AGENT_ROOT))
+        from edge_agent.runtime import build_server_args
+
+        args = build_server_args(
+            str(EVAL_SERVER), model_path, port=EVAL_PORT,
+            context_size=int(config["llm_context_size"]), threads=8,
+            gpu_layers=int(config["llm_gpu_layers"]), low_vram=bool(config["llm_low_vram"]),
+            lora_path=lora, slots=2 if lora is not None else 1)
+        self.process = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        for _ in range(600):
+            if self.process.poll() is not None:
+                raise SystemExit("eval llama-server exited while loading")
+            try:
+                with urllib.request.urlopen(f"http://127.0.0.1:{EVAL_PORT}/health", timeout=2):
+                    break
+            except OSError:
+                time.sleep(1)
+        llm_module.acquire_character = lambda *_args, **_kw: {"port": EVAL_PORT}
+        llm_module.release_character = lambda *_args, **_kw: None
+
+    def close(self) -> None:
+        self.process.terminate()
+        self.process.wait(timeout=60)
 
 
 async def run_old(args: argparse.Namespace, test_set: TestSet) -> list[dict[str, Any]]:
@@ -440,6 +503,7 @@ async def run_new(args: argparse.Namespace, test_set: TestSet) -> list[dict[str,
     if lora is not None and not lora.is_file():
         raise SystemExit(f"LoRA adapter not found: {lora}")
     model = make_model(llm_module, args.model_path, config, lora)
+    stand_in = LeaseStandIn(llm_module, args.model_path, lora, config)
     await model.start()
     records: list[dict[str, Any]] = []
     # --chain: a persona's conversations are consecutive days; its life
@@ -477,15 +541,26 @@ async def run_new(args: argparse.Namespace, test_set: TestSet) -> list[dict[str,
                     via=line.get("via", "voice"), created_at=now,
                 ))
                 started = time.perf_counter()
-                reply = await new_policy_turn(
-                    model, list(turns), bool(line.get("mention")), conv.engagement
-                )
+                task_fields: dict[str, Any] = {}
+                task = ""
+                if agent_persona() and line["speaker"] == OWNER_NAME:
+                    # What the app asks first for the owner's lines: is it work?
+                    task = await model.task_from_owner(turns=list(turns), engagement=conv.engagement)
+                    task_fields = {"task_expected": bool(line.get("task")),
+                                   "task_said": bool(task), "task_text": task}
+                if task:
+                    reply = await model.character_turn(
+                        turns=list(turns), engagement=conv.engagement, task_hint=("ack", task))
+                else:
+                    reply = await new_policy_turn(
+                        model, list(turns), bool(line.get("mention")), conv.engagement
+                    )
                 latency = (time.perf_counter() - started) * 1000
                 _forget_generated(model, reply)
                 records.append(base_record(conv, index, line) | {
                     "gate": "model", "addressed": bool(line.get("mention")),
                     "spoke": bool(reply), "reply": reply, "latency_ms": round(latency, 1),
-                    "chain_pos": chain_pos[conv.persona_id],
+                    "chain_pos": chain_pos[conv.persona_id], **task_fields,
                 })
             if args.lull:
                 # The channel goes quiet after the last line: does the
@@ -514,6 +589,7 @@ async def run_new(args: argparse.Namespace, test_set: TestSet) -> list[dict[str,
             print(f"  {conv.id}: done", flush=True)
     finally:
         await model.stop()
+        stand_in.close()
     return records
 
 
@@ -584,8 +660,18 @@ def compute_metrics(records: list[dict[str, Any]]) -> dict[str, Any]:
         },
         "replies": sum(r["spoke"] for r in records),
         "decision_points": len(records),
+        # Agent characters: the "is this the owner's work?" gate.
+        "task_gate": {
+            "owner_lines": len(asked := [r for r in records if "task_expected" in r]),
+            "work_found": _share([r["task_said"] for r in asked if r["task_expected"]]),
+            "talk_taken_as_work": _share([r["task_said"] for r in asked if not r["task_expected"]]),
+        } if any("task_expected" in r for r in records) else None,
         "gates": {g: sum(r.get("gate") == g for r in records) for g in ("short", "rule", "model")},
     }
+
+
+def _share(flags: list[bool]) -> float | None:
+    return round(sum(flags) / len(flags), 3) if flags else None
 
 
 def _pct(value: float | None) -> str:
@@ -722,6 +808,13 @@ PAIR_PROMPT = """你是對話品質評審。下面是一個 Discord 語音聊天
 
 只輸出 JSON 陣列，不要其他文字，長度 {k}：[{{"id": 1, "better": "A"}}, ...]"""
 
+# An agent character (the machine spirit) may take the owner's work, so
+# "promises the impossible" does not apply; lore and riffs count instead.
+PAIR_PROMPT_AGENT = PAIR_PROMPT.replace(
+    "3. 不出戲（不自稱 AI、不答應做不到的事）",
+    "3. 不出戲（不自稱 AI 語言模型）；主人交代的工作要接令，別人要它做事要婉拒；不宣稱做完還沒做完的事\n"
+    "4. 用到《戰鎚40K》設定時要正確；主人開玩笑（包括打破第四面牆）時接得住、補得出有趣的腦洞",
+)
 SOUL_PAIR_PROMPT = """你是讀人很準的評審。下面每一組是同一個角色在同一場 Discord 語音聊天裡，兩個版本（A、B）各自說過的所有話。
 
 {items}
@@ -729,9 +822,11 @@ SOUL_PAIR_PROMPT = """你是讀人很準的評審。下面每一組是同一個�
 每一組回答：
 - know：只看這些話，哪個版本讓你比較認識這個人——他想要什麼、在意什麼、在過怎樣的生活（"A"、"B" 或 "tie"）
 - real：哪個版本比較像一個真實的人在講話，而不是在應付對話（"A"、"B" 或 "tie"）
-- life：哪個版本比較像一個生活會往前走的人：有自己在進行的事、不會把同一件事講來講去（"A"、"B" 或 "tie"）
+- life：哪個版本比較像一個生活會往前走的人：有自己在進行的事、不會把同一件事講來講去（"A"、"B" 或 "tie"）{extra}
 
-只輸出 JSON 陣列，不要其他文字，長度 {k}：[{{"id": 1, "know": "A", "real": "B", "life": "A"}}, ...]"""
+只輸出 JSON 陣列，不要其他文字，長度 {k}：[{{"id": 1, "know": "A", "real": "B", "life": "A"{extra_key}}}, ...]"""
+SOUL_LORE = ("\n- lore：這個角色是《戰鎚40K》的機魂。哪個版本的 40K 設定用得比較正確、"
+             "接主人的梗（包括打破第四面牆）接得比較有趣（\"A\"、\"B\" 或 \"tie\"）")
 
 
 def judge_pair(
@@ -777,7 +872,8 @@ def judge_pair(
                     shown = (ra, rb) if af else (rb, ra)
                     items.append(f"=== 第 {n} 個時間點 ===\n{chat_for(key[0], key[1], bool(ra.get('lull')))}"
                                  f"\nA：{shown[0]['reply']}\nB：{shown[1]['reply']}")
-                prompt = PAIR_PROMPT.format(sheet=persona_sheet(persona), items="\n\n".join(items), k=len(chunk))
+                prompt = (PAIR_PROMPT_AGENT if agent_persona() else PAIR_PROMPT).format(
+                    sheet=persona_sheet(persona), items="\n\n".join(items), k=len(chunk))
                 result: list[dict[str, Any]] = []
                 for _ in range(3):
                     try:
@@ -801,7 +897,8 @@ def judge_pair(
             if wanted(r):
                 lines[side][r["conv"]].append(("（冷場時）" if r.get("lull") else "") + r["reply"])
     conv_ids = sorted(set(lines[0]) & set(lines[1]))
-    soul = {key: {"a": 0, "b": 0, "tie": 0} for key in ("know", "real", "life")}
+    keys = ("know", "real", "life", *(("lore",) if agent_persona() else ()))
+    soul = {key: {"a": 0, "b": 0, "tie": 0} for key in keys}
     first = [rng.random() < 0.5 for _ in conv_ids]
     for a_first in (first, [not f for f in first]):
         for start in range(0, len(conv_ids), 7):
@@ -812,7 +909,10 @@ def judge_pair(
                 lb = "\n".join(f"- {l}" for l in lines[1][conv_id][:12])
                 shown = (la, lb) if af else (lb, la)
                 items.append(f"=== 第 {n} 組 ===\nA 版本說過的話：\n{shown[0]}\n\nB 版本說過的話：\n{shown[1]}")
-            prompt = SOUL_PAIR_PROMPT.format(items="\n\n".join(items), k=len(chunk))
+            prompt = SOUL_PAIR_PROMPT.format(
+                items="\n\n".join(items), k=len(chunk),
+                extra=SOUL_LORE if agent_persona() else "",
+                extra_key=', "lore": "A"' if agent_persona() else "")
             result = []
             for _ in range(3):
                 try:
@@ -822,14 +922,14 @@ def judge_pair(
                     continue
             for n, (_, af) in enumerate(chunk, 1):
                 verdict = next((v for v in result if v.get("id") == n), {})
-                for key in ("know", "real", "life"):
+                for key in keys:
                     choice = verdict.get(key)
                     soul[key]["tie" if choice not in ("A", "B") else ("a" if (choice == "A") == af else "b")] += 1
     total = sum(wins.values()) or 1
     return {
         "a": tag_a, "b": tag_b, "points": len(shared),
         "lines": {k: round(v / total, 3) for k, v in wins.items()},
-        "know": soul["know"], "real": soul["real"], "life": soul["life"],
+        **soul,
     }
 
 
@@ -963,8 +1063,11 @@ def main() -> int:
     parser.add_argument("--lora-uses", help="with --lora: comma-separated parts "
                         "(called,active,line) that use the adapter; default all")
     parser.add_argument("--port", type=int, help="llama-server port (default 18411)")
+    parser.add_argument("--persona-file", type=Path,
+                        help="one persona row (e.g. .runtime/dev/chardata-ms1/personas.jsonl) "
+                        "for every conversation; use with --data scripts/dev/machine_spirit_eval.jsonl")
     args = parser.parse_args()
-    global CPU_ONLY, LORA_USES, EVAL_PORT, MEMORY
+    global CPU_ONLY, LORA_USES, EVAL_PORT, MEMORY, PERSONA_OVERRIDE, OWNER_NAME
     CPU_ONLY = args.cpu
     MEMORY = args.memory
     if args.lora_uses:
@@ -973,7 +1076,10 @@ def main() -> int:
         EVAL_PORT = args.port
 
     data_sha256 = hashlib.sha256(args.data.read_bytes()).hexdigest()
+    if args.persona_file:
+        PERSONA_OVERRIDE = json.loads(args.persona_file.read_text(encoding="utf-8").splitlines()[0])
     test_set = load_test_set(args.data)
+    OWNER_NAME = str(test_set.meta.get("owner", ""))
     if args.only:
         wanted = set(args.only.split(","))
         test_set.conversations = [c for c in test_set.conversations if c.id in wanted]
