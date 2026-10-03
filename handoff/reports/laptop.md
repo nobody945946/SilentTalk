@@ -164,3 +164,17 @@
 - windows_maintenance_owner: EdgeAgent scripts/windows-ai-maintenance; local entry points forward to canonical source; system state remains local.
 - windows_maintenance_verification: exit 0; checks passed 31; launcher retains original user state directory across elevation; local/source preview agreement passed; original snapshot SHA256 unchanged.
 - windows_maintenance_git_scope: original-state JSON excluded; measurement JSON excluded; permanent new-profile deployments 0; SilentTalk runtime changes 0.
+
+# Windows integration 2026-10-04
+
+- A_pull_silenttalk: copilot-story-mode; f9378f7 -> 712f964; fast-forward; exit 0.
+- A_pull_edgeagent: copilot-story-mode; 6e49f1f -> 0853091; fast-forward; exit 0.
+- A_edgeagent_pytest_baseline: 107 passed; 90.34 s; exit 0.
+- A_edgeagent_ruff_product: edge_agent/tests; exit 0.
+- A_edgeagent_ruff_all: 248 errors; bench scope; exit 1.
+- A_silenttalk_pytest_baseline: 232 passed; 1 failed; 1 skipped; 14.34 s; exit 1; EdgeTTS voice-list HTTP 503.
+- A_shell_guard_powershell: node shell_guard_check; exit 0.
+- B_search_before: true Pi SDK; grep 1 passed; find 1 failed; fd unavailable; exit 1.
+- B_search_deployment: rg 15.2.0; fd 10.5.0; pinned release SHA256; deployment exit 0.
+- B_search_after: true Pi SDK; grep/find 2 passed; 4.96 s; exit 0.
+- integration_checkpoint: C/D/E implementation in progress; browser/hardware/Discord end-to-end pending; no user configuration read or changed.
