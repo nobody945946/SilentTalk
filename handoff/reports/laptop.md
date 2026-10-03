@@ -60,3 +60,29 @@
 - documentation_final_agent_ci: 37028224969; success; 2b59272.
 - documentation_release_notes: 2 release pages updated with final documentation commits; archive payloads and digests unchanged.
 - documentation_scope: Markdown only; local runtime tests not repeated; automatic CI observed; protected user data untouched; services not started.
+
+# Laptop validation 2026-10-03
+
+- multimodal_agent_source_commit: 4432ef7215ac77a92acd26e5e657169353689552; copilot-story-mode; pushed.
+- multimodal_ui: image attachments; audio attachments; microphone; previews; removal; playback; paste; drag-drop; model capability gating.
+- multimodal_owner: EdgeAgent; llama.cpp native media; Pi SDK RAM transport; existing download and runtime owners.
+- multimodal_capabilities: Qwen3.5-4B vision 1 audio 0; E4B vision 1 audio 1; Qwen3-0.6B vision 0 audio 0.
+- multimodal_limits: 8 attachments; 20 MB total; documents 2 MB; microphone 120 s; WAV 16000 Hz mono.
+- multimodal_actual_edge: 16 passed / 16 total; 8 viewports; exit 0; unexpected runtime/console/network errors 0.
+- multimodal_actual_inference: E4B mixed native media recognition passed; context 16384; GPU layers 28; low VRAM 1; thinking off.
+- multimodal_negative_inference: context 4096; SDK compaction; output limit; incomplete; not counted as pass.
+- multimodal_projectors: public pinned revision and SHA256; Qwen F16; E4B ggml-org Q8; no personal adapter download.
+- multimodal_early_projector_trial: public F16; context 4096; incomplete; projector causality not established.
+- multimodal_recording_race: conversation switch blocked during capture and asynchronous stop; actual Edge checks passed.
+- multimodal_history: RAM media retained; unsupported model rejected; same-base capability changes rebuild SDK; real SDK tests passed.
+- multimodal_metadata_cache: RAM; file size and modification time invalidation; tests passed.
+- multimodal_pytest: 81 passed; 27.05 s; exit 0.
+- multimodal_agent_github_ci: 37094981999; completed; success; 4432ef7.
+- multimodal_checks: Ruff check exit 0; Ruff format exit 0; JavaScript syntax 2 exit 0; git diff exit 0.
+- multimodal_review: independent incremental review; concrete blockers 0.
+- multimodal_visual_review: empty desktop and mobile composer; confirmed.
+- multimodal_baseline_browser_repeat: 8 viewports; exit 0; unexpected errors 0; expected directory HTTP 400 / error log 1.
+- multimodal_cleanup: original Qwen configuration restored; context 16384; GPU layers 99; adapter empty; explicit projector empty.
+- multimodal_lifecycle: service stopped; control/inference/debug listeners 0; dedicated Edge closed; task profile absent; superseded task projector removed.
+- multimodal_privacy: conversations/prompts/recordings in RAM; Pi state directory absent; protected user configuration untouched.
+- multimodal_client_scope: SilentTalk runtime unchanged; runtime tests not repeated; player release assets unchanged.
