@@ -160,3 +160,7 @@
 - windows_assessment_services_final: SysMain Auto/Running; WSearch Auto/Running; DiagTrack Auto/Running; wuauserv Manual/Stopped; WlanSvc Auto/Running; Sense count 0.
 - windows_assessment_packages: Copilot/Cortana/WebExperience matches 0; Chrome active processes 0; no package removal.
 - windows_light_performance_ab: not run; measured new-profile RAM/VRAM net gains unavailable.
+- windows_maintenance_source_push: EdgeAgent copilot-story-mode 6e49f1f; files 5; source lines added 501.
+- windows_maintenance_owner: EdgeAgent scripts/windows-ai-maintenance; local entry points forward to canonical source; system state remains local.
+- windows_maintenance_verification: exit 0; checks passed 31; launcher retains original user state directory across elevation; local/source preview agreement passed; original snapshot SHA256 unchanged.
+- windows_maintenance_git_scope: original-state JSON excluded; measurement JSON excluded; permanent new-profile deployments 0; SilentTalk runtime changes 0.
