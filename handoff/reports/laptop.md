@@ -237,3 +237,5 @@ C3：TWStockMCPServer v1.9.0，8857b2ebc4e7be74bddf0e99c23146ebb28567b1；安裝
 C3 工具候選名稱：get_stock_daily_trading、get_stock_history、get_twse_institutional_investors_summary、get_twse_institutional_investors_by_stock、get_company_monthly_revenue、get_company_dividend、get_company_income_statement、get_company_balance_sheet、get_company_cash_flow_statement、get_taiex_index_history、get_exchange_rates。
 
 C 量測方式：閒置數字為 initialize/tools-list 完成後等待 1 s，再加總伺服器 PID 與子程序的 WorkingSet64；不含探測 Node 或量測 PowerShell。工作集可能含共用頁面，不等於私有 RAM。空間為安裝目錄所有檔案的 Length 加總；uv 有共用快取與 hardlink，數字不等於磁碟淨增量，且不含共用 uv cache、Python 3.13 runtime 或共用 Node。
+
+D：真模型透過既有 Windows 整合 runner、Pi SDK 與 /chat，在隔離測試 Workspace 各跑 1 輪求知儀式；context 16384、輸出上限 8192、thinking off、LoRA 空白。E4B：第一輪 3 題、➡️ 建議答案 3 個、非空白建議 3 個、寫檔或指令工具呼叫 0、error 0、done 1、延遲 38781 ms。Qwen3.5-4B：第一輪 5 題、➡️ 建議答案 5 個、非空白建議 5 個、寫檔或指令工具呼叫 0、error 0、done 1、延遲 40391 ms。題數沿用 bench/grill_auto.py 的 ❓ 標記計數；建議答案數為 ➡️ 標記計數，不是人工品質評分。延遲從送出 /chat 到終止事件。2/2 完成，runner exit 0。測完原測試模型與設定恢復 equal=true；使用者的原設定檔未讀寫。兩個模型輸出只在 RAM 計數，未儲存輸出內容；會話已重設。測試 control/inference listeners 0；測試根目錄已清除。
