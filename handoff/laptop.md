@@ -63,7 +63,7 @@
    - 參數 `--browser msedge --headless --isolated`（用 Windows 內建的 Edge，不要另外下載 Chromium）；
    - 探測一次，再呼叫 `browser_navigate` 開 `about:blank`，接著呼叫 `browser_snapshot`。
    - 開發機看到的是 25 個工具，幾乎都標成不可逆。
-3. **台股**：TWStockMCPServer v1.9.0（commit `8857b2e`）
+3. **台股**：TWStockMCPServer v1.9.0（`https://github.com/twjackysu/TWStockMCPServer`，commit `8857b2e`）
    - `git clone` 到 EdgeAgent 的 `.runtime` 底下，`uv sync`；
    - 用 `MCP_STDIO=1` 跑 stdio。**不要用它預設的 HTTP 模式**，那會開在 `0.0.0.0` 讓區網都連得到；
    - 探測一次，再呼叫一次 `get_exchange_rates`。
