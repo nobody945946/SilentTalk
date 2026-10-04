@@ -23,6 +23,7 @@ from silenttalk.copilot.persona import Persona, blank_persona
 from silenttalk.copilot.stt import StreamingTranscriber
 from silenttalk.copilot.stt_offline import OfflineTranscriber
 from silenttalk.copilot.types import ConversationTurn, ReplySuggestions
+from silenttalk.records import TranscriptRecorder, parse_ids
 
 _LOG = logging.getLogger(__name__)
 
@@ -100,6 +101,11 @@ class CopilotRuntime:
         self._on_suggestions = on_suggestions
         self._on_error = on_error
         self._on_turn = on_turn
+        # Transcripts on the user's encrypted records drive (records.py).
+        self._recorder = TranscriptRecorder(
+            enabled=config.record_transcripts, folder=config.record_folder,
+            exclude=parse_ids(config.record_exclude),
+        )
         self._on_thinking = on_thinking
         self._on_character_line = on_character_line
         self._on_character_text = on_character_text
@@ -356,6 +362,15 @@ class CopilotRuntime:
             agent_report_public=bool(
                 copilot.get("agent_report_public", self._config.agent_report_public)
             ),
+            record_transcripts=bool(
+                copilot.get("record_transcripts", self._config.record_transcripts)
+            ),
+            record_folder=str(copilot.get("record_folder", self._config.record_folder)).strip(),
+            record_exclude=str(copilot.get("record_exclude", self._config.record_exclude)),
+        )
+        self._recorder.configure(
+            enabled=self._config.record_transcripts, folder=self._config.record_folder,
+            exclude=parse_ids(self._config.record_exclude),
         )
         self._llm.set_agent_dispatch(self._config.character_agent)
         self._llm.set_report_public(self._config.agent_report_public)
@@ -788,7 +803,12 @@ class CopilotRuntime:
         )
         self._on_suggestions(suggestions)
 
+    def recording(self) -> bool:
+        """Transcripts are being kept right now (on, and the drive is there)."""
+        return self._recorder.ready()
+
     def _emit_turn(self, turn: ConversationTurn) -> None:
+        self._recorder.write(turn, self._persona.name.strip() if self._character_mode else "")
         if self._on_turn is None:
             return
         try:

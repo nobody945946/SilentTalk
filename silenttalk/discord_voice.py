@@ -97,6 +97,8 @@ class DiscordVoiceClient(discord.Client):
         self._status = status
         self._pcm_callback = pcm_callback
         self._text_callback = text_callback
+        # Called (on the client loop) each time the bot has joined voice.
+        self._joined_callback: Callable[[], Awaitable[None]] | None = None
         self._event_loop: asyncio.AbstractEventLoop | None = None
         self._voice_lock = asyncio.Lock()
         self._voice_monitor_task: asyncio.Task[None] | None = None
@@ -115,6 +117,9 @@ class DiscordVoiceClient(discord.Client):
         """Live settings. Intents and the token are startup-only, so only the
         behaviour flags and timings are taken from here."""
         self._config = config
+
+    def set_joined_callback(self, callback: Callable[[], Awaitable[None]] | None) -> None:
+        self._joined_callback = callback
 
     def set_text_callback(self, callback: TextCallback | None) -> None:
         self._text_callback = callback
@@ -403,6 +408,8 @@ class DiscordVoiceClient(discord.Client):
         self._listen_retries = 0
         self._ensure_listening(new_voice)
         self._mark_voice_healthy()
+        if self._joined_callback is not None:
+            asyncio.get_running_loop().create_task(self._joined_callback())
 
     async def wait_until_voice_ready(
         self, timeout_seconds: float | None = None

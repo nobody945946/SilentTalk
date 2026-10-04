@@ -122,7 +122,7 @@ Bot Token 與 Owner ID 優先沿用既有 `.env`，缺少時讀 Windows 認證�
 | STT 資產 | SilentTalk `.runtime/models/`；本機 CPU |
 | Agent／角色 GGUF、個人 LoRA | EdgeAgent `models/` |
 | 推論引擎、Node／Pi | EdgeAgent `.runtime/` |
-| 對話、轉錄、候選、摘要 | RAM；不寫 session JSONL／歷史檔 |
+| 對話、轉錄、候選、摘要 | RAM；不寫 session JSONL／歷史檔。例外：開啟「記錄對話」時，轉錄文字（不含錄音）由 `records.py` 只寫進使用者設定、含標記檔 `.agent-records` 的加密外接硬碟資料夾，硬碟不在就不寫 |
 | 合成音訊 | 暫存播放檔；結束清除 |
 | 人設、設定、快捷句、偏好 | 使用者持久資料；不進發行包 |
 | 選用角色自身狀態 | 可保存近況與心情；不保存人的原話 |
