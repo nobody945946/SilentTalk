@@ -24,6 +24,8 @@ import json
 import random
 from pathlib import Path
 
+import provenance  # scripts/dev
+
 PROJECT_DIR = Path(__file__).resolve().parents[2]
 DATA = PROJECT_DIR / ".runtime" / "dev" / "distill" / "replies.jsonl"
 TARGET_MODULES = (
@@ -72,6 +74,12 @@ def main() -> int:
     from transformers import AutoModelForCausalLM, AutoTokenizer
     from trl import SFTConfig, SFTTrainer
 
+    # Only files whose rules are known and the same throughout (provenance.py).
+    stamp = provenance.read_stamp(Path(args.data))
+    if stamp is None:
+        raise SystemExit(f"{args.data} has no version stamp ({provenance.sidecar(Path(args.data)).name}); "
+                         "train only on files made by the stamped data steps")
+    print(f"data {args.data}: {stamp}")
     tokenizer = AutoTokenizer.from_pretrained(args.base)
     rows = [
         json.loads(line)

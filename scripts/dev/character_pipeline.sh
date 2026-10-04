@@ -244,6 +244,11 @@ stage() {
         log "stage $name: waiting (not possible right now), will retry"
         exit 0
     fi
+    if [ "$rc" -eq 4 ]; then
+        touch "$STATE/$name.blocked"
+        log "stage $name: BLOCKED, the data here was made under other rules (scripts/dev/provenance.py); start a new data directory"
+        exit 0
+    fi
     if [ "$rc" -eq 3 ] && [[ $name == *filter ]]; then
         touch "$STATE/$name.blocked"
         log "stage $name: REFUSED by the quality check, nothing will be trained; see $DIR/filter.json"
@@ -288,18 +293,23 @@ student() {
 # The checker against the first round's gate labels. Informational: its
 # number decides whether the first round's gate adapter may ship, and shows
 # early whether the checker and the labels can meet HARD_CHECK at all.
+# In a directory of its own: the first round's files are not stamped with
+# today's rules (scripts/dev/provenance.py) and must not be extended.
 calibrate() {
-    python3 - "$V1" <<'PY'
+    local cal=$DIR/calibration
+    mkdir -p "$cal"
+    cp "$V1/personas.jsonl" "$cal/personas.jsonl"
+    python3 - "$V1" "$cal" <<'PY'
 import json, random, sys
 rows = [json.loads(line) for line in open(f"{sys.argv[1]}/train-gate-compact.jsonl")]
 pick = set(random.Random(7).sample(sorted({r["script"] for r in rows}), 60))
-with open(f"{sys.argv[1]}/gate-sample.jsonl", "w") as out:
+with open(f"{sys.argv[2]}/gate-sample.jsonl", "w") as out:
     for row in rows:
         if row["script"] in pick:
             out.write(json.dumps(row, ensure_ascii=False) + "\n")
 PY
-    CHARDATA_DIR="$REPO/$V1" checker check --rows gate-sample.jsonl || return
-    CHARDATA_DIR="$REPO/$V1" .venv/bin/python scripts/dev/character_data.py filter \
+    CHARDATA_DIR="$REPO/$cal" checker check --rows gate-sample.jsonl || return
+    CHARDATA_DIR="$REPO/$cal" .venv/bin/python scripts/dev/character_data.py filter \
         --rows gate-sample.jsonl --min-lines 0
     local rc=$?
     [ "$rc" -eq 0 ] || [ "$rc" -eq 3 ]

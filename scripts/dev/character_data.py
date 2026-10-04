@@ -74,6 +74,8 @@ from silenttalk.copilot.persona import (  # noqa: E402
 from silenttalk.copilot.script import to_taiwan_traditional  # noqa: E402
 from silenttalk.copilot.types import ConversationTurn  # noqa: E402
 
+import provenance  # noqa: E402  (scripts/dev)
+
 # CHARDATA_DIR keeps each round's data apart (v1 stays in chardata/).
 OUT_DIR = (
     Path(os.environ["CHARDATA_DIR"])
@@ -82,6 +84,26 @@ OUT_DIR = (
 )
 EVAL_DATA = Path(__file__).with_name("turn_eval_data.jsonl")
 _WRITE_LOCK = threading.Lock()
+
+# What decides these files' content (provenance.py): the app's prompts, these
+# rules and checks, the persona cards. A data directory holds one version.
+RULE_FILES = (
+    PROJECT_DIR / "silenttalk" / "copilot" / "llm.py",
+    PROJECT_DIR / "silenttalk" / "copilot" / "persona.py",
+    Path(__file__).resolve(),
+)
+DATA_FILES = (
+    "scripts.jsonl", "refined.jsonl", "train.jsonl", "student.jsonl", "check.jsonl",
+    "train-checked.jsonl",
+)
+PRODUCER = "character_data"
+_CLAIMED: set[Path] = set()
+# Exit code for "these files were made under other rules": blocked at once.
+MIXED_EXIT = 4
+
+
+def rules_version() -> str:
+    return provenance.fingerprint([*RULE_FILES, OUT_DIR / "personas.jsonl"])
 
 # Who the character is to the owner. Most personas people write are about a
 # relationship ("I want a wife / a kid / a brother"), so most data has one.
@@ -437,8 +459,12 @@ def _json_block(text: str, opener: str) -> Any:
 
 
 def _append(path: Path, record: dict[str, Any]) -> None:
-    with _WRITE_LOCK, path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(record, ensure_ascii=False) + "\n")
+    with _WRITE_LOCK:
+        if path.name in DATA_FILES and path not in _CLAIMED:
+            provenance.claim(path, PRODUCER, rules_version())
+            _CLAIMED.add(path)
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
 def _read(path: Path) -> list[dict[str, Any]]:
@@ -1294,6 +1320,7 @@ def make_render(args: argparse.Namespace) -> None:
         for row in rows:
             row["key"] = row_key(row)
             handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+    provenance.stamp(out, PRODUCER, rules_version())
     lines = [r["messages"][-1]["content"] for r in replies]
     print(
         f"render: {len(gate_yes)} gate 是, {len(gate_no)} gate 否, {len(replies)} lines "
@@ -1729,6 +1756,7 @@ def make_filter(args: argparse.Namespace) -> int:
     with (OUT_DIR / "train-checked.jsonl").open("w", encoding="utf-8") as handle:
         for row in keep:
             handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+    provenance.stamp(OUT_DIR / "train-checked.jsonl", PRODUCER, rules_version())
     print(
         f"train-checked: {len(keep)} rows ({len(yes)} 是, {len(no)} 否, {len(kept_lines)} lines, "
         f"{len(kept_tasks)} task instructions)",
@@ -1772,6 +1800,14 @@ def main() -> int:
     parser.add_argument("--max-prompt-chars", type=int, default=3400)
     args = parser.parse_args()
     OUT_DIR.mkdir(parents=True, exist_ok=True)
+    if args.step != "personas":
+        # Every file this step reads or extends must come from these rules.
+        problems = provenance.require_same(
+            [OUT_DIR / name for name in {*DATA_FILES, args.rows}], rules_version())
+        if problems:
+            print("REFUSED, data made under other rules (start a new data directory): "
+                  + "; ".join(problems), flush=True)
+            return MIXED_EXIT
     if args.step == "filter":
         return make_filter(args)
     {
