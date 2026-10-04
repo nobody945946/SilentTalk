@@ -1,16 +1,12 @@
-# Windows 工作檔：第 1 回合，跟上與預備（不需要使用者）
+# Windows 工作檔：第 2 回合，跟上與 Windows 驗證（不需要使用者）
 
-更新：2026-10-04 晚上｜開發分支：兩個 repo 都是 `copilot-story-mode`｜報告分支：`laptop-report`
+更新：2026-10-05 清晨｜開發分支：兩個 repo 都是 `copilot-story-mode`｜報告分支：`laptop-report`
 
 你是從 `AGENTS.md` 被分到這裡的。共通規則以 `AGENTS.md` 為準。舊版工作檔在開發機的 `archive/`，你不必讀。
 
 ## 0. 這一輪的大小
 
-使用者要工作切成小回合：開發機每到一個里程碑，你就做一回合份量小、做得完的事，不要一次耗光 5 小時額度。
-
-這一回合**只做不需要使用者的預備工作**。Discord 實測和人設匯入是之後的回合，這次不要做。
-
-如果額度快用完了，就停在做完的那一步，照 §4 回報做到哪裡。
+小回合、**不需要使用者**。Discord 實測（使用者打字下令、私訊批准、第二個帳號）是下一回合，這次不要做。額度快用完就停在做完的那一步，照 §4 回報做到哪裡。
 
 ## 1. 現況（開發機做好、你要跟上的）
 
@@ -20,84 +16,54 @@
 | EdgeAgent | `C:\Users\A8fm0\EdgeAgent`（控制 `127.0.0.1:18087`、推論 `127.0.0.1:18089`） |
 | 報告 | `handoff/reports/laptop.md`，只提交到 `laptop-report` |
 
-開發機上一個里程碑完成的內容：
+第 1 回合之後開發機做的（都在 EdgeAgent，除非另外寫）：
 
-- **SilentTalk 的 Discord 防話術**：
-  - 只有主人**打字**的話能派工，用說的只算聊天；
-  - 批准按鈕和結果只私訊主人；
-  - 機魂看得出哪句是打字的。
-- **EdgeAgent 的「求知儀式」模式**：
-  - 模式只剩「工作／求知儀式」，「規劃」拿掉了；
-  - 使用的是繁體中文、逐類想過的 grill-me skill。
-- **EdgeAgent 的 MCP 支援**（`edge_agent/mcp.py`、`agent_bridge.mjs`）：
-  - 只接本機 stdio 伺服器，設定由 EdgeAgent 管；
-  - 工具隨用隨載（`tool_search`）；
-  - 每次呼叫都過權限：唯讀的可自動執行，其他的都問；不可逆的、實體裝置的每一步都問；
-  - 每個伺服器可以只開放部分工具（`tools`），也可以設「一輪問一次」（`confirm: "turn"`）；
-  - `scripts/mcp_probe.mjs` 可以在啟用前列出伺服器的工具和標記。
+- **機器語言精準翻譯**（`edge_agent/lingua/`）：正規表示式（Python／.NET／JS）、PowerShell、Excel 公式、SQL、Python、MAVLink、機器碼。翻譯由解析器產生，每條說明都在真引擎上驗證過。
+  - Agent 新工具 `translate_machine`（執行 `python -m edge_agent.lingua`）；正規表示式可附範例字串，用真引擎跑。
+  - Agent 要執行 PowerShell 指令而請求批准時，批准卡片（和 SilentTalk 的 Discord 私訊）會先附上這個指令的白話和影響。
+- **上網研究工具** `web_research`：程式搜尋、讀網頁、挑出最相關的 6 段附編號和網址。
+- **MCP**：可接本機 HTTP 伺服器（`url`，只准 127.0.0.1／localhost）；`read_only_tools` 讓擁有者替沒標記的工具擔保唯讀（台股伺服器 173 個工具都沒標記）。
+- **新相依套件**：`sqlglot==30.21.0`、`pymavlink==2.4.50`、`capstone==5.0.9`（`pyproject.toml` 變了，`bootstrap.ps1` 會重裝）。
 
 ## 2. 這一回合要做的事（依序；每一步做完照 §4 回報）
 
 **A. 跟上**
-1. 兩個 repo `git pull`，照既有部署流程部署 EdgeAgent，兩邊跑完整測試。
-   - Windows 上的真 Pi SDK 測試要包含 `tests/test_mcp.py` 和 `tests/test_agent_chat.py -k interview`。
-2. 用既有的真 Edge 瀏覽器檢查：
-   - 模式選單只有「工作」「求知儀式」；
-   - 送出時 `/chat` 帶 `interview: true`；
-   - 8 種視窗大小版面正常；
-   - 既有瀏覽器檢查裡用到「規劃」的地方，照新選單改。
+1. 兩個 repo `git pull`；照既有部署流程部署 EdgeAgent（`bootstrap.ps1 -SetupOnly`），確認 `import pypdf, sqlglot, pymavlink, capstone, edge_agent` 都成功。
+2. 兩個 repo 跑完整測試，回報 passed／failed／skipped 和 exit code。EdgeAgent 的已知 Windows 以外失敗在 Windows 上應該都通過。
 
-**B. 準備 MCP 的執行環境**
-- 確認 Node 有 `npm`／`npx`。沒有就照 EdgeAgent 既有的部署 owner 補上（使用者說「請她載 npm」）。
-- 裝 `uv`（官方安裝程式）。台股伺服器要 Python 3.13，由 uv 管理，不動系統的 Python。
-- 這些都裝在 EdgeAgent 的部署範圍或使用者層級；不要改系統設定，也不要用系統管理員權限。
+**B. 在 Windows 上驗證翻譯器**（測試檔已寫好，只要跑和回報）
+1. PowerShell 翻譯器和正規表示式的 .NET 部分要在**兩種 PowerShell** 各跑一次：
+   - Windows PowerShell 5.1：`$env:EDGE_AGENT_PWSH = (Get-Command powershell.exe).Source`
+   - PowerShell 7（如果有裝 `pwsh.exe`）：`$env:EDGE_AGENT_PWSH = (Get-Command pwsh.exe).Source`
+   - 每次跑 `tests/test_lingua_powershell.py tests/test_lingua_regex.py tests/test_lingua_cli.py`；失敗的列出測試名稱和斷言訊息。只在 Windows 才有的指令（Stop-Service、Restart-Computer、Stop-Computer、Clear-RecycleBin）會在這裡被驗證。
+2. `tests/test_lingua_python.py`：回報 `test_windows_default_encoding_is_not_utf8` 的結果，和 `python -c "import locale; print(locale.getpreferredencoding(False))"` 印出的編碼名稱。
+3. **Excel**：先查有沒有裝 Excel（COM `Excel.Application`）。
+   - 有：開一個新活頁簿（不存檔），用 COM 填公式、讀回顯示值，回報這兩格：`=VLOOKUP(1,{1,"a";3,"b"},3,FALSE)`（預期 `#REF!`）和 `=XLOOKUP(4,{1;3;5},{"a";"b";"c"})`（預期 `#N/A`）。結束時關掉活頁簿不存檔、`Quit()`、釋放 COM 物件，並用 PID 確認 Excel 程序已結束。
+   - 沒有：回報「沒有 Excel」，跳過。
+   - 另外回報有沒有裝 LibreOffice（`soffice.exe`），只回報有沒有。
+4. `tests/test_lingua_mavlink.py`、`tests/test_lingua_asm.py`、`tests/test_lingua_sql.py`、`tests/test_lingua_excel.py` 在 Windows 上的結果（沒有 Docker 或 Calc 的部分會 skip，照實回報 skip 數）。
 
-**C. 安裝並探測三個 MCP 伺服器**（固定版本；**這回合不要在 EdgeAgent 裡啟用**，設定介面是之後的回合）
-
-1. **無人機（只用假無人機）**：`uv tool install mavlink-mcp==0.1.5`
-   - 用 `node scripts/mcp_probe.mjs -- mavlink-mcp --backend fake` 探測一次，再加上 `--enable-actuation` 探測一次；
-   - 再用 `--call get_status {}` 對假無人機呼叫一次。
-   - 開發機已經驗過：沒開動作模式時有 5 個唯讀工具，開了以後多 14 個飛行工具，全部標成不可逆。你要確認 Windows 上一樣。
-   - **絕對不要加 `--allow-real-vehicle`，也不要接任何實體飛控。**
-2. **瀏覽器測試**：`@playwright/mcp@0.0.83`
-   - 參數 `--browser msedge --headless --isolated`（用 Windows 內建的 Edge，不要另外下載 Chromium）；
-   - 探測一次，再呼叫 `browser_navigate` 開 `about:blank`，接著呼叫 `browser_snapshot`。
-   - 開發機看到的是 25 個工具，幾乎都標成不可逆。
-3. **台股**：TWStockMCPServer v1.9.0（`https://github.com/twjackysu/TWStockMCPServer`，commit `8857b2e`）
-   - `git clone` 到 EdgeAgent 的 `.runtime` 底下，`uv sync`；
-   - 用 `MCP_STDIO=1` 跑 stdio。**不要用它預設的 HTTP 模式**，那會開在 `0.0.0.0` 讓區網都連得到；
-   - 探測一次，再呼叫一次 `get_exchange_rates`。
-   - 它約有 173 個工具，太多了。從探測結果挑**10 個左右**，涵蓋：個股日成交、三大法人、月營收、股利、財報（公開資訊觀測站）、大盤指數、央行匯率。工具名稱寫進報告（只寫名稱）。
-
-**每個伺服器都要記錄**：
-- 版本；
-- 安裝耗時和佔用空間；
-- 閒置時佔用的記憶體；
-- 工具數；
-- 唯讀、不可逆、會連外三種標記各有幾個；
-- **有沒有標記看起來不對的工具**，例如會改東西卻標成唯讀。權限把關就是靠這些標記。
-
-**D. 求知儀式實測**（不需要使用者）
-
-在測試資料夾用真模型跑「求知儀式」：送一個假點子，例如「做一個記帳小工具」。只記數字：
-- 第一輪題數、`➡️` 建議答案數；
-- 有沒有呼叫寫檔或指令工具（應該 0）；
-- 延遲。
-
-E4B 和目前預設的 Qwen3.5-4B 各跑一次，量完換回原本的模型設定。不要記模型輸出的內容，也不要替使用者改預設模型。
+**C. 產品端實測**（不需要使用者）
+1. `translate_machine` 的命令列：在 EdgeAgent 的 venv 跑
+   `"ls -r *.log | rm -WhatIf" | .venv\Scripts\python.exe -m edge_agent.lingua powershell`
+   回報輸出裡的「解讀環境：」那一行，以及有沒有寫出「ls 是 Get-ChildItem 的別名」「rm 是 Remove-Item 的別名」「只是模擬」。
+2. **批准卡片**：用既有的真 Edge 瀏覽器檢查（`tests/browser_check.mjs` 那一套），加一個情境：權限 shell 設成「問」，請 Agent 執行 `Get-Date`；等批准卡片出現後確認卡片裡有「這個指令在做什麼」的展開區塊，然後按「拒絕」。在既有的檢查 owner 裡加，不另寫新腳本。回報檢查結果和視窗大小。
+3. **上網研究**：用 Node 直接呼叫 `edge_agent/web_tools.mjs` 的 `webResearch('Python 3.12 是哪一天發布的？', ['Python 3.12 release date'])`，只回報：讀了幾個網頁、回了幾段、段落裡有沒有出現「2023」。不要把網頁內容寫進報告。
+4. `tests/test_mcp.py` 在 Windows 的結果（包含新的 `url`、`read_only_tools` 驗證）。這回合**不要**在 EdgeAgent 設定裡啟用任何 MCP 伺服器。
 
 ## 3. 規則（AGENTS.md 之外）
 
 - 不讀寫使用者的 `.env`、`settings.json`、`personas.json`、`character_state.json`，也不讀 `silenttalk.log` 的對話原文。
-- MCP 伺服器只在探測時啟動，探測完就關（用自己的 PID）。不要讓它們常駐，不要開放到區網。
+- 不改使用者的預設模型和權限設定；測試用的設定測完換回原狀。
+- Excel 只開新的空活頁簿，絕不開使用者的檔案，也不存檔。
 - 修改都在既有的 owner 完成（AGENTS.md 規則 8）。程式提交到 `copilot-story-mode`；報告只提交到 `laptop-report`，用獨立 worktree，正常 push。
-- 結束後停掉自己啟動的服務、刪掉自己的暫存，並確認清理。裝好的工具（uv、MCP 伺服器）留著，下一回合要用。
+- 結束後停掉自己啟動的服務和程式（用自己的 PID），刪掉自己的暫存，並確認清理。
 
 ## 4. 回報（`handoff/reports/laptop.md`，`laptop-report` 分支）
 
 每一步一個段落，只寫：
 - 數字和事件；
-- 測試結果（passed／failed／exit code）；
+- 測試結果（passed／failed／skipped、exit code）；
 - 版本和 commit 雜湊；
 - 做不到的原因；
 - 額度用到哪裡停（如果有停）。
