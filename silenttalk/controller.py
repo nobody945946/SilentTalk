@@ -15,7 +15,6 @@ from silenttalk.config import Settings
 from silenttalk.copilot.persona import Persona
 from silenttalk.copilot.runtime import CopilotRuntime, ThinkingCallback, TurnCallback
 from silenttalk.copilot.types import ReplySuggestions
-from silenttalk.records import NOTICE as RECORDING_NOTICE
 from silenttalk.discord_voice import DiscordAudioPlayer, DiscordVoiceClient
 from silenttalk.speech_queue import SpeechQueue
 from silenttalk.speech_settings import validate_rate_multiplier
@@ -79,7 +78,6 @@ class AppController:
                 else None
             ),
         )
-        self._discord.set_joined_callback(self._on_voice_joined)
         self._tts = EdgeTTSEngine(settings.tts, Path(self._temp.name))
         self._queue = SpeechQueue(
             self._tts,
@@ -229,11 +227,6 @@ class AppController:
             return await self._agent_tasks.approve(call_id, approved)
 
         await self._discord.send_approval(payload, decide)
-
-    async def _on_voice_joined(self) -> None:
-        """Everyone in the channel is told when the conversation is recorded."""
-        if self._copilot is not None and self._copilot.recording():
-            await self._discord.send_text(RECORDING_NOTICE)
 
     async def _agent_private(self, text: str) -> bool:
         return await self._discord.send_private(text)

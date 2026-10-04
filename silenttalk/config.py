@@ -101,10 +101,9 @@ class CopilotConfig:
     agent_report_public: bool = False
     # Transcripts (text, no audio) on the user's encrypted external drive
     # (silenttalk/records.py); off until the user sets the folder and turns
-    # it on. record_exclude: Discord user IDs never recorded.
+    # it on.
     record_transcripts: bool = False
     record_folder: str = ""
-    record_exclude: str = ""
     character_engagement: str = "called"
     # Character mode: after this many seconds with nobody talking, the
     # character opens a topic of its own (0 = never).
@@ -339,7 +338,6 @@ def load_settings(project_dir: Path) -> Settings:
             agent_report_public=bool(copilot.get("agent_report_public", False)),
             record_transcripts=bool(copilot.get("record_transcripts", False)),
             record_folder=str(copilot.get("record_folder", "")).strip(),
-            record_exclude=str(copilot.get("record_exclude", "")),
             character_engagement=_one_of(
                 copilot.get("character_engagement", "called"),
                 [mode for mode, _ in ENGAGEMENT_MODES],

@@ -66,8 +66,6 @@ agent_report_public = false
 # folder must hold the setup marker (.agent-records) or nothing is written.
 record_transcripts = false
 record_folder = ""
-# Discord user IDs never recorded, separated by commas.
-record_exclude = ""
 character_engagement = "called"
 # Character mode: after this many seconds of silence the character brings up
 # something on its mind today or asks after someone (0 = never).

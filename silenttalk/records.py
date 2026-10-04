@@ -7,8 +7,10 @@ The user keeps transcripts so the Agent and the character can grow from them
   folder holds the marker file the setup step wrote (MARKER): a drive that is
   unplugged or still locked, or any other disk, gets nothing, and nothing is
   kept elsewhere to be written later;
-- as text (who, when, typed or spoken, what); never audio;
-- for everyone except the people on the "don't record" list.
+- as text (who, when, typed or spoken, what); never audio.
+
+They are the user's own record, not shared: no announcement in the channel
+and no per-person exclusions (the user's decision).
 
 One JSONL file per day under silenttalk/. Nothing here is logged: the log
 only says whether recording is on or paused.
@@ -28,40 +30,27 @@ _LOG = logging.getLogger(__name__)
 # Written by the setup step on the encrypted drive; its presence is the
 # signal that this folder is the user's records drive and is unlocked.
 MARKER = ".agent-records"
-NOTICE = "（提醒：這個頻道的對話會被記錄成文字，存在主人的加密硬碟。不想被記錄請告訴主人。）"
-
-
-def parse_ids(text: str) -> frozenset[int]:
-    """The "don't record" list as typed in settings: IDs split by commas or spaces."""
-    ids = set()
-    for part in text.replace("，", ",").replace(",", " ").split():
-        if part.isdigit():
-            ids.add(int(part))
-    return frozenset(ids)
 
 
 @dataclass
 class TranscriptRecorder:
     enabled: bool = False
     folder: str = ""
-    exclude: frozenset[int] = frozenset()
 
     def __post_init__(self) -> None:
         self._state = ""
 
-    def configure(self, *, enabled: bool, folder: str, exclude: frozenset[int]) -> None:
-        self.enabled, self.folder, self.exclude = enabled, folder, exclude
+    def configure(self, *, enabled: bool, folder: str) -> None:
+        self.enabled, self.folder = enabled, folder
 
     def ready(self) -> bool:
         """Recording is on and the records drive is there and unlocked."""
         return self.enabled and bool(self.folder) and (Path(self.folder) / MARKER).is_file()
 
     def write(self, turn: ConversationTurn, character: str = "") -> bool:
-        """Append one line; False when it was not written (off, excluded,
-        drive absent, or the write failed)."""
+        """Append one line; False when it was not written (off, drive
+        absent, or the write failed)."""
         if not self.enabled:
-            return False
-        if not turn.is_self and turn.speaker_id in self.exclude:
             return False
         if not self.ready():
             self._note("paused")
