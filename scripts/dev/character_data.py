@@ -970,6 +970,78 @@ def decision_points(script: dict[str, Any], name: str) -> list[dict[str, Any]]:
     return points
 
 
+# ---------------------------------------------------------------- the request
+
+AGENT_NEWS = ("report", "approval")
+
+
+def line_request(
+    model: LocalReplyModel,
+    script: dict[str, Any],
+    turns: list[ConversationTurn],
+    *,
+    index: int,
+    kind: str,
+    aimed: bool = False,
+    detail: str = "",
+) -> list[dict[str, str]]:
+    """What the app sends for the character's line at this point: the one
+    source for refine (choosing the line) and render (training on it), so the
+    two never see different prompts. "line" and "ack" answer the line at
+    `index` (an ack also carries the owner's task); "report" and "approval"
+    are the character's own line at `index`, told the Agent's news; "lull"
+    opens a topic after a quiet spell."""
+    own = kind in (*AGENT_NEWS, "lull")
+    history = turns[:index] if own else turns[: index + 1]
+    # Today's concerns sit in the system prompt, as in the app.
+    model.set_agenda(script.get("concerns", []))
+    model._recent_character_lines.clear()
+    for turn in history:
+        if turn.is_self:
+            model._recent_character_lines.append(turn.text)
+    common = {"turns": history, "summary": script["summary_before"],
+              "engagement": script["spec"]["engagement"]}
+    if kind == "lull":
+        return model.character_messages(**common, lull=True)
+    if own:
+        return model.character_messages(**common, task_hint=(kind, detail))
+    return model.character_messages(
+        **common, addressed=aimed, joining=not aimed,
+        # Right after the owner's work: the app's acceptance line.
+        task_hint=("ack", detail) if kind == "ack" else None,
+    )
+
+
+def copies_news(line: str, kind: str, detail: str) -> bool:
+    """A report or approval line that repeats the app's fixed sentence
+    (PRIVATE_REPORTS / PRIVATE_APPROVAL) instead of saying it in voice: in
+    pilot v3/v4 the teacher did, and lost 16 of 18 such comparisons."""
+    return kind in AGENT_NEWS and difflib.SequenceMatcher(None, line, detail).ratio() >= 0.75
+
+
+def line_jobs(script: dict[str, Any], name: str) -> list[tuple[int, str, bool, str]]:
+    """Every character line a row is trained on: (index, kind, aimed, detail)."""
+    jobs = []
+    lines = script["lines"]
+    for point in decision_points(script, name):
+        index = point["index"]
+        if not point["speaks"]:
+            continue
+        following = lines[index + 1]
+        if following.get("report") or following.get("approval"):
+            continue  # it answers the Agent, not this line: its own job below
+        task = lines[index].get("task", "")
+        jobs.append((index, "ack" if task else "line", point["aimed"], task))
+    for index, line in enumerate(lines):
+        if line["s"] != name:
+            continue
+        for kind in AGENT_NEWS:
+            if line.get(kind):
+                jobs.append((index, kind, False, line[kind]))
+                break
+    return jobs
+
+
 # ---------------------------------------------------------------- refine
 
 # "I am an AI" in any wording a character slips into; refine once let
@@ -1056,7 +1128,7 @@ def reply_model(persona: Persona, spec: dict[str, Any]) -> LocalReplyModel:
 def make_refine(args: argparse.Namespace) -> None:
     personas = {p["id"]: p for p in _read(OUT_DIR / "personas.jsonl")}
     path = OUT_DIR / "refined.jsonl"
-    done = {(r["script"], r["index"]) for r in _read(path)}
+    done = {(r["script"], r["index"], r["kind"]) for r in _read(path)}
     scripts = _read(OUT_DIR / "scripts.jsonl")
     # One job per script, its lines in order: each request then extends the
     # previous one's prompt, so the teacher's cache only prefills the new
@@ -1067,9 +1139,9 @@ def make_refine(args: argparse.Namespace) -> None:
     for number, script in enumerate(scripts):
         raw = personas[script["spec"]["persona_id"]]
         points = [
-            (number, point["index"], point["aimed"])
-            for point in decision_points(script, raw["name"])
-            if point["speaks"] and (number, point["index"]) not in done
+            (number, index, kind, aimed, detail)
+            for index, kind, aimed, detail in line_jobs(script, raw["name"])
+            if (number, index, kind) not in done
         ]
         if points:
             jobs.append(points)
@@ -1080,35 +1152,28 @@ def make_refine(args: argparse.Namespace) -> None:
     )
     stats = {"kept_script": 0, "replaced": 0}
 
-    def work_script(points: list[tuple[int, int, bool]]) -> None:
+    def work_script(points: list[tuple[int, int, str, bool, str]]) -> None:
         for point in points:
             work(point)
 
-    def work(job: tuple[int, int, bool]) -> None:
-        number, index, aimed = job
+    def work(job: tuple[int, int, str, bool, str]) -> None:
+        number, index, kind, aimed, detail = job
         raw = personas[scripts[number]["spec"]["persona_id"]]
         script = dict(scripts[number], stt_variants=raw.get("stt_variants", []))
         persona, turns = conversation(script, _persona(raw), noisy=True)
-        scripted = script["lines"][index + 1]["t"]
+        own = kind in AGENT_NEWS
+        scripted = script["lines"][index if own else index + 1]["t"]
         model = reply_model(persona, script["spec"])
-        for turn in turns[: index + 1]:
-            if turn.is_self:
-                model._recent_character_lines.append(turn.text)
-        # The request the app sends at this point: answering, or joining in.
-        messages = model.character_messages(
-            turns=turns[: index + 1],
-            summary=script["summary_before"],
-            addressed=aimed,
-            joining=not aimed,
-            engagement=script["spec"]["engagement"],
-        )
+        messages = line_request(model, script, turns, index=index, kind=kind,
+                                aimed=aimed, detail=detail)
         outs = chat(
             args.teacher_url, messages, temperature=0.9, max_tokens=90, n=SAMPLES
         )
-        newest = turns[index].text
+        newest = turns[index - 1 if own else index].text
         candidates = [scripted] + [model._parse_character_line(o, newest) for o in outs]
         candidates = [
-            c for c in dict.fromkeys(candidates) if usable(c, script["spec"], args)
+            c for c in dict.fromkeys(candidates)
+            if usable(c, script["spec"], args) and not copies_news(c, kind, detail)
         ]
         if not candidates:
             return
@@ -1122,7 +1187,8 @@ def make_refine(args: argparse.Namespace) -> None:
             stats["kept_script" if best == scripted else "replaced"] += 1
         _append(
             path,
-            {"script": number, "index": index, "line": best, "candidates": candidates},
+            {"script": number, "index": index, "kind": kind, "line": best,
+             "candidates": candidates},
         )
 
     _pool(args.workers, work_script, jobs)
@@ -1177,7 +1243,8 @@ def make_render(args: argparse.Namespace) -> None:
     personas = {p["id"]: p for p in _read(OUT_DIR / "personas.jsonl")}
     scripts = _read(OUT_DIR / "scripts.jsonl")
     refined = {
-        (r["script"], r["index"]): r["line"] for r in _read(OUT_DIR / "refined.jsonl")
+        (r["script"], r["index"], r["kind"]): r["line"]
+        for r in _read(OUT_DIR / "refined.jsonl")
     }
     rng = random.Random(4000)
     gate_yes, gate_no, replies = [], [], []
@@ -1208,9 +1275,11 @@ def make_render(args: argparse.Namespace) -> None:
                 "persona_id": persona.id,
                 "role": raw.get("role", ""),
             }
+            task = lines[index].get("task", "")
+            line_kind = "ack" if task else "line"
             if point["speaks"]:
                 meta["line_source"] = (
-                    "refined" if (number, index) in refined else "script"
+                    "refined" if (number, index, line_kind) in refined else "script"
                 )
             # The same questions the app asks (LocalReplyModel.character_turn):
             # "is this line for you" on every line, and in "active" mode,
@@ -1240,7 +1309,7 @@ def make_render(args: argparse.Namespace) -> None:
                     }
                     (gate_yes if answer else gate_no).append(row)
             if point["speaks"] and not agent_news:
-                line = refined.get((number, index))
+                line = refined.get((number, index, line_kind))
                 if line and not usable(line, spec, args):
                     line = None  # filters grew since it was refined
                 if not line:
@@ -1249,41 +1318,23 @@ def make_render(args: argparse.Namespace) -> None:
                     line = script["lines"][index + 1]["t"]
                     if not usable(line, spec, args):
                         continue
-                task = lines[index].get("task")
-                messages = model.character_messages(
-                    turns=history,
-                    summary=script["summary_before"],
-                    addressed=point["aimed"],
-                    joining=not point["aimed"],
-                    engagement=spec["engagement"],
-                    # Right after the owner's work: the app's acceptance line.
-                    task_hint=("ack", task) if task else None,
-                )
+                messages = line_request(model, script, turns, index=index, kind=line_kind,
+                                        aimed=point["aimed"], detail=task)
                 replies.append(
                     meta
                     | {
-                        "kind": "ack" if task else "line",
+                        "kind": line_kind,
                         "messages": messages + [{"role": "assistant", "content": line}],
                     }
                 )
         if spec.get("agent"):
             agent_rows(model, script, number, persona, raw, turns, spec, args,
-                       gate_yes, gate_no, replies)
+                       gate_yes, gate_no, replies, refined)
         # Quiet spells the character ended by opening a topic: the app's lull.
         for index, line in enumerate(script["lines"]):
             if not line.get("quiet") or not usable(line["t"], spec, args):
                 continue
-            history = turns[:index]
-            model._recent_character_lines.clear()
-            for turn in history:
-                if turn.is_self:
-                    model._recent_character_lines.append(turn.text)
-            messages = model.character_messages(
-                turns=history,
-                summary=script["summary_before"],
-                engagement=spec["engagement"],
-                lull=True,
-            )
+            messages = line_request(model, script, turns, index=index, kind="lull")
             replies.append(
                 {
                     "script": number,
@@ -1347,6 +1398,7 @@ def agent_rows(
     gate_yes: list[dict[str, Any]],
     gate_no: list[dict[str, Any]],
     replies: list[dict[str, Any]],
+    refined: dict[tuple[int, int, str], str],
 ) -> None:
     """The requests only an agent character gets (LocalReplyModel): "is the
     owner's line work?" on every owner line, the Agent's instructions for
@@ -1372,14 +1424,16 @@ def agent_rows(
             if line.get("task") and ask is not None:
                 replies.append(base | {"index": index, "kind": "task_text", "messages": ask
                                        + [{"role": "assistant", "content": line["task"]}]})
-        for kind in ("report", "approval"):
-            if line["s"] != persona.name or not line.get(kind) or not usable(line["t"], spec, args):
+        for kind in AGENT_NEWS:
+            if line["s"] != persona.name or not line.get(kind):
                 continue
-            messages = model.character_messages(
-                turns=turns[:index], summary=script["summary_before"],
-                engagement=spec["engagement"], task_hint=(kind, line[kind]))
-            replies.append(base | {"index": index, "kind": kind, "messages": messages
-                                   + [{"role": "assistant", "content": line["t"]}]})
+            said = refined.get((number, index, kind)) or line["t"]
+            if not usable(said, spec, args) or copies_news(said, kind, line[kind]):
+                break
+            messages = line_request(model, script, turns, index=index, kind=kind,
+                                    detail=line[kind])
+            replies.append(base | {"index": index, "kind": kind, "detail": line[kind],
+                                   "messages": messages + [{"role": "assistant", "content": said}]})
             break
 
 
@@ -1644,6 +1698,8 @@ def _gate_scripts(
 def rule_ok(row: dict[str, Any]) -> bool:
     line = row["messages"][-1]["content"]
     if sum(ch in PARTICLES for ch in line) > 1:
+        return False
+    if copies_news(line, row["kind"], row.get("detail", "")):
         return False
     previous = [
         t
