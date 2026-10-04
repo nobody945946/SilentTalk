@@ -239,3 +239,15 @@ C3 工具候選名稱：get_stock_daily_trading、get_stock_history、get_twse_i
 C 量測方式：閒置數字為 initialize/tools-list 完成後等待 1 s，再加總伺服器 PID 與子程序的 WorkingSet64；不含探測 Node 或量測 PowerShell。工作集可能含共用頁面，不等於私有 RAM。空間為安裝目錄所有檔案的 Length 加總；uv 有共用快取與 hardlink，數字不等於磁碟淨增量，且不含共用 uv cache、Python 3.13 runtime 或共用 Node。
 
 D：真模型透過既有 Windows 整合 runner、Pi SDK 與 /chat，在隔離測試 Workspace 各跑 1 輪求知儀式；context 16384、輸出上限 8192、thinking off、LoRA 空白。E4B：第一輪 3 題、➡️ 建議答案 3 個、非空白建議 3 個、寫檔或指令工具呼叫 0、error 0、done 1、延遲 38781 ms。Qwen3.5-4B：第一輪 5 題、➡️ 建議答案 5 個、非空白建議 5 個、寫檔或指令工具呼叫 0、error 0、done 1、延遲 40391 ms。題數沿用 bench/grill_auto.py 的 ❓ 標記計數；建議答案數為 ➡️ 標記計數，不是人工品質評分。延遲從送出 /chat 到終止事件。2/2 完成，runner exit 0。測完原測試模型與設定恢復 equal=true；使用者的原設定檔未讀寫。兩個模型輸出只在 RAM 計數，未儲存輸出內容；會話已重設。測試 control/inference listeners 0；測試根目錄已清除。
+
+A2：既有真 Edge CDP runner 已更新，只檢查「工作」「求知儀式」兩個選項；實際 /chat POST 的 interview=true 已由 Network.requestWillBeSent 觀察，測試後切回工作並建立新的會話。瀏覽器最終 exit 0，8/8 主畫面尺寸通過：1920×1080、1024×768、768×1024、390×844、320×568、844×390、390×320、320×280。既有模型對話框、權限、資料夾、終端機、附件、觸控檢查通過；未預期瀏覽器 console/runtime/network 錯誤 0。預期不存在資料夾的 HTTP 400 1 次。桌面與手機 PNG 已視覺檢查。前 3 次新增探測 exit 1：2 次未先選 Workspace、1 次在 Pi 会話開始前取消；已在既有檢查 owner 修正前置條件和等待。最終服務端出現 2 個 WinError 10053 連線中止事件，瀏覽器仍通過；不在本回合範圍，未改服務。runner 結束即時掃描曾顯示 9223，後續掃描 control/inference/CDP listeners 均 0，專用測試 Edge PID 已不存在。
+
+驗證工具：既有 mcp_probe.mjs 已加入同一 stdio 連線的重複 --call、Windows 閒置工作集量測、RPC error/timeout 非零退出，以及包含已退出 launcher 子程序的 PID 清理；沿用既有 fixture 和 test_mcp.py 回歸測試。獨立 reviewer 第一輪指出 3 件：已退出 launcher 子程序清理、裸 .cmd 命令解析、瀏覽器訪談歷史隔離；3 件均在既有 owner 修正。MCP 新增回歸初跑 1 failed、9 passed，原因為父程序隨子程序退出造成清理等待競態；改為對已知 PID 停止後檢查存活，重跑 10 passed、15.96 s、exit 0。缺少伺服器的負向探測 exit 1；fixture 正向探測為 3 個工具、2 次同連線呼叫、閒置工作集大於 0、存活子 PID 0。
+
+B 補充：uv 管理的 Python 3.13.13 runtime 檔案邏輯大小 63620050 bytes，安裝下載時間已含在 C3 的 uv sync 72.224 s 內。
+
+最終驗證與提交：EdgeAgent 完整 pytest 127 passed，67.56 s，exit 0；包含 2 個新增的 Windows 程序清理／裸 cmd 回歸測試。修改範圍 Ruff check exit 0；Windows runner 格式檢查 exit 0；3 個 JavaScript 檔案語法檢查 exit 0；git diff --check exit 0。獨立 reviewer 第二輪沒有新 finding，僅讀 diff，未讀模型输出。EdgeAgent 程式提交 40df9041fe771fb78d13ecb99d8b01a6f07e86e5，copilot-story-mode，正常 push exit 0；SilentTalk 程式未變更。
+
+最終清理：4 組 MCP 探測記錄中的伺服器與子 PID 全數不存在；control 18087、inference 18089、CDP 9223、HTTP 8000 的本次 listener 均 0；專用 Edge profile 程序 0。強制遞迴刪除被工具政策拒絕，未執行；非強制刪除遇到測試 Git fixture 的唯讀／隱藏屬性，移除本次 fixture 屬性後完成非強制清理，exit 0。EdgeAgent .test-tmp、.playwright-mcp，以及 SilentTalk 本次 pytest 目錄共 3 個路徑已確認不存在；整合 runner 自己的暫存根目錄也已清除。uv、3 個 MCP 安裝、Python 3.13 runtime 留存供下一回合使用。報告 worktree 留存於 SilentTalk-laptop-report。
+
+完成狀態：本回合 A/B/C/D 已實跑。MCP 啟用數 0；本回合 Discord 實測與人設匯入數 0。使用者 .env、settings.json、personas.json、character_state.json、對話原文紀錄未讀寫。未解決事件僅回報：無人機 wait 不可逆標記與交接不同、台股 173 個工具權限標記缺漏、瀏覽器測試服務端 WinError 10053 2 次；未擴大修改範圍。
