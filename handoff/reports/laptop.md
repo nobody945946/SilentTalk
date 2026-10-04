@@ -221,3 +221,9 @@
 - live_delivery_scope: actual Discord voice connection and channel text delivery; generated voice/TTS playback and actual human speech/STT input not exercised; character/persona quality not evaluated; runtime/service code unchanged.
 - live_cleanup: Discord connection closed; base lease returned ready true; own control/inference listeners 18087/18090 absent; temporary directory removed; occupied VSCode port 18089 untouched.
 - live_privacy: generated task/ack/result stayed in RAM except authorized Discord delivery; no conversation/prompt/audio/transcript stored in report/test assets; settings/personas/character_state and conversation log not read or changed.
+
+## Windows 預備回合 2026-10-05
+
+A1：兩個 repo 的 git pull --ff-only 均 exit 0。SilentTalk 534a61ae607ac403475bbdd99166819d0b2b6e30；EdgeAgent 34489bc3182b32a1009dcbd4477287676355529e。EdgeAgent bootstrap.ps1 -SetupOnly 部署 exit 0；CUDA llama.cpp b11193、Node 22.23.3、Pi SDK 1.0.0 資產核對完成。SilentTalk 完整 pytest：267 passed、1 skipped、1 audioop warning，12.55 s，exit 0。EdgeAgent 首次 pytest：33 passed、92 setup errors、exit 1，原因是本次測試暫存父目錄未建立；建立後完整重跑：125 passed，73.41 s，exit 0。指定 Windows 真 SDK 測試：test_mcp.py 8 passed，11.76 s，exit 0；test_agent_chat.py -k interview 1 passed、40 deselected，4.46 s，exit 0。
+
+B：使用者層級 uv 已存在，0.11.15。系統既有 Node 22.13.1、npm/npx 10.9.2；本次 MCP 使用 EdgeAgent 部署的 Node 22.23.3、npm/npx 10.9.9。系統 Python 未變更；MCP 未加入 EdgeAgent 設定。
