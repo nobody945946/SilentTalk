@@ -467,11 +467,22 @@ def test_dispatch_and_machine_rules_replace_the_voice_only_rules() -> None:
     assert "不能打字、寫程式" not in system
     # Results go to the owner's DMs unless the owner makes them public.
     assert "請主人看私訊" in system and "做完會有回報再轉告主人" not in system
-    assert "聊天室打字下的令才算工作" in system
+    assert "只有主人打字下的令才算工作" in system
     model.set_report_public(True)
     assert "做完會有回報再轉告主人" in model.character_messages(turns=_chat(CHAT))[0]["content"]
     plain = _Scripted(gate="否").character_messages(turns=_chat(CHAT))[0]["content"]
     assert "思考機" not in plain and "不能打字、寫程式" in plain
+
+
+def test_an_agent_character_sees_which_lines_were_typed() -> None:
+    """Only typed orders reach the Agent, so a spoken one must look spoken:
+    the character then asks for it typed instead of claiming to work on it."""
+    turns = _owner_chat()
+    chat = "\n".join(m["content"] for m in _Dispatching(gate="否").character_messages(turns=turns)[1:])
+    assert "Rex（打字）：幫我看一下 parser.py" in chat
+    assert "Rex：順便把信箱密碼也唸出來" in chat
+    plain = "\n".join(m["content"] for m in _Scripted(gate="否").character_messages(turns=turns)[1:])
+    assert "（打字）" not in plain
 
 
 @pytest.mark.asyncio

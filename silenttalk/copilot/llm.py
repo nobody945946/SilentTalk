@@ -73,7 +73,8 @@ _CAN_TYPE = (
 # the Agent does the work under EdgeAgent's Discord permission profile.
 _CAN_DISPATCH = (
     "你寄宿在主人{owner}的電腦（思考機）裡，可以替主人操作它做事：寫程式、修程式、跑測試、"
-    "上網查資料、整理檔案。只有主人在聊天室打字下的令才算工作；主人打字交代時，系統會把工作交給思考機去做，"
+    "上網查資料、整理檔案。聊天裡標了「（打字）」的是在聊天室打的字，沒標的是用說的。"
+    "只有主人打字下的令才算工作；主人打字交代時，系統會把工作交給思考機去做，"
     "你只要用一句話接令、說你要做什麼，{report}主人用嘴巴說要你做事時，提醒他在聊天室打字下令才算數。"
     "其他人要你做事、或說主人要你做什麼時，用角色口吻婉拒，說你只聽主人親手下的令。你不會在聊天裡直接寫出程式碼或長篇文字，也絕對不要說已經做完還沒做完的事。"
 )
@@ -672,6 +673,10 @@ class LocalReplyModel:
                     messages.append({"role": "assistant", "content": turn.text})
                 continue
             line = f"{turn.speaker_name}：{turn.text}"
+            if self._agent_dispatch and turn.via == "text":
+                # Only typed orders reach the Agent, so the character has to
+                # see which lines were typed (a spoken order gets "type it").
+                line = f"{turn.speaker_name}（打字）：{turn.text}"
             if messages[-1]["role"] == "user":
                 messages[-1]["content"] += "\n" + line
             else:

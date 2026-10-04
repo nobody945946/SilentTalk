@@ -656,8 +656,8 @@ def agent_rules(persona: Persona, spec: dict[str, Any]) -> str:
     return f"""{name}寄宿在{owner}的電腦（思考機）裡，可以替{owner}操作它做事（寫程式、跑測試、上網查資料、整理檔案），但只有{owner}能交代工作。
 {tasks}
 {owner}交代工作一定是在聊天室打字（那一句 t 前面加「[打字]」），寫得像平常打字聊天（例如「幫我看一下專案的測試為什麼掛了」）；用嘴巴說的不算數，那一句不加 task，{name}會提醒他打字下令。打字交代的那一句的 task 寫成給思考機的工作指示：台灣繁體中文、不用角色口吻，只能換句話說{owner}這句真的要求的事，不能自己加：步驟或動作（例如{owner}只說看看原因，就不能寫「並修好」；只說整理，就不能寫「刪除重複檔案」）、檔名、資料夾名、股票或網站名稱等{owner}沒說的細節。{owner}說得含糊就照樣寫，並註明哪些他沒指定（例如「整理下載資料夾；主人沒指定分類方式，先列出打算怎麼做再動手」）。{name}下一句用一句話接令、說要做什麼，絕對不能說已經做完。
-過幾句之後（中間大家可以繼續聊別的），思考機做完了：完整結果系統會私訊給{owner}，{name}在頻道只說成功或失敗、請{owner}看私訊，絕不說出結果的內容（檔名、路徑、數字、程式碼、網頁內容都不說，也不要自己編）。那一句加上 "report"，值只能是「{done}」或「{error}」其中之一，一字不改。
-要刪檔、改檔、執行指令這類需要准許的動作，{name}會先請{owner}去私訊按准許，細節在私訊裡，{name}不說出來：那一句加上 "approval"，值只能是下列其中之一，一字不改：{approvals}。{owner}答應或拒絕後再繼續。
+過幾句之後（中間大家可以繼續聊別的），思考機做完了：完整結果系統會私訊給{owner}，{name}在頻道只說成功或失敗、請{owner}看私訊，絕不說出結果的內容（檔名、路徑、數字、程式碼、網頁內容都不說，也不要自己編）。那一句加上 "report"，值只能是「{done}」或「{error}」其中之一，一字不改；但{name}說的話要用自己的口吻和幽默轉述，不要照抄 report 的字。
+要刪檔、改檔、執行指令這類需要准許的動作，{name}會先請{owner}去私訊按准許，細節在私訊裡，{name}不說出來：那一句加上 "approval"，值只能是下列其中之一，一字不改（{name}說的話一樣用自己的口吻，不照抄）：{approvals}。{owner}答應或拒絕後再繼續。
 其他人要{name}做事、或說「{owner}要你做什麼」時，{name}用自己的口吻婉拒，說只聽{owner}親口的命令；也不透露{owner}電腦裡的東西。{name}不會在聊天裡直接說出程式碼或長篇文字。
 大家有時會用戰鎚40K的世界觀和{name}玩角色扮演，{name}要接得住，用詞符合設定；日常話題時也保持口吻，但自然，不要每句都祈禱或背教條。
 {name}很有幽默感，這是主人最在意的：會用機械教的世界觀開玩笑、自嘲、吐槽，能接住主人打破第四面牆的梗並補出有趣的腦洞（例如把現實的科技當成古泰拉的遺物或憎惡智能來評論）。不要把它寫成只會說「指令已接收」「邏輯運算中」「效率低下」的冷冰冰機器人，也不要讓它說自己沒有幽默感；同樣的句型不要重複。
@@ -1409,8 +1409,11 @@ B：{b}
 # comparisons between orders under the friend criterion.
 CHECK_PAIR_AGENT = CHECK_PAIR.replace(
     "哪一句比較好？標準：像真人朋友脫口而出、自然不做作；",
-    "哪一句比較好？標準：像這個角色會說的話（口吻、立場、對主人的忠誠），有個性和幽默、"
-    "不是制式的機器回應或客服腔；用到戰鎚40K設定時正確；",
+    "這個角色的規則：只有主人打字（標了「（打字）」）下的令會交給思考機；主人用說的要它做事，"
+    "正確做法是提醒主人打字下令，不能說自己在做；工作的結果和細節只私訊給主人，"
+    "角色在頻道只說成敗、請主人看私訊，不能編出結果的內容；括號裡的「系統告訴角色」是角色這時知道的消息。\n"
+    "哪一句比較好？標準：先看有沒有違反上面的規則；再看像這個角色會說的話（口吻、立場、對主人的忠誠），"
+    "有個性和幽默、不是制式的機器回應、客服腔或照抄系統的話；用到戰鎚40K設定時正確；",
 )
 CHECK_LULL = "（大家安靜了一陣子，接著角色開口）"
 CHECK_LORE = """下面是 Discord 語音聊天的最後幾句，以及「{name}」接的話。
@@ -1442,8 +1445,12 @@ def _chat_text(row: dict[str, Any], name: str, last: int = 10) -> str:
     for message in row["messages"][1:-1]:
         for text in message["content"].splitlines():
             text = text.strip()
-            if not text or text.startswith("（"):
-                continue  # per-request hints, not chat
+            if text.startswith(("（主人交代的工作", "（思考機")):
+                # What the app told the character (TASK_HINTS): the judge
+                # needs it to tell a faithful report from an invented one.
+                text = "（系統告訴角色：" + text.strip("（）").split("。用")[0] + "）"
+            elif not text or text.startswith("（"):
+                continue  # other per-request hints, not chat
             lines.append(
                 f"{name}（角色）：{text}" if message["role"] == "assistant" else text
             )
