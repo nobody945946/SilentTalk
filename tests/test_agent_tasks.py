@@ -525,6 +525,23 @@ async def test_approvals_and_results_are_sent_to_the_owners_dm_only():
 
 
 @pytest.mark.asyncio
+async def test_a_command_approval_comes_with_its_explanation_first():
+    dm = _DM()
+    client = _discord_client(dm)
+
+    async def decide(call_id, approved):
+        return True
+
+    await client.send_approval({"call_id": "c1", "tool": "powershell", "arguments": {"command": "Remove-Item x"},
+                                "explain": "影響：會刪除：x" + "。" * 2100}, decide)
+    texts = [text for text, _ in dm.sent]
+    assert texts[0].startswith("這個指令在做什麼") and "會刪除：x" in texts[0]
+    assert all(len(text) <= 2000 for text in texts) and len(texts) == 3
+    assert dm.sent[-1][1] is not None and "Remove-Item x" in texts[-1]
+    dm.sent[-1][1].stop()
+
+
+@pytest.mark.asyncio
 async def test_a_closed_dm_fails_instead_of_falling_back_to_the_channel():
     client = _discord_client(_DM(fail=True))
 
