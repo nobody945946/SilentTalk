@@ -227,3 +227,13 @@
 A1：兩個 repo 的 git pull --ff-only 均 exit 0。SilentTalk 534a61ae607ac403475bbdd99166819d0b2b6e30；EdgeAgent 34489bc3182b32a1009dcbd4477287676355529e。EdgeAgent bootstrap.ps1 -SetupOnly 部署 exit 0；CUDA llama.cpp b11193、Node 22.23.3、Pi SDK 1.0.0 資產核對完成。SilentTalk 完整 pytest：267 passed、1 skipped、1 audioop warning，12.55 s，exit 0。EdgeAgent 首次 pytest：33 passed、92 setup errors、exit 1，原因是本次測試暫存父目錄未建立；建立後完整重跑：125 passed，73.41 s，exit 0。指定 Windows 真 SDK 測試：test_mcp.py 8 passed，11.76 s，exit 0；test_agent_chat.py -k interview 1 passed、40 deselected，4.46 s，exit 0。
 
 B：使用者層級 uv 已存在，0.11.15。系統既有 Node 22.13.1、npm/npx 10.9.2；本次 MCP 使用 EdgeAgent 部署的 Node 22.23.3、npm/npx 10.9.9。系統 Python 未變更；MCP 未加入 EdgeAgent 設定。
+
+C1：mavlink-mcp 0.1.5 已由 uv tool install 安裝，36.249 s；環境檔案邏輯大小 105126951 bytes。只使用 fake backend。未開動作模式：5 個工具，readOnly=true 5、destructive=true 0、openWorld=true 0；閒置工作集總和 78909440 bytes。開動作模式：19 個工具，readOnly=true 5、destructive=true 13、openWorld=true 14；閒置工作集總和 74481664 bytes。get_status 呼叫 1 次、isError=false；2 次探測均 exit 0。標記差異 1：wait 是 readOnly=false、destructive=false、openWorld=true；其餘 13 個動作工具 destructive=true。未使用 allow-real-vehicle。套件版號 0.1.5；握手回報的 1.30.0 是 MCP SDK 版號，不是套件版號。探測程序已依 PID 關閉。
+
+C2：@playwright/mcp 0.0.83 已安裝在 EdgeAgent .runtime/playwright-mcp，19.099 s；環境檔案邏輯大小 18733556 bytes。使用 msedge、headless、isolated，未下載 Chromium。25 個工具，readOnly=true 7、destructive=true 18、openWorld=true 25；閒置工作集總和 109498368 bytes。同一 stdio 連線依序呼叫 browser_navigate、browser_snapshot，2 次 isError=false；exit 0。初次命令因 Windows PowerShell 將 JSON 引號移除而 exit 1；修正原生命令參數引號後通過。browser_evaluate、browser_run_code_unsafe 均非唯讀；7 個唯讀工具為讀取、等待與截圖，未發現可寫入卻標成唯讀的工具。握手版號 1.64.0-alpha-1790635538000 是內含 Playwright 版號。探測程序已依 PID 關閉。
+
+C3：TWStockMCPServer v1.9.0，8857b2ebc4e7be74bddf0e99c23146ebb28567b1；安裝在 EdgeAgent .runtime/TWStockMCPServer。clone 15.077 s，uv sync --python 3.13 --frozen 72.224 s，合計 87.302 s；環境含 repo 檔案邏輯大小 170207945 bytes。uv 管理 Python 3.13.13；未變更系統 Python。MCP_STDIO=1，未使用 HTTP。173 個工具；readOnly=true 0、destructive=true 0、openWorld=true 0，173 個工具的三種標記全部缺漏。閒置工作集總和 106381312 bytes。get_exchange_rates 呼叫 1 次、isError=false、exit 0；外連匯率查詢成功，但其 openWorld 標記缺漏。缺漏不能視為 false 或自動執行許可。握手回報的 1.27.0 是 MCP SDK 版號；pyproject 0.1.0 與 release tag v1.9.0 不同。探測程序已依 PID 關閉。
+
+C3 工具候選名稱：get_stock_daily_trading、get_stock_history、get_twse_institutional_investors_summary、get_twse_institutional_investors_by_stock、get_company_monthly_revenue、get_company_dividend、get_company_income_statement、get_company_balance_sheet、get_company_cash_flow_statement、get_taiex_index_history、get_exchange_rates。
+
+C 量測方式：閒置數字為 initialize/tools-list 完成後等待 1 s，再加總伺服器 PID 與子程序的 WorkingSet64；不含探測 Node 或量測 PowerShell。工作集可能含共用頁面，不等於私有 RAM。空間為安裝目錄所有檔案的 Length 加總；uv 有共用快取與 hardlink，數字不等於磁碟淨增量，且不含共用 uv cache、Python 3.13 runtime 或共用 Node。
