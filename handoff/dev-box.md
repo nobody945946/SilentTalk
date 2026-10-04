@@ -1,6 +1,6 @@
 # 開發機工作檔（Linux、RTX 3090）
 
-更新：2026-10-03 深夜｜分支：SilentTalk、EdgeAgent 都用 `copilot-story-mode`（EdgeAgent 另有 `agent-permissions`，見 §1）
+更新：2026-10-04 早上｜分支：SilentTalk、EdgeAgent 都用 `copilot-story-mode`（EdgeAgent 另有 `agent-permissions`，見 §1）
 你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事。舊版在 `archive/`（只在這台機器、不進 git），不必讀。
 
 ---
@@ -25,14 +25,15 @@
 
 | 項目 | 狀態 |
 |---|---|
-| 權限可調＋上網工具＋刪檔／受保護檔案要單次批准（EdgeAgent） | ✅ 已合併進遠端 `copilot-story-mode`（在 `/home/clawd/EdgeAgent-dev` 做的）。**開發機主工作樹刻意還沒 pull**：佇列 `phase1b.sh` 的考場（老師試跑、提示變體、thinking）要和基準用同一版產品，跑完才 pull |
+| 權限可調＋上網工具＋刪檔／受保護檔案要單次批准（EdgeAgent） | ✅ 在 `copilot-story-mode`；開發機主工作樹 `/home/clawd/EdgeAgent` 已是最新（`fa5b134` 網址單次批准、`e4699d0` 定規格模式都在這裡做的）。真 Pi SDK 測試在 Linux 要 `.runtime/node/node-v22.23.3-win-x64/node.exe` → `/usr/bin/node` 的連結（已建）；4 個只在 Windows 過的測試會失敗 |
 | 筆電 | ✅ Windows 整合做完（`laptop-report`「Windows integration 2026-10-04」）；✅ Discord 自動實測（「Discord live verification 2026-10-04」：記憶體注入主人指令的唯讀任務，全程 9.4 s）。⬜ 使用者開口實測＋私訊批准＋人設匯入：`handoff/laptop.md` 已改寫，等使用者在筆電說「開工」 |
 | Discord 防話術（2026-10-04） | ✅ SilentTalk：**只有主人打字的話能派工**（使用者不要用語音下令；語音只聊天），派工判斷／工作指示只讀主人 ID 的打字內容（`owner_messages`，不含他人、主人用說的、角色自己、摘要），其他人照常能聊天；批准與結果只私訊主人（私訊失敗就拒絕）；角色只拿固定字句 `PRIVATE_REPORTS`／`PRIVATE_APPROVAL`（`copilot.agent_report_public` 才公開）；訓練資料同樣只用主人打字的話和固定字句（機魂劇本 `can_type` 一律開；`check_script` 擋沒打字的 task、不是固定字句的 report/approval）；`machine_spirit_eval.jsonl` v2：主人的工作改成打字，另加一句用說的。EdgeAgent `fa5b134`：模型自己組的網址要單次批准（`new_url`）。**機魂 pilot v3 的劇本要用這版重新產生** |
+| 定規格模式（EdgeAgent `e4699d0`） | ✅ 使用者要「當我需要嚴謹工作的時候，讓agent用grill me跟我定spec」：工作／規劃／定規格三種模式；定規格的第一句開啟內附 skill `edge_agent/skills/grill-me`（改寫自 mattpocock/skills 的 grill-me＋grilling＋to-spec，MIT），只能讀。同一份提示實測：E4B 兩輪都照格式（5 題 5 個建議）；Qwen3.5-4B 漏建議、替使用者做決定。筆電要部署並驗（`handoff/laptop.md` E） |
 | 機魂的角色邏輯（SilentTalk `llm.py`） | ✅ 已在 `copilot-story-mode`：誠實模式 `machine`、`copilot.character_agent`（預設 off）、派工判斷 `task`、`task_text_messages`、提示 `TASK_HINTS`（ack/approval/report） |
 | 角色資料管線的機魂模式（`character_data.py`） | ✅ 已在 `copilot-story-mode`，單元測試過，**還沒用老師真的跑過** |
 | 機魂人設卡 | ✅ 使用者選草稿 2「Machina-Prime-09A（馬基納）」並改成文雅（polish 1），背景保留老師的創意；在 `.runtime/dev/chardata-ms1/personas.jsonl`（9 條核對過的 40K 用語）。產品裡的人設要使用者自己建（`personas.json` 受保護），下一輪請筆電做「匯入人設」 |
 | 中性電子音 | ✅ 使用者聽過選 C：`VOICE_EFFECTS["machine_spirit"]`（配 YunJhe +22 Hz） |
-| 角色資料 | ⏳ 第一次試跑（19 個劇本）**被硬關卡擋下**：台詞贏學生 48.6%、檢查員一致 64.4%、工作指示忠實 72.7%（40K 核對 99.4%、判斷一致 86.7% 都過）。原因與修正見 §5.6；資料歸檔在 `chardata-ms1/pilot-v1-refused/`。第二次試跑由 `chardata-ms1/after-agent-pilot.sh` 排在 Agent 試跑之後自動開始；正式劇本步驟用 `state/scripts.blocked` 暫停，試跑通過才拿掉 |
+| 角色資料 | ⏳ 試跑 v1、v2 都被硬關卡擋下（歸檔在 `chardata-ms1/pilot-v{1,2}-refused/`）。寫台詞老師對照（`chardata-ms1-gemma`，同 19 劇本）：Gemma 31B 寫、Qwen 27B 檢查：台詞勝率 48.2%（v2 Qwen 寫、Gemma 檢查 44.0%），但檢查員一致只有 66.9%（v2 70.5%），也被擋；兩組換了檢查員，不是乾淨的對照。**試跑 v3 已在跑**（2026-10-04 08:04，`chardata-ms1/run-pilot.sh`，人設 playful 4、打字派工與私訊固定字句的新規則，Qwen 寫、Gemma 檢查）；正式劇本仍用 `state/scripts.blocked` 暫停，試跑通過才拿掉 |
 | Agent 解題紀錄 | ⏳ 試跑中：`.runtime/bench/agent-pilot.sh`（27B 老師 `teacher-27b` 解 `agentdata/pilot-tasks` 30 題 × 2，`--record`），之後 `bench/dataset.py` 產生 `agentdata/agent-pilot-rows.jsonl` |
 | 40K 背景測驗（`scripts/dev/lore_quiz.py`） | ✅（§5.3）：老師 35B-A3B 94.7%、檢查員 Gemma 31B 97.4%；學生 E4B 75% 最高 |
 | Agent 考場第一階段（基底選擇） | 進行中（§5.2）：ComfyUI 搶 GPU，非常慢 |
