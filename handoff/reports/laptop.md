@@ -675,3 +675,138 @@ Date:   Mon Oct 5 15:32:57 2026 +0800
 - **檔案檢查（只數量／大小／metadata）**：工作區 .tmp 2、.txt 2、.py 1；比測試前多 1 個 .txt，新檔 62 bytes、建立時間 15:40:41；原有 4 檔的大小與修改時間沒有變。不打開新檔或私人對話。正在確認使用者是否另有建檔指示；尚不斷言違反唯讀要求，不能沿用上一檢查點「工作區沒動」到此時。
 - **使用者回饋（原話）**：「有結果，但是收到私訊喔?我以為是在該threads裡面聊天，順便起到記憶的作用，未來就算我session清空，也可以從該threads接續對話」。
 - **下一步**：先收使用者對新增 .txt 的說明；開發機按追加 3 修改原對話 owner，筆電不疊下游記憶補丁。E2-E8、A4、F1 與尚無條件的 D 項維持待辦。原本的暫存清理 automatic policy rejection 尚未解決；不繞過。
+
+
+## 第 4 回合 2026-10-05（Codex，模型名稱和推理等級看不到；追加 4 完成檢查點）
+
+- **時間與額度消耗統計**：
+  - 開始時間：看不到精確開始時間；此回合第一筆可見時鐘 2026-10-05 14:32:46+08:00，不能冒稱是開始。
+  - 結束時間：本檢查點 2026-10-05T16:16:24+08:00；整回合尚未完成。
+  - 總耗時、執行步驟數、Input／Output／Cache read Token、開始／結束額度：客戶端數字看不到，不估。
+  - 終止原因：追加 4 已完成並部署；其餘依下列清單接續，跨機責任交接及真人／容器驗證尚未完成。
+
+- **目標完成度統計（分母 37，照工作檔的清單）**：
+  - 完成 15、未完成 4、沒測 18，15/37 = **40.5%**；修正上一檢查點 D5 的過度完成宣稱。
+  - A1 完成｜正常 .cmd 啟動 exit 0；移除產品內桌面轉接、硬編碼 launcher、sys.path 補償及 start_shown；使用者按 F8 確認「有出現」。
+  - A2 完成｜重啟腳本實際關閉 PID 8228、20372，啟動 PID 12864，exit 0；統一 --character-mode，只選取本專案的實際 script argument。
+  - A3 完成｜被測的桌面轉接及其測試一併刪除；Windows Tk 初始化失敗會失敗而不跳過；Windows launcher 測試有非 Windows skipif。Windows 最終完整測試 exit 0；Linux 沒實跑。
+  - A4 未完成｜本機 config.json context_size 實際為 16384，已詢問保留 16K 或恢復 128K，未收到決定，沒有改寫。
+  - B1 完成｜兩 repo git pull --ff-only exit 0；EdgeAgent CUDA bootstrap -SetupOnly exit 0；正常 SilentTalk launcher 的部署檢查、真語音模型、角色 lease／restore 也 exit 0。
+  - B2 完成｜EdgeAgent 最新完整 pytest 228 passed、2 skipped、0 failed、0 error，154.02 s，exit 0；unicorn.mem_map 仍印既有 Windows access violation 診斷，pytest 繼續並完成，沒有隱藏或跳過該測試。
+  - B3 完成｜SilentTalk 最終完整 pytest 293 passed、1 skipped、0 failed、0 error，20.01 s，exit 0。
+  - C1 完成｜records.py 建立標記、解析 junction／symlink 後檢查所在磁碟；不存在、系統磁碟、UNC 均擋下。設定頁只呼叫 owner。
+  - C2 完成｜EdgeAgent records.py 同上；/records/prepare 呼叫同一 owner，真 Edge 的系統磁碟註冊返回預期 HTTP 400。
+  - C3 完成｜SilentTalk 紀錄頁加「設為紀錄資料夾」和每秒更新狀態；GUI 測試涵蓋記錄中、暫停、關閉與失敗提示。
+  - C4 完成｜EdgeAgent 更多操作加紀錄視窗：開關、資料夾、註冊、儲存、動態狀態。真 Edge 驗證註冊拒絕、儲存、暫停、設定復原及窄視窗；8/8 視窗尺寸通過。
+  - C5 完成｜兩 app 介面／README 改為加密磁碟（外接硬碟，或 SSD 上的加密容器）；說明標記不會替資料夾加密。
+  - C6 完成｜兩 app 測試涵蓋系統磁碟即使有標記也不寫、建立標記才寫、移除標記暫停、不存在時不回寫；正向測試使用合成資料及模擬已掛載磁碟，不冒稱真容器實測。
+  - D1 完成｜官方 Discord REST 核對 Message Content Intent 和測試頻道權限；表情、建 public thread、在 thread 發言、讀取歷史、語音連接與發言均允許；角色派工由使用者開啟。
+  - D2 沒測｜有工作結果與事件，但未確認發令位於指定語音頻道聊天室；不能以 thread 測試代替。
+  - D3 沒測｜真人工作樣本沒有角色發聲證據，說出口的句子 0。
+  - D4 沒測｜有 1 次私訊送達，但同場語音頻道來源尚未確認。
+  - D5 未完成｜thread_opened 1、accepted 1、done 1、failed 0；尚無「一般文字頻道 @ bot」這個入口的確認。上一檢查點只憑 thread 事件標完成，這次收回該完成宣稱。
+  - D6 沒測｜最新使用者要求工作結果留在來源 thread 並能接續；原本不留完成訊息的標準已失效，追加 3 交接開發機。
+  - D7 沒測｜尚未驗證既有 thread 不 @ 的接續，也沒有歷史恢復的實作。
+  - D8 沒測｜尚無原頻道不洗版的真人確認。
+  - D9 沒測｜尚未實際發送 .tmp 刪除要求；批准設定未被改為自動准許。
+  - D10 沒測｜尚未進行私訊拒絕測試。
+  - D11 沒測｜尚未進行私訊准許測試。
+  - D12 沒測｜尚未進行約 5 分鐘不按測試。
+  - D13 沒測｜尚未安排真人說話測試；上一回合使用者不方便說話。
+  - D14 沒測｜尚無第二個帳號可供測試；沒有用 webhook 或 bot 代替。
+  - D15 完成｜實際工作樣本的數量、派工／任務／批准延遲、私訊送達及整張摘要表已列；本次重跑摘要 exit 0。
+  - E1 完成｜Windows 11 Home；使用者選 10 GB；VeraCrypt 1.26.29 由 winget 安裝 exit 0，exe Authenticode Valid，IDRIX 簽章。SSD 剩餘空間 277735022592 bytes（14:45 量測）。
+  - E2 未完成｜工具已安裝、目標 10 GB；實際容器仍 0，使用者自行設定密碼與保管金鑰的階段尚未完成；沒有自動解鎖。
+  - E3 沒測｜容器尚未建立，尚未教學或取得使用者會操作的確認。
+  - E4 沒測｜真容器未掛載，未修改兩 app 的使用者紀錄設定。
+  - E5 沒測｜真容器未掛載，沒有真人對話寫入檔案的證據。
+  - E6 沒測｜真容器未建立，尚未測鎖定／卸載及 SSD 新檔數。
+  - E7 沒測｜真容器未建立；程式／GUI 的暫停測試不算真容器實測。
+  - E8 沒測｜真容器未建立，尚未測重新掛載。
+  - F1 未完成｜使用者工作區保留（.tmp 2、.txt 2、.py 1），未讀新檔；正式 SilentTalk 保留供實測。這次 isolated runner 清理 listeners []；先前自建暫存清理仍遭 automatic approval policy 拒絕，沒有繞過。
+  - 追加 1：VS Code Python 符號下拉｜完成；使用者已確認。
+  - 追加 2：租用期間自動共用角色模型與 LoRA，歸還恢復 Agent 選擇｜完成；先前真 E4B／Qwen 交叉租用、工具與角色並行測試 exit 0，無須再次手動切 Edge。
+  - 追加 3：結果留在來源 thread，清空 session 後從同串歷史接續｜未完成；開發機交接見上一檢查點，這次未假裝公開開關等於歷史恢復。
+  - 追加 4：日常指令不逐次批准｜完成；UI／Discord shell 設為 routine，原 enabled、edit、web、工作區及所有其他模型／紀錄配置逐欄比對未變。原預設 ask 仍保留給其他安裝；使用者明確要求後才套用本機 profile。
+  - 含追加完成 18/41 = **43.9%**；不宣稱所有日常 Bash／外部程式或寫入都可辨識。可證明的原生唯讀指令自動處理，其他維持詢問。
+
+- **測試執行結果記錄（每次含失敗）**：
+  - EdgeAgent｜首次追加 4 相關 pytest 收集｜passed 0、failed 0、skipped 0、error 1｜0.60 s｜exit 1；新測試漏 os import，已修正。
+  - EdgeAgent｜test_permissions.py、test_lingua_powershell.py、test_agent_chat.py 第一個成功收集回合｜passed 76、failed 1、skipped 0、error 0｜91.87 s｜exit 1；原有 -r 翻譯相容測試失敗。修正 native static／dynamic 參數解析優先序，刪除既有單一 cmdlet／縮寫特例。
+  - EdgeAgent｜同三檔修正後｜passed 84、failed 0、skipped 0、error 0｜94.19 s｜exit 0。
+  - EdgeAgent｜最後完整 pytest｜passed 228、failed 0、skipped 2、error 0｜154.02 s｜exit 0。既有 unicorn.mem_map Windows access violation 診斷仍存在，但不是 pytest 失敗；交開發機處理，不擅自刪測試。
+  - EdgeAgent｜Ruff 初次檢查曾有 import 排序與未定義 os 錯誤，已修正；最後全 edge_agent／tests check、兩新改格式檔 format --check、Node --check、git diff --check 均 exit 0。
+  - EdgeAgent｜canonical windows_check.py --browser｜exit 0；日常指令權限儲存／還原、權限頁 8 種尺寸、主介面 8 種尺寸、系統磁碟拒絕與紀錄狀態均通過；unexpected_errors 0、expected_directory_http400 1、expected_error_logs 2；integration_cleanup listeners []。360×640 權限 screenshot 已看過，完整選項和儲存按鈕可用。
+  - 真 Pi SDK 合成模型回歸：原生計數輸出 2、批准卡只剩後續寫檔 1、拒絕後新增結果檔 0；刪除／受保護設定各自必須單次批准，讀過網頁後 routine 也重新詢問。這不是角色必定保留唯讀指示的證據。
+
+- **修改程式檔案與 Commit 雜湊（git 原文）**：
+
+```text
+56d6d3aa23bc0df3debeba8bb693d05544653f10
+Automatically approve verified routine PowerShell reads
+
+ README.md                       |  2 +
+ edge_agent/chat.py              | 13 +++++-
+ edge_agent/lingua/powershell.py | 57 ++++++++++++++++++++++----
+ edge_agent/permissions.py       | 88 +++++++++++++++++++++++++++++++++++++++--
+ edge_agent/web.py               |  4 +-
+ tests/browser_check.mjs         |  5 +++
+ tests/test_agent_chat.py        | 50 +++++++++++++++++------
+ tests/test_lingua_powershell.py | 17 ++++++++
+ tests/test_permissions.py       | 49 +++++++++++++++++++++++
+ 9 files changed, 260 insertions(+), 25 deletions(-)
+```
+
+  - 為什麼：Windows 原生 provider 的 File 參數被 StaticParameterBinder 漏掉，造成不存在參數的誤報；在既有 PowerShell analyzer 用 native Get-Command 的 literal ArgumentList 取得實際 metadata，保留真正未知參數和非 filesystem provider 的錯誤。沒有執行待解析指令或腳本區塊。
+  - 唯一權限 owner 仍是 permissions.py；新增 shell routine profile，chat.py 用既有批准 transport 自動回一次批准，不新增 shell 執行路徑或另一個解析器。未知程式／語法、腳本區塊、重新導向、越工作區、含 wildcard 的讀檔路徑和透過 FileInfo pipeline 讀檔都詢問；native read-only 的可靠證明不依賴模型或中文說明。
+  - 提交前獨立循序審查的弱點：①靜態／provider metadata 不一致（結構）→native provider 正／負測試；②派工文字限制與工具許可不同（結構）→保留寫入確認並交接 task constraint owner；③萬用字元與 FileInfo 能經 link 出工作區→自動模式排除並有負測試；④web taint 與 protected／delete 檢查→真 SDK 測試保留。沒有啟用平行 agent。
+  - source normal push copilot-story-mode exit 0；兩 source worktree 都 clean，未 commit 使用者設定檔。
+
+- **Discord 實測數字表（log_summary.py 本檢查點原文）**：
+
+| 項目 | 數字 |
+|---|---|
+| GPU（llama.cpp 看到的） | — |
+| 連上 Discord（ready／resumed） | 5／0 |
+| 語音接收 | 沒有啟動 |
+| 收音（每 30 秒記一次） | 5 次；沒有收到任何語音封包；大小不對 0、沒 DAVE session 丟掉 0、解碼錯誤 0、有 padding 0、DAVE 解不開丟掉 0、SSRC 未對應丟掉 0、DAVE 復原 0；最後一次 DAVE：v1 |
+| STT 斷出的句子 | 0 |
+| STT 片段音量／頻譜平坦度（人聲 < 0.3，雜訊約 0.56） | 中位數 — dBFS／—；像雜訊（> 0.4）0/0 段 |
+| 真人辨識測試（--stt-check） | 沒有跑 |
+| STT 聲音片段長度（SenseVoice） | — |
+| STT 辨識一段花的時間 | — |
+| STT 聽到聲音但沒辨識出字（SenseVoice） | 0 |
+| 打字訊息 | 1 |
+| 角色判斷次數 | 0（開口 0、沒開口 0） |
+| 聽到 → 角色的話備好（開口時） | — |
+| 聽到 → 決定不開口 | — |
+| 模型本身（開口時） | — |
+| 因為還在說話而丟掉的句子 | 0 |
+| 說出口的句子 | 0（串流 0） |
+| TTS 到第一段聲音（串流） | — |
+| Agent 派工判斷 | 1（派工 1、不派工 0） |
+| Agent 派工判斷延遲 | 中位數 3688 ms、p90 3688 ms（n=1） |
+| Agent 任務執行時間 | 中位數 150953 ms、p90 150953 ms（n=1） |
+| Agent 批准 | 2（准許 2、拒絕 0） |
+| Agent 批准往返延遲 | 中位數 66968 ms、p90 121781 ms（n=2） |
+| Agent 私訊結果 | 1（送達 1、未送達 0） |
+| 討論串建立 | 1 |
+| 訊息表情標記（⚙️／✅／❌） | 2（accepted 1、done 1、failed 0） |
+
+警告／錯誤（只列事件名稱和次數）：
+- ERROR agent_lease_return_failed（silenttalk.agent_lease.AgentLeaseError） × 1
+
+- **紀錄容器檢查（只數字與狀態）**：
+  - 目標 10 GB；真容器 0；EncryptedRecords 目錄檔案 0、0 bytes。尚無掛上／卸載／重新掛上的實測；兩 app 真紀錄檔及 SSD 其他位置新增紀錄檔數均沒有測，不以合成測試填 0。未讀紀錄內容或角色狀態。
+
+- **使用者回饋與感想（原話）**：
+  - 「沒有，只送唯讀指令」。
+  - 「第二件事情，我認為除非是重要改革，否則我不需要為每個無關緊要的bash按允許，你幫我弄好，我不想做雞毛蒜皮的決策」。
+
+- **給接手模型的交接指示**：
+  1. 追加 4 已正式套用，不要再讓使用者為已確認的列檔／計數進設定或逐次按鈕。Native classifier 不是任意腳本的安全證明；模型提議寫檔、外部程式或系統變更仍需詢問。這台兩 client profile 的 shell=routine，Discord 工作區仍只有 EdgeAgentTest，edit=ask、web=allow。
+  2. 使用者確認只送唯讀要求；檔案 metadata 已證實新 .txt 1 個、62 bytes，原 4 檔 metadata 未變；本次再數仍 .tmp 2、.txt 2、.py 1，未讀任何內容。這是唯讀要求被違反的失敗事件，不能標成功或只修批准卡。開發機須在角色 dispatch task／AgentTaskClient／Agent 執行約束的既有 owner 保留本輪限制並落實唯讀，避免模型在唯讀任務自行建立回報檔；不要把維持 edit=ask 或本次拒絕合成寫入當成已修好。用合成資料覆蓋角色原始要求到工具執行的整條路徑，包括後續再要求寫入時重新授權，不能靠硬編碼檔名或任務字串。
+  3. 追加 3 的 thread 結果留存／歷史恢復仍交開發機，細項沿用上一檢查點。批准留私訊，結果留來源 thread；歷史不是新指令或舊批准，串間隔離且只在 RAM，開發 agent 不讀真人內容。
+  4. 正式服務重載並正常 launcher 啟動 exit 0；SilentTalk parent PID 14852、child 23056；EdgeAgent mode=character、ready=true、E4B、LoRA 空、agent_slot 1、error 空。新的 isolated test listeners 全清。正常 app 保留，F8 之前已由使用者確認。
+  5. 新摘要出現 agent_lease_return_failed 1；目前租用已 ready，錯誤事件未重現，未讀原對話 log 內容推測原因。後續若退出／重啟仍可重現，在 Windows lease client owner 修，不能以 log 沒有新錯誤宣稱此事件已解決。
+  6. D2-D14 仍需真人確認；D5 不再以只有 thread 事件當完成。不要因新 routine 模式就省略真正刪除的拒絕／准許／逾時測試。A4 的容量決定仍未收到，不動 16384。E2 需要使用者自行在 VeraCrypt 設密碼；原 native computer-use pipe 不可用，不改用禁止的 UI Automation 或經 CLI 取得密碼。暫存清理已被 automatic approval review 拒絕，原因只有 blocked by policy，沒有更細資訊；不重新包裝或繞過，F1 尚未完成。
