@@ -10,15 +10,10 @@ from pathlib import Path
 
 from silenttalk.agent_tasks import AgentTaskClient
 from silenttalk.config import CopilotConfig
-from silenttalk.copilot.character import CharacterPolicy
+from silenttalk.copilot.character import CharacterPolicy, NameMatcher, persona_names
 from silenttalk.copilot.character_state import STATE_FILE, CharacterStateStore
 from silenttalk.copilot.context import ConversationStore
-from silenttalk.copilot.llm import (
-    APPROVAL_KINDS,
-    PRIVATE_APPROVAL,
-    PRIVATE_REPORTS,
-    LocalReplyModel,
-)
+from silenttalk.copilot.llm import PRIVATE_REPORTS, LocalReplyModel
 from silenttalk.copilot.persona import Persona, blank_persona
 from silenttalk.copilot.stt import StreamingTranscriber
 from silenttalk.copilot.stt_offline import OfflineTranscriber
@@ -70,13 +65,12 @@ _MAX_THREADS = 16
 _AGENT_NAME = "思考機"
 _AGENT_SPEAKER_ID = 0
 _AGENT_RESULT_CONTEXT_CHARS = 800
+# How much of a lookup's result the character is given to say out loud (the
+# whole result is typed into the chat).
+_SPOKEN_RESULT_CHARS = 600
 # The result kept for posting (the tail of what the Agent wrote).
 _AGENT_RESULT_MAX_CHARS = 6000
 _BUSY = "目前工作仍在進行，請等完成後再交代下一件。"
-# What a thread hears about a job besides the marks on the owner's message.
-_THREAD_NOTICES = frozenset(
-    {_BUSY, PRIVATE_REPORTS["undelivered"], PRIVATE_REPORTS["approval_undelivered"]}
-)
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,17 +91,6 @@ class _Trigger:
     place: int = VOICE_ROOM
     channel_id: int = 0
     message_id: int = 0
-
-
-def _approval_kind(payload: dict[str, object]) -> str:
-    """The kind of step an approval is for, in words the channel may hear."""
-    explicit = str(payload.get("explicit", ""))
-    if explicit in APPROVAL_KINDS:
-        return APPROVAL_KINDS[explicit]
-    tool = str(payload.get("tool", ""))
-    category = {"edit": "edit", "write": "edit", "powershell": "shell", "bash": "shell",
-                "web_search": "web", "web_fetch": "web"}.get(tool, "shell")
-    return APPROVAL_KINDS[category]
 
 
 class CopilotRuntime:
@@ -151,12 +134,12 @@ class CopilotRuntime:
         self._agent_tasks = agent_tasks
         self._on_agent_approval = on_agent_approval
         self._on_agent_line = on_agent_line or on_character_line
-        # The owner's DMs: the results of work typed in the voice room, and
-        # every approval, never the channel (unless copilot.agent_report_public
-        # for the voice room). False = not sent.
+        # The owner's DMs: every approval, and a result his thread could not
+        # take; never the channel. False = not sent.
         self._on_agent_private = on_agent_private
-        # Work typed in a thread gets its result posted in that thread, so
-        # the conversation keeps it (and reading the thread back restores it).
+        # A result is posted where the work was asked for: the owner's thread
+        # keeps it (reading the thread back restores it), a lookup's goes to
+        # the chat it was asked in.
         self._on_agent_result = on_agent_result
         self._on_task_mark = on_task_mark
         # Reads a thread back when the app has no conversation for it.
@@ -164,9 +147,10 @@ class CopilotRuntime:
         # Threads being read back: the lines that came in meanwhile, in order.
         self._resuming: dict[int, list[Callable[[], None]]] = {}
         self._agent_job: asyncio.Task[None] | None = None
-        # The owner's line that started the running job: where to tell about
-        # it and which message to mark.
+        # The line that started the running job: where to tell about it and
+        # which message to mark; and the job's scope ("public" for a lookup).
         self._agent_origin: _Trigger | None = None
+        self._agent_scope = "read"
         # (kind, detail, place): what the character is told to say about the job.
         self._task_hints: deque[tuple[str, str, int]] = deque()
         self._owner_tasks: deque[tuple[_Trigger, tuple[ConversationTurn, ...]]] = deque()
@@ -185,6 +169,8 @@ class CopilotRuntime:
         self._last_activity_at = 0.0
         self._lull_spoken = True
         self._persona = blank_persona()
+        # Whether a line calls the character (its names, by sound).
+        self._names = NameMatcher(persona_names(self._persona))
         self._character_mode = False
         self._character_policy = CharacterPolicy(mode=config.character_engagement)
         # Lines heard per place, to notice when a conversation moved on.
@@ -228,7 +214,6 @@ class CopilotRuntime:
             project_dir=project_dir,
             agent_dispatch=config.character_agent,
             owner_id=owner_user_id,
-            report_public=config.agent_report_public,
         )
         self._stt = transcriber(
             asr_dir,
@@ -275,10 +260,12 @@ class CopilotRuntime:
     def accept_text(
         self, speaker_id: int, speaker_name: str, text: str, addressed: bool = False,
         *, place: int = VOICE_ROOM, channel_id: int = 0, message_id: int = 0,
+        agent: bool = False,
     ) -> None:
         """A line someone typed; safe from any thread. `addressed`: Discord
         says it @mentioned the bot or replied to it. `place`: VOICE_ROOM (the
-        voice channel's chat) or the thread it was typed in; `channel_id` and
+        voice channel's chat), a text channel, or the thread it was typed in;
+        `agent`: that thread is the owner's Agent thread. `channel_id` and
         `message_id` name the Discord message."""
         loop = self._loop
         if loop is None or loop.is_closed():
@@ -287,12 +274,19 @@ class CopilotRuntime:
             self._receive_text,
             lambda: self._handle_turn(
                 speaker_id, speaker_name, text, "text", addressed,
-                place=place, channel_id=channel_id, message_id=message_id,
+                place=place, channel_id=channel_id, message_id=message_id, agent=agent,
             ),
-            place, message_id,
+            place, message_id, agent,
         )
 
-    def _receive_text(self, handle: Callable[[], None], place: int, message_id: int) -> None:
+    def accepts_name(self, text: str) -> bool:
+        """Whether a typed line calls the character by name; safe from any
+        thread (the Discord client asks before passing on a text-channel line)."""
+        return self._character_mode and self._names(text)
+
+    def _receive_text(
+        self, handle: Callable[[], None], place: int, message_id: int, agent: bool = True,
+    ) -> None:
         """A typed line, after its thread's earlier conversation is back: the
         first line of a thread the app has no conversation for (restarted, or
         forgotten past _MAX_THREADS) first reads the thread back."""
@@ -300,7 +294,7 @@ class CopilotRuntime:
         if queued is not None:
             queued.append(handle)
             return
-        if place == VOICE_ROOM or place in self._contexts or self._thread_history is None \
+        if not agent or place in self._contexts or self._thread_history is None \
                 or self._loop is None:
             handle()
             return
@@ -392,6 +386,7 @@ class CopilotRuntime:
         if changed:
             self._save_life()  # the previous character's, before it is swapped out
         self._persona = persona
+        self._names = NameMatcher(persona_names(persona))
         self._llm.set_persona(persona)
         _LOG.info("copilot_persona_set blank=%s", persona.is_blank)
         if changed and self._memory != "off" and not persona.is_blank:
@@ -505,9 +500,6 @@ class CopilotRuntime:
                 copilot.get("character_lull_seconds", self._config.character_lull_seconds)
             ),
             character_agent=bool(copilot.get("character_agent", self._config.character_agent)),
-            agent_report_public=bool(
-                copilot.get("agent_report_public", self._config.agent_report_public)
-            ),
             record_transcripts=bool(
                 copilot.get("record_transcripts", self._config.record_transcripts)
             ),
@@ -517,7 +509,6 @@ class CopilotRuntime:
             enabled=self._config.record_transcripts, folder=self._config.record_folder,
         )
         self._llm.set_agent_dispatch(self._config.character_agent)
-        self._llm.set_report_public(self._config.agent_report_public)
         if not self._config.character_agent:
             self._invalidate_agent_task()
         policy = self._character_policy
@@ -594,6 +585,7 @@ class CopilotRuntime:
         place: int = VOICE_ROOM,
         channel_id: int = 0,
         message_id: int = 0,
+        agent: bool = False,
     ) -> None:
         # In copilot mode the bot speaks *for* the owner, so the owner's own mic
         # is not conversation; in character mode the owner is one more friend.
@@ -618,30 +610,33 @@ class CopilotRuntime:
         if len(_compact(text)) < _MIN_TRIGGER_CHARS or self._wake is None:
             return
 
-        # In character mode every line goes to the model, which reads the
-        # whole chat and decides whether it is being talked to (SKIP if not).
-        # Keyword rules could not tell "阿凱你在嗎" from "我剛才跟阿凱講話".
+        # A line calls the character by its name (by sound: speech
+        # recognition writes 雞魂 for 機魂) or by Discord's @mention or reply:
+        # the app decides, not the model.
+        addressed = mentioned or (self._character_mode and self._names(text))
         trigger = _Trigger(
-            speaker_name, text, seq, mentioned, via, time.monotonic(), speaker_id,
+            speaker_name, text, seq, addressed, via, time.monotonic(), speaker_id,
             place, channel_id, message_id,
         )
-
+        self._latest_trigger = trigger
+        if agent:
+            # The owner's Agent thread: his typed lines are the Agent's work
+            # (names can be copied, IDs cannot; a voice can come from anyone
+            # near his microphone). Nobody else's line is anybody's work.
+            if (
+                self._character_mode
+                and self._config.character_agent
+                and speaker_id == self._owner_user_id
+                and via == "text"
+            ):
+                self._owner_tasks.append((trigger, tuple(self._context(place).snapshot())))
+                self._wake.set()
+            return
+        if self._character_mode and self._character_policy.mode != "active" and not addressed:
+            return  # every line must call it (the owner chose this: 純A)
         # Latest wins: while a generation is running, a newer line of the same
         # place replaces its queued trigger instead of stacking requests on a
         # small GPU; places are answered in the order they spoke.
-        self._latest_trigger = trigger
-        if (
-            self._character_mode
-            and self._config.character_agent
-            and speaker_id == self._owner_user_id
-            and via == "text"
-        ):
-            # The only way into the Agent: a line typed by the configured
-            # owner's Discord user ID (names can be copied, IDs cannot; a
-            # voice can come from anyone near the owner's microphone).
-            self._owner_tasks.append((trigger, tuple(self._context(place).snapshot())))
-            self._wake.set()
-            return
         self._pending[place] = trigger
         self._wake.set()
 
@@ -703,8 +698,7 @@ class CopilotRuntime:
                 continue
             if self._owner_tasks and self._character_mode and self._config.character_agent:
                 owner_trigger, turns = self._owner_tasks.popleft()
-                if not await self._dispatch_owner(owner_trigger, turns):
-                    await self._speak(owner_trigger)
+                await self._dispatch_owner(owner_trigger, turns)
                 self._wake.set()
                 continue
             if not self._pending:
@@ -715,7 +709,7 @@ class CopilotRuntime:
             if self._pending:
                 self._wake.set()  # another place is waiting
             if self._character_mode:
-                await self._speak(trigger)
+                await self._respond(trigger)
             else:
                 await self._generate(trigger)
 
@@ -741,51 +735,82 @@ class CopilotRuntime:
         if self._on_task_mark is not None and origin.message_id:
             self._on_task_mark(origin.channel_id, origin.message_id, state)
 
-    def _says(self, place: int, detail: str) -> bool:
-        """Whether the character reports on the job in this place. In the
-        voice room it acknowledges, asks for approvals and reports. In a
-        thread the marks on the owner's message say accepted and done and the
-        result is posted there, so it only types what those cannot: being
-        busy, or a result or approval that could not be delivered."""
-        return place == VOICE_ROOM or detail in _THREAD_NOTICES
+    async def _respond(self, trigger: _Trigger) -> None:
+        """A line in a chat (the voice room or a text channel) that called the
+        character: a lookup of public information goes to the Agent (anyone
+        may ask; the web alone), anything else gets the character's answer."""
+        if trigger.addressed and self._config.character_agent and self._agent_tasks is not None:
+            epoch = self._agent_epoch
+            context = self._context(trigger.place)
+            started = time.monotonic()
+            try:
+                task = await self._llm.public_lookup(
+                    turns=context.snapshot(), summary=context.summary,
+                    engagement=self._character_policy.mode,
+                )
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001 - the character still answers
+                _LOG.warning("agent_lookup_decision_failed error_type=%s", type(exc).__name__)
+                task = None
+            _LOG.info("agent_lookup_decision latency_ms=%d lookup=%s",
+                      round((time.monotonic() - started) * 1000), task is not None)
+            if task is not None:
+                await self._dispatch(trigger, task, epoch)
+                return
+        await self._speak(trigger)
 
     async def _dispatch_owner(
         self, trigger: _Trigger, turns: tuple[ConversationTurn, ...]
-    ) -> bool:
-        if self._agent_tasks is None:
-            return False
+    ) -> None:
+        """A line the owner typed in his Agent thread: the Agent's work, word
+        for word, read-only unless it asks for changes."""
         epoch = self._agent_epoch
         started = time.monotonic()
         try:
             task = await self._llm.task_from_owner(
                 turns=turns, engagement=self._character_policy.mode,
             )
-            _LOG.info("agent_task_decision latency_ms=%d dispatched=%s read_only=%s",
-                      round((time.monotonic() - started) * 1000), task is not None,
-                      task is not None and task.read_only)
-            if epoch != self._agent_epoch:
-                return True
-            if task is None or not self._character_mode or not self._config.character_agent:
-                return False
-            instruction = task.text
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - task failures must reach the owner
+            _LOG.warning("agent_task_dispatch_failed error_type=%s", type(exc).__name__)
+            self._mark(trigger, "failed")
+            await self._deliver_owner_result("error", str(exc), trigger.place)
+            return
+        _LOG.info("agent_task_decision latency_ms=%d dispatched=%s scope=%s",
+                  round((time.monotonic() - started) * 1000), task is not None,
+                  task.scope if task is not None else "-")
+        if task is not None:
+            await self._dispatch(trigger, task, epoch)
+
+    async def _dispatch(self, trigger: _Trigger, task: AgentTask, epoch: int) -> None:
+        """Hand one task to the Agent, one at a time: the owner's work in his
+        thread, or a lookup asked in a chat. `epoch`: when it was asked; a
+        task the owner stopped meanwhile (Agent or character turned off and
+        on) never starts."""
+        assert self._agent_tasks is not None
+        try:
+            if (epoch != self._agent_epoch or not self._character_mode
+                    or not self._config.character_agent):
+                return
             if self._agent_job is not None and not self._agent_job.done():
                 await self._task_line("report", _BUSY, trigger.place)
-                return True
+                return
             workspace = await self._agent_tasks.workspace()
-            if epoch != self._agent_epoch:
-                return True
-            self._agent_origin = trigger
+            if epoch != self._agent_epoch or not self._character_mode or not self._config.character_agent:
+                return
+            self._agent_origin, self._agent_scope = trigger, task.scope
             self._mark(trigger, "accepted")
             if trigger.place == VOICE_ROOM:
-                await self._task_line("ack", instruction, VOICE_ROOM)
+                await self._task_line("ack", task.text, VOICE_ROOM)
             if epoch != self._agent_epoch or not self._character_mode or not self._config.character_agent:
-                return True
+                return
             self._task_result = ""
             self._agent_job = asyncio.create_task(
                 self._run_agent_task(task, workspace, epoch, trigger.place),
                 name="discord-agent-task",
             )
-            return True
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # noqa: BLE001 - task failures must reach the character
@@ -794,10 +819,7 @@ class CopilotRuntime:
                 if self._agent_origin is trigger:
                     self._agent_origin = None
                 self._mark(trigger, "failed")
-                detail = await self._report_detail("error", str(exc), trigger.place)
-                if self._says(trigger.place, detail):
-                    await self._task_line("report", detail, trigger.place)
-            return True
+                await self._finish("error", str(exc), trigger, task.scope)
 
     async def _run_agent_task(
         self, task: AgentTask, workspace: str, epoch: int, place: int
@@ -809,17 +831,18 @@ class CopilotRuntime:
                 await self._agent_event(kind, payload)
         try:
             await self._agent_tasks.run(task.text, workspace, on_event,
-                                        read_only=task.read_only, conversation=place)
+                                        scope=task.scope, conversation=place)
         finally:
             _LOG.info("agent_task_finished elapsed_ms=%d", round((time.monotonic() - started) * 1000))
 
     async def _agent_event(self, kind: str, payload: dict[str, object]) -> None:
-        epoch = self._agent_epoch
         place = self._agent_origin.place if self._agent_origin is not None else VOICE_ROOM
         if kind == "delta":
             self._task_result = (self._task_result + str(payload.get("text", "")))[-_AGENT_RESULT_MAX_CHARS:]
             return
         if kind == "approval":
+            # Only the owner's work asks (a lookup never does): the buttons
+            # and the exact operation go to his DMs, the thread hears nothing.
             assert self._agent_tasks is not None
             if self._on_agent_approval is None:
                 await self._agent_tasks.approve(str(payload["call_id"]), False)
@@ -830,53 +853,56 @@ class CopilotRuntime:
                 await self._agent_tasks.approve(str(payload["call_id"]), False)
                 self._task_hints.append(("report", PRIVATE_REPORTS["approval_undelivered"], place))
                 _LOG.warning("agent_approval_failed error_type=%s", type(exc).__name__)
-            else:
-                if epoch != self._agent_epoch:
-                    return
-                # The tool's arguments (paths, commands) went to the owner's
-                # DMs with the buttons; the channel only hears what kind of step.
-                if place == VOICE_ROOM:
-                    detail = PRIVATE_APPROVAL.format(kind=_approval_kind(payload))
-                    self._task_hints.append(("approval", detail, place))
         elif kind in {"done", "error", "cancelled"}:
             result = self._task_result if kind == "done" else str(payload.get("message", "工作已取消。"))
             self._task_result = ""
-            detail = await self._report_detail(kind, result or "工作完成。", place)
-            if epoch != self._agent_epoch:
-                return
             origin, self._agent_origin = self._agent_origin, None
             if origin is not None:
                 self._mark(origin, "done" if kind == "done" else "failed")
-            if self._says(place, detail):
-                self._task_hints.append(("report", detail, place))
+            if kind != "cancelled" and origin is not None:
+                await self._finish(kind, result or "工作完成。", origin, self._agent_scope)
         if self._wake is not None:
             self._wake.set()
 
-    async def _report_detail(self, kind: str, result: str, place: int) -> str:
-        """Delivers a finished task's result and returns what the character
-        is told. Work typed in a thread: the result is posted there and kept
-        in that conversation (the owner's DMs if the thread cannot take it).
-        From the voice room: the result itself with
-        copilot.agent_report_public, otherwise it goes to the owner's DMs and
-        the character only hears the outcome."""
-        if kind == "cancelled":
-            return PRIVATE_REPORTS["cancelled"]
-        if place != VOICE_ROOM and self._on_agent_result is not None:
-            posted = False
+    async def _finish(self, kind: str, result: str, origin: _Trigger, scope: str) -> None:
+        """Deliver a finished task's result where it was asked for."""
+        epoch = self._agent_epoch
+        if scope == "public":
+            # A lookup: the result (public by nature) is typed into the chat
+            # it was asked in, and in the voice room the character also says
+            # what it found.
+            await self._post_result(kind, result, origin.place)
+            if origin.place == VOICE_ROOM and epoch == self._agent_epoch:
+                self._task_hints.append(("report", result[:_SPOKEN_RESULT_CHARS], VOICE_ROOM))
+            return
+        detail = await self._deliver_owner_result(kind, result, origin.place)
+        if detail and epoch == self._agent_epoch:
+            self._task_hints.append(("report", detail, origin.place))
+
+    async def _post_result(self, kind: str, result: str, place: int) -> bool:
+        """Type a result into a place and keep it in that conversation (as
+        said by 思考機, so reading the place back tells it apart)."""
+        posted = False
+        if self._on_agent_result is not None:
             try:
                 posted = await self._on_agent_result(result, place)
-            except Exception as exc:  # noqa: BLE001 - falls back to the owner's DMs
+            except Exception as exc:  # noqa: BLE001 - reported to the caller
                 _LOG.warning("agent_result_post_failed error_type=%s", type(exc).__name__)
-            _LOG.info("agent_result_thread kind=%s posted=%s", kind, posted)
-            if posted:
-                turn = ConversationTurn.now(_AGENT_SPEAKER_ID, _AGENT_NAME,
-                                            result[:_AGENT_RESULT_CONTEXT_CHARS],
-                                            via="text", place=place)
-                self._context(place).append(turn)
-                self._emit_turn(turn)
-                return PRIVATE_REPORTS[kind]
-        elif self._config.agent_report_public:
-            return result
+        _LOG.info("agent_result_posted kind=%s posted=%s place=%s", kind, posted,
+                  "voice" if place == VOICE_ROOM else "text")
+        if posted:
+            turn = ConversationTurn.now(_AGENT_SPEAKER_ID, _AGENT_NAME,
+                                        result[:_AGENT_RESULT_CONTEXT_CHARS],
+                                        via="text", place=place)
+            self._context(place).append(turn)
+            self._emit_turn(turn)
+        return posted
+
+    async def _deliver_owner_result(self, kind: str, result: str, place: int) -> str:
+        """The owner's work: the result goes into his thread (his DMs if the
+        thread cannot take it). Returns what the thread must hear, or ""."""
+        if await self._post_result(kind, result, place):
+            return ""
         delivered = False
         if self._on_agent_private is not None:
             try:
@@ -884,7 +910,7 @@ class CopilotRuntime:
             except Exception as exc:  # noqa: BLE001 - an undelivered result is reported as such
                 _LOG.warning("agent_private_failed error_type=%s", type(exc).__name__)
         _LOG.info("agent_result_private kind=%s delivered=%s", kind, delivered)
-        return PRIVATE_REPORTS[kind if delivered else "undelivered"]
+        return "" if delivered else PRIVATE_REPORTS["undelivered"]
 
     async def _task_line(self, kind: str, detail: str, place: int = VOICE_ROOM) -> None:
         """The character's own words about the job, in the place the work

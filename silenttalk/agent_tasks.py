@@ -37,13 +37,14 @@ class AgentTaskClient:
 
     async def run(
         self, text: str, workspace: str, on_event: TaskEvent, *,
-        read_only: bool = True, conversation: int | None = None,
+        scope: str = "read", conversation: int | None = None,
     ) -> None:
-        """One task. `read_only`: the owner asked only to read, and EdgeAgent
-        then refuses every change in this task. `conversation`: the place the
-        work was typed in (the voice room or a thread); its tasks share one
-        EdgeAgent session, so the Agent knows what it did there before (in
-        EdgeAgent's RAM). Without it the task is a session of its own."""
+        """One task. `scope` (EdgeAgent's task scope): "read" refuses every
+        change, "change" asks the owner for each, "public" leaves the web
+        alone. `conversation`: the place it was asked in (the voice room, a
+        text channel or a thread); its tasks share one EdgeAgent session, so
+        the Agent knows what it did there before (in EdgeAgent's RAM).
+        Without it the task is a session of its own."""
         if self.session_id is not None:
             raise AgentLeaseError("Agent 工作正在進行。")
         session_id = self.session_id = (
@@ -62,7 +63,7 @@ class AgentTaskClient:
                         "client": "discord",
                         "agent": True,
                         "working_dir": workspace,
-                        "read_only": read_only,
+                        "scope": scope,
                     },
                 ) as response,
             ):

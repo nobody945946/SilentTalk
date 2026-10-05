@@ -23,7 +23,8 @@ FRAME_BYTES = 3840
 StatusCallback = Callable[[AppState, str], None]
 PCMCallback = Callable[[int, str, bytes], None]
 # (author id, display name, content, addressed) of a typed line, with
-# keywords place (VOICE_ROOM or the thread), channel_id and message_id.
+# keywords place (VOICE_ROOM, a text channel or a thread), channel_id,
+# message_id and agent (the place is the owner's Agent thread).
 # `addressed` is Discord's own signal: an @mention of the bot or a reply to
 # one of its messages - exact, unlike matching the name as a substring.
 TextCallback = Callable[..., None]
@@ -110,6 +111,7 @@ class DiscordVoiceClient(discord.Client):
         pcm_callback: PCMCallback | None = None,
         text_callback: TextCallback | None = None,
         threads_open: Callable[[], bool] | None = None,
+        names: Callable[[str], bool] | None = None,
     ) -> None:
         intents = discord.Intents.none()
         intents.guilds = True
@@ -124,10 +126,14 @@ class DiscordVoiceClient(discord.Client):
         self._status = status
         self._pcm_callback = pcm_callback
         self._text_callback = text_callback
-        # Whether threads are conversations now (the character is on): the
-        # owner's @ in a text channel opens one, and its lines are read.
-        # The threads opened this session.
+        # Whether text channels and threads are conversations now (the
+        # character is on): the owner's @ in a text channel opens his Agent
+        # thread, and a line that calls the character there is a chat.
         self._threads_open = threads_open or (lambda: True)
+        # Whether a typed line calls the character by name (the runtime's
+        # NameMatcher); a text-channel line is passed on only then.
+        self._names = names or (lambda text: False)
+        # The threads opened this session.
         self._threads: set[int] = set()
         # This bot's invite link, known once it has logged in.
         self.invite_link = ""
@@ -155,11 +161,12 @@ class DiscordVoiceClient(discord.Client):
 
     async def on_message(self, message: discord.Message) -> None:
         """Typed lines the character takes part in: the chat of the voice
-        channel the bot sits in, and threads it opened. The owner's @ in any
-        text channel opens a thread there, so a conversation never floods the
-        channel. Other text-channel messages are not read, and nothing typed
-        is written to disk (records.py keeps transcripts only on the
-        records drive)."""
+        channel the bot sits in; the owner's @ in a text channel, which opens
+        his Agent thread there, and his lines in it (nobody else's: they are
+        nobody's work); and in any text channel a line that @s or names the
+        character, which is a chat with it right there. Other text-channel
+        messages are not read, and nothing typed is written to disk
+        (records.py keeps transcripts only on the records drive)."""
         callback = self._text_callback
         if callback is None:
             return
@@ -170,15 +177,24 @@ class DiscordVoiceClient(discord.Client):
             return  # attachment, sticker or embed only
         voice = self.active_voice()
         channel = message.channel
+        agent = False
         if voice is not None and channel.id == voice.channel.id:
             place, addressed = VOICE_ROOM, self._mentions_me(message)
         elif self._is_our_thread(channel) and self._threads_open():
-            place, addressed = channel.id, True
+            if message.author.id != self._config.owner_user_id:
+                return
+            place, addressed, agent = channel.id, True, True
         elif self._opens_thread(message):
             thread = await self._open_thread(message)
             if thread is None:
                 return
-            place, addressed = thread.id, True
+            place, addressed, agent = thread.id, True, True
+        elif (
+            isinstance(channel, discord.TextChannel)
+            and self._threads_open()
+            and (self._mentions_me(message) or self._names(content))
+        ):
+            place, addressed = channel.id, True
         else:
             return
         name = str(
@@ -188,10 +204,11 @@ class DiscordVoiceClient(discord.Client):
         )
         _LOG.info(
             "text_message_received char_count=%d addressed=%s place=%s",
-            len(content), addressed, "voice" if place == VOICE_ROOM else "thread",
+            len(content), addressed,
+            "voice" if place == VOICE_ROOM else ("thread" if agent else "channel"),
         )
         callback(message.author.id, name, content, addressed,
-                 place=place, channel_id=channel.id, message_id=message.id)
+                 place=place, channel_id=channel.id, message_id=message.id, agent=agent)
 
     def _mentions_me(self, message: discord.Message) -> bool:
         return self.user is not None and (
@@ -207,7 +224,7 @@ class DiscordVoiceClient(discord.Client):
         )
 
     def _opens_thread(self, message: discord.Message) -> bool:
-        """Only the owner opens a conversation, by @ in a text channel."""
+        """Only the owner opens an Agent thread, by @ in a text channel."""
         return (
             isinstance(message.channel, discord.TextChannel)
             and message.author.id == self._config.owner_user_id

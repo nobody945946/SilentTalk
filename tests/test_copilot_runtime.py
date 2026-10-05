@@ -41,9 +41,6 @@ class SlowFakeLLM:
     def set_owner(self, user_id: int, name: str) -> None:
         self.owner_name = name
 
-    def set_report_public(self, public: bool) -> None:
-        self.report_public = public
-
     async def suggest(
         self, *, turns, summary: str = "", trigger_speaker: str, trigger_text: str,
         on_partial=None,
@@ -179,24 +176,25 @@ async def test_character_speaks_what_the_model_says(tmp_path: Path) -> None:
     llm.release.set()
     await _settle()
 
-    assert llm.calls == [("character", "凱哥你覺得呢", False, "called")]
+    assert llm.calls == [("character", "凱哥你覺得呢", True, "called")]
     assert ("spoke", "收到") in delivered
     assert not any(isinstance(item, ReplySuggestions) for item in delivered)
     await _stop(runtime)
 
 
 @pytest.mark.asyncio
-async def test_character_stays_quiet_when_the_model_skips(tmp_path: Path) -> None:
-    """No keyword gate in front of the model: it sees every line, including
-    ones that only mention the character, and decides for itself."""
+async def test_only_lines_that_name_it_reach_the_model_which_may_still_skip(tmp_path: Path) -> None:
+    """純A (2026-10-05): every line must call it by name; a chat among
+    friends never reaches the model. A named line may still get SKIP."""
     runtime, llm, delivered = await _character_runtime(tmp_path)
     llm.character_line = ""
+    runtime._handle_turn(2, "阿傑", "今天好熱喔")
     runtime._handle_turn(2, "阿傑", "我剛才跟阿凱講話")
     await _settle()
     llm.release.set()
     await _settle()
 
-    assert llm.calls == [("character", "我剛才跟阿凱講話", False, "called")]
+    assert llm.calls == [("character", "我剛才跟阿凱講話", True, "called")]
     assert not any(isinstance(item, tuple) and item[0] == "spoke" for item in delivered)
     await _stop(runtime)
 
@@ -255,7 +253,10 @@ async def test_owner_mic_counts_only_in_character_mode(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_character_drops_a_reply_once_the_chat_moved_on(tmp_path: Path) -> None:
+    """Joining in on its own ("active"): a late reply would sound off. A line
+    that called it is always answered."""
     runtime, llm, delivered = await _character_runtime(tmp_path)
+    runtime.apply_settings({"character_engagement": "active"})
     runtime._handle_turn(2, "阿傑", "晚餐要吃什麼")
     await _settle()
     runtime._handle_turn(3, "小雨", "我要吃拉麵")
@@ -263,7 +264,7 @@ async def test_character_drops_a_reply_once_the_chat_moved_on(tmp_path: Path) ->
     llm.release.set()
     await _settle()
 
-    assert llm.calls[0] == ("character", "晚餐要吃什麼", False, "called")
+    assert llm.calls[0] == ("character", "晚餐要吃什麼", False, "active")
     assert ("spoke", "收到") not in delivered  # the chat moved on while thinking
     await _stop(runtime)
 
@@ -286,14 +287,15 @@ async def test_typed_lines_are_answered_by_typing(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_a_thread_is_its_own_conversation_answered_in_the_thread(tmp_path: Path) -> None:
-    """A thread the bot opened is a separate conversation: the character is
-    given only that thread's lines, answers by typing there, and the voice
-    room neither hears it nor counts it as talk (no lull reset)."""
+async def test_a_text_channel_is_its_own_conversation_answered_there(tmp_path: Path) -> None:
+    """A text channel where someone called the character is a separate
+    conversation: the character is given only that channel's lines, answers
+    by typing there, and the voice room neither hears it nor counts it as
+    talk (no lull reset)."""
     runtime, llm, delivered = await _runtime(tmp_path, text=True)
     runtime.set_persona(EXAMPLE_PERSONAS[0])
     runtime.set_character_mode(True)
-    runtime._handle_turn(2, "阿傑", "今天好熱喔")
+    runtime._handle_turn(2, "阿傑", "凱哥今天好熱喔")
     heard = runtime._last_heard_at
     runtime._handle_turn(3, "小綠", "幫我想個團名", "text", True, place=777, channel_id=777, message_id=9)
     assert runtime._last_heard_at == heard
@@ -304,10 +306,10 @@ async def test_a_thread_is_its_own_conversation_answered_in_the_thread(tmp_path:
     await _settle()
 
     assert ("spoke", "收到") in delivered and ("typed", "收到", 777) in delivered
-    assert llm.turns_seen == [["今天好熱喔"], ["幫我想個團名"]]
+    assert llm.turns_seen == [["凱哥今天好熱喔"], ["幫我想個團名"]]
     runtime.record_self("收到", 777, via="text")  # what the controller does once it is sent
     assert [t.text for t in runtime._context(777).snapshot()] == ["幫我想個團名", "收到"]
-    assert [t.text for t in runtime._context(VOICE_ROOM).snapshot()] == ["今天好熱喔"]
+    assert [t.text for t in runtime._context(VOICE_ROOM).snapshot()] == ["凱哥今天好熱喔"]
     turns = [item for item in delivered if isinstance(item, ConversationTurn)]
     assert [(t.place, t.via, t.is_self) for t in turns] == [
         (VOICE_ROOM, "voice", False), (777, "text", False), (777, "text", True)]
@@ -319,16 +321,16 @@ async def test_newer_lines_replace_older_ones_only_within_their_own_place(tmp_pa
     runtime, llm, _ = await _runtime(tmp_path, text=True)
     runtime.set_persona(EXAMPLE_PERSONAS[0])
     runtime.set_character_mode(True)
-    runtime._handle_turn(2, "阿傑", "第一句")  # being answered
+    runtime._handle_turn(2, "阿傑", "凱哥第一句")  # being answered
     await _settle()
-    runtime._handle_turn(2, "阿傑", "第二句")
+    runtime._handle_turn(2, "阿傑", "凱哥第二句")
     runtime._handle_turn(3, "小綠", "串裡一句", "text", True, place=777)
-    runtime._handle_turn(2, "阿傑", "第三句")  # replaces 第二句, keeps its turn in line
+    runtime._handle_turn(2, "阿傑", "凱哥第三句")  # replaces 第二句, keeps its turn in line
     assert list(runtime._pending) == [VOICE_ROOM, 777]
     for _ in range(3):
         llm.release.set()
         await _settle()
-    assert [call[1] for call in llm.calls] == ["第一句", "第三句", "串裡一句"]
+    assert [call[1] for call in llm.calls] == ["凱哥第一句", "凱哥第三句", "串裡一句"]
     await _stop(runtime)
 
 
@@ -510,18 +512,18 @@ async def test_a_lull_opens_one_topic_until_someone_speaks_again(
     await asyncio.sleep(0.2)
     assert asked == []
 
-    runtime._handle_turn(2, "A", "欸大家好")
+    runtime._handle_turn(2, "A", "欸大家好")  # not for the character: no reply
     await asyncio.sleep(0.3)
     spoken = [item for item in delivered if isinstance(item, tuple)]
     assert spoken == [("spoke", "我今天烤了草莓蛋糕")]
-    assert asked == [False, True]  # the line itself, then one lull
+    assert asked == [True]  # one lull after the room went quiet
     # Still quiet: it does not talk to an empty room again.
     await asyncio.sleep(0.2)
-    assert asked == [False, True]
+    assert asked == [True]
 
     runtime._handle_turn(3, "B", "真的假的")
     await asyncio.sleep(0.3)
-    assert asked == [False, True, False, True]
+    assert asked == [True, True]
     await _stop(runtime)
 
 

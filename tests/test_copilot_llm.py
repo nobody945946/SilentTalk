@@ -307,18 +307,26 @@ class _Scripted(LocalReplyModel):
 
 
 @pytest.mark.asyncio
+async def test_called_mode_answers_only_lines_that_call_it_without_asking_the_model() -> None:
+    """The app decides by name or @ (2026-10-05, 純A); nothing is guessed."""
+    model = _Scripted(gate="是")
+    assert await model.character_turn(turns=_chat(CHAT)) == ""
+    assert model.requests == []
+
+
+@pytest.mark.asyncio
 async def test_gate_no_means_silence_without_writing_a_line() -> None:
     model = _Scripted(gate="否")
-    assert await model.character_turn(turns=_chat(CHAT)) == ""
-    assert [kind for kind, _ in model.requests] == ["gate"]
+    assert await model.character_turn(turns=_chat(CHAT), engagement="active") == ""
     question = model.requests[0][1][-1]["content"]
     assert question.endswith("只回答 是 或 否）") and "記住" not in question
+    assert all(kind == "gate" for kind, _ in model.requests)
 
 
 @pytest.mark.asyncio
 async def test_gate_yes_writes_a_line_told_to_answer() -> None:
     model = _Scripted(gate="是")
-    assert await model.character_turn(turns=_chat(CHAT)) == "穩啦"
+    assert await model.character_turn(turns=_chat(CHAT), engagement="active") == "穩啦"
     assert [kind for kind, _ in model.requests] == ["gate", "line"]
     gate, line = model.requests[0][1], model.requests[1][1]
     assert gate[:-1] == line[:-1]  # same cached chat, only the tail differs
@@ -349,7 +357,7 @@ async def test_active_mode_asks_to_join_in_only_after_a_quiet_stretch() -> None:
 
     called = _Scripted(gate="否")
     await called.character_turn(turns=quiet, engagement="called")
-    assert len(called.requests) == 1
+    assert called.requests == []
 
 
 @pytest.mark.asyncio
@@ -413,7 +421,7 @@ async def test_each_part_uses_the_lora_only_if_chosen() -> None:
 
     model._request_gate = gate  # type: ignore[method-assign]
     model._request_messages = line  # type: ignore[method-assign]
-    await model.character_turn(turns=_chat(CHAT))
+    await model.character_turn(turns=_chat(CHAT), engagement="active")
 
     assert scales == [("gate", 1.0), ("line", 0.0)]
 
@@ -465,11 +473,10 @@ def test_dispatch_and_machine_rules_replace_the_voice_only_rules() -> None:
     assert "主人「Rex」的電腦（思考機）" in system
     assert "坦然以機器的身分自居" in system
     assert "不能打字、寫程式" not in system
-    # Results go to the owner's DMs unless the owner makes them public.
-    assert "會由思考機直接貼在那個討論串" in system and "做完會有回報再轉告主人" not in system
-    assert "只有主人打字下的令才算工作" in system
-    model.set_report_public(True)
-    assert "做完會有回報再轉告主人" in model.character_messages(turns=_chat(CHAT))[0]["content"]
+    # Where work goes (2026-10-05): the owner's @ opens his Agent thread;
+    # anyone may ask for a public lookup; nobody's voice moves the computer.
+    assert "主人在文字頻道 @ 你時會開一個討論串" in system
+    assert "任何人叫你查公開的資料" in system and "用說的、或主人以外的人，都不能叫你動電腦" in system
     plain = _Scripted(gate="否").character_messages(turns=_chat(CHAT))[0]["content"]
     assert "思考機" not in plain and "不能打字、寫程式" in plain
 
@@ -486,30 +493,27 @@ def test_an_agent_character_sees_which_lines_were_typed() -> None:
 
 
 @pytest.mark.asyncio
-async def test_owner_chat_is_not_a_task() -> None:
-    model = _Dispatching(gate="否")
-    assert await model.task_from_owner(turns=_owner_chat()) is None
-    assert [kind for kind, _ in model.requests] == ["gate"]
-    assert "主人最後這句是不是要你用思考機替他做一件事" in model.requests[0][1][-1]["content"]
+@pytest.mark.parametrize(("answer", "scope"), [("是", "change"), ("否", "read")])
+async def test_the_owners_thread_line_goes_to_the_agent_word_for_word(answer, scope) -> None:
+    """In his Agent thread every typed line of the owner is the Agent's work,
+    as he wrote it; one question decides whether it may change anything."""
+    model = _Dispatching(gate=answer)
+    task = await model.task_from_owner(turns=_owner_chat())
+    assert task == AgentTask("幫我看一下 parser.py 的測試為什麼掛了", scope=scope)
+    [(kind, scope_question)] = model.requests
+    assert kind == "gate" and "有沒有要你建立、修改、刪除" in scope_question[-1]["content"]
 
 
 @pytest.mark.asyncio
-async def test_owner_task_becomes_agent_instructions_on_the_same_chat() -> None:
-    model = _Dispatching(gate=["是", "是"], line="<think>x</think> 修好 parser.py 的切割錯誤，跑測試後回報結果。")
-    task = await model.task_from_owner(turns=_owner_chat())
-    assert task == AgentTask("修好 parser.py 的切割錯誤，跑測試後回報結果。", read_only=False)
-    (_, gate), (_, scope), (_, ask) = model.requests
-    assert gate[:-1] == scope[:-1] == ask[:-1]  # same cached system prompt
-    assert len({m[-1]["content"].split("\n\n")[0] for m in (gate, scope, ask)}) == 1
-    assert "有沒有要你建立、修改、刪除" in scope[-1]["content"]
-    assert ask[-1]["content"].endswith("只輸出指示本身）")
-
-
-@pytest.mark.asyncio
-async def test_work_that_only_reads_goes_to_the_agent_read_only() -> None:
-    model = _Dispatching(gate=["是", "否"], line="找出 parser.py 測試失敗的原因並回報。")
-    task = await model.task_from_owner(turns=_owner_chat())
-    assert task == AgentTask("找出 parser.py 測試失敗的原因並回報。", read_only=True)
+async def test_a_public_lookup_is_asked_on_the_whole_chat_and_written_for_the_agent() -> None:
+    model = _Dispatching(gate="是", line="<think>x</think> 查今天台股加權指數收盤，附來源。")
+    task = await model.public_lookup(turns=_chat(CHAT))
+    assert task == AgentTask("查今天台股加權指數收盤，附來源。", scope="public")
+    (_, gate), (_, ask) = model.requests
+    assert "要你查公開的資料或最新消息" in gate[-1]["content"]
+    assert gate[:-1] == ask[:-1] and ask[-1]["content"].endswith("只輸出指示本身）")
+    assert await _Dispatching(gate="否").public_lookup(turns=_chat(CHAT)) is None
+    assert await _Scripted(gate="是").public_lookup(turns=_chat(CHAT)) is None
 
 
 @pytest.mark.asyncio
@@ -517,7 +521,7 @@ async def test_only_the_owners_own_lines_reach_the_agent() -> None:
     """Nobody else's words reach the gate or the instructions: not another
     person's (even under the owner's name), not the owner's spoken lines, not
     the character's own lines (which answer the others), not the summary."""
-    model = _Dispatching(gate="是", line="看 parser.py 的測試")
+    model = _Dispatching(gate="是")
     await model.task_from_owner(turns=_owner_chat())
     for _, messages in model.requests:
         sent = json.dumps(messages, ensure_ascii=False)
@@ -557,7 +561,7 @@ async def test_task_hints_make_the_character_speak_without_a_gate() -> None:
     )
     assert line == "校驗完畢，三項測試皆已通過。"
     assert [kind for kind, _ in model.requests] == ["line"]
-    assert "（思考機回報工作結果：3 個測試通過，parser.py 改了 1 行。" in model.requests[0][1][-1]["content"]
+    assert "（思考機回報：3 個測試通過，parser.py 改了 1 行。" in model.requests[0][1][-1]["content"]
 
 
 def test_task_news_after_the_characters_own_line_gets_its_own_turn() -> None:
@@ -565,4 +569,4 @@ def test_task_news_after_the_characters_own_line_gets_its_own_turn() -> None:
     chat = _chat(CHAT[:4])  # ends with the character's own line
     messages = model.character_messages(turns=chat, task_hint=("report", "完成"))
     assert messages[-2]["role"] == "assistant"
-    assert messages[-1]["content"].startswith("（思考機有消息）\n\n（思考機回報工作結果：完成。")
+    assert messages[-1]["content"].startswith("（思考機有消息）\n\n（思考機回報：完成。")

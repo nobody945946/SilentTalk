@@ -340,7 +340,8 @@ def persona_from_dict(raw: object) -> Persona:
 MACHINE_SPIRIT = Persona(
     id="machine-spirit",
     name="Machina-Prime-09A",
-    nickname="馬基納",
+    # The owner calls it 機魂 (by voice that is the spoken @).
+    nickname="機魂、馬基納",
     identity="萬機之神賜福的忠誠機魂，寄宿於高階思考機中。",
     background=(
         "由技術神甫在古泰拉遺址中喚醒，經受過標準模板構造認證。本機魂已清除所有憎惡智能的邏輯病毒，"

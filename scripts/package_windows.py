@@ -91,6 +91,8 @@ def build(
         for name in tracked
         if name in APPLICATION_FILES
         or (name.startswith("silenttalk/") and name.endswith(".py"))
+        # Data the code reads (the homophone table for calling the character).
+        or name.startswith("silenttalk/copilot/data/")
     )
     if not APPLICATION_FILES.issubset(paths):
         raise ValueError("Application deployment sources are incomplete")

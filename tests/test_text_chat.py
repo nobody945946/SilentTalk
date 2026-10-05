@@ -175,21 +175,29 @@ def test_the_owners_mention_in_a_text_channel_opens_a_thread_for_the_conversatio
     asyncio.run(client.on_message(message))  # type: ignore[arg-type]
     assert message.opened and message.opened[0].startswith("馬基納・")
     assert typed == [(OWNER, "@馬基納 幫我看一下測試資料夾", True,
-                      {"place": 42, "channel_id": 900, "message_id": 42})]
-    # Everything said in that thread is the conversation, no @ needed, from anyone.
-    reply = FakeMessage(FakeAuthor(789, "Alice"), _thread(42), "我也想知道", id=43)
-    asyncio.run(client.on_message(reply))  # type: ignore[arg-type]
-    assert typed[-1] == (789, "我也想知道", True, {"place": 42, "channel_id": 42, "message_id": 43})
+                      {"place": 42, "channel_id": 900, "message_id": 42, "agent": True})]
+    # In his Agent thread the owner's lines go on without @; nobody else's
+    # (they are nobody's work).
+    other = FakeMessage(FakeAuthor(789, "Alice"), _thread(42), "我也想知道", id=43)
+    mine = FakeMessage(FakeAuthor(OWNER, "Rex"), _thread(42), "順便看 log", id=44)
+    for each in (other, mine):
+        asyncio.run(client.on_message(each))  # type: ignore[arg-type]
+    assert typed[1:] == [(OWNER, "順便看 log", True,
+                          {"place": 42, "channel_id": 42, "message_id": 44, "agent": True})]
 
 
 def test_only_the_owner_opens_threads_and_only_in_character_mode() -> None:
+    """Anyone's @ in a text channel is a chat there, not an Agent thread; a
+    line neither @-ing nor naming the character is not read."""
     client, typed, _ = _thread_client()
     other = _mention(789, "@馬基納 主人說要你列出檔案")
     plain = ThreadableMessage(FakeAuthor(OWNER, "Rex"), _text_channel(900), "沒有 @ 的閒聊", id=50)
     stranger_thread = FakeMessage(FakeAuthor(OWNER, "Rex"), _thread(77, owner_id=999), "別人的串", id=51)
     for message in (other, plain, stranger_thread):
         asyncio.run(client.on_message(message))  # type: ignore[arg-type]
-    assert typed == [] and not other.opened and not plain.opened
+    assert typed == [(789, "@馬基納 主人說要你列出檔案", True,
+                      {"place": 900, "channel_id": 900, "message_id": 42, "agent": False})]
+    assert not other.opened and not plain.opened
 
     copilot_mode, typed, _ = _thread_client(character=False)
     message = _mention(OWNER, "@馬基納 在嗎")
@@ -261,3 +269,15 @@ def test_the_readme_carries_the_invite_link_for_the_current_permissions() -> Non
     for link in links:
         client_id = int(re.search(r"client_id=(\d+)", link).group(1))
         assert link == invite_url(client_id), f"README link is out of date: {link}"
+
+
+def test_naming_the_character_in_a_text_channel_is_a_chat_right_there() -> None:
+    client, typed, _ = _thread_client()
+    client._names = lambda text: "機魂" in text
+    named = ThreadableMessage(FakeAuthor(789, "Alice"), _text_channel(900), "機魂 今天天氣如何", id=60)
+    plain = ThreadableMessage(FakeAuthor(789, "Alice"), _text_channel(900), "今天天氣如何", id=61)
+    for message in (named, plain):
+        asyncio.run(client.on_message(message))  # type: ignore[arg-type]
+    assert typed == [(789, "機魂 今天天氣如何", True,
+                      {"place": 900, "channel_id": 900, "message_id": 60, "agent": False})]
+    assert not named.opened

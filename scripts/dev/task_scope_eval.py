@@ -1,6 +1,6 @@
-"""Measure the task scope gate: does the work the owner typed ask to change
-anything (files, settings, running programs)? A "no" sends the task to the
-Agent read-only, where EdgeAgent refuses every change.
+"""Measure the task scope gate: does the work the owner typed in his Agent
+thread ask to change anything (files, settings, running programs)? A "no"
+sends the task to the Agent read-only, where EdgeAgent refuses every change.
 
 Runs the product's own questions (LocalReplyModel, the machine-spirit card)
 against a model served here with EdgeAgent's own server arguments. Data:
@@ -77,10 +77,9 @@ def main() -> None:
             turns = [ConversationTurn(OWNER_ID, owner, line, via="text", created_at=float(i))
                      for i, line in enumerate(lines)]
             started = time.monotonic()
-            task = model._request_gate(model.task_gate_messages(turns=turns), False)
             scope = model._request_gate(
                 model._owner_question(turns, "called", llm._TASK_SCOPE_QUESTION), False)
-            records.append({"id": item["id"], "changes": item["changes"], "task": task == "是",
+            records.append({"id": item["id"], "changes": item["changes"],
                             "said_changes": scope == "是",
                             "ms": round((time.monotonic() - started) * 1000)})
     finally:
@@ -96,8 +95,7 @@ def main() -> None:
         "reads_taken_as_changes": [r["id"] for r in reads if r["said_changes"]],
         # Changes taken as reads: the Agent cannot do them and says so; the owner asks again.
         "changes_taken_as_reads": [r["id"] for r in changes if not r["said_changes"]],
-        "task_gate_missed": [r["id"] for r in records if not r["task"]],
-        "ms_two_gates_median": sorted(r["ms"] for r in records)[len(records) // 2],
+        "ms_median": sorted(r["ms"] for r in records)[len(records) // 2],
     }
     print(json.dumps(summary, ensure_ascii=False, indent=1))
     if args.out:

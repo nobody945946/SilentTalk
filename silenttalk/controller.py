@@ -80,8 +80,10 @@ class AppController:
                 if self._copilot and settings.discord.text_chat
                 else None
             ),
-            # Threads are conversations with the character, so only in character mode.
+            # Text channels and threads are conversations with the character,
+            # so only in character mode.
             threads_open=lambda: self._copilot is not None and self._copilot.character_mode,
+            names=self._copilot.accepts_name if self._copilot else None,
         )
         self._tts = EdgeTTSEngine(settings.tts, Path(self._temp.name))
         self._queue = SpeechQueue(

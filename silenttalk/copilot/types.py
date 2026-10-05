@@ -46,11 +46,13 @@ VOICE_ROOM = 0
 
 @dataclass(frozen=True, slots=True)
 class AgentTask:
-    """Work the owner typed for the Agent. `read_only`: the owner asked only to
-    read and look things up, so EdgeAgent refuses every change in this task."""
+    """Work for the Agent and how far it may reach (EdgeAgent's task scope):
+    "read" (the owner's work that only reads this computer), "change" (the
+    owner's work that changes things, each change approved in his DMs) or
+    "public" (a lookup anyone may ask for: the web alone)."""
 
     text: str
-    read_only: bool = True
+    scope: str = "read"
 
 
 @dataclass(frozen=True, slots=True)

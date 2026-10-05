@@ -29,6 +29,7 @@ def distribution(tmp_path, monkeypatch):
     files = {name: b"source fixture" for name in package_windows.APPLICATION_FILES}
     files["scripts/edge-agent-distribution.json"] = json.dumps(manifest).encode()
     files["silenttalk/__init__.py"] = b""
+    files["silenttalk/copilot/data/homophones.txt"] = b"ji\t\xe6\xa9\x9f"
     for name in [
         ".env",
         "settings.json",
@@ -58,6 +59,8 @@ def test_player_package_only_contains_application_and_verified_dependency(distri
             archive.read("SilentTalk/.runtime/downloads/edge.zip") == edge.read_bytes()
         )
         assert "SilentTalk/silenttalk/__init__.py" in names
+        # The code's own data ships too (calling the character by name needs it).
+        assert "SilentTalk/silenttalk/copilot/data/homophones.txt" in names
         assert not any("fixture" in name or "private" in name for name in names)
         assert "SilentTalk/.env" not in names
         assert "SilentTalk/settings.json" not in names

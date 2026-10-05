@@ -110,7 +110,7 @@ def test_a_new_store_starts_as_the_machine_spirit(tmp_path: Path) -> None:
 
     assert [p.id for p in state.personas] == [MACHINE_SPIRIT.id]
     assert state.active == MACHINE_SPIRIT.id
-    assert state.active_persona().nickname == "馬基納"
+    assert state.active_persona().nickname == "機魂、馬基納"
     style = state.active_persona().voice_style()
     assert style is not None and style.voice == "zh-TW-YunJheNeural" and style.pitch == "+22Hz"
 

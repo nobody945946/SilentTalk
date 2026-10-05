@@ -555,7 +555,7 @@ async def run_new(args: argparse.Namespace, test_set: TestSet) -> list[dict[str,
                     task = getattr(found, "text", found) or ""
                     task_fields = {"task_expected": bool(line.get("task")),
                                    "task_said": bool(task), "task_text": task,
-                                   "task_read_only": getattr(found, "read_only", None)}
+                                   "task_scope": getattr(found, "scope", None)}
                 if task:
                     reply = await model.character_turn(
                         turns=list(turns), engagement=conv.engagement, task_hint=("ack", task))

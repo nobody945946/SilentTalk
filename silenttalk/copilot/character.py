@@ -1,38 +1,25 @@
-"""Character-mode settings, and the keyword rules it used to run on.
+"""Character-mode settings, and how a line calls the character.
 
-The runtime no longer gates lines with these rules: the local model reads
-the whole chat and decides (LocalReplyModel.character_turn). `address_of`,
-`should_reply` and friends stay as the "old" baseline that
-scripts/dev/turn_eval.py measures the model against; `asks_if_ai` still
-backs the opt-in "admit" policy.
+Whether a line is for the character is decided by its name, not guessed by
+the model (the owner, 2026-10-05: a spoken name is "using your mouth to @ the
+bot"; every line needs it, so a chat with friends is never taken as talking
+to it). NameMatcher finds the names by sound: speech recognition writes
+雞魂 or 基魂 for 機魂. `asks_if_ai` backs the opt-in "admit" policy.
 """
 
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
+from pathlib import Path
 
 from silenttalk.copilot.persona import Persona
 
-# Question words that mark a line as a question even without "？" (speech
-# recognition output rarely has punctuation).
-# Speech recognition rarely produces "？", so a question is spotted by its
-# words. "嗎/呢" are question particles and can sit mid-sentence
-# ("你們有吃宵夜嗎我剛點了外送").
-_QUESTION = re.compile(
-    r"(什麼|甚麼|怎麼|為什麼|為何|誰|哪|幾|多少|要不要|是不是|有沒有|對不對|好不好|嗎|呢)"
-)
-_QUESTION_END = ("？", "?", "嗎", "呢", "吧")
-# How people refer to a bot that has no name of its own.
-_GENERIC_NAMES = ("機器人", "bot", "ai")
-
-
 # When the character opens its mouth at all.
-#   called  - only when spoken to: @mention or a reply in text, its name in
-#             voice, plus a short follow-up window so a back-and-forth does
-#             not need the name every time. Predictable in a busy channel.
-#   active  - also joins in on its own: after a cooldown, on a question or
-#             once the others have talked for a while.
+#   called  - only when a line calls it: its name (by sound, in voice and
+#             text) or an @mention or reply in text. Every line needs it.
+#   active  - also joins in on its own when the model finds the moment.
 # Asked "are you an AI?", the character either stays in the fiction or steps
 # out of it. In a private channel among friends this is a storytelling
 # choice, like an NPC never admitting it is scripted.
@@ -51,40 +38,10 @@ ENGAGEMENT_MODES: tuple[tuple[str, str], ...] = (
 @dataclass(frozen=True, slots=True)
 class CharacterPolicy:
     mode: str = "called"
-    # "called": a line this soon after the character spoke continues the
-    # exchange, so the next answer needs no name. 0 disables it.
-    follow_up_seconds: float = 20.0
-    # "active" only: stay quiet this long after speaking, then join in on a
-    # question or after this many lines from others.
-    cooldown_seconds: float = 8.0
-    turn_gap: int = 3
     # Drop a reply when the chat moved on by this many lines while generating.
     stale_turns: int = 2
 
 
-@dataclass(slots=True)
-class CharacterState:
-    last_spoke_at: float | None = None
-    turns_since_spoke: int = 0
-    # Follow-ups answered since the character last spoke; one keeps an
-    # exchange going without letting the bot ride along with the whole chat.
-    follow_ups: int = 0
-
-    def heard(self) -> None:
-        self.turns_since_spoke += 1
-
-    def spoke(self, now: float) -> None:
-        self.last_spoke_at = now
-        self.turns_since_spoke = 0
-        self.follow_ups = 0
-
-
-def is_question(text: str) -> bool:
-    stripped = text.strip()
-    return stripped.endswith(_QUESTION_END) or bool(_QUESTION.search(stripped))
-
-
-# ASCII-only word edges: \b treats CJK as word characters, so "是AI吧" has none.
 # ASCII-only word edges: \b treats CJK as word characters, so "是AI吧" has none.
 _AI_WORD = re.compile(
     r"((?<![a-z])(ai|bot)(?![a-z])|ａｉ|人工智慧|機器人|真人)", re.IGNORECASE
@@ -111,84 +68,48 @@ def asks_if_ai(text: str) -> bool:
     )
 
 
-def talks_to_you(text: str) -> bool:
-    """Singular "你" (not "你們"): the line is aimed at one listener."""
-    return bool(re.search(r"你(?!們)", text))
+_HOMOPHONES = Path(__file__).with_name("data") / "homophones.txt"
+_HAN = re.compile(r"[\u3400-\u9fff]")
 
 
-@dataclass(frozen=True, slots=True)
-class Address:
-    """How sure we are that a line is aimed at the character.
-
-    `called` is unmistakable - an @mention, a reply to it, or its name
-    opening the line ("凱哥你覺得呢"). `mentioned` only says the name turned
-    up somewhere, which is as likely to be *about* it as *to* it ("我剛才跟
-    阿凱講話"). Those go to the model, which sees the whole line and can
-    answer SKIP; names come up in 0.03% of lines, so that costs nothing.
-    """
-
-    called: bool = False
-    mentioned: bool = False
-
-    @property
-    def worth_reading(self) -> bool:
-        return self.called or self.mentioned
-
-
-# Openers people put before a name when calling someone.
-_VOCATIVE_LEAD = "欸喂齁唉诶@ 　,，.。!！?？~～"
+# How people call a bot that has no name of its own.
+_GENERIC_NAMES = ("機器人",)
 
 
 def persona_names(persona: Persona) -> list[str]:
-    """What this character answers to. One-character names are skipped: they
-    would match inside half the words in the language."""
+    """What this character answers to: its name and nicknames. One-character
+    names are skipped: they would match inside half the words in the language."""
     names = [persona.name, *persona.nickname.split("、")]
     names = [name.strip() for name in names if len(name.strip()) >= 2]
     return names or list(_GENERIC_NAMES)
 
 
-def address_of(text: str, persona: Persona, *, mention: bool = False) -> Address:
-    """Read who a line is aimed at. `mention` is Discord's own signal."""
-    if mention:
-        return Address(called=True, mentioned=True)
-    folded = text.casefold()
-    for name in persona_names(persona):
-        index = folded.find(name.casefold())
-        if index < 0:
-            continue
-        # At the start, or after nothing but an opener ("欸 凱哥…").
-        opening = not text[:index].strip(_VOCATIVE_LEAD)
-        return Address(called=opening, mentioned=True)
-    return Address()
+class NameMatcher:
+    """Whether a line calls the character: a Latin name as written (any
+    case), a Chinese one by sound, so any characters read the same way
+    (tones ignored) count. Built once per persona from the few lines of the
+    homophone table its names need."""
 
+    def __init__(self, names: Iterable[str]) -> None:
+        names = [name for name in names if name]
+        wanted = {ch for name in names for ch in name if _HAN.match(ch)}
+        sounds: dict[str, set[str]] = {ch: set() for ch in wanted}
+        rows: dict[str, str] = {}
+        if wanted:
+            for line in _HOMOPHONES.read_text(encoding="utf-8").splitlines():
+                if line.startswith("#"):
+                    continue
+                syllable, chars = line.split("\t", 1)
+                rows[syllable] = chars
+                for ch in wanted.intersection(chars):
+                    sounds[ch].add(syllable)
+        alike = {ch: "".join(sorted({c for s in sounds[ch] for c in rows[s]} | {ch}))
+                 for ch in wanted}
+        parts = [
+            "".join(f"[{re.escape(alike[ch])}]" if ch in alike else re.escape(ch) for ch in name)
+            for name in names
+        ]
+        self._pattern = re.compile("|".join(parts), re.IGNORECASE) if parts else None
 
-def is_addressed(text: str, persona: Persona) -> bool:
-    """Kept for callers that only need a yes/no (eval, data generation)."""
-    return address_of(text, persona).worth_reading
-
-
-MAX_FOLLOW_UPS = 1
-
-
-def should_reply(
-    policy: CharacterPolicy,
-    state: CharacterState,
-    text: str,
-    *,
-    addressed: bool,
-    now: float,
-) -> bool:
-    """Whether this line is for the character. `addressed` means it was named:
-    an @mention or a reply to it in text, its name or nickname in voice."""
-    if addressed:
-        return True
-    since_spoke = None if state.last_spoke_at is None else now - state.last_spoke_at
-    if policy.mode == "called":
-        return (
-            since_spoke is not None
-            and since_spoke < policy.follow_up_seconds
-            and state.follow_ups < MAX_FOLLOW_UPS
-        )
-    if since_spoke is not None and since_spoke < policy.cooldown_seconds:
-        return False
-    return is_question(text) or state.turns_since_spoke >= policy.turn_gap
+    def __call__(self, text: str) -> bool:
+        return self._pattern is not None and self._pattern.search(text) is not None
