@@ -17,7 +17,6 @@ import subprocess
 import sys
 import time
 import urllib.request
-from dataclasses import replace
 from pathlib import Path
 
 PROJECT_DIR = Path(__file__).resolve().parents[2]
@@ -27,12 +26,11 @@ sys.path[:0] = [str(PROJECT_DIR), str(EDGE_AGENT_ROOT)]
 from edge_agent.runtime import build_server_args  # noqa: E402
 
 from silenttalk.copilot import llm  # noqa: E402
-from silenttalk.copilot.persona import Relationship, persona_from_dict  # noqa: E402
+from silenttalk.copilot.persona import MACHINE_SPIRIT  # noqa: E402
 from silenttalk.copilot.types import ConversationTurn  # noqa: E402
 
 SERVER = PROJECT_DIR / ".runtime/tools/llama.cpp-b11193-src/build-cuda/bin/llama-server"
 MODEL = PROJECT_DIR / ".runtime/models/llm/gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf"
-CARD = PROJECT_DIR / ".runtime/dev/chardata-ms1/personas.jsonl"
 DATA = Path(__file__).with_name("task_scope_eval.jsonl")
 PORT = 18412
 OWNER_ID = 1
@@ -62,10 +60,8 @@ def main() -> None:
     rows = [json.loads(line) for line in DATA.read_text(encoding="utf-8").splitlines()]
     meta, items = rows[0]["meta"], rows[1:]
     owner = meta["owner"]
-    card = json.loads(CARD.read_text(encoding="utf-8").splitlines()[0])
-    persona = persona_from_dict(card)
-    persona = replace(persona, relationships=(
-        Relationship(owner, card["owner_relation"]), *persona.relationships))
+    # The card the app ships, as the app sends it.
+    persona = MACHINE_SPIRIT
     model = llm.LocalReplyModel(args.model, port=PORT, context_size=8192, agent_dispatch=True,
                                 owner_id=OWNER_ID, owner_name=owner, ai_honesty="machine")
     model.set_persona(persona)

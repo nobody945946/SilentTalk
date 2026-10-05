@@ -2,10 +2,13 @@
 
 The owner described the character in their own words (OWNER_BRIEF). An
 open-weight teacher turns that into persona sheets in SilentTalk's Persona
-schema plus a lore glossary; the owner picks or edits one. Claude does not
-write persona text or training data (dev-box rule 5).
+schema plus a lore glossary; the owner picked one, which the app now ships as
+persona.MACHINE_SPIRIT. Claude does not write persona text or training data
+(dev-box rule 5).
 
-    .venv/bin/python scripts/dev/machine_spirit.py drafts --count 3
+    .venv/bin/python scripts/dev/machine_spirit.py drafts --variants 1,2,3
+    .venv/bin/python scripts/dev/machine_spirit.py verify-lore
+    .venv/bin/python scripts/dev/machine_spirit.py builtin --chardata .runtime/dev/chardata-ms2
 """
 
 from __future__ import annotations
@@ -21,11 +24,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 from silenttalk.copilot.persona import (  # noqa: E402
+    MACHINE_SPIRIT,
     REPLY_LENGTHS,
     TEXT_FIELDS,
     TRAIT_AXES,
     Persona,
     Relationship,
+    persona_to_dict,
     validate_persona,
 )
 
@@ -223,25 +228,28 @@ def verify_lore(threads: int, extra: list[str]) -> None:
     path.write_text(json.dumps(items, ensure_ascii=False, indent=1), encoding="utf-8")
 
 
-def pick(number: int, chardata: Path, edits: dict) -> None:
-    """The owner's chosen draft (optionally with the owner's edits) as the one
-    persona row of an agent character for character_data.py."""
-    raw = next(item["persona"] for item in
-               json.loads((OUT / "drafts.json").read_text(encoding="utf-8"))
-               if item["variant"] == number)
-    raw = {**raw, **edits}
-    persona = to_persona(number - 1, raw)  # validates the edited sheet
-    owner = next((r["relation"] for r in raw.get("relationships", [])
-                  if isinstance(r, dict) and r.get("name") == "主人"), "主人，侍奉的技術神甫")
-    row = {**{k: getattr(persona, k) for k in ("id", "name", *TEXT_FIELDS, "reply_length")},
-           "traits": persona.traits, "agent": True, "owner_relation": owner,
-           "lore": [item for item in raw.get("lore", []) if isinstance(item, dict)
-                    and item.get("term") and item.get("meaning")],
-           "stt_variants": [], "role": "machine spirit"}
+# How speech recognition writes 機魂 (the app's name matcher accepts them):
+# character_data.py puts them into the others' spoken lines now and then.
+STT_VARIANTS = ("雞魂", "基魂")
+
+
+def builtin(chardata: Path, variant: int) -> None:
+    """The app's own machine spirit (persona.MACHINE_SPIRIT, as it ships) as
+    the one persona row of an agent character for character_data.py, so the
+    training requests are the app's byte for byte. Its lore glossary is the
+    checked one of the draft the card came from."""
+    item = next((item for item in json.loads((OUT / "drafts.json").read_text(encoding="utf-8"))
+                 if item["variant"] == variant), None)
+    if item is None or item["persona"].get("name") != MACHINE_SPIRIT.name:
+        raise SystemExit(f"draft {variant} is not the card the app ships ({MACHINE_SPIRIT.name})")
+    row = {**persona_to_dict(MACHINE_SPIRIT), "agent": True, "owner_relation": "",
+           "lore": [entry for entry in item["lore"] if isinstance(entry, dict)
+                    and entry.get("term") and entry.get("meaning")],
+           "stt_variants": list(STT_VARIANTS), "role": "machine spirit"}
     chardata.mkdir(parents=True, exist_ok=True)
     (chardata / "personas.jsonl").write_text(json.dumps(row, ensure_ascii=False) + "\n",
                                              encoding="utf-8")
-    print(f"{persona.name} -> {chardata / 'personas.jsonl'}")
+    print(f"{MACHINE_SPIRIT.name} -> {chardata / 'personas.jsonl'}")
 
 
 def main() -> None:
@@ -256,15 +264,14 @@ def main() -> None:
     v = sub.add_parser("verify-lore")
     v.add_argument("--threads", type=int, default=12)
     v.add_argument("--server-args", default="")
-    k = sub.add_parser("pick")
-    k.add_argument("number", type=int, help="draft number the owner chose (1-based)")
-    k.add_argument("--chardata", type=Path, default=ROOT / ".runtime/dev/chardata-ms1")
-    k.add_argument("--edits", default="{}", help="JSON object of fields the owner changed")
+    b = sub.add_parser("builtin")
+    b.add_argument("--chardata", type=Path, required=True, help="a new data directory")
+    b.add_argument("--variant", type=int, default=2, help="the draft the shipped card came from")
     args = parser.parse_args()
     if args.command == "verify-lore":
         verify_lore(args.threads, args.server_args.split())
-    if args.command == "pick":
-        pick(args.number, args.chardata, json.loads(args.edits))
+    if args.command == "builtin":
+        builtin(args.chardata, args.variant)
     if args.command == "drafts":
         drafts([int(v) for v in args.variants.split(",")], args.threads, args.teacher,
                args.server_args.split())

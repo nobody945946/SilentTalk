@@ -367,17 +367,6 @@ def test_rows_without_a_verdict_refuse_the_set(chardata: Path) -> None:
     assert _filter() == 3  # 23 of 24 checked
 
 
-def test_agent_personas_wait_for_scripts_of_the_new_discord_design() -> None:
-    """The old agent scripts taught work typed in the chat, approvals asked
-    aloud and results only "see your DMs": the app no longer does any of it."""
-    import random
-
-    with pytest.raises(SystemExit, match="redesigned"):
-        character_data.script_request(
-            {"id": "ms", "name": "Machina", "agent": True}, random.Random(1), set()
-        )
-
-
 def test_a_nickname_names_the_character() -> None:
     """The teacher sometimes writes the persona's nickname as the speaker."""
     spec = _script([])["spec"]

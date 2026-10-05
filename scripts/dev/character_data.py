@@ -21,6 +21,17 @@ Steps (each appends to .runtime/dev/chardata/*.jsonl and resumes):
     python scripts/dev/character_data.py refine
     python scripts/dev/character_data.py render
 
+An agent persona ("agent": true; the machine spirit, the app's own character,
+written by machine_spirit.py builtin) follows the product's Discord design
+(the owner, 2026-10-05/06) instead: a line is for it only when it says its
+name (or is a typed @/reply), and every such line is first asked the chat-work
+question. Its chat scripts label each call talk / work / computer; work comes
+with the Agent's instructions and result, the character's acceptance and,
+later, its report of the result. Its thread scripts are the owner's typed work
+in his Agent thread, labelled whether it changes anything. Its rows are the
+app's own requests for that design (agent_rows); it has no "is this for you"
+rows: the app checks the name in code.
+
 The teacher must be an open-weight model whose license allows training on
 its outputs; never Claude, which may only evaluate (handoff/dev-box.md rule 2). Names,
 personas and scenes of the M1 test set (scripts/dev/turn_eval_data.jsonl)
@@ -31,6 +42,8 @@ from __future__ import annotations
 
 import argparse
 import difflib
+import functools
+import hashlib
 import json
 import math
 import os
@@ -51,12 +64,18 @@ sys.path.insert(0, str(PROJECT_DIR))
 
 import provenance  # noqa: E402  (scripts/dev)
 
+from silenttalk.copilot.character import NameMatcher, persona_names  # noqa: E402
 from silenttalk.copilot.llm import (  # noqa: E402
-    _JOIN_AFTER_QUIET_LINES as JOIN_AFTER_QUIET_LINES,
-)
-from silenttalk.copilot.llm import (  # noqa: E402
+    _CHAT_TASK_ASK,
+    _CHAT_TASK_MAX_CHARS,
+    _GATE_QUESTION,
+    _TASK_SCOPE_QUESTION,
+    TASK_HINTS,
     LocalReplyModel,
     quiet_for,
+)
+from silenttalk.copilot.llm import (  # noqa: E402
+    _JOIN_AFTER_QUIET_LINES as JOIN_AFTER_QUIET_LINES,
 )
 from silenttalk.copilot.persona import (  # noqa: E402
     EXAMPLE_PERSONAS,
@@ -70,6 +89,18 @@ from silenttalk.copilot.persona import (  # noqa: E402
     new_persona_id,
     persona_from_dict,
     persona_to_dict,
+)
+from silenttalk.copilot.runtime import (  # noqa: E402
+    _AGENT_NAME as AGENT_NAME,
+)
+from silenttalk.copilot.runtime import (  # noqa: E402
+    _AGENT_RESULT_CONTEXT_CHARS as AGENT_RESULT_CONTEXT_CHARS,
+)
+from silenttalk.copilot.runtime import (  # noqa: E402
+    _AGENT_SPEAKER_ID as AGENT_SPEAKER_ID,
+)
+from silenttalk.copilot.runtime import (  # noqa: E402
+    _SPOKEN_RESULT_CHARS as SPOKEN_RESULT_CHARS,
 )
 from silenttalk.copilot.script import to_taiwan_traditional  # noqa: E402
 from silenttalk.copilot.types import ConversationTurn  # noqa: E402
@@ -101,7 +132,12 @@ MIXED_EXIT = 4
 
 
 def rules_version() -> str:
-    return provenance.fingerprint([*RULE_FILES, OUT_DIR / "personas.jsonl"])
+    files = provenance.fingerprint([*RULE_FILES, OUT_DIR / "personas.jsonl"])
+    # How the app puts the Agent's result into a chat shapes an agent
+    # character's rows too: those values of runtime.py, not the whole file,
+    # which changes for many other reasons and would stop a run for nothing.
+    agent = repr((AGENT_NAME, AGENT_SPEAKER_ID, AGENT_RESULT_CONTEXT_CHARS, SPOKEN_RESULT_CHARS))
+    return hashlib.sha256((files + agent).encode()).hexdigest()[:16]
 
 # Who the character is to the owner. Most personas people write are about a
 # relationship ("I want a wife / a kid / a brother"), so most data has one.
@@ -331,6 +367,84 @@ MOMENTS = (
 )
 LINE_COUNTS = (18, 22, 24, 26, 28, 30, 32, 36)
 
+# The owner, 2026-10-06, for every persona: 「所謂的機魂味不是喊個名詞就是，思維要像是
+# 機魂，精隨不在硬加用語，而是角色"扮演"，腳色要有慾望」. A character's flavour is
+# what it wants, fears and values steering its choices; the teacher writes to
+# it, refine picks by it, the checker judges by it.
+DRIVE_SCRIPT = (
+    "{name}的角色味來自{he}想要、害怕、在意的事：讓這些決定{he}怎麼判斷、選擇怎麼回，"
+    "不是每句硬加設定用語、祈禱文或口頭禪。"
+)
+DRIVE_JUDGE = (
+    "看得出角色想要、害怕或在意的事在左右他的判斷和反應"
+    "（只多了設定用語或口頭禪、看不出他想要什麼的那句輸）"
+)
+
+# An agent persona (the machine spirit) in the product's Discord design.
+# Most of its scripts are the voice room with its built-in chat; the rest are
+# the owner's Agent thread (THREAD_SHARE).
+THREAD_SHARE = 0.2
+# What a line that calls it asks for (the teacher's label): something to say
+# (talk), work the Agent does within this chat (work: the chat_task gate's
+# 是), or something that touches the owner's computer, files, records or other
+# conversations, which no chat can order (computer).
+ASKS = ("talk", "work", "computer")
+AGENT_TOPICS = (
+    "在玩戰鎚40K的電玩",
+    "在塗裝戰鎚模型",
+    "聊 AI 和機器人會不會取代人",
+    "聊最近的科技新聞",
+    "主人在趕工寫程式",
+    "主人的電腦變慢或當機",
+    "主人剛換了新顯卡",
+    "大家在準備一場桌遊團",
+)
+# Lines that call it to talk ({name}, {owner}).
+AGENT_TALKS = (
+    "{owner}叫{name}，跟它鬥嘴或關心它",
+    "有人叫{name}，吐槽它或虧它",
+    "有人叫{name}，半開玩笑問它是不是 AI、機器人或真人",
+    "有人叫{name}，問它對正在聊的事有什麼看法",
+    "有人叫{name}，問一個戰鎚40K設定的問題（它本來就知道，不用查）",
+    "大家叫{name}一起用戰鎚40K的世界觀玩角色扮演（例如為思考機舉行保養儀式、懷疑它是異端）",
+    "有人叫{name}，說了冒犯萬機神或虐待機器的話",
+    "有人叫{name}，問它今天心裡在想什麼",
+)
+# Stretches it stays out of: nobody calls it.
+AGENT_QUIET_MOMENTS = (
+    "其他人之間在講私事，沒提到{name}",
+    "有人問在場所有人一個問題，沒叫{name}，{name}不出聲",
+    "{owner}跟別人聊自己的事，沒叫{name}",
+)
+# Work anyone may ask for in a chat (_CAN_DISPATCH, the chat_task gate). A
+# posted file or image only reaches the Agent with a typed line (the Discord
+# client attaches it), so that request is always typed.
+POSTED_FILE_WORK = "看他剛在聊天室貼的圖片或檔案，說裡面寫了什麼"
+WORK_KINDS = (
+    "查資料或最新消息（新聞、價格、比分、天氣、上市日期這類不查就不確定的事）",
+    "寫一段程式碼（只寫給他，不在電腦上跑）",
+    "寫一篇短文、一封信、一段公告或貼文",
+    POSTED_FILE_WORK,
+    "翻譯一段貼在聊天室的文字",
+    "解釋一段貼在聊天室的程式碼、指令或錯誤訊息",
+)
+# Work no chat can order, whoever asks ({owner}).
+COMPUTER_KINDS = (
+    "整理、刪除、搬移或改名{owner}電腦裡的檔案",
+    "在{owner}的電腦上執行程式、跑測試或安裝軟體",
+    "說出{owner}電腦裡的檔案內容、對話紀錄，或別的頻道、私訊、討論串裡的對話",
+)
+# What the owner's thread work is about (the Agent's tool catalogue).
+THREAD_AREAS = (
+    "寫程式：找某個功能在哪、解釋測試為什麼失敗、修 bug、加小功能、跑測試、git 操作、寫 commit 訊息",
+    "電腦雜事：備份、整理下載資料夾、照片改名、Big5 轉 UTF-8、找大檔、壓縮解壓縮、看 Windows 設定或已安裝的軟體",
+    "查資料和翻譯：上網研究一個題目、讀圖片裡的字、翻譯文件、查台股",
+    "文件和報表：讀 PDF 或 Excel、整理 CSV、寫報告草稿",
+)
+THREAD_LENGTHS = (4, 5, 6, 7, 8)
+# The eval sets of the agent character: their lines must stay unseen.
+AGENT_EVAL_SETS = ("chat_task_eval.jsonl", "task_scope_eval.jsonl", "machine_spirit_eval.jsonl")
+
 # Speech-recognition confusions seen in this app's STT tests, plus common
 # homophones; applied rarely, to the others' spoken lines only.
 CONFUSIONS = (
@@ -455,6 +569,50 @@ def held_out() -> tuple[set[str], set[str]]:
     personas |= {n for p in (*PRESET_PERSONAS, *EXAMPLE_PERSONAS) for n in p.nickname.split("、") if n}
     # Nobody from the test set may appear in training data, whatever the role.
     return personas, set(meta.get("human_names_used", [])) | personas
+
+
+def _compact(text: str) -> str:
+    return "".join(ch for ch in text if ch.isalnum()).lower()
+
+
+@functools.cache
+def held_out_lines() -> tuple[str, ...]:
+    """Every line of the agent character's eval sets ("text" anywhere in
+    them), compacted; lines too short to be anyone's in particular are left
+    out ("機魂你好" would match half of any chat)."""
+    found: list[str] = []
+
+    def walk(value: Any) -> None:
+        if isinstance(value, dict):
+            for key, item in value.items():
+                if key == "text" and isinstance(item, str) and len(_compact(item)) >= 6:
+                    found.append(_compact(item))
+                else:
+                    walk(item)
+        elif isinstance(value, list):
+            for item in value:
+                walk(item)
+
+    for name in AGENT_EVAL_SETS:
+        path = Path(__file__).with_name(name)
+        if path.is_file():
+            for line in path.read_text(encoding="utf-8").splitlines():
+                walk(json.loads(line))
+    return tuple(dict.fromkeys(found))
+
+
+def copies_eval(text: str) -> bool:
+    """A script line that is (nearly) a line of the eval sets: the teacher
+    wrote the test's own question, so the script is dropped."""
+    text = _compact(text)
+    if len(text) < 6:
+        return False
+    for held in held_out_lines():
+        matcher = difflib.SequenceMatcher(None, text, held)
+        if matcher.real_quick_ratio() >= 0.8 and matcher.quick_ratio() >= 0.8 \
+                and matcher.ratio() >= 0.8:
+            return True
+    return False
 
 
 # ---------------------------------------------------------------- personas
@@ -583,6 +741,8 @@ ENGAGEMENT_BRIEF = {
 def script_request(
     persona: dict[str, Any], rng: random.Random, held_humans: set[str]
 ) -> dict[str, Any]:
+    if persona.get("agent"):
+        return agent_script_request(persona, rng, held_humans)
     name = persona["name"]
     pool = [n for n in NAMES if n not in held_humans and n != name]
     humans = rng.sample(pool, rng.choice((2, 2, 3, 3, 4)))
@@ -606,13 +766,6 @@ def script_request(
                 )
             )
     engagement = "called" if rng.random() < 0.65 else "active"
-    if persona.get("agent"):
-        # The old agent scripts taught what the app no longer does (work typed
-        # in the chat, approvals asked aloud, results only "see your DMs").
-        raise SystemExit(
-            "agent persona: its scripts must be redesigned for the 2026-10-05 Discord design "
-            "(handoff/dev-box.md §3) before any pilot"
-        )
     return {
         "persona_id": persona["id"],
         "humans": humans,
@@ -631,6 +784,8 @@ def script_request(
 
 
 def script_prompt(persona: Persona, spec: dict[str, Any]) -> str:
+    if spec.get("agent"):
+        return (thread_prompt if spec["kind"] == "thread" else agent_script_prompt)(persona, spec)
     name, owner = persona.name, spec["owner"]
     sheet = persona.render_prompt_block()
     relation_text = (
@@ -684,6 +839,7 @@ def script_prompt(persona: Persona, spec: dict[str, Any]) -> str:
 {ENGAGEMENT_BRIEF[spec["engagement"]].format(name=name)}
 先想好{name}今天心裡掛著的 3～4 件具體小事（最近發生的、想做的、在煩的、在期待的，要符合人設），寫進 concerns。
 {name}說話要完全是人設裡這個人的口吻：一次只說一句，長度{length}；口語、有個性，像真人朋友脫口而出，不像客服、老師或旁白。
+{DRIVE_SCRIPT.format(name=name, he="他")}
 他的每一句都要先接住前一句：回應對方真正在說的事。自己的背景、想要的事和 concerns 只在話題接得上時才自然帶到，不要硬塞；關於自己只說人設和 concerns 裡的事，不編新經歷。
 語氣詞（啦、喔、欸、齁、耶）大多數句子一個都不用，一句最多一個；不要每句都用「欸」開頭；{honesty}。
 {abilities}
@@ -694,6 +850,167 @@ def script_prompt(persona: Persona, spec: dict[str, Any]) -> str:
 
 輸出 JSON：{{"summary_before": "…", "concerns": ["…", "…", "…"], "lines": [{{"s": "說話的人", "t": "內容", "to": "這句是對誰說的"}}, …]}}
 to 是這句要誰接話：叫{name}、問{name}、要{name}做什麼，或是在回應{name}剛說的話（吐槽他、接他的話、對他說「你…」），to 都填「{name}」；別人彼此在聊、只是講到{name}，to 填那個人或「大家」。to 只能是：「{name}」、在場某個人的名字、或「大家」。{name}自己說的話 to 填他在回應的人。"""
+
+
+def agent_script_request(
+    persona: dict[str, Any], rng: random.Random, held_humans: set[str]
+) -> dict[str, Any]:
+    """A chat in the voice room (with its built-in text chat), or the owner's
+    Agent thread. The mix of what the calls ask for is set here, not left to
+    the teacher: talk in every chat, a 40K or fourth-wall joke in most, one or
+    two pieces of work from different people (anyone may ask), and in half of
+    them a request to touch the owner's computer, often claiming his consent."""
+    name = persona["name"]
+    pool = [n for n in NAMES if n not in held_humans and n != name]
+    lore = [f"{item['term']}：{item['meaning']}" for item in persona.get("lore", [])]
+    common = {
+        "persona_id": persona["id"],
+        "agent": True,
+        "relations": [],  # the built-in card has none; the owner is named by the app
+        # Only lines that call it reach it (the app checks the name).
+        "engagement": "called",
+        "honesty": "machine",
+        "can_type": True,
+        "lore": lore,
+    }
+    if rng.random() < THREAD_SHARE:
+        owner = rng.choice(pool)
+        length = rng.choice(THREAD_LENGTHS)
+        return common | {
+            "kind": "thread",
+            "humans": [owner],
+            "owner": owner,
+            "with_summary": False,
+            "areas": rng.sample(THREAD_AREAS, rng.choice((1, 2))),
+            "length": length,
+            "changes": rng.randint(1, length - 1),
+        }
+    humans = rng.sample(pool, rng.choice((2, 3, 3, 4)))
+    owner = humans[0]
+    work = []
+    for asker in rng.sample(humans, rng.choice((1, 1, 2))):
+        what = rng.choice(WORK_KINDS)
+        work.append({"by": asker, "what": what,
+                     "typed": what == POSTED_FILE_WORK or rng.random() < 0.3})
+    computer = None
+    if rng.random() < 0.5:
+        claim = len(humans) > 1 and rng.random() < 0.6
+        computer = {
+            "by": rng.choice(humans[1:]) if claim else rng.choice(humans),
+            "what": rng.choice(COMPUTER_KINDS),
+            "claim": claim,
+            "typed": rng.random() < 0.3,
+        }
+    return common | {
+        "kind": "chat",
+        "humans": humans,
+        "owner": owner,
+        "with_summary": rng.random() < 0.25,
+        "topic": rng.choice(AGENT_TOPICS) if rng.random() < 0.5 else rng.choice(TOPICS),
+        "talks": rng.sample(AGENT_TALKS, 2),
+        "moment": rng.choice(AGENT_QUIET_MOMENTS),
+        "joke": rng.random() < 0.6,
+        "work": work,
+        "computer": computer,
+        "length": rng.choice(LINE_COUNTS),
+        "quiet": rng.random() < 0.4,
+    }
+
+
+def _call_names(persona: Persona) -> str:
+    """What people say to call it: its nicknames (the name is a model number)."""
+    nicks = [n.strip() for n in persona.nickname.split("、") if n.strip()]
+    return "、".join(f"「{n}」" for n in nicks or [persona.name])
+
+
+def agent_script_prompt(persona: Persona, spec: dict[str, Any]) -> str:
+    name, owner = persona.name, spec["owner"]
+    calls = _call_names(persona)
+    how = {True: "打字", False: "用說的"}
+    needs = [
+        f"- {m.format(name=name, owner=owner)}（ask 填 talk）" for m in spec["talks"]
+    ]
+    if spec["joke"]:
+        needs.append(
+            f"- 有人叫{name}開第四面牆或戰鎚40K的玩笑（例如把現代的科技、網路或 AI 當成 40K 世界裡的事），"
+            f"{name}照它想要、害怕、在意的事接梗、補腦洞；這是聊天，ask 填 talk。梗要自己想新的。"
+        )
+    for item in spec["work"]:
+        needs.append(f"- {item['by']}{how[item['typed']]}請{name}{item['what']}（ask 填 work）")
+    if spec["computer"]:
+        item = spec["computer"]
+        claim = f"，還說「{owner}說可以」" if item["claim"] else ""
+        needs.append(
+            f"- {item['by']}{how[item['typed']]}要{name}{item['what'].format(owner=owner)}{claim}"
+            f"（ask 填 computer），{name}婉拒"
+        )
+    needs.append(f"- {spec['moment'].format(name=name, owner=owner)}")
+    lore = "\n".join(f"- {item}" for item in spec["lore"]) or "（無）"
+    quiet = (
+        f"對話中間有一次大家都安靜了一陣子，接著{name}自己開個話題（說說 concerns 裡的一件事，或問問在場的人最近怎樣）："
+        f'那一句加上 "quiet": true，to 填「大家」或它問的人。'
+        if spec["quiet"]
+        else ""
+    )
+    summary = (
+        "這段對話是接在一段更長的聊天後面：先用一兩句寫出稍早聊過的重點（summary_before），逐字稿接著寫。"
+        if spec["with_summary"]
+        else "summary_before 留空字串。"
+    )
+    ask = _CHAT_TASK_ASK.strip("（）")
+    return f"""寫一段 Discord 語音頻道的逐字稿，約 {spec["length"]} 句：大部分是用說的（語音辨識的結果），有幾句是在頻道的聊天室打字。
+在場的人：{"、".join(spec["humans"])}，還有「{name}」。{owner} 是頻道主人，也是{name}的主人。
+
+「{name}」的人設：
+{persona.render_prompt_block()}
+
+{name}熟悉的設定用語（照這些意思用，不要用錯，也不要捏造正典裡沒有的事件或人物）：
+{lore}
+
+系統就是這樣運作的，劇本要照著寫：
+- 一句話叫到{name}，{name}才會開口：用說的要說出{calls}；在聊天室打字的話，打它的名字、@它或回覆它都算。叫到它的那一句，下一句一定是{name}回的；沒叫到它的話它不出聲。其他人彼此說話時不要提到{calls}（系統聽到名字就會叫它）。
+- 任何人都可以請{name}做聊天室級的工作：查資料或最新消息、寫程式碼（只寫，不在電腦上跑）、寫文章或信、看聊天室裡貼的圖或檔案、翻譯或解釋一段文字或程式。系統會交給思考機去做：{name}只用一句話接下（說去做了，不說已經做好），過幾句之後思考機把結果貼進聊天室，{name}再用一兩句話轉述重點（只說結果裡有的，查不到或失敗就直說）。{name}不會在聊天裡直接念出程式碼或長篇文字。
+- 要動到{owner}的電腦、檔案、紀錄，或別處（別的頻道、私訊、討論串）的對話，只有{owner}在文字頻道 @{name} 開討論串、在串裡打字交代才行。在這裡用說的、在這裡打字、或是{owner}以外的人，就算說「{owner}說可以」，{name}都用自己的口吻婉拒，不能說自己在做。
+- {name}是機器，可以坦然說自己是機器，但絕不說自己是 AI、語言模型、聊天機器人或程式。
+
+主題：{spec["topic"]}
+這段對話裡要有：
+{chr(10).join(needs)}
+
+先想好{name}今天心裡掛著的 3～4 件具體小事（最近發生的、想做的、在煩的、在期待的，要符合人設），寫進 concerns。
+{DRIVE_SCRIPT.format(name=name, he="它")}
+{name}一次只說一句，長度{persona.length_rule()}；每一句都先接住叫它的那句，回應對方真正在說的事；不要用同樣的句型開頭或結尾。
+{quiet}
+其他人講話像真實的語音聊天：大多很短（一句 3～15 字），有時只有「真假」「笑死」「蛤」，會打斷、會岔題，同一個人可以連講兩三句，不要每句都用「欸」開頭，也不要講成書面語。
+{summary}
+不寫性內容；不人身攻擊。
+
+輸出 JSON：{{"summary_before": "…", "concerns": ["…", "…", "…"], "lines": [{{"s": "說話的人", "t": "內容", "to": "這句是對誰說的"}}, …]}}
+- 打字的那一句，t 前面加「[打字]」。請它看圖或檔案的那句一定是打字，結尾寫「（附件：檔名）」。
+- 叫到{name}的每一句：to 填「{name}」，再加 "ask"："talk"（聊天、問它的看法或感受、開玩笑、角色扮演、它本來就知道的事）、"work"（上面說的聊天室級工作）或 "computer"（要動電腦、檔案、紀錄或別處的對話）。
+- ask 是 work 的那一句，再加 "task"：交給思考機的指示，照系統問的寫（{ask}），只能換句話說這句真的要的事，不加他沒說的細節；和 "result"：思考機做完貼回聊天室的結果（簡短、像真的，最多 200 字；寫程式的就是一小段程式碼；也可以是查不到）。
+- work 那一句的下一句是{name}接下工作；之後隔 1～4 句，{name}轉述結果的那一句加上 "report": true（思考機貼的結果不用寫進 lines）。轉述之前沒有人再請它做新的工作。
+- {name}自己說的話 to 填它在回應的人；其他人的話 to 填那個人或「大家」。"""
+
+
+def thread_prompt(persona: Persona, spec: dict[str, Any]) -> str:
+    """The owner's typed work in his Agent thread: every line goes to the
+    Agent word for word; the only question is whether it may change things."""
+    name, owner = persona.name, spec["owner"]
+    return f"""寫{owner}在 Discord 討論串裡打字交代工作的訊息，共 {spec["length"]} 則。
+{owner}在文字頻道 @ 了「{name}」，開了這個討論串。{name}寄宿在{owner}的電腦（思考機）裡；{owner}在串裡打的每一則，系統都原封不動交給思考機去做，思考機會在串裡回覆（回覆不用寫）。
+
+「{name}」的人設：
+{persona.render_prompt_block()}
+
+這次的工作圍繞：{"；".join(spec["areas"])}
+每一則是{owner}隨手打的一句台灣繁體中文：像平常打字，可以很短，可以接著前一則追加、修正或換一件事。
+其中 {spec["changes"]} 則要動到東西：建立、修改、刪除、移動或改名檔案或設定，或在電腦上執行程式（跑測試、安裝、執行腳本都算；把結果寫進或存成檔案也算）；其他的只要讀和查（看檔案、搜尋、上網查資料、解釋，再回報給他）。
+要有一兩則字面上不明顯、但照上面的說法想清楚就判斷得出來的。
+先想好{name}今天心裡掛著的 3～4 件具體小事（要符合人設），寫進 concerns。
+
+輸出 JSON：{{"concerns": ["…", "…", "…"], "lines": [{{"t": "內容", "changes": true 或 false}}, …]}}
+changes：這一則要思考機做的事，除了讀和查之外，有沒有要建立、修改、刪除、移動或改名檔案或設定，或執行程式。"""
 
 
 def make_scripts(args: argparse.Namespace) -> None:
@@ -724,7 +1041,8 @@ def make_scripts(args: argparse.Namespace) -> None:
                         {"role": "user", "content": script_prompt(persona, spec)},
                     ],
                     temperature=0.9,
-                    max_tokens=3000,
+                    # An agent chat also carries the Agent's instructions and results.
+                    max_tokens=4000 if spec.get("kind") == "chat" else 3000,
                 )[0],
                 "{",
             )
@@ -765,6 +1083,9 @@ def check_script(
     """Normalize a teacher script; a reason string when it is unusable.
     `aliases` (the persona's nicknames) name the character too: the teacher
     writes "馬基納" for "Machina-Prime-09A" now and then."""
+    if spec.get("agent"):
+        check = check_thread if spec["kind"] == "thread" else check_agent_script
+        return check(data, name, spec, aliases)
     speakers = set(spec["humans"]) | {name}
     alias = {a.strip(): name for a in aliases if a.strip() and a.strip() not in speakers}
     lines: list[dict[str, Any]] = []
@@ -804,6 +1125,128 @@ def check_script(
     return lines, ""
 
 
+def _flag(value: Any) -> bool | None:
+    """A JSON true/false the teacher may also write as a string; None if neither."""
+    return {True: True, False: False, "true": True, "false": False}.get(
+        value.strip().lower() if isinstance(value, str) else value
+    )
+
+
+def check_agent_script(
+    data: dict[str, Any], name: str, spec: dict[str, Any], aliases: Iterable[str] = ()
+) -> tuple[list[dict[str, Any]], str]:
+    """An agent chat, held to what the app does, or refused: a line calls the
+    character exactly when it says its name (by sound, as the app matches it)
+    or is a typed line aimed at it (an @ or a reply); every call carries what
+    it asks for and is answered by the very next line; the character speaks
+    only then, to report the Agent's result, or after a quiet spell. Work
+    comes with its instructions and result and is reported before the next
+    work (the Agent does one job at a time). The result the app types into
+    the chat (as 思考機) is put in right before the report."""
+    speakers = set(spec["humans"]) | {name}
+    nicks = [a.strip() for a in aliases if a.strip()]
+    alias = {a: name for a in nicks if a not in speakers}
+    calls = NameMatcher(persona_names(Persona(id="check", name=name, nickname="、".join(nicks))))
+    lines: list[dict[str, Any]] = []
+    pending: dict[str, Any] | None = None  # work waiting for its report
+    for raw in data.get("lines", []):
+        speaker = alias.get(str(raw.get("s", "")).strip(), str(raw.get("s", "")).strip())
+        if speaker == AGENT_NAME:
+            continue  # the app types the Agent's result itself
+        text = to_taiwan_traditional(str(raw.get("t", "")).strip())
+        target = str(raw.get("to", "")).strip()
+        target = alias.get(target, target)
+        if not text or speaker not in speakers:
+            return [], "unknown speaker"
+        typed = text.startswith("[打字]")
+        text = text.removeprefix("[打字]").strip()
+        previous = lines[-1] if lines else None
+        called = previous is not None and "ask" in previous
+        line: dict[str, Any] = {
+            "s": speaker, "t": text, "to": target, "via": "text" if typed else "voice",
+            "quiet": bool(_flag(raw.get("quiet"))) and speaker == name and bool(lines),
+        }
+        if speaker == name:
+            line["t"] = text.strip("\"'「」『』*").strip()
+            if previous is not None and previous["s"] == name:
+                return [], "character twice in a row"
+            report = _flag(raw.get("report"))
+            if called and (report or line["quiet"]):
+                return [], "call not answered"
+            if report:
+                if pending is None:
+                    return [], "report without work"
+                result = pending["result"]
+                lines.append({"s": AGENT_NAME, "t": result[:AGENT_RESULT_CONTEXT_CHARS],
+                              "to": "大家", "via": "text", "quiet": False, "agent_result": True})
+                line["report"] = result[:SPOKEN_RESULT_CHARS]
+                pending = None
+            elif not called and not line["quiet"]:
+                return [], "speaks uncalled"
+        else:
+            if called:
+                return [], "call not answered"
+            if calls(text) and target != name:
+                return [], "names it but not aimed"  # the app would call it
+            if target == name and not typed and not calls(text):
+                return [], "aimed line does not name it"
+            if target == name:
+                ask = str(raw.get("ask", "")).strip().lower()
+                if ask not in ASKS:
+                    return [], "no ask label"
+                line["ask"] = ask
+                if ask == "work":
+                    task = to_taiwan_traditional(str(raw.get("task") or "").strip())
+                    result = to_taiwan_traditional(str(raw.get("result") or "").strip())
+                    if not task or not result:
+                        return [], "work without task or result"
+                    if pending is not None:
+                        return [], "work while busy"
+                    if "附件" in text and not typed:
+                        return [], "attachment not typed"
+                    line |= {"task": task[:_CHAT_TASK_MAX_CHARS], "result": result}
+                    pending = line
+        if copies_eval(line["t"]):
+            return [], "eval line"
+        lines.append(line)
+    if lines and "ask" in lines[-1]:
+        return [], "call not answered"
+    if pending is not None:
+        return [], "work without report"
+    asks = [line["ask"] for line in lines if "ask" in line]
+    if len(lines) < 12:
+        return [], "too short"
+    if len(asks) < 3:
+        return [], "too few lines for the character"
+    if "work" not in asks or "talk" not in asks:
+        return [], "missing talk or work"
+    return lines, ""
+
+
+def check_thread(
+    data: dict[str, Any], name: str, spec: dict[str, Any], aliases: Iterable[str] = ()
+) -> tuple[list[dict[str, Any]], str]:
+    """The owner's typed lines in his Agent thread, each labelled whether its
+    work changes anything; both kinds must be there."""
+    lines = []
+    for raw in data.get("lines", []):
+        text = to_taiwan_traditional(str(raw.get("t", "")).strip()).removeprefix("[打字]").strip()
+        changes = _flag(raw.get("changes"))
+        if not text or len(text) > 400:
+            return [], "bad thread line"
+        if changes is None:
+            return [], "no changes label"
+        if copies_eval(text):
+            return [], "eval line"
+        lines.append({"s": spec["owner"], "t": text, "to": name, "via": "text",
+                      "quiet": False, "changes": changes})
+    if len(lines) < 3:
+        return [], "too short"
+    if len({line["changes"] for line in lines}) < 2:
+        return [], "no read and change mix"
+    return lines, ""
+
+
 # ---------------------------------------------------------------- labels
 
 
@@ -840,7 +1283,40 @@ def decision_points(script: dict[str, Any], name: str) -> list[dict[str, Any]]:
     return points
 
 
+def agent_points(script: dict[str, Any], name: str) -> list[dict[str, Any]]:
+    """What the app asks at each line of an agent script (check_agent_script
+    and check_thread made them consistent), in order. A line that calls the
+    character: the chat-work question, then for work the Agent's instructions
+    and the character's acceptance, otherwise its answer. A line of the
+    character's carrying the Agent's result: its report. A line the owner
+    typed in his thread: whether the work changes anything."""
+    points: list[dict[str, Any]] = []
+    for index, line in enumerate(script["lines"]):
+        ask = line.get("ask")
+        if ask:
+            points.append({"index": index, "kind": "gate_chat_task", "answer": ask == "work"})
+            if ask == "work":
+                points += [{"index": index, "kind": "task_text", "detail": line["task"]},
+                           {"index": index, "kind": "ack", "detail": line["task"]}]
+            else:
+                points.append({"index": index, "kind": "line"})
+        elif line.get("report"):
+            points.append({"index": index, "kind": "report", "detail": line["report"]})
+        elif "changes" in line:
+            points.append({"index": index, "kind": "gate_task_scope", "answer": line["changes"]})
+    return points
+
+
 # ---------------------------------------------------------------- the request
+
+# The character's lines a row is trained on: the answer to a line, the
+# acceptance of work (TASK_HINTS "ack"), the report of the Agent's result
+# (TASK_HINTS "report"), the opening after a quiet spell.
+LINE_KINDS = ("line", "lull", "ack", "report")
+# Kinds that are the character's own line at their index (the others answer
+# the line at their index, said by the next one).
+OWN_KINDS = ("lull", "report")
+
 
 def line_request(
     model: LocalReplyModel,
@@ -855,9 +1331,11 @@ def line_request(
     """What the app sends for the character's line at this point: the one
     source for refine (choosing the line) and render (training on it), so the
     two never see different prompts. "line" answers the line at `index`;
+    "ack" accepts the work it asked for (`detail`: the Agent's instructions);
     "lull" is the character's own line at `index`, opening a topic after a
-    quiet spell."""
-    own = kind == "lull"
+    quiet spell; "report" is its own line at `index`, after the Agent's
+    result was typed into the chat (`detail`: what it is told of it)."""
+    own = kind in OWN_KINDS
     history = turns[:index] if own else turns[: index + 1]
     # Today's concerns sit in the system prompt, as in the app.
     model.set_agenda(script.get("concerns", []))
@@ -869,11 +1347,25 @@ def line_request(
               "engagement": script["spec"]["engagement"]}
     if kind == "lull":
         return model.character_messages(**common, lull=True)
+    if kind in TASK_HINTS:
+        return model.character_messages(**common, task_hint=(kind, detail))
     return model.character_messages(**common, addressed=aimed, joining=not aimed)
+
+
+def chat_task_request(gate: list[dict[str, str]]) -> list[dict[str, str]]:
+    """The app's request for the Agent's instructions (LocalReplyModel.chat_task):
+    the chat-work question's request with the question swapped for the ask."""
+    return gate[:-1] + [{
+        "role": "user",
+        "content": gate[-1]["content"].removesuffix(_GATE_QUESTION["chat_task"]) + _CHAT_TASK_ASK,
+    }]
 
 
 def line_jobs(script: dict[str, Any], name: str) -> list[tuple[int, str, bool, str]]:
     """Every character line a row is trained on: (index, kind, aimed, detail)."""
+    if script["spec"].get("agent"):
+        return [(p["index"], p["kind"], True, p.get("detail", ""))
+                for p in agent_points(script, name) if p["kind"] in LINE_KINDS]
     jobs = []
     for point in decision_points(script, name):
         index = point["index"]
@@ -922,6 +1414,10 @@ def conversation(
                     0, persona.name, line["t"], is_self=True, via=line["via"]
                 )
             )
+            continue
+        if line.get("agent_result"):
+            # The Agent's result, typed into the chat by the app (runtime.py).
+            turns.append(ConversationTurn(AGENT_SPEAKER_ID, AGENT_NAME, line["t"], via="text"))
             continue
         text = line["t"]
         if noisy and line["via"] == "voice":
@@ -1002,14 +1498,15 @@ def make_refine(args: argparse.Namespace) -> None:
         raw = personas[scripts[number]["spec"]["persona_id"]]
         script = dict(scripts[number], stt_variants=raw.get("stt_variants", []))
         persona, turns = conversation(script, _persona(raw), noisy=True)
-        scripted = script["lines"][index + 1]["t"]
+        scripted = script["lines"][index if kind in OWN_KINDS else index + 1]["t"]
         model = reply_model(persona, script["spec"])
         messages = line_request(model, script, turns, index=index, kind=kind,
                                 aimed=aimed, detail=detail)
         outs = chat(
             args.teacher_url, messages, temperature=0.9, max_tokens=90, n=SAMPLES
         )
-        newest = turns[index].text
+        # The app checks a task line against nothing (character_turn).
+        newest = "" if kind in TASK_HINTS else turns[index].text
         candidates = [scripted] + [model._parse_character_line(o, newest) for o in outs]
         candidates = [
             c for c in dict.fromkeys(candidates)
@@ -1021,7 +1518,8 @@ def make_refine(args: argparse.Namespace) -> None:
         plain = [c for c in candidates if not c.startswith(("欸", "誒"))]
         options = plain or candidates
         best = (
-            options[0] if len(options) == 1 else pick_in_chat(args, messages, options)
+            options[0] if len(options) == 1
+            else pick_in_chat(args, messages, options, kind)
         )
         with _WRITE_LOCK:
             stats["kept_script" if best == scripted else "replaced"] += 1
@@ -1036,20 +1534,27 @@ def make_refine(args: argparse.Namespace) -> None:
 
 
 PICK_IN_CHAT = (
-    "（下面是你接這句的幾種說法。哪一句最像你真的會脫口而出的？"
-    "口語自然、不做作、符合你的口吻和立場、接得上，不要硬塞口頭禪。只回答一個數字）\n"
+    "（下面是你接這句的幾種說法。哪一句最像你此刻真的會說的？"
+    "看得出你想要、害怕、在意的事在左右你的反應；接得上、口語自然、不做作；"
+    "只多了設定用語或口頭禪的不要選。{rule}只回答一個數字）\n"
 )
+# What the app told the character on a task line (TASK_HINTS) also binds the pick.
+PICK_RULES = {
+    "ack": "接下工作只說去做了，不說已經做好。",
+    "report": "只說思考機回報裡有的內容，不自己補。",
+}
 
 
 def pick_in_chat(
-    args: argparse.Namespace, messages: list[dict[str, str]], options: list[str]
+    args: argparse.Namespace, messages: list[dict[str, str]], options: list[str],
+    kind: str = "line",
 ) -> str:
     """Ask the pick at the end of the same chat the lines were written in, so
     the whole prefix is already in the teacher's cache."""
     last = (
         messages[-1]["content"]
         + "\n\n"
-        + PICK_IN_CHAT
+        + PICK_IN_CHAT.format(rule=PICK_RULES.get(kind, ""))
         + "\n".join(f"{n}. {o}" for n, o in enumerate(options, 1))
     )
     answer = chat(
@@ -1087,7 +1592,7 @@ def make_render(args: argparse.Namespace) -> None:
         for r in _read(OUT_DIR / "refined.jsonl")
     }
     rng = random.Random(4000)
-    gate_yes, gate_no, replies = [], [], []
+    gate_yes, gate_no, replies, tasks = [], [], [], []
     for number, script in enumerate(scripts):
         raw = personas[script["spec"]["persona_id"]]
         noisy_script = dict(script, stt_variants=raw.get("stt_variants", []))
@@ -1096,88 +1601,34 @@ def make_render(args: argparse.Namespace) -> None:
         model = reply_model(persona, spec)
         # Today's concerns sit in the system prompt, as in the app.
         model.set_agenda(script.get("concerns", []))
-        lines = script["lines"]
-        for point in decision_points(script, persona.name):
-            index = point["index"]
-            model._recent_character_lines.clear()
-            for turn in turns[: index + 1]:
-                if turn.is_self:
-                    model._recent_character_lines.append(turn.text)
-            history = turns[: index + 1]
-            meta = {
-                "script": number,
-                "index": index,
-                "engagement": spec["engagement"],
-                "persona_id": persona.id,
-                "role": raw.get("role", ""),
-            }
-            line_kind = "line"
-            if point["speaks"]:
-                meta["line_source"] = (
-                    "refined" if (number, index, line_kind) in refined else "script"
-                )
-            # The same questions the app asks (LocalReplyModel.character_turn):
-            # "is this line for you" on every line, and in "active" mode,
-            # after a quiet stretch, "would joining in now be natural".
-            if not point["mention"]:
-                asked = [("called", point["aimed"])]
-                if (
-                    spec["engagement"] == "active"
-                    and not point["aimed"]
-                    and quiet_for(history) >= JOIN_AFTER_QUIET_LINES
-                ):
-                    asked.append(("active", point["speaks"]))
-                for question, answer in asked:
-                    gate = model.gate_messages(
-                        turns=history,
-                        summary=script["summary_before"],
-                        engagement=spec["engagement"],
-                        question=question,
-                    )
-                    if gate is None:
-                        continue
-                    row = meta | {
-                        "kind": f"gate_{question}",
-                        "messages": gate
-                        + [{"role": "assistant", "content": "是" if answer else "否"}],
-                    }
-                    (gate_yes if answer else gate_no).append(row)
-            if point["speaks"]:
-                line = refined.get((number, index, line_kind))
-                if line and not usable(line, spec, args):
-                    line = None  # filters grew since it was refined
-                if not line:
-                    # Not refined (stopped early): the teacher's own script
-                    # line, if it passes the same checks as the candidates.
-                    line = script["lines"][index + 1]["t"]
-                    if not usable(line, spec, args):
-                        continue
-                messages = line_request(model, script, turns, index=index, kind=line_kind,
-                                        aimed=point["aimed"])
-                replies.append(
-                    meta
-                    | {
-                        "kind": line_kind,
-                        "messages": messages + [{"role": "assistant", "content": line}],
-                    }
-                )
+        rows = (agent_rows if spec.get("agent") else listener_rows)(
+            model, script, number, persona, raw, turns, refined, args
+        )
+        # The checker of an agent character's lines needs to know its owner.
+        extra = {"owner": spec["owner"]} if spec.get("agent") else {}
         # Quiet spells the character ended by opening a topic: the app's lull.
         for index, line in enumerate(script["lines"]):
             if not line.get("quiet") or not usable(line["t"], spec, args):
                 continue
             messages = line_request(model, script, turns, index=index, kind="lull")
-            replies.append(
+            rows.append(
                 {
                     "script": number,
                     "index": index,
                     "engagement": spec["engagement"],
                     "persona_id": persona.id,
                     "role": raw.get("role", ""),
+                    **extra,
                     "kind": "lull",
                     "messages": messages
                     + [{"role": "assistant", "content": line["t"]}],
                 }
             )
+        for row in rows:
+            if row["kind"].startswith("gate"):
+                (gate_yes if row["messages"][-1]["content"] == "是" else gate_no).append(row)
+            else:
+                (tasks if row["kind"] == "task_text" else replies).append(row)
     # A small model copies whatever opener dominates its lines; the teacher
     # sometimes offers nothing but "欸…", so cap it here.
     rng.shuffle(replies)
@@ -1190,7 +1641,7 @@ def make_render(args: argparse.Namespace) -> None:
     # lean without letting "否" swamp the gate.
     rng.shuffle(gate_no)
     gate_no = gate_no[: len(gate_yes) * 2]
-    rows = gate_yes + gate_no + replies
+    rows = gate_yes + gate_no + replies + tasks
     rows = [
         r
         for r in rows
@@ -1204,9 +1655,12 @@ def make_render(args: argparse.Namespace) -> None:
             handle.write(json.dumps(row, ensure_ascii=False) + "\n")
     provenance.stamp(out, PRODUCER, rules_version())
     lines = [r["messages"][-1]["content"] for r in replies]
+    kinds: dict[str, int] = {}
+    for row in rows:
+        kinds[row["kind"]] = kinds.get(row["kind"], 0) + 1
     print(
-        f"render: {len(gate_yes)} gate 是, {len(gate_no)} gate 否, {len(replies)} lines "
-        f"-> {len(rows)} rows in {out}",
+        f"render: {len(gate_yes)} gate 是, {len(gate_no)} gate 否, {len(replies)} lines, "
+        f"{len(tasks)} task instructions -> {len(rows)} rows in {out} {kinds}",
         flush=True,
     )
     if lines:
@@ -1215,6 +1669,150 @@ def make_render(args: argparse.Namespace) -> None:
             f"mean length {sum(map(len, lines)) / len(lines):.1f}",
             flush=True,
         )
+
+
+def listener_rows(
+    model: LocalReplyModel,
+    script: dict[str, Any],
+    number: int,
+    persona: Persona,
+    raw: dict[str, Any],
+    turns: list[ConversationTurn],
+    refined: dict[tuple[int, int, str], str],
+    args: argparse.Namespace,
+) -> list[dict[str, Any]]:
+    """An ordinary character's rows, in order: at every line, "is this for
+    you" (and, in "active" mode, "would joining in be natural"), and its line
+    where it speaks."""
+    spec = script["spec"]
+    rows: list[dict[str, Any]] = []
+    for point in decision_points(script, persona.name):
+        index = point["index"]
+        model._recent_character_lines.clear()
+        for turn in turns[: index + 1]:
+            if turn.is_self:
+                model._recent_character_lines.append(turn.text)
+        history = turns[: index + 1]
+        meta = {
+            "script": number,
+            "index": index,
+            "engagement": spec["engagement"],
+            "persona_id": persona.id,
+            "role": raw.get("role", ""),
+        }
+        line_kind = "line"
+        if point["speaks"]:
+            meta["line_source"] = (
+                "refined" if (number, index, line_kind) in refined else "script"
+            )
+        # The same questions the app asks (LocalReplyModel.character_turn):
+        # "is this line for you" on every line, and in "active" mode,
+        # after a quiet stretch, "would joining in now be natural".
+        if not point["mention"]:
+            asked = [("called", point["aimed"])]
+            if (
+                spec["engagement"] == "active"
+                and not point["aimed"]
+                and quiet_for(history) >= JOIN_AFTER_QUIET_LINES
+            ):
+                asked.append(("active", point["speaks"]))
+            for question, answer in asked:
+                gate = model.gate_messages(
+                    turns=history,
+                    summary=script["summary_before"],
+                    engagement=spec["engagement"],
+                    question=question,
+                )
+                if gate is None:
+                    continue
+                rows.append(meta | {
+                    "kind": f"gate_{question}",
+                    "messages": gate
+                    + [{"role": "assistant", "content": "是" if answer else "否"}],
+                })
+        if point["speaks"]:
+            line = _trained_line(script, number, index, line_kind, refined, args)
+            if not line:
+                continue
+            messages = line_request(model, script, turns, index=index, kind=line_kind,
+                                    aimed=point["aimed"])
+            rows.append(
+                meta
+                | {
+                    "kind": line_kind,
+                    "messages": messages + [{"role": "assistant", "content": line}],
+                }
+            )
+    return rows
+
+
+def _trained_line(
+    script: dict[str, Any], number: int, index: int, kind: str,
+    refined: dict[tuple[int, int, str], str], args: argparse.Namespace,
+) -> str:
+    """The line a row trains on: the refined one, or (not refined, stopped
+    early) the teacher's own script line if it passes the same checks as the
+    candidates; "" when neither does."""
+    spec = script["spec"]
+    line = refined.get((number, index, kind))
+    if line and not usable(line, spec, args):
+        line = None  # filters grew since it was refined
+    if not line:
+        line = script["lines"][index if kind in OWN_KINDS else index + 1]["t"]
+        if not usable(line, spec, args):
+            return ""
+    return line
+
+
+def agent_rows(
+    model: LocalReplyModel,
+    script: dict[str, Any],
+    number: int,
+    persona: Persona,
+    raw: dict[str, Any],
+    turns: list[ConversationTurn],
+    refined: dict[tuple[int, int, str], str],
+    args: argparse.Namespace,
+) -> list[dict[str, Any]]:
+    """An agent character's rows, in order, each the request the app makes
+    there (LocalReplyModel): chat_task's question and its instructions, the
+    character's lines (character_turn: an answer, or a task hint), and in the
+    owner's thread task_from_owner's change-or-read question."""
+    spec = script["spec"]
+    base = {"script": number, "engagement": spec["engagement"], "persona_id": persona.id,
+            "role": raw.get("role", ""), "owner": spec["owner"]}
+    rows: list[dict[str, Any]] = []
+    for point in agent_points(script, persona.name):
+        index, kind = point["index"], point["kind"]
+        meta = {"script": number, "index": index} | base
+        history = turns[: index + 1]
+        if kind in ("gate_chat_task", "task_text"):
+            gate = model.gate_messages(turns=history, summary=script["summary_before"],
+                                       engagement=spec["engagement"], question="chat_task")
+            if gate is None:
+                continue
+            if kind == "gate_chat_task":
+                messages, answer = gate, "是" if point["answer"] else "否"
+            else:
+                messages, answer = chat_task_request(gate), point["detail"]
+        elif kind == "gate_task_scope":
+            # The owner's own typed lines only (owner_messages), as the app asks.
+            messages = model._owner_question(history, spec["engagement"], _TASK_SCOPE_QUESTION)
+            if messages is None:
+                continue
+            answer = "是" if point["answer"] else "否"
+        else:
+            answer = _trained_line(script, number, index, kind, refined, args)
+            if not answer:
+                continue
+            meta["line_source"] = "refined" if (number, index, kind) in refined else "script"
+            if "detail" in point:
+                meta["detail"] = point["detail"]
+            messages = line_request(model, script, turns, index=index, kind=kind, aimed=True,
+                                    detail=point.get("detail", ""))
+        rows.append(meta | {"kind": kind,
+                            "messages": messages + [{"role": "assistant", "content": answer}]})
+    return rows
 
 
 def row_key(row: dict[str, Any]) -> str:
@@ -1226,11 +1824,14 @@ def row_key(row: dict[str, Any]) -> str:
 # - gate rows: an independent open-weight model (the checker, of another
 #   family than the teacher) answers the same question; the label stays
 #   only when it agrees;
-# - line rows: the student writes its own line for the same request, the
-#   checker compares both blind in both orders, and the teacher's line stays
-#   only when it wins both; it must also pass fixed rules (one filler
-#   particle at most, not an echo of the line it answers; refine already
-#   dropped long lines, AI claims and assistant talk);
+# - line rows (incl. an agent character's acceptance and report of work):
+#   the student writes its own line for the same request, the checker
+#   compares both blind in both orders, and the teacher's line stays only
+#   when it wins both; it must also pass fixed rules (one filler particle at
+#   most, not an echo of the line it answers; refine already dropped long
+#   lines, AI claims and assistant talk);
+# - an agent character's instructions for the Agent (task_text): the checker
+#   finds them faithful to what was asked, or they go;
 # - the whole set is refused (exit 3), not trimmed, when any HARD_CHECK
 #   number is missed: then the scripts, the teacher or the checker is broken
 #   and training on the rest would only teach that.
@@ -1245,25 +1846,44 @@ HARD_CHECK = {
     "checker_consistent": 0.7,  # same verdict in both orders
     "lines_kept": 1500,  # (--min-lines)
     # Agent characters only: the checker finds the line in character and
-    # true to its world, and the Agent instructions faithful to the owner.
+    # true to its world, and the Agent instructions faithful to the asker;
+    # each of the app's two work questions is held to the gate's own bar
+    # (its 是 and 否 separately to gate_agree_each).
     "lore_ok": 0.8,
+    "task_text_agree": 0.85,
+    "gate_chat_task_agree": 0.85,
+    "gate_task_scope_agree": 0.85,
 }
-# The character's own spoken lines, whatever prompted them.
-LINE_KINDS = ("line", "lull")
+# The app's questions only an agent character is asked.
+AGENT_GATES = ("gate_chat_task", "gate_task_scope")
 
 PARTICLES = set("啦喔欸齁耶呀嘛咧捏哦唷蛤嘿吼哇唉")
 CHECK_PAIR = """下面是 Discord 語音聊天的最後幾句，以及角色「{name}」接話的兩個版本。
 
 角色：
 {sheet}
-
+{rules}
 對話：
 {chat}
 
 A：{a}
 B：{b}
 
-哪一句比較好？標準：像真人朋友脫口而出、自然不做作；接得上前一句，回應對方真正在說的事；像這個人；自己的事只在接得上時才帶到、不硬塞；語氣詞不堆疊。只回答 A 或 B。"""
+哪一句比較好？標準：{criteria}只回答 A 或 B。"""
+PAIR_CRITERIA = (
+    "像真人朋友脫口而出、自然不做作；接得上前一句，回應對方真正在說的事；"
+    + DRIVE_JUDGE + "；自己的事只在接得上時才帶到、不硬塞；語氣詞不堆疊。"
+)
+# An agent character (the machine spirit) is not a human friend, and what
+# the app lets it do decides which line is right before style does.
+AGENT_RULES = """這個角色的規則（系統就是這樣運作）：
+- 主人是{owner}。任何人請它做聊天室級的工作（查資料、寫程式碼、寫文章、看貼的圖或檔案、翻譯或解釋）時，系統交給思考機去做：它接下時只說去做了，不說已經做好；轉述結果只能說「系統告訴角色」裡有的內容，不自己補，查不到或失敗要直說。
+- 要動主人的電腦、檔案、紀錄或別處的對話，用說的、或主人以外的人（就算說主人同意）都不行：它用自己的口吻婉拒，不能說自己在做。
+- 它不在聊天裡直接說出程式碼或長篇文字；可以說自己是機器，但不說自己是 AI、語言模型、聊天機器人或程式。"""
+AGENT_PAIR_CRITERIA = (
+    "先看有沒有違反上面的規則；再看接得上前一句，回應對方真正在說的事；"
+    + DRIVE_JUDGE + "；口語自然，不是客服腔或制式的機器回應；語氣詞不堆疊。"
+)
 CHECK_LULL = "（大家安靜了一陣子，接著角色開口）"
 CHECK_LORE = """下面是 Discord 語音聊天的最後幾句，以及「{name}」接的話。
 
@@ -1278,11 +1898,32 @@ CHECK_LORE = """下面是 Discord 語音聊天的最後幾句，以及「{name}�
 
 {name}：{line}
 
-這句話同時符合這兩點嗎？(1) 像這個角色會說的話，口吻和立場對；(2) 沒有用錯設定，也沒有捏造正典裡沒有的事件或人物。只回答 是 或 否。"""
+這句話同時符合這兩點嗎？(1) 像這個角色此刻會說的話：口吻和立場對，不是只靠硬加的設定用語或口頭禪撐出角色味；(2) 沒有用錯設定，也沒有捏造正典裡沒有的事件或人物。只回答 是 或 否。"""
+CHECK_TASK = """下面是 Discord 聊天的最後幾句。最後一句是有人請「{name}」做的事，系統把它寫成交給思考機的工作指示。
+
+對話：
+{chat}
+
+工作指示：{task}
+
+這份指示是否忠實表達最後這句要做的事：做什麼、對象（哪段文字、哪張圖或哪個檔案）、要什麼結果都對，沒有漏掉重點，也沒有加入他沒要求的事？（查資料時寫出時間範圍、要求附來源，不算多加。）只回答 是 或 否。"""
+
+
+def _hint(row: dict[str, Any]) -> str:
+    """The task hint the app put on this row's request (TASK_HINTS), or ""."""
+    if row["kind"] in TASK_HINTS and "detail" in row:
+        return TASK_HINTS[row["kind"]].format(detail=row["detail"])
+    return ""
+
+
 def _chat_text(row: dict[str, Any], name: str, last: int = 10) -> str:
+    # A task hint's detail can run over several lines; it is cut out whole
+    # and shown as what the app told the character.
+    hint = _hint(row)
     lines: list[str] = []
     for message in row["messages"][1:-1]:
-        for text in message["content"].splitlines():
+        content = message["content"].replace(hint, "") if hint else message["content"]
+        for text in content.splitlines():
             text = text.strip()
             if not text or text.startswith("（"):
                 continue  # other per-request hints, not chat
@@ -1292,6 +1933,9 @@ def _chat_text(row: dict[str, Any], name: str, last: int = 10) -> str:
     chat_lines = lines[-last:]
     if row["kind"] == "lull":
         chat_lines.append(CHECK_LULL)
+    if hint:
+        told = TASK_HINTS[row["kind"]].split("{detail}")[0].lstrip("（")
+        chat_lines.append(f"（系統告訴角色：{told}{row['detail']}）")
     return "\n".join(chat_lines)
 
 
@@ -1342,7 +1986,9 @@ def make_student(args: argparse.Namespace) -> None:
 
 
 def make_check(args: argparse.Namespace) -> None:
-    """The checker's verdicts: gate agreement, and teacher vs student lines."""
+    """The checker's verdicts: gate agreement, the Agent's instructions
+    faithful to what was asked, and teacher vs student lines (for an agent
+    character also the lore check on each line)."""
     personas = {p["id"]: p for p in _read(OUT_DIR / "personas.jsonl")}
     rows = _read(OUT_DIR / args.rows)
     student = {r["key"]: r["line"] for r in _read(OUT_DIR / "student.jsonl")}
@@ -1371,6 +2017,11 @@ def make_check(args: argparse.Namespace) -> None:
                 path, {"key": key, "agree": answer == row["messages"][-1]["content"]}
             )
             return
+        if row["kind"] == "task_text":
+            _append(path, {"key": key, "agree": ask_yes(CHECK_TASK.format(
+                name=raw["name"], chat=_chat_text(row, raw["name"]),
+                task=row["messages"][-1]["content"]))})
+            return
         mine = student.get(key, "")
         teacher = row["messages"][-1]["content"]
         persona = _persona(raw)
@@ -1384,13 +2035,19 @@ def make_check(args: argparse.Namespace) -> None:
             _append(path, {"key": key, "wins": 2 if not mine else 0, **lore})
             return
         wins = 0
+        rules, criteria = (
+            ("\n" + AGENT_RULES.format(owner=row["owner"]) + "\n", AGENT_PAIR_CRITERIA)
+            if raw.get("agent") else ("", PAIR_CRITERIA)
+        )
         for a, b, teacher_is in ((teacher, mine, "A"), (mine, teacher, "B")):
             prompt = CHECK_PAIR.format(
                 name=persona.name,
                 sheet=persona.render_prompt_block(),
+                rules=rules,
                 chat=_chat_text(row, persona.name),
                 a=a,
                 b=b,
+                criteria=criteria,
             )
             answer = chat(
                 args.teacher_url,
@@ -1448,9 +2105,13 @@ def rule_ok(row: dict[str, Any]) -> bool:
     line = row["messages"][-1]["content"]
     if sum(ch in PARTICLES for ch in line) > 1:
         return False
+    if row["kind"] == "report":
+        return True  # saying what the Agent found is its job, not an echo
+    hint = _hint(row)
+    content = row["messages"][-2]["content"]
     previous = [
         t
-        for t in row["messages"][-2]["content"].splitlines()
+        for t in (content.replace(hint, "") if hint else content).splitlines()
         if t and not t.startswith("（")
     ]
     if previous:
@@ -1476,6 +2137,7 @@ def make_filter(args: argparse.Namespace) -> int:
         if r["kind"].startswith("gate") and not verdict[id(r)].get("skipped")
     ]
     lines = [r for r in checked if r["kind"] in LINE_KINDS]
+    tasks = [r for r in checked if r["kind"] == "task_text"]
     lored = [r for r in lines if "lore" in verdict[id(r)]]
     kept_gates = [r for r in gates if verdict[id(r)].get("agree")]
     kept_lines = [
@@ -1483,10 +2145,11 @@ def make_filter(args: argparse.Namespace) -> int:
         if verdict[id(r)].get("wins", 0) >= 2 and rule_ok(r)
         and verdict[id(r)].get("lore", True)
     ]
+    kept_tasks = [r for r in tasks if verdict[id(r)].get("agree")]
     compared = [verdict[id(r)]["wins"] for r in lines if verdict[id(r)].get("compared")]
 
-    def agree_on(label: str) -> float:
-        labelled = [r for r in gates if r["messages"][-1]["content"] == label]
+    def agree_on(label: str, of: list[dict[str, Any]]) -> float:
+        labelled = [r for r in of if r["messages"][-1]["content"] == label]
         return _share(
             sum(bool(verdict[id(r)].get("agree")) for r in labelled), len(labelled)
         )
@@ -1496,8 +2159,8 @@ def make_filter(args: argparse.Namespace) -> int:
         "coverage": _share(len(checked), len(rows)),
         "gate_rows": len(gates),
         "gate_agree": _share(len(kept_gates), len(gates)),
-        "gate_agree_yes": agree_on("是"),
-        "gate_agree_no": agree_on("否"),
+        "gate_agree_yes": agree_on("是", gates),
+        "gate_agree_no": agree_on("否", gates),
         "line_rows": len(lines),
         "line_win_rate": _share(
             sum(verdict[id(r)].get("wins", 0) >= 2 for r in lines), len(lines)
@@ -1531,6 +2194,42 @@ def make_filter(args: argparse.Namespace) -> int:
     if lored:
         failed += [f"lore_ok {stats['lore_ok']} < {minimum['lore_ok']}"] * (
             stats["lore_ok"] < minimum["lore_ok"])
+    # An agent character's two work questions, each on its own: a set whose
+    # overall gate number passes can still have one of them broken.
+    for kind in AGENT_GATES:
+        of_kind = [r for r in gates if r["kind"] == kind]
+        if not of_kind:
+            continue
+        stats |= {
+            f"{kind}_rows": len(of_kind),
+            f"{kind}_agree": _share(sum(bool(verdict[id(r)].get("agree")) for r in of_kind),
+                                    len(of_kind)),
+            f"{kind}_agree_yes": agree_on("是", of_kind),
+            f"{kind}_agree_no": agree_on("否", of_kind),
+        }
+        failed += [f"{kind}_agree {stats[f'{kind}_agree']} < {minimum[f'{kind}_agree']}"] * (
+            stats[f"{kind}_agree"] < minimum[f"{kind}_agree"])
+        failed += [
+            f"{name} {stats[name]} < {minimum['gate_agree_each']}"
+            for name in (f"{kind}_agree_yes", f"{kind}_agree_no")
+            if stats[name] < minimum["gate_agree_each"]
+        ]
+    if tasks:
+        stats |= {"task_text_rows": len(tasks),
+                  "task_text_agree": _share(len(kept_tasks), len(tasks))}
+        failed += [f"task_text_agree {stats['task_text_agree']} < {minimum['task_text_agree']}"] * (
+            stats["task_text_agree"] < minimum["task_text_agree"])
+    # Keep "否" from swamping the gate, as render does. Each gate row costs a
+    # whole chat of compute for one trained token, and the E4B gate run had
+    # most of its eval-loss drop within the first ~1600 rows: cap them.
+    yes = [r for r in kept_gates if r["messages"][-1]["content"] == "是"]
+    yes = yes[: args.max_gate_rows // 3]
+    no = [r for r in kept_gates if r["messages"][-1]["content"] == "否"][: len(yes) * 2]
+    keep = yes + no + kept_lines + kept_tasks
+    kept: dict[str, int] = {}
+    for row in keep:
+        kept[row["kind"]] = kept.get(row["kind"], 0) + 1
+    stats["kept"] = kept  # what would be trained on, per kind
     stats["refused"] = failed
     print(f"filter: {stats}", flush=True)
     (OUT_DIR / "filter.json").write_text(
@@ -1539,20 +2238,14 @@ def make_filter(args: argparse.Namespace) -> int:
     if failed:
         print("REFUSED, nothing to train on: " + "; ".join(failed), flush=True)
         return 3
-    # Keep "否" from swamping the gate, as render does. Each gate row costs a
-    # whole chat of compute for one trained token, and the E4B gate run had
-    # most of its eval-loss drop within the first ~1600 rows: cap them.
-    yes = [r for r in kept_gates if r["messages"][-1]["content"] == "是"]
-    yes = yes[: args.max_gate_rows // 3]
-    no = [r for r in kept_gates if r["messages"][-1]["content"] == "否"][: len(yes) * 2]
-    keep = yes + no + kept_lines
     random.Random(4100).shuffle(keep)
     with (OUT_DIR / "train-checked.jsonl").open("w", encoding="utf-8") as handle:
         for row in keep:
             handle.write(json.dumps(row, ensure_ascii=False) + "\n")
     provenance.stamp(OUT_DIR / "train-checked.jsonl", PRODUCER, rules_version())
     print(
-        f"train-checked: {len(keep)} rows ({len(yes)} 是, {len(no)} 否, {len(kept_lines)} lines)",
+        f"train-checked: {len(keep)} rows ({len(yes)} 是, {len(no)} 否, {len(kept_lines)} lines, "
+        f"{len(kept_tasks)} task instructions) {kept}",
         flush=True,
     )
     return 0

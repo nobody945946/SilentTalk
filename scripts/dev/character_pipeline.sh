@@ -48,9 +48,14 @@ export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 HF_DATASETS_OFFLINE=1
 export PYTHONUNBUFFERED=1
 
 # CHARDATA picks the round's folder. FIXED_PERSONA=1: the folder already holds
-# the one persona to train (e.g. the machine spirit, personas.jsonl written by
-# machine_spirit.py pick); calibrate and the persona steps are skipped and the
-# script count per persona scales to ~2000 kept lines instead.
+# the one persona to train (the machine spirit: personas.jsonl written by
+# machine_spirit.py builtin, the app's own card); calibrate (the first round's
+# "is this for you" labels, a question the machine spirit is never asked) and
+# the persona steps are skipped, and the script count scales to ~2000 kept
+# lines instead. Its scripts are the app's Discord design: voice-room chats
+# and the owner's Agent-thread scripts (character_data.agent_script_request),
+# rendered as the chat-work and change-or-read questions, the Agent's
+# instructions and the character's lines; the hard check holds each kind.
 DIR=${CHARDATA:-.runtime/dev/chardata-v3}
 FIXED_PERSONA=${FIXED_PERSONA:-0}
 export CHARDATA_DIR="$REPO/$DIR"
@@ -82,12 +87,18 @@ LLAMA_SERVER=${LLAMA_SERVER:-.runtime/tools/llama.cpp-b11179-src/build-cuda/bin/
 # keeps its cache well inside the free memory). Gemma 4 31B reads prompts
 # slower the more sequences it holds (414 tokens/s with 1, 386 with 2, 112
 # with 8), so the checker gets 2.
-SLOTS=${SLOTS:-12}
 CHECKER_SLOTS=${CHECKER_SLOTS:-2}
-SERVER_SLOTS=$SLOTS
 # Context per slot: the machine spirit's script prompt (agent rules, lore)
-# plus a 3000-token script does not fit in 4096.
-SLOT_CTX=${SLOT_CTX:-4096}
+# plus a 4000-token script does not fit in 4096; 8 slots of 8192 is what its
+# pilots ran with.
+if [ "$FIXED_PERSONA" = 1 ]; then
+    SLOTS=${SLOTS:-8}
+    SLOT_CTX=${SLOT_CTX:-8192}
+else
+    SLOTS=${SLOTS:-12}
+    SLOT_CTX=${SLOT_CTX:-4096}
+fi
+SERVER_SLOTS=$SLOTS
 
 log() { echo "$(date '+%F %T') $*" | tee -a "$LOG"; }
 
@@ -95,7 +106,7 @@ if [ "${1:-}" = "--status" ]; then
     for f in personas scripts refined train student check train-checked; do
         printf '%-14s %s\n' "$f" "$(wc -l 2>/dev/null < "$DIR/$f.jsonl" || echo 0)"
     done
-    [ -f "$V1/filter.json" ] && echo "calibrate (first round's gate rows): $(tr -d '\n ' < "$V1/filter.json")"
+    [ "$FIXED_PERSONA" != 1 ] && [ -f "$V1/filter.json" ] && echo "calibrate (first round's gate rows): $(tr -d '\n ' < "$V1/filter.json")"
     [ -f "$DIR/filter.json" ] && echo "filter: $(tr -d '\n ' < "$DIR/filter.json")"
     echo "done:    $(cd "$STATE" && ls | grep -v '\.' | tr '\n' ' ')"
     blocked=$(cd "$STATE" && ls *.blocked 2>/dev/null | tr '\n' ' ')
@@ -337,7 +348,10 @@ render() { .venv/bin/python scripts/dev/character_data.py render; }
 filter() { .venv/bin/python scripts/dev/character_data.py filter "$@"; }
 
 if [ "$FIXED_PERSONA" = 1 ]; then
-    [ -s "$DIR/personas.jsonl" ] || { log "FIXED_PERSONA needs $DIR/personas.jsonl"; exit 1; }
+    [ -s "$DIR/personas.jsonl" ] || {
+        log "FIXED_PERSONA needs $DIR/personas.jsonl (scripts/dev/machine_spirit.py builtin --chardata $DIR)"
+        exit 1
+    }
     stage pilot_scripts generator scripts --per-persona "$PILOT_SCRIPTS"
 else
     stage calibrate calibrate
@@ -365,8 +379,10 @@ teacher_down
 stage filter filter
 if [ "$FIXED_PERSONA" = 1 ]; then
     # The agent character's adapter trains on these rows together with the
-    # Agent trajectories (EdgeAgent bench/dataset.py) and is judged on its own
-    # eval set (machine_spirit_eval.jsonl): not this round's training stages.
+    # Agent trajectories (EdgeAgent bench/dataset.py), one adapter for both,
+    # and is judged on its own eval sets (chat_task_eval, task_scope_eval,
+    # machine_spirit_eval): not this round's training stages, which would
+    # train a character-only adapter that the joint one replaces.
     log "character data ready: $DIR/train-checked.jsonl"
     exit 0
 fi
