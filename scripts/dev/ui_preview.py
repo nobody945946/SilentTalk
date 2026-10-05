@@ -26,6 +26,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 PROJECT_DIR = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_DIR))
@@ -70,6 +71,11 @@ def main() -> int:
     from silenttalk.settings_store import SettingsStore
     from silenttalk.ui import SilentTalkUI
 
+    # Rendering and screenshot delays must not expire the synthetic user's
+    # held choices. Advance only the story clock by requested pump durations.
+    story_clock = time.monotonic()
+    story_ui.time = SimpleNamespace(monotonic=lambda: story_clock)
+
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     temp = Path(tempfile.mkdtemp(prefix="ui-preview-"))
     sent: list[str] = []
@@ -105,6 +111,8 @@ def main() -> int:
     )
 
     def pump(seconds: float = 0.3) -> None:
+        nonlocal story_clock
+        story_clock += seconds
         end = time.time() + seconds
         while time.time() < end:
             ui.root.update()
@@ -118,9 +126,10 @@ def main() -> int:
         print(f"saved {OUT_DIR / name}.png")
 
     def press(keysym: str) -> None:
+        ui.popup.focus_force()
         ui.story.focus_set()
         pump(0.05)
-        ui.popup.event_generate(f"<KeyPress-{keysym}>", when="now")
+        ui.popup.event_generate(f"<KeyPress-{keysym}>", state=0, when="now")
         pump(0.1)
 
     ui.show()
@@ -247,6 +256,13 @@ def main() -> int:
     shot("14_settings_model")
     ui.settings_panel.show("voice")
     shot("14b_settings_voice")
+    record_fixture = temp / "records"
+    record_fixture.mkdir()
+    ui.settings_panel.set_value("copilot", "record_folder", str(record_fixture))
+    ui.settings_panel.set_value("copilot", "record_transcripts", True)
+    ui.settings_panel._prepare_records()
+    ui.settings_panel.show("records")
+    shot("14c_settings_records")
     ui.settings_panel._changed(
         next(s for s in all_settings() if s.key == "character_engagement"), "active"
     )
@@ -300,7 +316,11 @@ def main() -> int:
     if previews != [("欸我的，下波我先進", "zh-TW-YunJheNeural")]:
         problems.append(f"voice preview should say 凱哥's first sample line in his voice, got {previews}")
     saved = json.loads((temp / "settings.json").read_text(encoding="utf-8"))
-    if saved != {"copilot": {"character_engagement": "active"}}:
+    if saved != {"copilot": {
+        "character_engagement": "active",
+        "record_folder": str(record_fixture),
+        "record_transcripts": True,
+    }}:
         problems.append(f"settings page should save only what changed, got {saved}")
     if not applied_settings:
         problems.append("settings page should apply live changes")
