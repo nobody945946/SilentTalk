@@ -56,6 +56,9 @@ def main() -> int:
     args = parser.parse_args()
 
     project_dir = Path(__file__).resolve().parent
+    from silenttalk.windows_desktop import attach_interactive_desktop
+
+    attach_interactive_desktop()
     configure_logging(project_dir)
     try:
         settings = load_settings(project_dir)

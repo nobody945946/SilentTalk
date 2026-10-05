@@ -39,6 +39,7 @@ from silenttalk.widgets import (
     hint_row,
     wrap_to_width,
 )
+from silenttalk.windows_desktop import attach_interactive_desktop
 
 # Three places, like a phone's tab bar: talking, who you are, and settings.
 # Everything else is a layer inside one of them. (key, glyph, label); glyphs
@@ -152,6 +153,7 @@ class SilentTalkUI:
         # The chat view to return to from another page, character included.
         self._chat_view = self._chat_mode
 
+        attach_interactive_desktop()
         _enable_crisp_text()
         self.root = tk.Tk()
         self.root.withdraw()
