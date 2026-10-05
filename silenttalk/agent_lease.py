@@ -144,9 +144,9 @@ def acquire_character(project_dir: Path, owner_pid: int) -> dict[str, object]:
                 "model": settings.llm_model,
                 "lora": settings.character_lora,
                 "port": settings.llama_port,
+                # The character's part of EdgeAgent's shared window; where
+                # the model runs (GPU, CPU) is EdgeAgent's to decide.
                 "context_size": settings.llm_context_size,
-                "gpu_layers": settings.llm_gpu_layers,
-                "low_vram": settings.llm_low_vram,
             },
         },
         timeout=360,

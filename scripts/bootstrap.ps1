@@ -152,7 +152,7 @@ function Install-SilentTalk {
         Write-Host '[OK] Deployment already verified. Starting SilentTalk.'
         return
     }
-    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer -CoreDir $CoreRoot -SetupOnly -CharacterAssets
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer -CoreDir $CoreRoot -SetupOnly
     if ($LASTEXITCODE -ne 0) { throw 'EdgeAgent installation failed.' }
     # Import deployment helpers only; the application never imports the Agent package.
     . $installer -Library

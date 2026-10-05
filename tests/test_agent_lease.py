@@ -52,8 +52,6 @@ def test_silenttalk_sends_character_configuration_through_http_api(
                     "lora": "character.gguf",
                     "port": 18088,
                     "context_size": 32768,
-                    "gpu_layers": 99,
-                    "low_vram": True,
                 },
             },
             360,
