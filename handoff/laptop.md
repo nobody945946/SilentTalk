@@ -375,16 +375,16 @@ git -C <報告資料夾> add handoff/reports/laptop.md; git -C <報告資料夾>
 
 # 第 3 回合（需要使用者）
 
-先做不需要使用者的 R3.1–R3.2：Discord 實測的數字表、測試資料夾。R3.3 才請使用者一起做 Discord 實測。
+先做不需要使用者的 R3.1–R3.2：Discord 實測的數字表、設定頁的邀請連結、測試資料夾。R3.3 才請使用者一起做 Discord 實測。
 
 ## R3.0 開始條件和這一回合的規則
 
 **開始條件**：報告裡第 2 回合的最後一段寫「停在：全部做完」，而且「10_修正」沒有「沒修好」。不符合就不開始，跟使用者說一句：「第 2 回合還有沒完成或沒修好的，等開發機處理後再做第 3 回合。」然後結束。
 
 **規則**（第 2 回合的 0.2「怎麼執行指令」、0.3「計畫外的狀況」照樣適用；0.1 改成下面這樣）：
-1. 只做 R3.1 寫的功能，不做別的。修改放在負責那件事的地方（`AGENTS.md` 規則 8）。
+1. 只做 R3.1 和 R3.1b 寫的功能，不做別的。修改放在負責那件事的地方（`AGENTS.md` 規則 8）。
 2. 新功能要附新測試。既有測試不刪、不加 skip、不改預期值、不放寬。
-3. 0.1 的第 3–7 條和第 10 條照樣適用。第 3 條在這一回合放寬成：可以讀 R3.1 指名的檔案。
+3. 0.1 的第 3–7 條和第 10 條照樣適用。第 3 條在這一回合放寬成：可以讀 R3.1、R3.1b 指名的檔案。
 4. 0.1 第 8 條在這一回合改成：只在 R3.3 照步驟啟動 SilentTalk、連 Discord。實測只用測試 guild `729722190857240717`（語音頻道 `729722190857240721`）和測試資料夾 `C:\Users\A8fm0\EdgeAgentTest`。
 5. **設定一律由使用者在 app 的設定頁自己按**：你不讀也不改 `settings.json`、`.env`、`personas.json`。Agent 的批准也一律由使用者自己按。
 6. 功能做完：先跑那個 repo 的完整測試（步驟 4 的指令），`FAILED`／`ERROR` 的行只能比第 2 回合最後一次少，不能多出新的。通過就提交並推上去，做法和步驟 10 第 6 點一樣，包括 push 被拒絕時怎麼做。commit 訊息用英文寫一句。
@@ -414,6 +414,26 @@ git -C <報告資料夾> add handoff/reports/laptop.md; git -C <報告資料夾>
 - 用 `--log` 指向它，跑這個腳本。
 - 檢查輸出有正確的次數和中位數，而且**不含**「秘密測試句」。
 
+## R3.1b 設定頁的邀請連結（SilentTalk 設定，`silenttalk/settings_ui.py`）
+
+目的：使用者到新的 Discord 伺服器時，要請管理員把 bot 加進去。給管理員的連結必須已經勾好 bot 需要的所有權限，管理員按一次授權就好。
+
+開發機已經做好、你**不要改**的部分：
+- 權限清單只在 `silenttalk/discord_voice.py` 的 `BOT_PERMISSIONS`；
+- 連結由同一個檔案的 `invite_url()` 產生；
+- bot 登入 Discord 後，`AppController.invite_link` 就是這條連結；還沒登入時是空字串。
+
+不要自己組網址，也不要在別處再列一次權限。
+
+要做的：
+- 在設定頁的 Discord 那一頁加一塊「邀請連結」：顯示連結文字（唯讀、可選取），旁邊一個「複製」按鈕，按下複製到剪貼簿。
+  - 還沒登入（`invite_link` 是空字串）時，顯示「連上 Discord 後才會出現」，不要顯示按鈕。
+  - 說明文字寫一行：「把連結交給伺服器管理員開啟。已經在伺服器裡的 bot 再開一次，會補上新的權限。」
+- 用 `settings_ui.py` 既有的 `_custom_slots` 做法放進 Discord 頁。`controller.invite_link` 從 `silenttalk/ui.py` 傳進 `SettingsPanel`，例如傳一個回傳字串的函式，每次顯示 Discord 頁時再讀一次。
+- README「首次 Discord 授權」第 2 點加一句：「app 的設定 → Discord → 邀請連結 可以直接複製這條連結。」
+
+測試：把「讀連結的函式回傳空字串時顯示提示、回傳連結時顯示連結」寫成不碰 Tk 的小函式來測。Tk 畫面本身在 R3.3 請使用者看。
+
 ## R3.2 準備測試資料夾（不需要使用者）
 
 ```powershell
@@ -433,7 +453,7 @@ $d = "C:\Users\A8fm0\EdgeAgentTest"; New-Item -ItemType Directory -Force $d | Ou
 
 1. 「請到 Discord Developer Portal → 你的 bot → Bot → Privileged Gateway Intents，確認 **Message Content Intent** 是開的。」沒開的話，開了「讀寫文字聊天」的 bot 會連不上。
 2. 「請確認 Discord 的隱私設定允許這個測試伺服器的成員私訊你。」批准和結果都是用私訊送的。
-2b. 「請在測試伺服器挑一個文字頻道給這次測試用，並確認 bot 在那個頻道有『建立公開討論串』『在討論串中傳送訊息』『新增反應』『讀取訊息歷史』權限（伺服器設定 → 角色，或頻道的權限設定）。」記下他挑的是不是新開的頻道，**不要記頻道名稱**。
+2b. 「請在測試伺服器挑一個文字頻道給這次測試用。」**不要記頻道名稱**。
 3. 打開 EdgeAgent 的網頁（沒在跑會自己啟動）：
    ```powershell
    C:\Users\A8fm0\EdgeAgent\.venv\Scripts\python.exe -m edge_agent.cli
@@ -447,6 +467,9 @@ $d = "C:\Users\A8fm0\EdgeAgentTest"; New-Item -ItemType Directory -Force $d | Ou
    ```powershell
    powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Users\A8fm0\Downloads\SilentTalk\scripts\restart_silenttalk.ps1 -ProjectDir C:\Users\A8fm0\Downloads\SilentTalk -Pythonw C:\Users\A8fm0\Downloads\SilentTalk\.venv\Scripts\pythonw.exe; "exit=$LASTEXITCODE"
    ```
+4b. 請他：「打開 SilentTalk 的設定 → Discord，看有沒有『邀請連結』。有的話按『複製』，貼到瀏覽器打開，選測試伺服器，按授權。」這會把 bot 的權限補成新的清單（討論串、表情）。
+   - 他不是那個伺服器的管理員：請他把連結傳給管理員開，等管理員說好了再繼續。
+   - 頻道自己的權限設定可能還是擋著。如果 5b 開不了討論串，SilentTalk 會在狀態列寫缺哪個權限；照那句話請他在那個頻道的權限裡放行 bot，再試一次。
 5. 「請進語音頻道，在頻道的聊天室**打字**：『（角色名），幫我看一下測試資料夾裡有哪些檔案』。」
    - 預期：他那則訊息先出現 ⚙️，做完換成 ✅；角色用說的接令，做完用說的講成功或失敗，並請他看私訊；檔案清單在私訊裡。
    - 問他：「你那則訊息的表情有沒有從 ⚙️ 變成 ✅？頻道裡有沒有出現檔名或指令？私訊有沒有收到檔案清單？」只記「有／沒有」，不要抄內容。
@@ -489,10 +512,11 @@ $d = "C:\Users\A8fm0\EdgeAgentTest"; New-Item -ItemType Directory -Force $d | Ou
 ## 第 3 回合 <今天日期 YYYY-MM-DD>（<Codex 或 Antigravity，和模型名稱>）
 
 - R3.1_數字表：<做完／沒做完>；新測試 <passed 那一行>；SilentTalk 完整測試 <passed 那一行>，exit <n>；commit <雜湊>
+- R3.1b_邀請連結：<做完／沒做完>；新測試 <passed 那一行>；SilentTalk 完整測試 <passed 那一行>，exit <n>；commit <雜湊>
 - R3.2_測試資料夾：<印出的檔名>
 - R3.3_1 Intent：<原本就開／剛打開／使用者不確定>
 - R3.3_2 私訊設定：<允許／剛改成允許>
-- R3.3_2b 文字頻道權限：<四個都有／剛補上：哪幾個／使用者不確定>
+- R3.3_4b 邀請連結：設定頁有連結 <有／沒有>；複製後授權 <成功／使用者不是管理員，已交給管理員／失敗：抄錯誤訊息>
 - R3.3_5 語音頻道聊天室列出檔案：表情 ⚙️ 變 ✅ <是／否>；頻道只說成功或失敗 <是／否>；私訊收到清單 <有／沒有>；頻道出現檔名或指令 <有／沒有>
 - R3.3_5b 文字頻道 @：開出討論串 <有／沒有>；表情 ⚙️ 變 ✅ <是／否>；串裡多出接令或完成的訊息 <有／沒有>；串裡不 @ 的閒聊有回 <有／沒有>；原頻道被洗版 <有／沒有>
 - R3.3_6 刪 .tmp（在討論串）：批准在私訊 <是／否>；附「這個指令在做什麼」<有／沒有>；串或頻道有按鈕 <有／沒有>；拒絕後 <5 個都在／少了 N 個>，表情 <✅／❌>；准許後 <只少了兩個 .tmp／其他：抄檔名>
