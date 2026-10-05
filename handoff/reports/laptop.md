@@ -399,6 +399,9 @@ SilentTalk 0a7371e／82b4402、EdgeAgent eaa54fc 均已 push copilot-story-mode�
 
 使用者決定保留暫存；日常 EdgeAgent 不開 VS Code、Discord 保留，擔心 Edge 關窗後背景常駐。最終拍板：「等等，原生SSD沒有加密必要，直接弄個目錄存起來就好，我的拍板，你們服從」。其後指出「我懷疑你卡死，重複做同樣測試」；已停止預覽重跑，承認執行節奏失當，收尾提交與交接。沒有真人測試成績。
 
+使用者再指出拖延一小時影響睡眠，要求趕快收尾、流程 Skill 化，並要求不要做成疤痕 patch。先增補決策自律 Skill 的候選已完整撤回；原 Skill 恢復，唯一新 owner 是本機 C:\Users\A8fm0\.codex\skills\bounded-validation-delivery\SKILL.md。內容只管驗收、證據支持的重試與收尾：通過且來源未變不重跑；同類失敗兩次無新證據停止路徑；附帶診斷五分鐘重新評估；催收尾停止可選工作；必要驗收失敗仍誠實未完成。不新增 hook、台帳或平行審查。Skill 在本機，沒有冒稱已 push 到 repo。
+官方 quick_validate.py 分別在兩個既有 Python 環境都因缺 PyYAML 無法執行，未安裝依賴或再嘗試第三環境。已用標準函式庫檢查此單純 frontmatter 的名稱、欄位結構、長度與未完成 placeholder，並確認舊 Skill 無新增段落；這不是官方 validator 通過，也不是行為保證。四個情境逐項覆核：已通過直接交付、附帶反覆失敗停止、必要 build 失敗保留未完成、催收尾停止可選工作。
+
 ## 暫存處置（使用者已決定保留）
 
 使用者已撤回清理需求，測試／預覽暫存保留；不再請使用者執行刪除。前次 automatic approval review 的拒絕理由為 blocked by policy，整段刪除未執行，也未繞過。後續優先 RAM，暫存檔與開機 RAM 負担分開處理。
