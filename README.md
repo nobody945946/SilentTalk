@@ -30,7 +30,7 @@ SilentTalk 是 Discord 語音角色與回覆建議玩具。下載後啟動同一
 ### 首次 Discord 授權
 
 1. 在 Discord Developer Portal 建立 Application 與 Bot。
-2. 邀請 Bot 到要使用的 Server，授予 View Channel、Connect、Speak、Send Messages（所在語音頻道的聊天室）；要在文字頻道開討論串，再加 Create Public Threads、Send Messages in Threads、Add Reactions、Read Message History。
+2. 把 Bot 的邀請連結交給要使用的 Server 的管理員，由他開啟並選擇 Server：`https://discord.com/oauth2/authorize?client_id=<Application ID>&scope=bot&permissions=309240859712`。連結已勾好 Bot 用到的 8 個權限：View Channel、Connect、Speak、Send Messages、Read Message History、Add Reactions、Create Public Threads、Send Messages in Threads。權限清單只寫在 `silenttalk/discord_voice.py` 的 `BOT_PERMISSIONS`，連結由同檔的 `invite_url()` 產生；Bot 登入後 `AppController.invite_link` 就是這條連結。
 3. 取得 Bot Token，並在 Discord Developer Mode 複製自己的 User ID。
 4. 初次啟動時，在授權介面輸入這兩項資料。
 
@@ -38,7 +38,7 @@ SilentTalk 是 Discord 語音角色與回覆建議玩具。下載後啟動同一
 
 預設只使用語音。要啟用文字聊天，需在設定開啟文字聊天，於 Developer Portal 開啟 Message Content Intent，並授予發送訊息權限。Bot 讀寫所在語音頻道的內建聊天室；角色模式下 Owner 在任何文字頻道 @ 它，它就從那則訊息開一個討論串，之後的對話都在串裡（不用再 @），不洗版原頻道。只有 Owner 能開串；串裡誰都能和角色聊。其他文字頻道的訊息不讀。每個討論串是獨立的對話：角色只在那個串裡回答、也只在那個串裡記得說過的話。
 
-既有 Bot 使用 Agent 派工前需重新邀請一次，補上 Send Messages。使用 [Discord 邀請頁](https://discord.com/developers/applications) 中該 Application 的 OAuth2 URL Generator，選 bot 與上述四個權限。批准按鈕不需要 Message Content Intent；只有讀取一般聊天文字時才需要。
+已經在 Server 裡的 Bot，權限清單變多時（例如討論串和表情），請管理員再開一次邀請連結，Discord 會更新它的權限。頻道自己的權限設定仍可能擋住（例如某個頻道不准開討論串），要在那個頻道的權限裡放行 Bot。Message Content Intent 不在邀請連結裡，由 Bot 擁有者在 [Developer Portal](https://discord.com/developers/applications) 開啟；批准按鈕不需要它，只有讀取打字內容時才需要。
 
 ## 日常使用
 
@@ -103,7 +103,7 @@ LoRA 是個人資產。產品只提供載入框架，不附帶、下載或自動
 ## 常見問題與驗收
 
 - **下載中斷／元件損壞：**重跑同一啟動器。只部署用 `啟動 SilentTalk.cmd --setup-only`；完整驗收用 `--check`，會實際載入 STT、租借角色並歸還，不連 Discord。正在租借時先退出會話。
-- **Bot 沒加入：**確認 Owner ID、Bot 已邀請到 Server，以及 View Channel／Connect／Speak／Send Messages 權限。
+- **Bot 沒加入或缺權限：**確認 Owner ID，並請 Server 管理員用邀請連結再邀請一次（會補上缺的權限）。
 - **F8 無反應：**確認已啟動，並檢查其他程式是否占用快捷鍵。
 - **播放中斷線：**已開始的句子不自動重播以避免回音；程式恢復連線後讓下一句接續。
 - **換模型失敗：**確認沒有 Agent 工作或角色租借，且模型已下載完整、格式與引擎相容。

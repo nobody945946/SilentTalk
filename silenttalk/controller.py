@@ -292,6 +292,12 @@ class AppController:
     def copilot_enabled(self) -> bool:
         return self._copilot is not None
 
+    @property
+    def invite_link(self) -> str:
+        """The bot's invite link with every permission it needs, for a
+        server admin to open; "" until the bot has logged in."""
+        return self._discord.invite_link
+
     def stop_playback(self) -> None:
         self._schedule(self._queue.cancel_all())
 

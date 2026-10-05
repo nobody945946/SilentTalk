@@ -31,6 +31,22 @@ TextCallback = Callable[..., None]
 MAX_TEXT_CHARS = 2000
 # On the owner's message that handed over work (the user chose the gear).
 TASK_MARKS = {"accepted": "\u2699\ufe0f", "done": "\u2705", "failed": "\u274c"}
+# Everything the bot does in a server, asked for in its invite link so a
+# server admin grants it in one click: join and speak in voice, read and type
+# in the voice channel's chat, open threads and talk in them, mark the owner's
+# orders. The Message Content Intent is not a server permission: the bot's
+# owner turns it on in the Developer Portal.
+BOT_PERMISSIONS = discord.Permissions(
+    view_channel=True, connect=True, speak=True, send_messages=True,
+    read_message_history=True, add_reactions=True,
+    create_public_threads=True, send_messages_in_threads=True,
+)
+
+
+def invite_url(application_id: int) -> str:
+    """The link a server admin opens to add the bot (or, opened again, to
+    give a bot already there what BOT_PERMISSIONS has gained since)."""
+    return discord.utils.oauth_url(application_id, permissions=BOT_PERMISSIONS, scopes=("bot",))
 
 
 class AgentApprovalView(discord.ui.View):
@@ -107,6 +123,8 @@ class DiscordVoiceClient(discord.Client):
         # The threads opened this session.
         self._threads_open = threads_open or (lambda: True)
         self._threads: set[int] = set()
+        # This bot's invite link, known once it has logged in.
+        self.invite_link = ""
         self._event_loop: asyncio.AbstractEventLoop | None = None
         self._voice_lock = asyncio.Lock()
         self._voice_monitor_task: asyncio.Task[None] | None = None
@@ -305,6 +323,9 @@ class DiscordVoiceClient(discord.Client):
         _LOG.info(
             "discord_ready bot_user_id=%s", self.user.id if self.user else "unknown"
         )
+        application_id = self.application_id or (self.user.id if self.user else None)
+        if application_id:
+            self.invite_link = invite_url(application_id)
         if self._voice_monitor_task is None or self._voice_monitor_task.done():
             self._voice_monitor_task = asyncio.create_task(
                 self._voice_monitor(), name="voice-self-heal"

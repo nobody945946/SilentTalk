@@ -7,7 +7,12 @@ from types import SimpleNamespace
 import discord
 
 from silenttalk.config import DiscordConfig
-from silenttalk.discord_voice import TASK_MARKS, DiscordVoiceClient
+from silenttalk.discord_voice import (
+    BOT_PERMISSIONS,
+    TASK_MARKS,
+    DiscordVoiceClient,
+    invite_url,
+)
 
 
 @dataclass
@@ -232,3 +237,14 @@ def test_the_gear_marks_accepted_work_and_turns_into_a_check_or_a_cross() -> Non
     asyncio.run(client.mark_task(900, 43, "failed"))
     assert partials[43].ops[1] == ("add", TASK_MARKS["failed"])
     assert TASK_MARKS == {"accepted": "⚙️", "done": "✅", "failed": "❌"}
+
+
+def test_the_invite_link_asks_for_every_permission_the_bot_uses_and_no_more() -> None:
+    granted = {name for name, on in BOT_PERMISSIONS if on}  # read_messages = View Channel
+    assert granted == {
+        "read_messages", "connect", "speak", "send_messages", "read_message_history",
+        "add_reactions", "create_public_threads", "send_messages_in_threads",
+    }
+    link = invite_url(1552128066719981608)
+    assert link == ("https://discord.com/oauth2/authorize?client_id=1552128066719981608"
+                    "&scope=bot&permissions=309240859712")
