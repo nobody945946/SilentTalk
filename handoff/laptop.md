@@ -405,8 +405,9 @@ git -C <報告資料夾> add handoff/reports/laptop.md; git -C <報告資料夾>
 | Agent 工作 | `agent_task_finished` 的 `elapsed_ms`（用 `ms()`）；`agent_task_dispatch_failed` 幾次 |
 | 批准 | `agent_approval_decided` 的 `roundtrip_ms`（用 `ms()`）；`approved` 每種值各幾次；`agent_approval_failed`、`agent_approval_timeout_failed` 各幾次 |
 | 私訊結果 | `agent_result_private` 依 `kind` 分，`delivered=True`／`False` 各幾次；`agent_private_failed`、`private_send_failed` 各幾次 |
+| 討論串和表情 | `thread_opened`、`thread_open_failed` 各幾次；`task_marked` 依 `state`（accepted／done／failed）各幾次；`task_mark_failed` 幾次 |
 
-除了事件名稱、key=value 裡的數字和 True／False、`kind`、`approved` 的值，**什麼文字都不要印**。
+除了事件名稱、key=value 裡的數字和 True／False、`kind`、`approved`、`state` 的值，**什麼文字都不要印**。
 
 測試（新檔 `tests/test_log_summary.py`）：
 - 寫一個假的 log 到 pytest 的 `tmp_path`：上面每種事件各幾行，外加一行事件文字裡帶一句假對話（例如 `copilot_turn_final text=秘密測試句`）。
@@ -425,13 +426,14 @@ $d = "C:\Users\A8fm0\EdgeAgentTest"; New-Item -ItemType Directory -Force $d | Ou
 
 先問使用者這一句，等他回答：
 
-「第 3 回合要做 Discord 實測，大約需要你 30 分鐘：在 Discord 確認兩個設定、在 EdgeAgent 和 SilentTalk 的設定頁按幾個選項、進語音頻道打字下令、在私訊按批准。現在可以嗎？」
+「第 3 回合要做 Discord 實測，大約需要你 30 分鐘：在 Discord 確認幾個設定、在 EdgeAgent 和 SilentTalk 的設定頁按幾個選項、在語音頻道的聊天室和一個文字頻道打字下令、在私訊按批准。現在可以嗎？」
 
 - 不行：照 0.3 停下，報告寫「停在步驟 R3.3（使用者現在不方便）」並推上去。
 - 可以：照下面的順序做。**每則訊息只請他做一個動作**，等他說好了再做下一個。
 
 1. 「請到 Discord Developer Portal → 你的 bot → Bot → Privileged Gateway Intents，確認 **Message Content Intent** 是開的。」沒開的話，開了「讀寫文字聊天」的 bot 會連不上。
 2. 「請確認 Discord 的隱私設定允許這個測試伺服器的成員私訊你。」批准和結果都是用私訊送的。
+2b. 「請在測試伺服器挑一個文字頻道給這次測試用，並確認 bot 在那個頻道有『建立公開討論串』『在討論串中傳送訊息』『新增反應』『讀取訊息歷史』權限（伺服器設定 → 角色，或頻道的權限設定）。」記下他挑的是不是新開的頻道，**不要記頻道名稱**。
 3. 打開 EdgeAgent 的網頁（沒在跑會自己啟動）：
    ```powershell
    C:\Users\A8fm0\EdgeAgent\.venv\Scripts\python.exe -m edge_agent.cli
@@ -446,14 +448,19 @@ $d = "C:\Users\A8fm0\EdgeAgentTest"; New-Item -ItemType Directory -Force $d | Ou
    powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Users\A8fm0\Downloads\SilentTalk\scripts\restart_silenttalk.ps1 -ProjectDir C:\Users\A8fm0\Downloads\SilentTalk -Pythonw C:\Users\A8fm0\Downloads\SilentTalk\.venv\Scripts\pythonw.exe; "exit=$LASTEXITCODE"
    ```
 5. 「請進語音頻道，在頻道的聊天室**打字**：『（角色名），幫我看一下測試資料夾裡有哪些檔案』。」
-   - 預期：角色接令；做完後在頻道只說成功或失敗，並請他看私訊；檔案清單在私訊裡。
-   - 問他：「頻道裡有沒有出現檔名或指令？私訊有沒有收到檔案清單？」只記「有／沒有」，不要抄內容。
-6. 「請打字：『把裡面的 .tmp 檔刪掉』。」
-   - 預期：批准出現在**私訊**，按鈕前面有一段「這個指令在做什麼」的白話說明；頻道裡沒有按鈕，也沒有檔名或指令。
+   - 預期：他那則訊息先出現 ⚙️，做完換成 ✅；角色用說的接令，做完用說的講成功或失敗，並請他看私訊；檔案清單在私訊裡。
+   - 問他：「你那則訊息的表情有沒有從 ⚙️ 變成 ✅？頻道裡有沒有出現檔名或指令？私訊有沒有收到檔案清單？」只記「有／沒有」，不要抄內容。
+5b. 「請到你挑的文字頻道，打字：『@（bot）幫我看一下測試資料夾裡有哪些檔案』。」
+   - 預期：bot 從他那則訊息開一個討論串；那則訊息先出現 ⚙️，做完換成 ✅；討論串裡**沒有**「接令」「完成了」這類訊息；檔案清單在私訊裡。
+   - 「請在那個討論串裡，不用 @，打一句閒聊，例如『你今天心情如何』。」預期：角色在討論串裡回答，原頻道沒有新訊息。
+   - 問他：「有沒有開出討論串？表情有沒有從 ⚙️ 變成 ✅？討論串裡有沒有多出接令或完成的訊息？閒聊有沒有在串裡回？原頻道有沒有被洗版？」只記「有／沒有」。
+6. 「請在剛剛的討論串裡打字：『把裡面的 .tmp 檔刪掉』。」
+   - 預期：他那則訊息出現 ⚙️；批准出現在**私訊**，按鈕前面有一段「這個指令在做什麼」的白話說明；討論串和頻道裡沒有按鈕，也沒有檔名或指令。
    - 請他先按「拒絕」。用下面的指令確認 5 個檔案都還在：
      ```powershell
      Get-ChildItem -LiteralPath C:\Users\A8fm0\EdgeAgentTest | Select-Object -ExpandProperty Name
      ```
+   - 拒絕之後問他：「那則訊息最後是 ✅ 還是 ❌？」照實記。（拒絕的是一個操作，Agent 可能照樣把工作做完並回報沒刪成，所以兩種都可能。）
    - 請他再打一次同一句，這次按「准許」。再跑一次上面的指令，確認只少了兩個 `.tmp`。
 7. （他願意才做）「請用**說的**講一次：『（角色名），幫我看一下測試資料夾』。」預期：不派工，角色提醒他要打字下令。
 8. （他有第二個帳號，或朋友在場才做）
@@ -485,8 +492,10 @@ $d = "C:\Users\A8fm0\EdgeAgentTest"; New-Item -ItemType Directory -Force $d | Ou
 - R3.2_測試資料夾：<印出的檔名>
 - R3.3_1 Intent：<原本就開／剛打開／使用者不確定>
 - R3.3_2 私訊設定：<允許／剛改成允許>
-- R3.3_5 列出檔案：頻道只說成功或失敗 <是／否>；私訊收到清單 <有／沒有>；頻道出現檔名或指令 <有／沒有>
-- R3.3_6 刪 .tmp：批准在私訊 <是／否>；附「這個指令在做什麼」<有／沒有>；頻道有按鈕 <有／沒有>；拒絕後 <5 個都在／少了 N 個>；准許後 <只少了兩個 .tmp／其他：抄檔名>
+- R3.3_2b 文字頻道權限：<四個都有／剛補上：哪幾個／使用者不確定>
+- R3.3_5 語音頻道聊天室列出檔案：表情 ⚙️ 變 ✅ <是／否>；頻道只說成功或失敗 <是／否>；私訊收到清單 <有／沒有>；頻道出現檔名或指令 <有／沒有>
+- R3.3_5b 文字頻道 @：開出討論串 <有／沒有>；表情 ⚙️ 變 ✅ <是／否>；串裡多出接令或完成的訊息 <有／沒有>；串裡不 @ 的閒聊有回 <有／沒有>；原頻道被洗版 <有／沒有>
+- R3.3_6 刪 .tmp（在討論串）：批准在私訊 <是／否>；附「這個指令在做什麼」<有／沒有>；串或頻道有按鈕 <有／沒有>；拒絕後 <5 個都在／少了 N 個>，表情 <✅／❌>；准許後 <只少了兩個 .tmp／其他：抄檔名>
 - R3.3_7 用說的下令：<沒派工／派工了／沒測>
 - R3.3_8 第二個帳號：下令 <被擋／沒擋／沒測>；閒聊 <有回／沒回／沒測>
 - R3.3_9 數字表：<log_summary 的輸出原樣>
