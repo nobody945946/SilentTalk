@@ -40,7 +40,7 @@ auto_popup = true
 # Public reply model leased from EdgeAgent. Other supported GGUF models can
 # be installed in EdgeAgent's models directory. Adapters are optional and
 # must match the exact base model used for training.
-llm_model = "gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf"
+llm_model = "Qwen3.5-4B-Q4_K_M.gguf"
 # Layers offloaded to the GPU; 0 = CPU only (about 3x slower, still usable).
 llm_gpu_layers = 99
 # 8-bit KV cache + flash attention: 1.7B uses ~1.4 GB instead of ~1.6 GB (4B:
@@ -59,7 +59,7 @@ character_lora_uses = "called,active,line"
 character_ai_honesty = "in_character"
 # The owner's typed lines (needs [discord] text_chat) can hand work to the
 # EdgeAgent Agent; requires Discord access/workspace in EdgeAgent.
-character_agent = false
+character_agent = true
 # Agent results go to the owner's DMs; true = the character says them aloud.
 agent_report_public = false
 # Transcripts (text only) kept on the user's encrypted external drive: the

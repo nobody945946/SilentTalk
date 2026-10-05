@@ -167,11 +167,14 @@ def test_silenttalk_ui_invite_link_card() -> None:
         pytest.skip("No graphical display available for Tk")
 
     link_state = ""
-    ui = SilentTalkUI(
-        "F8", "F9", lambda _: None, lambda: None, lambda: None,
-        config_defaults=config_defaults(Path(".")),
-        invite_link=lambda: link_state,
-    )
+    try:
+        ui = SilentTalkUI(
+            "F8", "F9", lambda _: None, lambda: None, lambda: None,
+            config_defaults=config_defaults(Path(".")),
+            invite_link=lambda: link_state,
+        )
+    except tk.TclError:
+        pytest.skip("No graphical display available for Tk")
     try:
         ui.settings_panel.show("discord")
         assert ui._invite_card_body is not None

@@ -49,9 +49,9 @@ def main() -> int:
         help="Real-voice STT: the owner reads fixed sentences in Discord voice, scored by CER",
     )
     parser.add_argument(
-        "--silenttalk-desktop",
+        "--character-mode",
         action="store_true",
-        help=argparse.SUPPRESS,
+        help="Start in character mode immediately",
     )
     args = parser.parse_args()
 
@@ -172,6 +172,7 @@ def main() -> int:
         copilot_info=copilot_info,
         invite_link=lambda: controller.invite_link,
         start_shown=True,
+        start_character_mode=args.character_mode,
     )
 
     runtime_issues = settings.validate_runtime()

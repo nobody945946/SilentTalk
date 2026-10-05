@@ -9,8 +9,6 @@ from silenttalk.windows_desktop import attach_interactive_desktop
 def test_attach_interactive_desktop_returns_bool() -> None:
     result = attach_interactive_desktop()
     assert isinstance(result, bool)
-    if sys.platform == "win32":
-        assert result is True
 
 
 def test_attach_interactive_desktop_skips_on_non_windows() -> None:

@@ -112,6 +112,7 @@ class SilentTalkUI:
         font_override: str | None = None,
         invite_link: Callable[[], str] | None = None,
         start_shown: bool = False,
+        start_character_mode: bool = False,
     ) -> None:
         self._submit_callback = submit
         self._stop_callback = stop_playback
@@ -240,9 +241,11 @@ class SilentTalkUI:
         self._character_view.set_engagement(
             str(self.settings_panel.value("copilot", "character_engagement") or "called")
         )
-        if not self._copilot_enabled:
-            self._ai_dot.set(theme.DIM, "AI 關閉")
-        self.show_page(self._mode if self._mode in CHAT_MODES else "manual", focus=False)
+        if start_character_mode and self._character_callback is not None:
+            self.show_page("character", focus=False)
+            self._set_character_mode(True)
+        else:
+            self.show_page(self._mode if self._mode in CHAT_MODES else "manual", focus=False)
         if start_shown:
             self.show()
         else:
