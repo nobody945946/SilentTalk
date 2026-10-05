@@ -67,6 +67,12 @@ def test_log_summary_parses_agent_events_and_never_leaks_dialogue(tmp_path: Path
         {
             "event": "thread_opened",
         },
+        {"event": "agent_lookup_decision latency_ms=90 lookup=True", "text": secrets[0]},
+        {"event": "agent_lookup_decision latency_ms=50 lookup=False"},
+        {"event": "agent_result_posted kind=done posted=True place=voice", "result": secrets[4]},
+        {"event": "agent_result_posted kind=done posted=False place=text"},
+        {"event": "thread_history_read lines=12"},
+        {"level": "WARNING", "event": "thread_history_failed error_type=Forbidden"},
         {
             "level": "WARNING",
             "event": "thread_open_failed status=500",
@@ -93,7 +99,10 @@ def test_log_summary_parses_agent_events_and_never_leaks_dialogue(tmp_path: Path
 
     summary = generate_summary(records, all_sessions=True)
 
-    assert "| Agent 派工判斷 | 2（派工 1、不派工 1、失敗 1） |" in summary
+    assert "| Agent 派工判斷（主人的 Agent 串） | 2（派工 1、不派工 1、失敗 1） |" in summary
+    assert "| 查公開資料判斷（叫到機魂的句子） | 2（去查 1、自己回 1） |" in summary
+    assert "| 結果貼到聊天室或串 | 2（貼出 1、貼不上 1） |" in summary
+    assert "| 討論串讀回 | 1（讀不到 1） |" in summary
     assert "中位數 185 ms" in summary
     assert "| Agent 任務執行時間 | 中位數 3400 ms、p90 3400 ms（n=1） |" in summary
     assert "| Agent 批准 | 2（准許 1、拒絕 1、失敗 1、逾時 1） |" in summary

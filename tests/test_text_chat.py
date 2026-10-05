@@ -281,3 +281,16 @@ def test_naming_the_character_in_a_text_channel_is_a_chat_right_there() -> None:
     assert typed == [(789, "機魂 今天天氣如何", True,
                       {"place": 900, "channel_id": 900, "message_id": 60, "agent": False})]
     assert not named.opened
+
+
+def test_the_owners_reply_to_the_character_is_a_chat_not_a_thread() -> None:
+    """Discord lists the replied-to author among the mentions; a reply is
+    still a chat in that channel, only an @ opens the owner's Agent thread."""
+    client, typed, _ = _thread_client()
+    said = SimpleNamespace(resolved=SimpleNamespace(author=ME))
+    reply = ThreadableMessage(FakeAuthor(OWNER, "Rex"), _text_channel(900), "那明天呢", id=70,
+                              mentions=[ME], reference=said)
+    asyncio.run(client.on_message(reply))  # type: ignore[arg-type]
+    assert not reply.opened
+    assert typed == [(OWNER, "那明天呢", True,
+                      {"place": 900, "channel_id": 900, "message_id": 70, "agent": False})]

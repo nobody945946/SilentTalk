@@ -224,11 +224,15 @@ class DiscordVoiceClient(discord.Client):
         )
 
     def _opens_thread(self, message: discord.Message) -> bool:
-        """Only the owner opens an Agent thread, by @ in a text channel."""
+        """Only the owner opens an Agent thread, by @ in a text channel. A
+        reply to the character is a chat, not an @ (the owner, 2026-10-05),
+        though Discord lists the replied-to author among the mentions."""
         return (
             isinstance(message.channel, discord.TextChannel)
             and message.author.id == self._config.owner_user_id
-            and self._mentions_me(message)
+            and self.user is not None
+            and self.user in message.mentions
+            and message.reference is None
             and self._threads_open()
         )
 
