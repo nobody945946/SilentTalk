@@ -31,6 +31,12 @@ TextCallback = Callable[..., None]
 MAX_TEXT_CHARS = 2000
 # On the owner's message that handed over work (the user chose the gear).
 TASK_MARKS = {"accepted": "\u2699\ufe0f", "done": "\u2705", "failed": "\u274c"}
+# Heads every message of an Agent result posted in a thread, so reading the
+# thread back tells the Agent's work apart from what the character said.
+AGENT_RESULT_HEAD = "【思考機回報】"
+# A thread's earlier lines, oldest first: (author ID, display name, text,
+# kind) with kind "mine" (the character), "agent" (a posted result) or "text".
+HistoryLine = tuple[int, str, str, str]
 # Everything the bot does in a server, asked for in its invite link so a
 # server admin grants it in one click: join and speak in voice, read and type
 # in the voice channel's chat, open threads and talk in them, mark the owner's
@@ -251,6 +257,65 @@ class DiscordVoiceClient(discord.Client):
             _LOG.warning("text_send_failed status=%s", getattr(exc, "status", "?"))
             return False
         return True
+
+    async def send_result(self, text: str, place: int) -> bool:
+        """The Agent's result in the thread the work came from, so the thread
+        keeps it: split at Discord's limit, each part headed. False if a part
+        could not be sent."""
+        channel = await self._channel(place)
+        if channel is None:
+            return False
+        size = MAX_TEXT_CHARS - len(AGENT_RESULT_HEAD) - 12
+        parts = [text[start:start + size] for start in range(0, max(len(text), 1), size)]
+        try:
+            for index, part in enumerate(parts, 1):
+                count = f"（{index}/{len(parts)}）" if len(parts) > 1 else ""
+                await channel.send(f"{AGENT_RESULT_HEAD}{count}\n{part}",
+                                   allowed_mentions=discord.AllowedMentions.none())
+        except discord.HTTPException as exc:
+            _LOG.warning("result_send_failed status=%s", getattr(exc, "status", "?"))
+            return False
+        return True
+
+    async def thread_history(self, place: int, before: int, limit: int) -> list[HistoryLine]:
+        """The lines of a thread this bot opened, before message `before`
+        (newest `limit`, oldest first, starting with the owner's message that
+        opened it once the thread is read to its start). Picks a conversation
+        back up after the app forgot it; read into RAM only."""
+        if before == place:
+            # The thread's opening message itself: nothing came before it.
+            return []
+        channel = await self._channel(place)
+        if not self._is_our_thread(channel):
+            return []
+        found: list[discord.Message] = []
+        async for message in channel.history(
+            limit=limit, before=discord.Object(before) if before else None
+        ):
+            found.append(message)
+        if len(found) < limit:
+            try:
+                # A thread opened from a message has that message's ID.
+                found.append(await channel.parent.fetch_message(channel.id))
+            except (discord.HTTPException, AttributeError):
+                pass
+        lines: list[HistoryLine] = []
+        for message in reversed(found):
+            content = message.clean_content.strip()
+            if not content or message.type not in (
+                discord.MessageType.default, discord.MessageType.reply
+            ):
+                continue
+            name = str(getattr(message.author, "display_name", None) or message.author.id)
+            if self.user is not None and message.author.id == self.user.id:
+                if content.startswith(AGENT_RESULT_HEAD):
+                    body = content.split("\n", 1)[1] if "\n" in content else ""
+                    lines.append((message.author.id, name, body.strip(), "agent"))
+                else:
+                    lines.append((message.author.id, name, content, "mine"))
+            elif not message.author.bot:
+                lines.append((message.author.id, name, content, "text"))
+        return lines
 
     async def mark_task(self, channel_id: int, message_id: int, state: str) -> bool:
         """⚙️ on the owner's message while the Agent works on it, then ✅ or ❌."""

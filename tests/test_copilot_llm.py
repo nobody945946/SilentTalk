@@ -466,7 +466,7 @@ def test_dispatch_and_machine_rules_replace_the_voice_only_rules() -> None:
     assert "坦然以機器的身分自居" in system
     assert "不能打字、寫程式" not in system
     # Results go to the owner's DMs unless the owner makes them public.
-    assert "請主人看私訊" in system and "做完會有回報再轉告主人" not in system
+    assert "會由思考機直接貼在那個討論串" in system and "做完會有回報再轉告主人" not in system
     assert "只有主人打字下的令才算工作" in system
     model.set_report_public(True)
     assert "做完會有回報再轉告主人" in model.character_messages(turns=_chat(CHAT))[0]["content"]

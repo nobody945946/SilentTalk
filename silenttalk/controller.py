@@ -67,7 +67,9 @@ class AppController:
                 on_agent_approval=self._agent_approval,
                 on_agent_line=self._speak_agent_line,
                 on_agent_private=self._agent_private,
+                on_agent_result=self._agent_result,
                 on_task_mark=self._mark_task,
+                thread_history=self._thread_history,
             )
         self._discord = DiscordVoiceClient(
             settings.discord,
@@ -239,6 +241,12 @@ class AppController:
 
     async def _agent_private(self, text: str) -> bool:
         return await self._discord.send_private(text)
+
+    async def _agent_result(self, text: str, place: int) -> bool:
+        return await self._discord.send_result(text, place)
+
+    async def _thread_history(self, place: int, before: int, limit: int) -> list:
+        return await self._discord.thread_history(place, before, limit)
 
     def _speak_agent_line(self, line: str) -> None:
         """Task acknowledgments and reports wait behind current speech."""

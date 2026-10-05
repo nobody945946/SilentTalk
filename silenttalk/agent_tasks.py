@@ -36,13 +36,19 @@ class AgentTaskClient:
         return str(roots[0])
 
     async def run(
-        self, text: str, workspace: str, on_event: TaskEvent, *, read_only: bool = True
+        self, text: str, workspace: str, on_event: TaskEvent, *,
+        read_only: bool = True, conversation: int | None = None,
     ) -> None:
-        """One task as one EdgeAgent session. `read_only`: the owner asked only
-        to read, and EdgeAgent then refuses every change in this task."""
+        """One task. `read_only`: the owner asked only to read, and EdgeAgent
+        then refuses every change in this task. `conversation`: the place the
+        work was typed in (the voice room or a thread); its tasks share one
+        EdgeAgent session, so the Agent knows what it did there before (in
+        EdgeAgent's RAM). Without it the task is a session of its own."""
         if self.session_id is not None:
             raise AgentLeaseError("Agent 工作正在進行。")
-        session_id = self.session_id = str(uuid4())
+        session_id = self.session_id = (
+            f"discord-{conversation}" if conversation is not None else str(uuid4())
+        )
         terminal = False
         try:
             timeout = aiohttp.ClientTimeout(total=None, sock_connect=10, sock_read=330)

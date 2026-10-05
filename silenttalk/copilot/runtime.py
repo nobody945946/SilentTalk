@@ -53,11 +53,25 @@ PlaceLineCallback = Callable[[str, int], None]
 # The owner's message that handed over work: (channel, message, state), state
 # "accepted" while the Agent works, then "done" or "failed".
 TaskMarkCallback = Callable[[int, int, str], None]
+# An Agent result posted in the thread it came from: (text, thread) -> sent.
+ResultCallback = Callable[[str, int], Awaitable[bool]]
+# A thread's earlier lines (thread, before message, limit) ->
+# [(author ID, name, text, kind)], kind "mine", "agent" or "text"
+# (DiscordVoiceClient.thread_history).
+HistoryCallback = Callable[[int, int, int], Awaitable[list[tuple[int, str, str, str]]]]
 
 # "嗯", "好", "喔" are context, not something worth four reply options.
 _MIN_TRIGGER_CHARS = 2
 # Threads kept in memory; the one quiet the longest is forgotten first.
 _MAX_THREADS = 16
+# The Agent's results in a conversation: who they are from, and how much of
+# each the character keeps (the whole result is in the thread itself; a long
+# one would slow every later reply there).
+_AGENT_NAME = "思考機"
+_AGENT_SPEAKER_ID = 0
+_AGENT_RESULT_CONTEXT_CHARS = 800
+# The result kept for posting (the tail of what the Agent wrote).
+_AGENT_RESULT_MAX_CHARS = 6000
 _BUSY = "目前工作仍在進行，請等完成後再交代下一件。"
 # What a thread hears about a job besides the marks on the owner's message.
 _THREAD_NOTICES = frozenset(
@@ -117,7 +131,9 @@ class CopilotRuntime:
         on_agent_approval: Callable[[dict[str, object]], Awaitable[None]] | None = None,
         on_agent_line: LineCallback | None = None,
         on_agent_private: Callable[[str], Awaitable[bool]] | None = None,
+        on_agent_result: ResultCallback | None = None,
         on_task_mark: TaskMarkCallback | None = None,
+        thread_history: HistoryCallback | None = None,
     ) -> None:
         self._config = config
         self._owner_user_id = owner_user_id
@@ -135,10 +151,18 @@ class CopilotRuntime:
         self._agent_tasks = agent_tasks
         self._on_agent_approval = on_agent_approval
         self._on_agent_line = on_agent_line or on_character_line
-        # The owner's DMs: the Agent's results and errors go here, never to
-        # the channel unless copilot.agent_report_public. False = not sent.
+        # The owner's DMs: the results of work typed in the voice room, and
+        # every approval, never the channel (unless copilot.agent_report_public
+        # for the voice room). False = not sent.
         self._on_agent_private = on_agent_private
+        # Work typed in a thread gets its result posted in that thread, so
+        # the conversation keeps it (and reading the thread back restores it).
+        self._on_agent_result = on_agent_result
         self._on_task_mark = on_task_mark
+        # Reads a thread back when the app has no conversation for it.
+        self._thread_history = thread_history
+        # Threads being read back: the lines that came in meanwhile, in order.
+        self._resuming: dict[int, list[Callable[[], None]]] = {}
         self._agent_job: asyncio.Task[None] | None = None
         # The owner's line that started the running job: where to tell about
         # it and which message to mark.
@@ -260,20 +284,67 @@ class CopilotRuntime:
         if loop is None or loop.is_closed():
             return
         loop.call_soon_threadsafe(
+            self._receive_text,
             lambda: self._handle_turn(
                 speaker_id, speaker_name, text, "text", addressed,
                 place=place, channel_id=channel_id, message_id=message_id,
-            )
+            ),
+            place, message_id,
         )
+
+    def _receive_text(self, handle: Callable[[], None], place: int, message_id: int) -> None:
+        """A typed line, after its thread's earlier conversation is back: the
+        first line of a thread the app has no conversation for (restarted, or
+        forgotten past _MAX_THREADS) first reads the thread back."""
+        queued = self._resuming.get(place)
+        if queued is not None:
+            queued.append(handle)
+            return
+        if place == VOICE_ROOM or place in self._contexts or self._thread_history is None \
+                or self._loop is None:
+            handle()
+            return
+        self._resuming[place] = [handle]
+        self._loop.create_task(self._resume_thread(place, message_id), name="copilot-thread-history")
+
+    async def _resume_thread(self, place: int, before: int) -> None:
+        """The thread's earlier lines become its conversation again, as
+        context only: nothing in them is answered, handed to the Agent or
+        recorded again, and no approval comes back (approvals are DMs). If
+        the thread cannot be read the character is told so, rather than
+        acting as if it remembered."""
+        assert self._thread_history is not None
+        turns: list[ConversationTurn] = []
+        try:
+            lines = await self._thread_history(place, before, self._max_session_turns)
+            for author, name, text, kind in lines:
+                if kind == "agent":
+                    turns.append(ConversationTurn(
+                        _AGENT_SPEAKER_ID, _AGENT_NAME, text[:_AGENT_RESULT_CONTEXT_CHARS],
+                        via="text", place=place))
+                else:
+                    turns.append(ConversationTurn(
+                        self._owner_user_id if kind == "mine" else author,
+                        self._self_name() if kind == "mine" else name, text,
+                        is_self=kind == "mine", via="text", place=place))
+            _LOG.info("thread_history_read lines=%d", len(turns))
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - an unreadable thread is said, not guessed
+            _LOG.warning("thread_history_failed error_type=%s", type(exc).__name__)
+            turns = [ConversationTurn(_AGENT_SPEAKER_ID, "系統", "（讀不到這個討論串之前的訊息）",
+                                      via="text", place=place)]
+        store = self._context(place)
+        for turn in turns:
+            store.append(turn)
+        for handle in self._resuming.pop(place, []):
+            handle()
 
     def record_self(self, text: str, place: int = VOICE_ROOM, *, via: str = "voice") -> None:
         """Something the bot actually said aloud or typed (`via`), in that
         place (after playback finished or the message was sent)."""
-        name = "你"
-        if self._character_mode and self._persona.name.strip():
-            name = self._persona.name.strip()
         turn = ConversationTurn.now(
-            self._owner_user_id, name, text, is_self=True, via=via, place=place
+            self._owner_user_id, self._self_name(), text, is_self=True, via=via, place=place
         )
         self._context(place).append(turn)
         self._emit_turn(turn)
@@ -282,6 +353,11 @@ class CopilotRuntime:
             self._last_heard_at = time.monotonic()
         self._last_activity_at = time.monotonic()
         self._lines_since_update += 1
+
+    def _self_name(self) -> str:
+        if self._character_mode and self._persona.name.strip():
+            return self._persona.name.strip()
+        return "你"
 
     @property
     def character_mode(self) -> bool:
@@ -668,15 +744,10 @@ class CopilotRuntime:
     def _says(self, place: int, detail: str) -> bool:
         """Whether the character reports on the job in this place. In the
         voice room it acknowledges, asks for approvals and reports. In a
-        thread the marks on the owner's message already say accepted and
-        done, so it only types what the marks cannot: a DM that could not be
-        delivered, or the result itself when the owner made results public
-        (being busy is always said)."""
-        return (
-            place == VOICE_ROOM
-            or self._config.agent_report_public
-            or detail in _THREAD_NOTICES
-        )
+        thread the marks on the owner's message say accepted and done and the
+        result is posted there, so it only types what those cannot: being
+        busy, or a result or approval that could not be delivered."""
+        return place == VOICE_ROOM or detail in _THREAD_NOTICES
 
     async def _dispatch_owner(
         self, trigger: _Trigger, turns: tuple[ConversationTurn, ...]
@@ -711,7 +782,8 @@ class CopilotRuntime:
                 return True
             self._task_result = ""
             self._agent_job = asyncio.create_task(
-                self._run_agent_task(task, workspace, epoch), name="discord-agent-task",
+                self._run_agent_task(task, workspace, epoch, trigger.place),
+                name="discord-agent-task",
             )
             return True
         except asyncio.CancelledError:
@@ -722,19 +794,22 @@ class CopilotRuntime:
                 if self._agent_origin is trigger:
                     self._agent_origin = None
                 self._mark(trigger, "failed")
-                detail = await self._report_detail("error", str(exc))
+                detail = await self._report_detail("error", str(exc), trigger.place)
                 if self._says(trigger.place, detail):
                     await self._task_line("report", detail, trigger.place)
             return True
 
-    async def _run_agent_task(self, task: AgentTask, workspace: str, epoch: int) -> None:
+    async def _run_agent_task(
+        self, task: AgentTask, workspace: str, epoch: int, place: int
+    ) -> None:
         assert self._agent_tasks is not None
         started = time.monotonic()
         async def on_event(kind: str, payload: dict[str, object]) -> None:
             if epoch == self._agent_epoch:
                 await self._agent_event(kind, payload)
         try:
-            await self._agent_tasks.run(task.text, workspace, on_event, read_only=task.read_only)
+            await self._agent_tasks.run(task.text, workspace, on_event,
+                                        read_only=task.read_only, conversation=place)
         finally:
             _LOG.info("agent_task_finished elapsed_ms=%d", round((time.monotonic() - started) * 1000))
 
@@ -742,7 +817,7 @@ class CopilotRuntime:
         epoch = self._agent_epoch
         place = self._agent_origin.place if self._agent_origin is not None else VOICE_ROOM
         if kind == "delta":
-            self._task_result = (self._task_result + str(payload.get("text", "")))[-2400:]
+            self._task_result = (self._task_result + str(payload.get("text", "")))[-_AGENT_RESULT_MAX_CHARS:]
             return
         if kind == "approval":
             assert self._agent_tasks is not None
@@ -766,7 +841,7 @@ class CopilotRuntime:
         elif kind in {"done", "error", "cancelled"}:
             result = self._task_result if kind == "done" else str(payload.get("message", "工作已取消。"))
             self._task_result = ""
-            detail = await self._report_detail(kind, result or "工作完成。")
+            detail = await self._report_detail(kind, result or "工作完成。", place)
             if epoch != self._agent_epoch:
                 return
             origin, self._agent_origin = self._agent_origin, None
@@ -777,14 +852,31 @@ class CopilotRuntime:
         if self._wake is not None:
             self._wake.set()
 
-    async def _report_detail(self, kind: str, result: str) -> str:
-        """What the character is told of a finished task: the result itself
-        with copilot.agent_report_public, otherwise only the outcome, after
-        the result has gone to the owner's DMs."""
-        if self._config.agent_report_public:
-            return result
+    async def _report_detail(self, kind: str, result: str, place: int) -> str:
+        """Delivers a finished task's result and returns what the character
+        is told. Work typed in a thread: the result is posted there and kept
+        in that conversation (the owner's DMs if the thread cannot take it).
+        From the voice room: the result itself with
+        copilot.agent_report_public, otherwise it goes to the owner's DMs and
+        the character only hears the outcome."""
         if kind == "cancelled":
             return PRIVATE_REPORTS["cancelled"]
+        if place != VOICE_ROOM and self._on_agent_result is not None:
+            posted = False
+            try:
+                posted = await self._on_agent_result(result, place)
+            except Exception as exc:  # noqa: BLE001 - falls back to the owner's DMs
+                _LOG.warning("agent_result_post_failed error_type=%s", type(exc).__name__)
+            _LOG.info("agent_result_thread kind=%s posted=%s", kind, posted)
+            if posted:
+                turn = ConversationTurn.now(_AGENT_SPEAKER_ID, _AGENT_NAME,
+                                            result[:_AGENT_RESULT_CONTEXT_CHARS],
+                                            via="text", place=place)
+                self._context(place).append(turn)
+                self._emit_turn(turn)
+                return PRIVATE_REPORTS[kind]
+        elif self._config.agent_report_public:
+            return result
         delivered = False
         if self._on_agent_private is not None:
             try:

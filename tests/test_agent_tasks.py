@@ -84,10 +84,12 @@ async def test_sse_denial_and_failure_use_discord_profile_and_first_workspace(tm
 
     try:
         workspace = await client.workspace()
-        await asyncio.wait_for(client.run("fixture", workspace, event), 10)
+        await asyncio.wait_for(client.run("fixture", workspace, event, conversation=42), 10)
         assert events[-1] == ("error", {"message": "fixture failure"})
         assert not state["executed"]
         assert state["requests"][0]["client"] == "discord"
+        # A place's tasks share one EdgeAgent session.
+        assert state["requests"][0]["session_id"] == "discord-42"
         assert state["requests"][0]["agent"] is True
         assert state["requests"][0]["working_dir"] == str(tmp_path)
         # Unless told otherwise a task is read-only: EdgeAgent refuses changes.
@@ -194,7 +196,7 @@ async def test_cancelled_dispatch_cannot_revive_after_reenable(
             await pause("workspace")
             return str(tmp_path)
 
-        async def run(self, *args):
+        async def run(self, *args, **kwargs):
             tasks.append(args)
 
     runtime = CopilotRuntime(
@@ -278,7 +280,7 @@ async def test_owner_dispatch_runs_in_background_and_failure_gets_character_repo
         async def workspace(self):
             return str(tmp_path)
 
-        async def run(self, text, workspace, callback, *, read_only):
+        async def run(self, text, workspace, callback, *, read_only, conversation):
             entered.set()
             await released.wait()
             await callback("error", {"message": "fixture failure"})
@@ -556,10 +558,79 @@ async def test_a_closed_dm_fails_instead_of_falling_back_to_the_channel():
     assert await client.send_private("結果") is False
 
 
-def _marked_runtime(tmp_path, *, delivered=True, read_only=True):
+class _Thread:
+    """A thread the bot opened: newest message first, like Discord's history."""
+
+    def __init__(self, messages, starter=None):
+        self.id, self.sent, self._messages, self._starter = 77, [], messages, starter
+        self.parent = SimpleNamespace(fetch_message=self._fetch)
+
+    async def send(self, text, **kwargs):
+        self.sent.append(text)
+
+    async def _fetch(self, message_id):
+        assert message_id == self.id
+        if self._starter is None:
+            raise discord.NotFound(SimpleNamespace(status=404, reason="Not Found"), "gone")
+        return self._starter
+
+    def history(self, limit, before=None):
+        async def lines():
+            for message in self._messages[:limit]:
+                yield message
+        return lines()
+
+
+def _post(author, text, *, bot=False, kind=discord.MessageType.default):
+    return SimpleNamespace(clean_content=text, type=kind,
+                           author=SimpleNamespace(id=author, display_name=f"u{author}", bot=bot))
+
+
+def _thread_client(thread):
+    client = object.__new__(DiscordVoiceClient)
+    client._connection = SimpleNamespace(user=SimpleNamespace(id=99))
+    client._is_our_thread = lambda channel: channel is thread
+
+    async def channel(place):
+        return thread if place == thread.id else None
+
+    client._channel = channel
+    return client
+
+
+@pytest.mark.asyncio
+async def test_a_result_is_posted_in_the_thread_in_headed_parts():
+    thread = _Thread([])
+    assert await _thread_client(thread).send_result("結" * 4000, 77) is True
+    assert len(thread.sent) == 3 and all(len(text) <= 2000 for text in thread.sent)
+    assert [text.split("\n")[0] for text in thread.sent] == [
+        "【思考機回報】（1/3）", "【思考機回報】（2/3）", "【思考機回報】（3/3）"]
+    assert "".join(text.split("\n", 1)[1] for text in thread.sent) == "結" * 4000
+
+
+@pytest.mark.asyncio
+async def test_a_thread_reads_back_oldest_first_from_the_owners_opening_message():
+    thread = _Thread([
+        _post(99, "【思考機回報】（2/2）\n第二段"), _post(99, "【思考機回報】（1/2）\n第一段"),
+        _post(99, "遵命"), _post(55, "別的 bot", bot=True),
+        _post(1, "", kind=discord.MessageType.thread_created), _post(1, "幫我數 tmp 檔"),
+    ], starter=_post(1, "@Machina 開工"))
+    client = _thread_client(thread)
+    assert await client.thread_history(77, 500, 50) == [
+        (1, "u1", "@Machina 開工", "text"), (1, "u1", "幫我數 tmp 檔", "text"),
+        (99, "u99", "遵命", "mine"), (99, "u99", "第一段", "agent"), (99, "u99", "第二段", "agent")]
+    # Read only as far back as asked: the opening message is left out then.
+    assert [line[2] for line in await client.thread_history(77, 500, 2)] == ["第一段", "第二段"]
+    # The opening message itself has nothing before it.
+    assert await client.thread_history(77, 77, 50) == []
+    assert await _thread_client(_Thread([])).thread_history(5, 500, 50) == []
+
+
+def _marked_runtime(tmp_path, *, delivered=True, read_only=True, posted=True, history=None):
     """A character runtime whose Agent lists a folder; records the marks on
     the owner's message, what is typed where, what is spoken and the DMs."""
-    seen = SimpleNamespace(marks=[], typed=[], spoken=[], hints=[], private=[], read_only=[])
+    seen = SimpleNamespace(marks=[], typed=[], spoken=[], hints=[], private=[], read_only=[],
+                           results=[], conversations=[], recorded=[])
 
     class Model:
         def set_owner(self, user_id, name):
@@ -579,12 +650,17 @@ def _marked_runtime(tmp_path, *, delivered=True, read_only=True):
         seen.private.append(text)
         return delivered
 
+    async def post_result(text, place):
+        seen.results.append((text, place))
+        return posted
+
     class Tasks:
         async def workspace(self):
             return str(tmp_path)
 
-        async def run(self, text, workspace, callback, *, read_only):
+        async def run(self, text, workspace, callback, *, read_only, conversation):
             seen.read_only.append(read_only)
+            seen.conversations.append(conversation)
             await callback("delta", {"text": "a.txt c.tmp"})
             await callback("done", {})
 
@@ -597,9 +673,12 @@ def _marked_runtime(tmp_path, *, delivered=True, read_only=True):
         lambda value: None,
         on_character_line=seen.spoken.append,
         on_character_text=lambda line, place: seen.typed.append((line, place)),
+        on_turn=seen.recorded.append,
         agent_tasks=Tasks(),
         on_agent_private=send_private,
+        on_agent_result=post_result,
         on_task_mark=lambda channel, message, state: seen.marks.append((channel, message, state)),
+        thread_history=history,
     )
     runtime._llm = Model()
     runtime._character_mode = True
@@ -632,8 +711,14 @@ async def test_work_from_a_thread_is_marked_on_the_message_instead_of_announced(
         await _until(lambda: len(seen.marks) == 2)
         await asyncio.sleep(0.02)
         assert seen.marks == [(900, 42, "accepted"), (900, 42, "done")]
-        assert seen.private == ["a.txt c.tmp"]
-        # No 「接令」 or 「完成了」 lines: the gear and the check say it.
+        # The result stays in the thread (the owner's memory of the work) and
+        # in the thread's conversation, said by the Agent, not the character.
+        assert seen.results == [("a.txt c.tmp", 42)] and seen.private == []
+        last = runtime._context(42).snapshot()[-1]
+        assert (last.speaker_name, last.text, last.is_self) == ("思考機", "a.txt c.tmp", False)
+        # Later work typed in this thread continues the same Agent session.
+        assert seen.conversations == [42]
+        # No 「接令」 or 「完成了」 lines: the gear, the check and the result say it.
         assert seen.hints == [] and seen.typed == [] and seen.spoken == []
     finally:
         await _close(runtime)
@@ -655,15 +740,74 @@ async def test_the_tasks_scope_reaches_edgeagent(tmp_path, read_only):
 
 
 @pytest.mark.asyncio
-async def test_a_thread_is_told_when_the_dm_did_not_arrive(tmp_path):
-    runtime, seen = _marked_runtime(tmp_path, delivered=False)
+@pytest.mark.parametrize("delivered", [True, False])
+async def test_a_result_the_thread_cannot_take_goes_to_the_dm(tmp_path, delivered):
+    runtime, seen = _marked_runtime(tmp_path, posted=False, delivered=delivered)
     try:
         runtime._handle_turn(1, "owner", "幫我看一下測試資料夾", "text", True,
                              place=42, channel_id=900, message_id=42)
-        await _until(lambda: seen.typed)
-        assert seen.marks[-1] == (900, 42, "done")
-        assert seen.hints == [("report", PRIVATE_REPORTS["undelivered"])]
-        assert seen.typed == [("（角色的話）", 42)] and seen.spoken == []
+        await _until(lambda: seen.marks[-1:] == [(900, 42, "done")])
+        await asyncio.sleep(0.02)
+        assert seen.results == [("a.txt c.tmp", 42)] and seen.private == ["a.txt c.tmp"]
+        if delivered:
+            assert seen.hints == [] and seen.typed == []
+        else:
+            assert seen.hints == [("report", PRIVATE_REPORTS["undelivered"])]
+            assert seen.typed == [("（角色的話）", 42)] and seen.spoken == []
+    finally:
+        await _close(runtime)
+
+
+@pytest.mark.asyncio
+async def test_a_forgotten_thread_is_read_back_before_its_new_line(tmp_path):
+    """After a restart (or once more threads pushed it out) a thread's next
+    line first brings its earlier lines back, as context only: nothing old is
+    answered, handed to the Agent or recorded again."""
+    asked = []
+    release = asyncio.Event()
+
+    async def history(place, before, limit):
+        asked.append((place, before))
+        await release.wait()
+        return [(1, "owner", "幫我數 tmp 檔", "text"), (99, "Machina", "遵命", "mine"),
+                (99, "Machina", "a.tmp b.tmp", "agent"), (5, "阿傑", "我也想看", "text")]
+
+    runtime, seen = _marked_runtime(tmp_path, history=history)
+    try:
+        runtime.accept_text(5, "阿傑", "那剛剛那兩個是什麼", True, place=77, channel_id=900, message_id=80)
+        runtime.accept_text(5, "阿傑", "快說", True, place=77, channel_id=900, message_id=81)
+        await _until(lambda: asked)
+        release.set()
+        await _until(lambda: len(runtime._context(77).snapshot()) == 6)
+        turns = runtime._context(77).snapshot()
+        assert [t.text for t in turns] == ["幫我數 tmp 檔", "遵命", "a.tmp b.tmp", "我也想看",
+                                           "那剛剛那兩個是什麼", "快說"]
+        assert turns[1].is_self and turns[2].speaker_name == "思考機" and not turns[2].is_self
+        assert turns[0].speaker_id == 1 and turns[0].via == "text"
+        assert asked == [(77, 80)]
+        assert [t.text for t in seen.recorded] == ["那剛剛那兩個是什麼", "快說"]
+        assert not runtime._owner_tasks and seen.conversations == []
+        runtime.accept_text(5, "阿傑", "還在嗎", True, place=77, channel_id=900, message_id=82)
+        await _until(lambda: len(runtime._context(77).snapshot()) == 7)
+        assert len(asked) == 1  # read once
+    finally:
+        await _close(runtime)
+
+
+@pytest.mark.asyncio
+async def test_an_unreadable_thread_is_not_pretended_to_be_remembered(tmp_path):
+    asked = []
+
+    async def history(place, before, limit):
+        asked.append(place)
+        raise discord.Forbidden(SimpleNamespace(status=403, reason="Forbidden"), "no history")
+
+    runtime, seen = _marked_runtime(tmp_path, history=history)
+    try:
+        runtime.accept_text(5, "阿傑", "剛剛說到哪", True, place=77, channel_id=900, message_id=80)
+        await _until(lambda: asked and not runtime._resuming)
+        note, line = runtime._context(77).snapshot()
+        assert note.text == "（讀不到這個討論串之前的訊息）" and line.text == "剛剛說到哪"
     finally:
         await _close(runtime)
 
@@ -677,7 +821,8 @@ async def test_work_typed_in_the_voice_room_is_marked_and_still_announced(tmp_pa
         await _until(lambda: len(seen.spoken) == 2)
         assert seen.marks == [(555, 7, "accepted"), (555, 7, "done")]
         assert seen.hints == [("ack", "列出測試資料夾"), ("report", PRIVATE_REPORTS["done"])]
-        assert seen.typed == []
+        assert seen.typed == [] and seen.results == [] and seen.private == ["a.txt c.tmp"]
+        assert seen.conversations == [VOICE_ROOM]
     finally:
         await _close(runtime)
 
@@ -735,8 +880,12 @@ async def test_the_controller_types_into_the_right_place_and_marks_the_message()
 
 
 @pytest.mark.asyncio
-async def test_public_results_are_typed_in_the_thread_without_an_announcement(tmp_path):
-    marks, shown = [], []
+async def test_public_reports_do_not_add_a_line_to_a_thread_that_has_the_result(tmp_path):
+    marks, shown, posted = [], [], []
+
+    async def post(text, place):
+        posted.append((text, place))
+        return True
 
     async def deliver(payload):
         shown.append(payload)
@@ -746,10 +895,11 @@ async def test_public_results_are_typed_in_the_thread_without_an_announcement(tm
             raise AssertionError("a delivered approval waits for the owner")
 
     runtime = _agent_runtime(tmp_path, public=True, approval=deliver, tasks=Tasks())
+    runtime._on_agent_result = post
     runtime._on_task_mark = lambda channel, message, state: marks.append(state)
     runtime._agent_origin = _Trigger("owner", "x", speaker_id=1, place=42, channel_id=900, message_id=42)
     await runtime._agent_event("approval", {"call_id": "c1", "tool": "write"})
     await runtime._agent_event("delta", {"text": "3 個測試通過"})
     await runtime._agent_event("done", {})
     assert len(shown) == 1 and marks == ["done"]
-    assert list(runtime._task_hints) == [("report", "3 個測試通過", 42)]
+    assert posted == [("3 個測試通過", 42)] and list(runtime._task_hints) == []
