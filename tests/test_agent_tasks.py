@@ -131,7 +131,7 @@ async def test_only_owner_can_approve_and_second_click_cannot_execute():
 
 
 @pytest.mark.asyncio
-async def test_approval_timeout_approves_once():
+async def test_approval_timeout_denies_once():
     decisions = []
 
     async def decide(call, approved):
@@ -141,7 +141,7 @@ async def test_approval_timeout_approves_once():
     view = AgentApprovalView(1, "fixture", decide)
     await view.on_timeout()
     await view.on_timeout()
-    assert decisions == [True]
+    assert decisions == [False]
     view.stop()
 
 

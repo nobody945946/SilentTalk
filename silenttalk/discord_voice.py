@@ -50,11 +50,10 @@ def invite_url(application_id: int) -> str:
 
 
 class AgentApprovalView(discord.ui.View):
-    """Only the configured owner can decide; times out to approve by default."""
+    """Only the configured owner can decide; every approval covers one call."""
     def __init__(self, owner_id: int, call_id: str,
-                 decide: Callable[[str, bool], Awaitable[bool]],
-                 timeout: float = 60.0) -> None:
-        super().__init__(timeout=timeout)
+                 decide: Callable[[str, bool], Awaitable[bool]]) -> None:
+        super().__init__(timeout=290)
         self.owner_id, self.call_id, self.decide = owner_id, call_id, decide
         self.answered = False
         self.started = time.monotonic()
@@ -91,10 +90,8 @@ class AgentApprovalView(discord.ui.View):
         if not self.answered:
             self.answered = True
             try:
-                await self.decide(self.call_id, True)
-                _LOG.info("agent_approval_decided approved=True default_approved=True roundtrip_ms=%d",
-                          round((time.monotonic() - self.started) * 1000))
-            except Exception as exc:  # noqa: BLE001
+                await self.decide(self.call_id, False)
+            except Exception as exc:  # noqa: BLE001 - timed-out operations must remain denied
                 _LOG.warning("agent_approval_timeout_failed error_type=%s", type(exc).__name__)
 
 
