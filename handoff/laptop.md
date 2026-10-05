@@ -1,6 +1,6 @@
 # Windows 工作檔：第 5 回合，目標式
 
-更新：2026-10-06｜開發分支 `copilot-story-mode`｜回報分支 `laptop-report`
+更新：2026-10-06 凌晨（A4 已同意）｜開發分支 `copilot-story-mode`｜回報分支 `laptop-report`
 
 你從 AGENTS.md 被分到此處，只照這份做。沿用第 5 回合和 34 項，不新增回合或累加回報歷史。開始先 git pull --ff-only；失敗就停止。接手先讀既有 worktree `C:\Users\A8fm0\Downloads\SilentTalk-laptop-report` 的 `handoff/reports/laptop.md`，從最後檢查點續做。程式與測試可按目標自行查既有 owner；Windows／介面／紀錄設定由筆電負責，模型／Agent 工具與角色邏輯交開發機。
 
@@ -11,7 +11,7 @@
 - 2026-10-06 使用者拍板：原生 SSD 不需加密，直接用一般紀錄目錄。取消容器、分割、密碼、解鎖與專用磁碟代號的要求；不再請使用者確認是否取消加密。兩 app 共用 `C:\Users\A8fm0\AgentRecords`，只存文字，不存錄音。AGENTS.md 的紀錄規則是唯一依據。
 - 日常 EdgeAgent 不開 VS Code，Discord 保留；使用者關普通 Edge 很方便，關注它是否背景殘留。Edge 背景執行與啟動加速的既有持久 policy 值均為 0；不擅自強制退出目前編輯器或普通瀏覽器。獨立關窗測試曾被 automatic approval review 拒絕，未執行，不換工具重包重試。
 - 使用者表示測試暫存不清理也沒關係：保留，不再請他執行刪除命令。測試資料夾 EdgeAgentTest 保留。
-- A4 重載確認已問一次，尚未收到同意；不得重問、推定同意或先清掉 RAM 對話。紀錄目錄與持久設定可獨立完成，正式服務生效須等 A4。
+- A4 重載：使用者 2026-10-06 在開發機回答「可以」：重載 EdgeAgent 和 SilentTalk（會清掉 RAM 裡的對話）並套用 E4B 128K。不用再問。
 
 ## 驗收清單（分母 34）
 
@@ -22,7 +22,7 @@
 - A1 兩 repo pull 成功；EdgeAgent 部署 exit 0。
 - A2 EdgeAgent 完整 pytest（含真 Edge 回歸）0 failed、0 error、exit 0。PowerShell 看 pytest 自己的 exit code；測試環境使用 PYTHONIOENCODING=utf-8，取消 PYTHONUTF8，EDGE_AGENT_UI_REGRESSION=1。
 - A3 SilentTalk 完整 pytest 同上，使用 PYTHONUTF8=1；保留既有單一 Tcl interpreter 的 UI 測試 fixture，不 skip 或加重試。
-- A4 等待已提出的重載確認。收到同意後用正常啟動器、既有 EdgeAgent CLI，按 PID 重載；重查目前 PID，開啟 SilentTalk 後就是機魂角色模式。此操作會清掉 RAM 對話。
+- A4 使用者已同意重載。用正常啟動器、既有 EdgeAgent CLI，按 PID 重載；重查目前 PID，開啟 SilentTalk 後就是機魂角色模式。
 - A5 用模型頁設定 E4B／131072／working 131072／GPU 自動／low VRAM 開，不手改 config.json。核對 /status mode=character、agent_slot 有值、Agent context 是 131072 減角色 32768。
 - A6 實量 VRAM、模型 RAM、mlock 成敗、角色回覆延遲、Agent 每秒字數。無 log 或未載新模型就寫未測；working set／private commit 不當作鎖成功的證據。
 - A7 常駐只看名稱、數量、RAM。Discord 必須保留；日常不開 VS Code。關其他程式／取消自啟動需由使用者決定，做完量前後可用 RAM，不將程序工作集加總當作保證可釋出量。
@@ -72,4 +72,4 @@
 
 回報只改既有 laptop-report worktree 的 handoff/reports/laptop.md，同一回合改寫同一節。包含時間／看不到的額度、34 項統計、每次測試（含紅測與失敗）、git log --stat 與 commit、RAM／速度、log_summary 全表、紀錄目錄數字、使用者決定、接手指示。對話與角色狀態內容禁止進回報。兩 repo 來源 commit 在 copilot-story-mode，報告 push laptop-report；以 git diff --check 和相關 pytest 核對，不宣稱沒實跑的功能通過。
 
-接手優先核對紀錄變更和持久設定，再等 A4 已提出的確認；新版正式服務尚未生效時不把來源／測試通過當真人成功。本回合不做外接硬碟搬遷、MCP 介面或硬體擴充。
+接手優先核對紀錄變更和持久設定，再做 A4 重載；新版正式服務尚未生效時不把來源／測試通過當真人成功。本回合不做外接硬碟搬遷、MCP 介面或硬體擴充。
