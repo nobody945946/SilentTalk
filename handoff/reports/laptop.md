@@ -3,7 +3,7 @@
 ## 時間與額度消耗統計
 
 - 使用者指示：pull 開工；刪除若被 policy 擋住，提供 PowerShell 指令由使用者執行。
-- 開始時間、完整總耗時與完整步驟數看不到；本次第一筆直接讀取的時鐘為 2026-10-05T23:08:19+08:00。檢查點：2026-10-05T23:42:23.1510569+08:00。不是整回合起訖或總耗時。
+- 開始時間、完整總耗時與完整步驟數看不到；本次第一筆直接讀取的時鐘為 2026-10-05T23:08:19+08:00。檢查點：2026-10-05T23:52:17.4170218+08:00。不是整回合起訖或總耗時。
 - Token（Input／Output／Cache read）、開始和結束額度：看不到，不估算。
 - 測試執行 15 次，逐次結果如下；介面預覽 2 次均 exit 0。
 - 本回合尚未結案：不依賴使用者的程式、部署與回歸已交付；A4 重載確認已問一次，尚未收到回覆。其餘真人／容器驗收續接同一回合。
@@ -20,7 +20,7 @@
 - A4 未完成｜已依工作檔問一次是否可重載並清掉 RAM 對話；尚無回覆。沒有重載。現有 EdgeAgent 仍為 base，SilentTalk 未執行。
 - A5 未完成｜E4B／131072／working 131072／auto GPU／low VRAM 尚未經模型頁套用。舊正式服務仍是 Qwen 16K，不把程式新預設當實際設定。
 - A6 未完成｜只量舊正式服務的數字；未量 E4B 128K、角色反應與 Agent 文字速度。引擎 stderr 被 service 送至 DEVNULL，無 mlock 成敗 log 可讀；不由 RAM 占用推定鎖成功。
-- A7 未完成｜常駐名稱、數量和 RAM 已盤點，完整表在下方。關閉／取消自啟動的決定仍待使用者；尚未關任何非必要程式。
+- A7 未完成｜RAM 已盤點；使用者決定日常 EdgeAgent 不開 VS Code、Discord 保留，擔心 Edge 關閉後殘留。查到 HKCU Edge 的 BackgroundModeEnabled／StartupBoostEnabled 既有值均為 DWORD 0，HKLM 無 Edge policy key，未改設定。獨立實際關窗驗證整段被自動審核拒絕、未執行；沒有關普通 Edge、VS Code 或 Discord，沒有釋出 RAM 的前後證據。
 - A8 未完成｜已擴充既有 --audit-live 驗收，使其真正下載 TXT 並驗證 BOM、當前合成對話／工具文字和排除草稿。新 live 分支只跑語法檢查，正式重載後尚需實跑；不能以 UI regression 或按鈕存在取代。
 - B1 完成｜三格設定、TOML 預設、CopilotConfig 欄位、LocalReplyModel 參數／成員、runtime／smoke／setup／app 啟動資訊和 eval 呼叫均清掉。Git 全追蹤檔檢索只剩工作檔需求與負向回歸測試；使用者設定檔未改寫。
 - B2 完成｜內建機魂刪除入口隱藏並說明原因，直接呼叫刪除也會拒絕；複製的自訂角色仍可刪。音高／語速沿用 Stepper 顯示精確數字，22 Hz、23 Hz、7% 及再儲存都驗證。合成機魂截圖顯示 22Hz、內建說明且沒有刪除按鈕。
@@ -49,7 +49,7 @@
 - E1 完成｜使用者最新決定「不清理也沒關係」，依此保留測試／預覽暫存，不再執行刪除。自建測試／預覽程序已結束，9223 無 listener；正式服務保留。既有 policy 拒絕紀錄保留，沒有繞過。
 - E2 完成｜既有 log 最後修改 21:12:46，早於本次工作；全檔 6404 行 JSON 可解析、未解析 0。歷史 lease 錯誤 1（最後 15:56:45）、DNS 錯誤 115（最後 18:25:48），本次無新增；discord.com DNS A 查詢成功。正式新版本尚未重載，不能由此宣稱新實測不會復發。
 
-使用者追加要求：暫存不需清理，改優先盤點 RAM 與持續有效的輕量化；沒有因這句話自行關閉程式或取消開機自啟動。
+使用者追加要求：暫存保留，優先持續有效的 RAM 輕量化；日常使用 EdgeAgent 不開 VS Code、Discord 保留，重點是 Edge 瀏覽器關閉後不要背景常駐。此決定不等於批准立即強制關閉目前編輯器或重載模型。
 
 ## 測試執行結果記錄
 
@@ -152,7 +152,7 @@ EdgeAgent 2d6aae2：live browser 驗收增加真正的 TXT 下載內容檢查；
 - GPU 23:39：2958/4096 MiB。舊模型 PID 6720 working set 12.4 MiB、private commit 4760.8 MiB；router PID 19792 4.7／139.7 MiB。private commit 不是實體占用或 mlock 證據；此次 Get-Process 指定的 pythonw 不存在而回傳 exit 1，已列程序數字仍有效，沒有把它當模型測試成功。
 - Windows 全系統 committed bytes 23766941696、commit limit 34028036096；這是虛擬記憶體承諾量，不是同量 RAM。非分頁核心池約 1002 MiB；單次樣本無法判定驅動漏記憶體，未擅改驅動／核心服務。
 - 自啟動登記名稱：OneDrive、SecurityHealth；OneDrive 不在本次程序表中，不能把取消它視為已釋出 RAM。沒有取消或關閉程式。
-- 長期方案：先依 A7 由使用者決定不需常駐的程式，取消其自動啟動／背景執行；Edge 可用休眠分頁與關閉背景 app。只是建議，尚未改設定。[Microsoft Edge 官方說明](https://learn.microsoft.com/en-us/troubleshoot/microsoft-edge/performance/edge-high-cpu-memory)、[Windows 自啟動說明](https://support.microsoft.com/en-gb/windows/experience/startup-boot/configure-startup-applications-in-windows)。
+- 日常用途已由使用者決定：EdgeAgent＋Discord，不開 VS Code。VS Code 不是 EdgeAgent 的啟動依賴；目前開發用編輯器仍在，沒有擅自強制退出或處理未儲存工作。Discord 保留。EdgeAgent 模型／控制服務獨立於瀏覽器，角色在 Discord 工作時仍需要它；關網頁不代表卸載模型。
 
 | 名稱 | 數量 | RAM MiB | 歸屬 |
 |---|---:|---:|---|
@@ -275,6 +275,9 @@ EdgeAgent 2d6aae2：live browser 驗收增加真正的 TXT 下載內容檢查；
 | pet | 1 | 0 | 開發／agent 工具 |
 | LightingService | 1 | 0 | 其他／第三方（由使用者決定） |
 | RstMwService | 1 | 0 | 其他／第三方（由使用者決定） |
+- 持久設定查證：HKCU\Software\Policies\Microsoft\Edge 的 BackgroundModeEnabled=0、StartupBoostEnabled=0（REG_DWORD），HKLM 對應 key 不存在。原先已停用，這次沒有寫入；未量其載入中的 browser policy 狀態，也未重開機驗證。[Microsoft BackgroundModeEnabled](https://learn.microsoft.com/en-us/deployedge/microsoft-edge-policies/backgroundmodeenabled)、[Microsoft StartupBoostEnabled](https://learn.microsoft.com/en-us/deployedge/microsoft-edge-policies/startupboostenabled)。
+- 關窗驗證未執行：準備用專用 profile／9223，讀兩項 policy，再以 Target.closeTarget 關最後一個測試分頁，核對只屬於測試的 PID 都自然退出，既有 Edge／Discord PID 保留。exec_command 整段被 automatic approval review 拒絕，理由只有 blocked by policy；沒有命令或 fallback 執行。未繞過、未換 shell 重試；不能由登錄值宣稱普通瀏覽器關窗已測到無殘留。
+
 ## Discord 實測數字表
 
 本次直接執行 scripts/dev/log_summary.py 的最後一次原文如下；log 最後更新 21:12:46，屬於此前 app session。這回合真人 Discord 實測 0，工作区 metadata .tmp 2／14 bytes、.txt 2／8400 bytes、.py 1／6 bytes，沒有讀內容、沒有改檔。
@@ -324,7 +327,7 @@ EdgeAgent 2d6aae2：live browser 驗收增加真正的 TXT 下載內容檢查；
 
 ## 使用者回饋與感想
 
-使用者最新決定：「那不清理也沒關係，記憶體知道怎麼輕量化，讓出更多空間嗎」。保留暫存，優先 RAM；沒有新增真人測試成績。
+使用者決定保留暫存，優先 RAM。最新指定：「以後使用edge不會開vscode，要關掉edge瀏覽器也很容易，就是怕關不乾淨而已，DC要留著」。沒有新增真人測試成績。
 
 ## 暫存處置（使用者已決定保留）
 
@@ -336,7 +339,7 @@ EdgeAgent 2d6aae2：live browser 驗收增加真正的 TXT 下載內容檢查；
 2. A4 的 async 確認已問一次：「重載會清掉目前 RAM 對話，可重載 EdgeAgent 與 SilentTalk 並套用已同意的 E4B／128K 嗎？」尚未回覆，不因時間過去當成同意，不重問。收到同意後先用既有 EdgeAgent CLI stop／start、正常 SilentTalk launcher；只按已辨識 PID。EdgeAgent 当前 control PID 12040、router PID 19792、模型 PID 6720，實作前重查。最後一次 9223 無 listener。保留使用者普通 Edge。
 3. 模型頁使用既有 CDP helper：#model-select 選 E4B，#model-context／#model-working 填 131072，#model-gpu 自動，#model-low-vram 開；套用後核對工作完成與 readiness，再開 SilentTalk 角色模式。不要手改 config.json 或使用者檔案。機魂、人設與誠實模式依 app 讀到的狀態驗證，不能只憑預設。
 4. 重載後實跑 tests/browser_check.mjs --audit-live（專用 Edge，沿用 tests/windows_check.py 的 launch_edge，先查 9223）。新 live runner 的驗收是 24 項，含 TXT 真下載；前端／Agent／網路失敗要如實列出，不改 threshold 或略過。仍需 A6 數字，不自降 context／GPU。
-5. A7 盤點已做；等 A4 回覆後一次只請使用者決定一件事，顯示具體名稱與 RAM，再關他決定的非必要程式／取消自啟動。不要自判 Code、Discord、ASUS／Meta 工具都可關。
+5. A7 日常用途已決定：EdgeAgent 不開 VS Code，Discord 必須保留。不要再次問是否保留 Discord；沒有立即強制結束目前 Code 的授權。Edge 背景／Startup boost 持久值已是 0，不要重複寫或宣稱省下 RAM。關最後一窗自然退出測試受 policy 擋、未執行；不要改用另一工具包裝重試。未得到 A4 回覆前，不重載正式服務或清 RAM 對話。
 6. C 的範圍只限伺服器 729722190857240717、語音頻道 729722190857240721；工作區只用 EdgeAgentTest，批准由使用者本人按。一次請他做一件事；不用 webhook／bot 代替第二真人帳號。只讀 log_summary 的数字／事件名與工作區 metadata，不讀對話。
 7. D1 工具 native pipe 故障尚未解除；不得再循環重試同一失敗或改用被技能禁止的 PowerShell UI Automation。工具恢復後準備 10 GB VeraCrypt wizard；密碼頁完全交給使用者，密碼／復原金鑰不經工具、檔案或回報。不設自動解鎖，掛載教學要得到使用者會了的確認。
 8. E1 依使用者最新決定保留暫存，沒有待使用者執行的清理命令；不要再次要求刪除或自行清理。RAM 輕量化遵循 A7，先確認具體程式用途與使用者選擇；保留 EdgeAgentTest。
