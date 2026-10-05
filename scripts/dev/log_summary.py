@@ -311,7 +311,7 @@ def main() -> int:
     parser.add_argument("--all", action="store_true", help="every session in the file")
     args = parser.parse_args()
     if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(errors="replace")
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     if not args.log.is_file():
         print(f"找不到 {args.log}")
         return 1
