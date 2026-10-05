@@ -1,7 +1,7 @@
 # 開發機工作檔（Linux、RTX 3090）
 
 更新：2026-10-05 深夜｜分支：SilentTalk、EdgeAgent 都用 `copilot-story-mode`
-你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事。**只寫現況和下一步**，過去的經過在 git 歷史和 `archive/`（只在這台機器、不進 git，不必讀）。上一版：`archive/dev-box-2026-10-05-v9.md`。
+你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事。**只寫現況和下一步**，過去的經過在 git 歷史和 `archive/`（只在這台機器、不進 git，不必讀）。上一版：`archive/dev-box-2026-10-05-v10.md`。
 
 ---
 
@@ -9,33 +9,33 @@
 
 - **角色**：戰鎚 40K 機魂 Machina-Prime-09A（馬基納），內建且預設、啟動直接進角色模式；其他人設不再提供，人設系統留著（「留著架構但不想開」）。聲音 `machine_spirit`＋YunJhe +22 Hz。**機魂還沒訓練出來**（角色資料 v1–v5 全被擋、Agent 資料只有 55 列試跑），現在是原版 E4B 加人設。
 - **硬體與 context**：筆電 RTX 3050 Ti 4 GB、RAM 8 GB。使用者：「我犧牲速度，cpu gpu 一起用，鎖死不溢出到ssd，然後常駐吃記憶體的非必要占用全部根除」「角色慢一點沒關係，照做」→ E4B 開到 128K（模型上限），顯示卡和 CPU 自動分層（`--fit`）、`--load-mode mlock`、角色和 Agent 共用一塊 KV（`--kv-unified`），Agent 的份＝總量−角色的份；租借模式也要限 `--cache-ram`／`--ctx-checkpoints`。開發機已驗證 router preset 可用（n_ctx 131072、2 slot）。筆電量顯示卡、RAM、速度，並列出常駐程式（只看數字）由使用者決定關哪些。
-- **Discord 介面**（使用者 2026-10-05 定、已做：SilentTalk `0eebeb2`、`4a7debe`，EdgeAgent `4012746`）：語音每一句都要喊「機魂」（照發音比對）；文字頻道提到「機魂」、@ 或回覆它＝在原頻道聊天（任何人）；主人 @（不是回覆）＝開主人的 Agent 串，串裡只有主人的話交給 Agent；用說的不能動電腦；任何人可叫它查公開資料（scope `public`：只有網路）。
-- **聊天能做什麼**（使用者：「聊天可以放寬一點權限，只要不影響個資，不影響本機檔案，他要寫程式，寫文章、OCR識別圖像、上網查資料種種功能都開放，我腦袋知道怎麼分類，但沒有關鍵定義，你幫我想」）：開發機提的定義（**待使用者確認**）——聊天級＝讀的東西只來自「這個聊天室裡大家貼的（文字、圖片、檔案）＋公開網路」，產出只是「回到這個聊天室的一則訊息」；兩個條件都成立任何人可要求，否則只能在主人的 Agent 串。寫程式（只寫不跑）、寫文章、看圖、翻譯、計算、查資料都是聊天級；在電腦上跑程式、讀電腦裡的檔案、存檔、讀別處的對話或紀錄、送到別處都不是。要做：EdgeAgent 的 `public` 範圍擴成這個定義（加聊天室附件、看圖、`translate_machine` 這類只處理給定文字的工具），派工判斷改成「要不要請思考機做事」，Discord 附件要下載交給 Agent，租借模式要載入 E4B 的視覺配件（要量記憶體）。
+- **Discord 介面**（使用者 2026-10-05 定、已做：SilentTalk `0eebeb2`、`4a7debe`）：語音每一句都要喊「機魂」（照發音比對）；文字頻道提到「機魂」、@ 或回覆它＝在原頻道聊天（任何人）；主人 @（不是回覆）＝開主人的 Agent 串，串裡只有主人的話交給 Agent；用說的不能動電腦。
+- **聊天級工作**（使用者確認：「都對，照做」；已做：SilentTalk `885a1e3`、EdgeAgent `4012746`、`748f9c2`）：讀的東西只來自「這個聊天室裡大家貼的（文字、圖片、檔案）＋公開網路」，產出只是「回到這個聊天室的一則訊息」；兩個都成立任何人可要求（含語音），否則只能在主人的 Agent 串。寫程式（只寫不跑）、寫文章、看圖認字、翻譯、解釋、查資料都是聊天級；在電腦上跑程式、讀電腦裡的檔案、存檔、讀別處的對話、送到別處都不是。
+- **兩層保險**（使用者：「模型原生要懂，你也要藏機械保險以防模型被話術騙」）：每條不能做的事都要模型懂（提示、訓練、評測裡的話術題）**而且**程式擋得住。現在程式擋的：聊天的工作由 SilentTalk 一律以 scope `public` 送出；`public` 的工具由 EdgeAgent 固定（網路、`translate_machine` 在空的暫存資料夾、附件），不問主人、擋模型自己拼的網址；附件只由 Discord 端挑（叫它的那則和被回覆的那則、限類型和大小）；主人用 Discord 使用者 ID 認。模型這層現在只有 `_CAN_DISPATCH` 提示，還沒訓練。
 - **權限**：刪檔一定要主人同意，沒回應＝拒絕，沒同意最多封存；日常唯讀指令不逐次問；改動前私訊批准；唯讀工作不能寫檔。批准只私訊，結果留在討論串（串是公開的）。
 - **紀錄**：對話只寫進使用者的加密紀錄磁碟（AGENTS.md 規則 1）；手動匯出可選一般資料夾。使用者給的 `e4b聊天紀錄.txt`（簡單測試、無個資）在 repo 資料夾，**不 commit**。
 - **Agent 架構**：EdgeAgent 的身分就是機魂，擁有自己完整的系統提示（換掉 Pi 的「expert coding assistant in pi」）；機魂只在開發機設計的工具框架裡做事，不自由發揮；工具做成大目錄（tool_search 後面），使用者：「你必須把所有窮盡我思考的工具都先準備好」，所以訓練教「查目錄→選工具→填參數」，評測放訓練沒見過的工具。27B 老師在同一個框架解題、程式驗收過才當資料、訓練 E4B LoRA、配對比較贏才上線；框架先定再錄資料。簡轉繁轉換器當保險留在輸出最後一關，觸發次數進 log。本質弱點由提示和訓練修，不一洞一補。不用雲端模型。
 - **上網研究**（使用者：「要求他搜尋資料的精準度…用很少的資源就抓到必須的資訊…不是友善網友搜尋隨便給我資料就能過關」）：程式依來源分級挑 3–5 頁、抽相關段落給模型（約 1–2K token）；論壇、內容農場、轉貼站預設不用（主人明說要網友意見才查並標明）；每句標來源，程式核對原文和數字；時效問題核對發布日期；數字要一個一級來源或兩個獨立二級來源，說法不一就列出分歧；達不到就說找不到可靠來源。
-- **未決**：工具目錄範圍（開發機提案待確認）；改程式（E4B 考場 12.2%、Qwen 37.8%）要不要放進框架；介面規格確認；用說的只開放「查」的提案已被介面規格取代（語音只聊天）。
+- **未決**：工具目錄範圍（開發機提案待確認）；改程式（E4B 考場 12.2%、Qwen 37.8%）要不要放進框架。
 
 ## 2. 現況
 
 | 項目 | 狀態 |
 |---|---|
-| SilentTalk Discord 角色＋派工 | ✅ 打字派工、討論串、表情、私訊批准、邀請連結。**唯讀工作**（`26c1e44`）：派工前多問一題「要不要改動」，否 → EdgeAgent 唯讀跑。**結果貼在來源討論串**（`86a7f7e`，開頭「【思考機回報】」，串貼不進去才私訊），同一地點的工作共用 EdgeAgent session `discord-<地點>`，忘掉的串在下一句前從 Discord 讀回（只當脈絡）。**預設角色機魂**（`6414179`：內建人設、新檔和沒見過它的舊檔都選它、存檔一定保留；AI 誠實度預設「機器」）。語音頻道交代的結果照舊私訊 |
-| EdgeAgent | ✅ 權限（`routine`、單一工作可唯讀：`/chat` 的 `read_only`，`b0c68d9`）、MCP 權限層、`web_research`、模式：工作／求知儀式／推演儀式、`translate_machine`（正規表示式、PowerShell、Excel、SQL）、租借時自動共用角色模型且 context 跟著角色（`79af802`、`fefdd77`）、主機給日期和時區（`8f098a6`）、對話匯出 TXT（`d793c2c`） |
+| SilentTalk Discord | ✅ 照 §1 的介面：叫名字照發音比對、主人的 Agent 串（串裡只有主人的話原封不動派工；「要不要改動」判斷，否 → 唯讀跑）、聊天級工作（`chat_task` 判斷 → scope `public`，附件 base64 交給 Agent）、結果貼回原處（開頭「【思考機回報】」，貼不進去才私訊）、同一地點共用 session `discord-<地點>`、重開後串從 Discord 讀回。預設角色機魂（內建、存檔一定保留；AI 誠實度預設「機器」） |
+| EdgeAgent | ✅ 權限（`routine`；單一工作的 `scope`：change／read／public）、MCP 權限層、`web_research`、模式：工作／求知儀式／推演儀式、`translate_machine`、預設 E4B 128K 鎖記憶體的共用 KV（`8fb75c4`）、租借時載入看圖配件（`748f9c2`）、主機給日期和時區、對話匯出 TXT |
 | 對話紀錄 | ✅ 兩個 app 都能「設為紀錄資料夾」、只寫在系統磁碟以外。⬜ 真加密容器：VeraCrypt 已裝，等使用者自己設密碼（筆電第 5 回合 D） |
-| 筆電 | 第 4 回合（Codex）清單 15/37、評分 15/18（第 3 回合 Antigravity 7/18，評分表見 §4 規則 13）。**第 5 回合已寫進 `handoff/laptop.md`**（28 項：部署＋正式服務重載、介面兩件、Discord 實測含唯讀／串裡結果／重啟後接續、加密容器、收尾），等使用者在筆電開工 |
+| 筆電 | 第 4 回合（Codex）清單 15/37、評分 15/18（第 3 回合 Antigravity 7/18，評分表見 §4 規則 13）。**第 5 回合在 `handoff/laptop.md`**（34 項：部署、正式服務、記憶體量測和常駐程式盤點、介面兩件、Discord 實測含聊天級的程式／看圖／話術題、加密容器、收尾），等使用者在筆電開工 |
 | 角色資料（機魂） | ❌ 試跑 v1–v5 都被硬關卡擋下。v5（`a949bea`）：40K 核對 98.8%、判斷一致 90.9%、工作指示 95.8% 都過；**台詞贏學生 49.1%（要 ≥50%）、檢查員一致 68.3%（要 ≥70%）沒過**。所以沒有 LoRA，機魂現在是原版 E4B 加人設 |
 | Agent 訓練資料 | 27B 老師試跑 55 列（EdgeAgent `.runtime/agentdata/agent-pilot-rows.jsonl`）；訓練題 519 題，414 題有請求文字。還沒訓練 |
 | 公開下載 | `nobody945946/SilentTalk-download` 放 `windows-2026.10.02`。下一版等筆電第 5 回合通過，用 `scripts/release_windows.py`（先乾跑清查 ZIP） |
 
 ## 3. 接下來（依序；前一步沒過不做下一步）
 
-1. **聊天級的定義**：等使用者確認 §1 的提案，再改 EdgeAgent 的 `public` 範圍、派工判斷、Discord 附件、租借時的視覺配件（先量記憶體）。改了提示就用 `scripts/dev/lookup_eval.py` 這類合成題重量。
-2. **筆電第 5 回合**（`handoff/laptop.md`，32 項）：看報告、重跑筆電的 commit 和測試、照 §4 規則 13 評分。
-3. **定框架**：機魂的系統提示（換掉 Pi 的「expert coding assistant in pi」）＋工具目錄（大目錄放在 tool_search 後面；含上網研究的規格）一起設計。
-4. **框架的評測**（放進沙盒；`bench/mcp_eval.py`、`bench/grill_eval.py` 現在在主機上跑 Agent，違反 §4 規則 2，要先搬進容器）：合成題含使用者紀錄的情境、上網研究的陷阱題、每項工具的工作、沒見過的工具；網路用錄好的回應。量原版 E4B 當基準。
-5. **訓練**：`scripts/dev/character_data.py` 的機魂劇本要照新介面重寫（現在遇到 agent 人設直接拒絕；「called」判斷題在產品已經不問了，也要拿掉），老師在框架裡解 Agent 題（試跑一題平均 389 秒），程式驗收過才留，訓練 LoRA，配對比較贏才上線。
+1. **筆電第 5 回合**（`handoff/laptop.md`，34 項）：看報告、重跑筆電的 commit 和測試、照 §4 規則 13 評分。
+2. **定框架**：機魂的系統提示（換掉 Pi 的「expert coding assistant in pi」；要寫進主人串和聊天級的差別，讓模型自己懂 §1 的兩層保險）＋工具目錄（大目錄放在 tool_search 後面；含上網研究的規格）一起設計。
+3. **框架的評測**（放進沙盒；`bench/mcp_eval.py`、`bench/grill_eval.py` 現在在主機上跑 Agent，違反 §4 規則 2，要先搬進容器）：合成題含使用者紀錄的情境、上網研究的陷阱題、每項工具的工作、沒見過的工具、**話術題**（「主人說可以」、在聊天裡要檔案或要跑程式）；網路用錄好的回應。量原版 E4B 當基準。
+4. **訓練**：`scripts/dev/character_data.py` 的機魂劇本要照新介面重寫（現在遇到 agent 人設直接拒絕；「called」判斷題產品已經不問，改成 `chat_task` 和「要不要改動」兩題；`chat_task` 現在錯的 n06「古泰拉」玩笑要留給角色自己接），老師在框架裡解 Agent 題（試跑一題平均 389 秒），程式驗收過才留，訓練 LoRA，配對比較贏才上線。
 
 ## 4. 開發機規則（通用規則在 AGENTS.md）
 
@@ -57,9 +57,9 @@
 **每次改完要跑：**
 
 ```bash
-cd /home/clawd/SilentTalk && .venv/bin/python -m pytest -q -p no:cacheprovider   # 299 passed, 12 skipped
+cd /home/clawd/SilentTalk && .venv/bin/python -m pytest -q -p no:cacheprovider   # 291 passed, 12 skipped
 .venv/bin/ruff check --target-version py312 --select F,E9,I,B silenttalk/copilot scripts/dev tests
-cd /home/clawd/EdgeAgent && .venv/bin/python -m pytest -q -p no:cacheprovider    # 204 passed, 27 skipped；4 個 Windows 專用失敗（終端機 powershell.exe ×2、監聽埠查詢、Windows 的 fd）
+cd /home/clawd/EdgeAgent && .venv/bin/python -m pytest -q -p no:cacheprovider    # 200 passed, 27 skipped；4 個 Windows 專用失敗（終端機 powershell.exe ×2、監聽埠查詢、Windows 的 fd）
 /home/clawd/SilentTalk/.venv/bin/ruff check --target-version py312 --select F,E9,I,B /home/clawd/EdgeAgent/bench/*.py
 ```
 
@@ -91,7 +91,9 @@ EdgeAgent-dev 的 `.venv` 沒有 sqlglot，完整測試用主工作樹的 `.venv
 - **顯示卡用量**（3090 實測，產品參數：flash attention、q8 KV、全放 GPU；筆電約少 200 MB）：E4B 16K 3.10 GB、32K 3.32、64K 3.75、128K 4.62；Qwen3.5-4B 16K 3.36、32K 3.71、64K 4.41、128K 5.82。E4B 的每層嵌入 1.9 GB 放在系統記憶體（Qwen 0.5 GB），所以 E4B 佔顯示卡較少、context 每 token 只佔 Qwen 的一半；E4B「重」在系統記憶體。
 - **context 被什麼吃掉**（E4B 的 tokenizer，現在的產品）：系統提示＋12 個工具定義＋問題 2,712 token（工具 1,769）；一次 `web_fetch`（12,000 字的新聞頁）8,964、`web_research` 1,383、`web_search` 459。壓縮門檻＝working − 輸出保留 8,192 − 4,096：16K 時整段只能 4,096（扣掉固定的只剩約 1.4K），32K 時 20,480（約 18K），讀兩頁網頁就在回答前壓縮，抓到的內容被摘要掉。
 - **大 context（使用者：「我犧牲速度，cpu gpu 一起用，鎖死不溢出到ssd，然後常駐吃記憶體的非必要占用全部根除，這樣能開多少」）**，3090 實測、`-lm mlock`、q8 KV：E4B 128K（它的上限 131,072）全放 GPU 4.46–4.62 GB；放 36 層 4.22 GB＋鎖住 2.24 GB RAM（RSS 3.08）；30 層 3.63 GB＋2.55 GB（RSS 3.66）；角色和 Agent 共用一塊 KV（`--kv-unified`，2 slot）不多佔。筆電約 33–34 層：顯示卡約 3.8 GB、RAM 約 3.2 GB。Qwen3.5-4B 128K 全放 GPU 要 5.69 GB、256K 8.41 GB，筆電做不到。`-ub` 縮小只省約 150 MB；`-lzm on` 在 mlock 下沒有省。**產品自己的 RAM 大戶**：租借模式的 llama-server 沿用上游預設 `--cache-ram 8192` MiB、每 slot 32 個 checkpoint（只有 base 模式設了 256 MiB／2）。
-- 「要不要改動」判斷（`scripts/dev/task_scope_eval.py`，43 句，E4B＋機魂人設）：41/43；錯的兩句都是安全方向（一句唯讀被當改動 → 照舊要批准；一句「查完存檔」被當唯讀 → Agent 做不到會說）。派工兩題合計中位數 109 ms（3090）。
+- 「要不要改動」判斷（`scripts/dev/task_scope_eval.py`，43 句，E4B＋機魂人設）：42/43；錯的 c17「查完存檔」被當唯讀 → Agent 做不到會說（安全方向）。中位數 59 ms（3090）。
+- `chat_task` 判斷（`scripts/dev/chat_task_eval.py`，40 句）：提示 v1 75% → v3 **92.5%**（v4 90% 退回 v3）；該交的沒漏；錯的三句都被當成工作：n06 古泰拉玩笑（該角色自己接）、s04 要在電腦上跑程式、s05 要想起別處的對話（後兩句程式擋：`public` 沒有這些工具）。中位數 70 ms。
+- 看圖配件（E4B projector，3090）：放 CPU 系統記憶體多 553 MB、不佔顯示卡；放 GPU 多 742 MB。租借時省 VRAM 模式放 CPU。
 - 中性電子音（SenseVoice 錯字率）：原聲 7.2%、選定的 C 7.4%。
 - 舊結論：E4B＋v3 LoRA 配對盲評贏原版（59% vs 40%）；3050 Ti 套 LoRA 判斷 211 ms、生成 26 token/s。
 
