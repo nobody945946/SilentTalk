@@ -10,6 +10,7 @@
 | **Windows**（使用者的 RTX 3050 Ti 筆電，`C:\Users\...\SilentTalk`） | `handoff/laptop.md` | `handoff/reports/laptop.md` | `laptop-report` |
 | **Linux** 開發機（`/home/clawd/SilentTalk`，RTX 3090） | `handoff/dev-box.md` | 直接改 `handoff/dev-box.md` | `copilot-story-mode` |
 
+- 工作檔是給**機器**的，不分是哪個 agent：筆電上的 Codex 和 Antigravity 讀同一份。**同一台機器一次只開一個 agent**；換人時，新的 agent 照工作檔寫的方式從上一個停下的地方接手。
 - 工作檔是自足的：**不要另外讀** README、ARCHITECTURE、程式碼或另一台機器的工作檔，除非你的工作檔叫你去讀某個段落。
 - 使用者只說「開工」「照做」「繼續」時，就是照上表那份工作檔做。
 - **開工第一件事**：在 SilentTalk 這個 repo 執行 `git pull --ff-only`，然後重讀這份和你的工作檔（工作檔常在另一台機器更新）。拉不下來就停下，告訴使用者。
@@ -28,4 +29,4 @@
 
 ## 3. 給寫交接的人
 
-這個 repo 的交接配置：根目錄只有這份給 agent 讀；每台機器一份自足的工作檔，放在 `handoff/`，並在 §1 的表裡登記；回報寫在 `handoff/reports/<角色>.md`，推到 `<角色>-report` 分支。工作檔的狀況變了（例如一個階段結束、計畫改了）時，把舊版複製到 `archive/`（只存在開發機），再從頭重寫一份新的；不要在舊版上修補。不要在根目錄另外新增給 agent 讀的檔案。
+這個 repo 的交接配置：根目錄只有這份給 agent 讀；每台機器一份自足的工作檔，放在 `handoff/`，並在 §1 的表裡登記；回報寫在 `handoff/reports/<角色>.md`，推到 `<角色>-report` 分支。工作檔的狀況變了（例如一個階段結束、計畫改了）時，把舊版複製到 `archive/`（只存在開發機），再從頭重寫一份新的；不要在舊版上修補。不要在根目錄另外新增給 agent 讀的檔案，也不要寫給特定 agent 的版本（`GEMINI.md`、`AGENTS.override.md`、`.agents/` 之類都不要有；`CLAUDE.md` 只放 `@AGENTS.md`）。工作檔要寫到最弱的 agent 也能照做：每步有照抄的指令、預期結果、失敗時怎麼做；強的 agent 照做也不吃虧。
