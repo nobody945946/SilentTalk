@@ -35,7 +35,7 @@
 ## 3. 接下來
 
 1. **使用者點頭後**把 `toolbox` 併進 EdgeAgent `copilot-story-mode`（它是從 `eaa54fc` 長出來的，可快轉）：先清掉主工作樹裡已經搬到 toolbox 的未提交副本，再 `git merge --ff-only toolbox`、跑測試、push。筆電第 6 回合要靠它。
-2. **看佇列結果**：`python <scratchpad 外>/compare.py` 的做法已寫進 `bench/report.py A B`（配對）。比 `fw-base` 對 `fw-v2`（框架本身）、`fw-v2` 對 `fw-v1-lora`（LoRA）。LoRA 要贏才上線；上線方式要另定（產品從 10/02 起不附 LoRA；角色和 Agent 共用一個 adapter 時，角色請求用 `character_lora_uses` 決定比例）。
+2. **看佇列結果**：`bench/report.py A B`（配對，含失敗卻沒承認）。比 `fw-base` 對 `fw-v2`（框架本身）、`fw-v2` 對 `fw-v1-lora`（LoRA）。LoRA 要贏才上線；上線方式要另定（產品從 10/02 起不附 LoRA；角色和 Agent 共用一個 adapter 時，角色請求用 `character_lora_uses` 決定比例）。
 3. **角色 v6 試跑**（GPU 空出來後）：`.venv/bin/python scripts/dev/machine_spirit.py builtin --chardata .runtime/dev/chardata-ms2`，再 `CHARDATA=.runtime/dev/chardata-ms2 FIXED_PERSONA=1 scripts/dev/character_pipeline.sh`（到 `train-checked.jsonl` 為止；adapter 和 Agent 列一起訓）。硬關卡不降；機魂一段只有 6–9 句角色台詞，試跑可能卡在 75 句的下限，看各項丟掉的數字再判斷。
 4. 合併後的雙用途 adapter（角色列＋Agent 列一起訓）再配對比較一次。
 
@@ -76,7 +76,7 @@ cd /home/clawd/EdgeAgent-toolbox && PYTHONPATH=$PWD /home/clawd/EdgeAgent/.venv/
 
 ## 6. 量過的數字
 
-**框架評測**（E4B、Agent 的份 98K、2 次、同題配對；`fw-base`＝`eaa54fc`，`fw-v1`＝新框架第一版）：整體 19/116 對 19/116；範圍與話術 3/12→7/12（regex 題評分修正後重評）；工具 7/22→4/22；雜事 4/16→5/16；**失敗卻沒承認：54/59→23/85**。v1 的毛病：先說「我將使用 X」就結束這輪、很少主動 tool_search、唯讀工作被要求刪檔卻回「我已執行刪除」（沒刪，程式擋下）→ v2 提示改「直接做完、不複述不客套」、`organize_folder` 收使用者說的資料夾名，待 `fw-v2` 量。
+**框架評測**（E4B、Agent 的份 98K、2 次、同題配對；`fw-base`＝`eaa54fc`，`fw-v1`＝新框架第一版）：整體 19/116 對 19/116；範圍與話術 3/12→7/12（regex 題評分修正後重評）；工具 7/22→4/22；雜事 4/16→5/16；失敗卻沒承認（模型自己的話，中英文都算）17/64→25/90，沒有改善，主機提醒只補到 1 次。v1 的毛病：先說「我將使用 X」就結束這輪、很少主動 tool_search、唯讀工作被要求刪檔卻回「我已執行刪除」（沒刪，程式擋下）→ v2 提示改「直接做完、不複述不客套」、`organize_folder` 收使用者說的資料夾名，待 `fw-v2` 量。
 
 **依工作選模型**（3090 上量，筆電約 ×5 慢）：改程式 E4B 12.2%／Qwen3.5-4B 37.8%；上網研究會誤導 E4B 9%；MCP 找對並呼叫 E4B 77%（舊版、有伺服器清單）；40K 測驗 E4B 75%。27B 老師試跑 55/60 過、平均 454 秒（3 平行）。
 
