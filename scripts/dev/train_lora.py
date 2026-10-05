@@ -256,7 +256,8 @@ def _tokenize(tokenizer, messages: list[dict], row: dict) -> dict[str, list[int]
                 and upto_ids[: len(prompt_ids)] == prompt_ids):
             raise ValueError("chat template does not extend the prompt")
         # The answer ends with the template's end-of-turn marker (Gemma:
-        # <turn|>, Qwen: <|im_end|>), which llama.cpp stops on.
+        # <turn|>, or <|tool_response> after a tool call; Qwen: <|im_end|>),
+        # which llama.cpp stops on (its end-of-generation tokens).
         for position in range(len(prompt_ids), len(upto_ids)):
             mask[position] = 1
     return {"input_ids": full_ids, "completion_mask": mask}
@@ -283,7 +284,7 @@ def check(trainer, tokenizer) -> int:
     print(f"tokens: {len(ids)}, trained on: {len(positions)} in {len(spans)} span(s)")
     for a, b in spans:
         print("TRAINED >>>" + tokenizer.decode(ids[a:b]) + "<<<")
-    end = tokenizer.convert_tokens_to_ids(["<turn|>", "<|im_end|>"])
+    end = tokenizer.convert_tokens_to_ids(["<turn|>", "<|tool_response>", "<|im_end|>"])
     if not spans or any(not any(t in end for t in ids[a:b]) for a, b in spans):
         print("MASK WRONG: every trained span must end its turn with the end-of-turn marker")
         return 1
