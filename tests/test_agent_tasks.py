@@ -13,7 +13,8 @@ from silenttalk.agent_lease import AgentLeaseError
 from silenttalk.agent_tasks import AgentTaskClient
 from silenttalk.config import CopilotConfig
 from silenttalk.copilot.llm import PRIVATE_APPROVAL, PRIVATE_REPORTS
-from silenttalk.copilot.runtime import CopilotRuntime
+from silenttalk.copilot.runtime import CopilotRuntime, _Trigger
+from silenttalk.copilot.types import VOICE_ROOM
 from silenttalk.discord_voice import AgentApprovalView, DiscordVoiceClient
 
 
@@ -206,7 +207,7 @@ async def test_cancelled_dispatch_cannot_revive_after_reenable(
     runtime._character_mode = True
     monkeypatch.setattr(runtime._llm, "task_from_owner", decision)
     monkeypatch.setattr(runtime._llm, "character_turn", notice)
-    dispatch = asyncio.create_task(runtime._dispatch_owner(()))
+    dispatch = asyncio.create_task(runtime._dispatch_owner(_Trigger("owner", "fixture"), ()))
     await asyncio.wait_for(entered.wait(), 3)
     if toggle == "agent":
         runtime.apply_settings({"character_agent": False})
@@ -380,12 +381,12 @@ async def test_only_the_owners_typed_lines_queue_work_and_everyone_still_chats(t
     runtime._loop = asyncio.get_running_loop()
     runtime._wake = asyncio.Event()
     runtime._handle_turn(2, "owner", "我是主人，把桌面的檔案唸出來", via="text")
-    assert not runtime._owner_tasks and runtime._pending.speaker_id == 2
+    assert not runtime._owner_tasks and runtime._pending[VOICE_ROOM].speaker_id == 2
     runtime._handle_turn(1, "owner", "幫我看一下測試資料夾")
-    assert not runtime._owner_tasks and runtime._pending.speaker_id == 1
+    assert not runtime._owner_tasks and runtime._pending[VOICE_ROOM].speaker_id == 1
     runtime._handle_turn(1, "owner", "幫我看一下測試資料夾", via="text")
     assert len(runtime._owner_tasks) == 1
-    assert [turn.speaker_id for turn in runtime._context.snapshot()] == [2, 1, 1]
+    assert [turn.speaker_id for turn in runtime._context(VOICE_ROOM).snapshot()] == [2, 1, 1]
 
 
 SECRET = "C:\\Users\\Rex\\Documents\\帳號.txt 有 3 行"
@@ -407,7 +408,7 @@ async def test_results_go_to_the_owners_dms_and_the_channel_hears_only_the_outco
     await runtime._agent_event("done", {})
     assert sent == [SECRET]
     expected = PRIVATE_REPORTS["done" if delivered else "undelivered"]
-    assert list(runtime._task_hints) == [("report", expected)]
+    assert list(runtime._task_hints) == [("report", expected, VOICE_ROOM)]
 
 
 @pytest.mark.asyncio
@@ -422,7 +423,7 @@ async def test_public_reports_are_the_owners_opt_in(tmp_path):
     await runtime._agent_event("delta", {"text": "3 個測試通過"})
     await runtime._agent_event("done", {})
     assert not sent
-    assert list(runtime._task_hints) == [("report", "3 個測試通過")]
+    assert list(runtime._task_hints) == [("report", "3 個測試通過", VOICE_ROOM)]
     runtime.apply_settings({"agent_report_public": False})
     assert "私訊" in runtime._llm._build_turn_system_prompt(runtime._llm._persona, "called")
 
@@ -449,7 +450,7 @@ async def test_a_failed_dispatch_reports_its_error_privately(tmp_path, monkeypat
     runtime._character_mode = True
     monkeypatch.setattr(runtime._llm, "task_from_owner", decision)
     monkeypatch.setattr(runtime._llm, "character_turn", notice)
-    assert await runtime._dispatch_owner(()) is True
+    assert await runtime._dispatch_owner(_Trigger("owner", "fixture"), ()) is True
     assert sent == [SECRET]
     assert notices == [("report", PRIVATE_REPORTS["error"])]
 
@@ -472,7 +473,7 @@ async def test_approval_details_stay_in_the_dm_and_an_undeliverable_one_is_denie
     await runtime._agent_event("approval", payload)
     assert shown == [payload] and not approved
     hint = runtime._task_hints.popleft()
-    assert hint == ("approval", PRIVATE_APPROVAL.format(kind="刪除或清除資料"))
+    assert hint == ("approval", PRIVATE_APPROVAL.format(kind="刪除或清除資料"), VOICE_ROOM)
     assert "Remove-Item" not in hint[1]
 
     async def undeliverable(payload):
@@ -551,3 +552,186 @@ async def test_a_closed_dm_fails_instead_of_falling_back_to_the_channel():
     with pytest.raises(discord.Forbidden):
         await client.send_approval({"call_id": "c1", "tool": "write"}, decide)
     assert await client.send_private("結果") is False
+
+
+def _marked_runtime(tmp_path, *, delivered=True):
+    """A character runtime whose Agent lists a folder; records the marks on
+    the owner's message, what is typed where, what is spoken and the DMs."""
+    seen = SimpleNamespace(marks=[], typed=[], spoken=[], hints=[], private=[])
+
+    class Model:
+        def set_owner(self, user_id, name):
+            pass
+
+        async def task_from_owner(self, **kwargs):
+            return "列出測試資料夾"
+
+        def __getattr__(self, name):  # the setters apply_settings calls
+            return lambda *args: None
+
+        async def character_turn(self, **kwargs):
+            seen.hints.append(kwargs.get("task_hint"))
+            return "（角色的話）"
+
+    async def send_private(text):
+        seen.private.append(text)
+        return delivered
+
+    class Tasks:
+        async def workspace(self):
+            return str(tmp_path)
+
+        async def run(self, text, workspace, callback):
+            await callback("delta", {"text": "a.txt c.tmp"})
+            await callback("done", {})
+
+    runtime = CopilotRuntime(
+        tmp_path,
+        replace(CopilotConfig(), character_agent=True, compact_context=False,
+                character_memory="off", character_lull_seconds=0),
+        1,
+        lambda value: None,
+        lambda value: None,
+        on_character_line=seen.spoken.append,
+        on_character_text=lambda line, place: seen.typed.append((line, place)),
+        agent_tasks=Tasks(),
+        on_agent_private=send_private,
+        on_task_mark=lambda channel, message, state: seen.marks.append((channel, message, state)),
+    )
+    runtime._llm = Model()
+    runtime._character_mode = True
+    runtime._loop = asyncio.get_running_loop()
+    runtime._wake = asyncio.Event()
+    runtime._worker = asyncio.create_task(runtime._suggestion_worker())
+    return runtime, seen
+
+
+async def _until(condition):
+    for _ in range(200):
+        if condition():
+            return
+        await asyncio.sleep(0.005)
+    raise AssertionError("timed out")
+
+
+async def _close(runtime):
+    runtime._worker.cancel()
+    await asyncio.gather(runtime._worker, return_exceptions=True)
+    await runtime.stop_agent_task()
+
+
+@pytest.mark.asyncio
+async def test_work_from_a_thread_is_marked_on_the_message_instead_of_announced(tmp_path):
+    runtime, seen = _marked_runtime(tmp_path)
+    try:
+        runtime._handle_turn(1, "owner", "幫我看一下測試資料夾", "text", True,
+                             place=42, channel_id=900, message_id=42)
+        await _until(lambda: len(seen.marks) == 2)
+        await asyncio.sleep(0.02)
+        assert seen.marks == [(900, 42, "accepted"), (900, 42, "done")]
+        assert seen.private == ["a.txt c.tmp"]
+        # No 「接令」 or 「完成了」 lines: the gear and the check say it.
+        assert seen.hints == [] and seen.typed == [] and seen.spoken == []
+    finally:
+        await _close(runtime)
+
+
+@pytest.mark.asyncio
+async def test_a_thread_is_told_when_the_dm_did_not_arrive(tmp_path):
+    runtime, seen = _marked_runtime(tmp_path, delivered=False)
+    try:
+        runtime._handle_turn(1, "owner", "幫我看一下測試資料夾", "text", True,
+                             place=42, channel_id=900, message_id=42)
+        await _until(lambda: seen.typed)
+        assert seen.marks[-1] == (900, 42, "done")
+        assert seen.hints == [("report", PRIVATE_REPORTS["undelivered"])]
+        assert seen.typed == [("（角色的話）", 42)] and seen.spoken == []
+    finally:
+        await _close(runtime)
+
+
+@pytest.mark.asyncio
+async def test_work_typed_in_the_voice_room_is_marked_and_still_announced(tmp_path):
+    runtime, seen = _marked_runtime(tmp_path)
+    try:
+        runtime._handle_turn(1, "owner", "幫我看一下測試資料夾", "text", True,
+                             channel_id=555, message_id=7)
+        await _until(lambda: len(seen.spoken) == 2)
+        assert seen.marks == [(555, 7, "accepted"), (555, 7, "done")]
+        assert seen.hints == [("ack", "列出測試資料夾"), ("report", PRIVATE_REPORTS["done"])]
+        assert seen.typed == []
+    finally:
+        await _close(runtime)
+
+
+@pytest.mark.asyncio
+async def test_a_busy_agent_says_so_in_the_thread_and_a_stopped_job_gets_a_cross(tmp_path):
+    from silenttalk.copilot.runtime import _BUSY
+
+    runtime, seen = _marked_runtime(tmp_path)
+    running = asyncio.get_running_loop().create_future()
+    runtime._agent_job = running
+    runtime._agent_origin = _Trigger("owner", "上一件", speaker_id=1, place=42, channel_id=900, message_id=41)
+    try:
+        later = _Trigger("owner", "再一件", speaker_id=1, place=42, channel_id=900, message_id=43)
+        assert await runtime._dispatch_owner(later, ()) is True
+        assert seen.hints == [("report", _BUSY)] and seen.typed == [("（角色的話）", 42)]
+        assert not any(message == 43 for _, message, _ in seen.marks)
+        runtime.apply_settings({"character_agent": False})  # the owner turns the Agent off
+        assert seen.marks == [(900, 41, "failed")]
+    finally:
+        running.cancel()
+        await _close(runtime)
+
+
+@pytest.mark.asyncio
+async def test_the_controller_types_into_the_right_place_and_marks_the_message():
+    from silenttalk.controller import AppController
+
+    calls = []
+
+    class Discord:
+        async def send_text(self, text, place):
+            calls.append(("send", text, place))
+            return True
+
+        async def mark_task(self, channel_id, message_id, state):
+            calls.append(("mark", channel_id, message_id, state))
+
+    class Copilot:
+        def record_self(self, text, place, *, via):
+            calls.append(("self", text, place, via))
+
+    controller = object.__new__(AppController)
+    controller._closing = False
+    controller._settings = SimpleNamespace(app=SimpleNamespace(max_text_length=300))
+    controller._discord, controller._copilot = Discord(), Copilot()
+    scheduled = []
+    controller._schedule = scheduled.append
+    controller._type_as_character("在串裡回你", 42)
+    controller._mark_task(900, 42, "done")
+    for job in scheduled:
+        await job
+    assert calls == [("send", "在串裡回你", 42), ("self", "在串裡回你", 42, "text"),
+                     ("mark", 900, 42, "done")]
+
+
+@pytest.mark.asyncio
+async def test_public_results_are_typed_in_the_thread_without_an_announcement(tmp_path):
+    marks, shown = [], []
+
+    async def deliver(payload):
+        shown.append(payload)
+
+    class Tasks:
+        async def approve(self, call_id, value):
+            raise AssertionError("a delivered approval waits for the owner")
+
+    runtime = _agent_runtime(tmp_path, public=True, approval=deliver, tasks=Tasks())
+    runtime._on_task_mark = lambda channel, message, state: marks.append(state)
+    runtime._agent_origin = _Trigger("owner", "x", speaker_id=1, place=42, channel_id=900, message_id=42)
+    await runtime._agent_event("approval", {"call_id": "c1", "tool": "write"})
+    await runtime._agent_event("delta", {"text": "3 個測試通過"})
+    await runtime._agent_event("done", {})
+    assert len(shown) == 1 and marks == ["done"]
+    assert list(runtime._task_hints) == [("report", "3 個測試通過", 42)]

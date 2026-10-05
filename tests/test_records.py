@@ -48,11 +48,12 @@ def test_every_line_is_kept_with_who_when_and_how(tmp_path: Path) -> None:
     assert recorder.write(_turn(1, "阿遠", "機魂 在嗎", via="text"))
     assert recorder.write(_turn(22, "小綠", "我也在"))
     assert recorder.write(_turn(1, "阿遠", "遵命", is_self=True), character="馬基納")
+    assert recorder.write(_turn(1, "阿遠", "串裡說的", via="text", place=777))
     lines = _lines(tmp_path)
-    assert [(l["speaker"], l["text"], l["via"], l["self"]) for l in lines] == [
-        ("阿遠", "機魂 在嗎", "text", False), ("小綠", "我也在", "voice", False),
-        ("馬基納", "遵命", "voice", True)]
-    assert all(set(l) == {"time", "speaker_id", "speaker", "self", "via", "text"} for l in lines)
+    assert [(l["speaker"], l["text"], l["via"], l["self"], l["place"]) for l in lines] == [
+        ("阿遠", "機魂 在嗎", "text", False, 0), ("小綠", "我也在", "voice", False, 0),
+        ("馬基納", "遵命", "voice", True, 0), ("阿遠", "串裡說的", "text", False, 777)]
+    assert all(set(l) == {"time", "speaker_id", "speaker", "self", "via", "place", "text"} for l in lines)
 
 
 @pytest.mark.asyncio

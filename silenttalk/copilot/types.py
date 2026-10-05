@@ -13,6 +13,10 @@ class ConversationTurn:
     created_at: float = 0.0
     # "voice" (spoken, via STT) or "text" (typed in the channel's chat).
     via: str = "voice"
+    # Where it was said: VOICE_ROOM (the voice channel, spoken or in its chat)
+    # or the ID of a Discord thread the bot opened. Each place is its own
+    # conversation; a line is only answered, and only remembered, where it was said.
+    place: int = 0
 
     @classmethod
     def now(
@@ -23,6 +27,7 @@ class ConversationTurn:
         *,
         is_self: bool = False,
         via: str = "voice",
+        place: int = 0,
     ) -> "ConversationTurn":
         return cls(
             speaker_id=speaker_id,
@@ -30,8 +35,13 @@ class ConversationTurn:
             text=text,
             is_self=is_self,
             via=via,
+            place=place,
             created_at=time(),
         )
+
+
+# The voice channel the bot sits in (its voice and its built-in chat).
+VOICE_ROOM = 0
 
 
 @dataclass(frozen=True, slots=True)

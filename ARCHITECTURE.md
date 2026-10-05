@@ -83,7 +83,7 @@ Discord 真人 PCM（含 Owner，排除 Bot）
 
 receive callback 不做推理，只複製 PCM 到 queue。生成期間新句子只更新下一次 trigger，不各自排隊生成；少於兩字的句子只進 context。角色正在說話時不追加下一句，過期生成會丟棄。語音播放成功後才記錄 self turn，未採用候選不進 context。自動壓縮濃縮早期內容，保留近期原文。
 
-文字聊天啟用時，只接收 Bot 所在語音頻道的內建文字聊天，排除其他 Bot。文字與語音共用 context；依來源用文字或語音回覆，文字送出成功後才記錄 self turn。
+文字聊天啟用時，接收 Bot 所在語音頻道的內建文字聊天，以及 Bot 開的討論串，排除其他 Bot；Owner 在其他文字頻道 @ Bot（角色模式）時，從那則訊息開討論串（Discord 語音頻道的聊天室不能開串）。每句話帶著所在位置（`place`：`VOICE_ROOM` 或討論串 ID）。每個位置各有自己的 context、壓縮與「最新一句優先」的待答；語音頻道的文字與語音共用同一個 context。回覆送回原位置：討論串打字，語音頻道依來源用文字或語音；文字送出成功後才在該位置記錄 self turn。沉默開話題只看語音頻道；角色狀態更新讀所有位置。討論串最多保留 16 個，最久沒說話的先忘。派工的那則訊息由 `discord_voice.mark_task` 標記：受理 ⚙️，完成 ✅，失敗或取消 ❌。語音頻道的派工另有角色的接令與回報；討論串只在標記說不出的情況（工作仍在進行、私訊送不出去、公開結果）打一句。逐字稿紀錄附 `place`。
 
 角色 LoRA 的套用請求由 `character_lora_uses` 決定。EdgeAgent 在角色有 LoRA 時分兩個 slot，區分套用與未套用的 cache；其他情況角色用一個 slot。基底與 LoRA 相同時另加 Agent 專用 slot，角色請求固定 slot 0／1，Agent 使用下一個 slot。每個 slot 的 context 保留兩個用戶端要求的較大容量。slot 數不代表完整模型數。
 

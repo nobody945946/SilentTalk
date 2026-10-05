@@ -30,13 +30,13 @@ SilentTalk 是 Discord 語音角色與回覆建議玩具。下載後啟動同一
 ### 首次 Discord 授權
 
 1. 在 Discord Developer Portal 建立 Application 與 Bot。
-2. 邀請 Bot 到要使用的 Server，授予 View Channel、Connect、Speak、Send Messages（所在語音頻道的聊天室）。
+2. 邀請 Bot 到要使用的 Server，授予 View Channel、Connect、Speak、Send Messages（所在語音頻道的聊天室）；要在文字頻道開討論串，再加 Create Public Threads、Send Messages in Threads、Add Reactions、Read Message History。
 3. 取得 Bot Token，並在 Discord Developer Mode 複製自己的 User ID。
 4. 初次啟動時，在授權介面輸入這兩項資料。
 
 新輸入存入 Windows 認證管理員，之後不用重填。既有 `.env` 優先，安裝器不修改它或其他使用者設定。Application ID 與 Public Key 不能代替 Bot Token。建立 Bot 與帳號授權仍是必要的一次性步驟。
 
-預設只使用語音。要啟用所在語音頻道的內建文字聊天，需在設定開啟文字聊天，於 Developer Portal 開啟 Message Content Intent，並授予該頻道的發送訊息權限；不會讀寫其他文字頻道。
+預設只使用語音。要啟用文字聊天，需在設定開啟文字聊天，於 Developer Portal 開啟 Message Content Intent，並授予發送訊息權限。Bot 讀寫所在語音頻道的內建聊天室；角色模式下 Owner 在任何文字頻道 @ 它，它就從那則訊息開一個討論串，之後的對話都在串裡（不用再 @），不洗版原頻道。只有 Owner 能開串；串裡誰都能和角色聊。其他文字頻道的訊息不讀。每個討論串是獨立的對話：角色只在那個串裡回答、也只在那個串裡記得說過的話。
 
 既有 Bot 使用 Agent 派工前需重新邀請一次，補上 Send Messages。使用 [Discord 邀請頁](https://discord.com/developers/applications) 中該 Application 的 OAuth2 URL Generator，選 bot 與上述四個權限。批准按鈕不需要 Message Content Intent；只有讀取一般聊天文字時才需要。
 
@@ -59,11 +59,11 @@ SilentTalk 是 Discord 語音角色與回覆建議玩具。下載後啟動同一
 - **選項：**產生最多四種角色會說的回覆。W／A／S／D 或方向鍵選擇，同鍵再按一次、Enter 或 Space 說出。R 換到待顯示的新選項，沒有時重新產生；E 帶到打字框修改，M 切換心情。中文輸入法若攔截按鍵，可改用方向鍵。
 - **打字：**手動輸入後讓 Bot 說出。建議清單可用上下鍵選擇、Tab 帶入文字框；快捷句可新增、更新、刪除或雙擊播放。
 
-開啟文字聊天後，角色依觸發來源用文字或語音回答；選項模式可用 T 將選中回覆送到所在語音頻道的文字聊天。
+開啟文字聊天後，角色在哪裡被問就在哪裡答：討論串打字回串裡，語音頻道裡依來源用文字或語音；選項模式可用 T 將選中回覆送到所在語音頻道的文字聊天。
 
 人設頁設定角色的名字、身分、背景、想要的事、個性、人際關係與聲音。開啟「設定 → 聊天 → 讓主人交代 Agent 工作」後，角色可接令並透過 EdgeAgent 做事。聲線、語速與音效可試聽，試聽只在本機播放。標點會影響 EdgeTTS 的斷句與語氣，但不保證精確停頓或拉長音。
 
-在 EdgeAgent「⋯ → 權限」開啟 Discord Agent，設定寫檔、執行指令、上網及可用資料夾；派工使用第一個資料夾，沒有設定時角色會請主人先設定。Agent 與角色需選同一基底與同一 LoRA，才能在角色租借期間共用推論。只有 Owner 打字的話能派工：Owner 在語音頻道的聊天室打字下令（要開「讀寫文字聊天」和 Developer Portal 的 Message Content Intent），用說的只是聊天（麥克風旁的任何聲音都會被當成 Owner）。判斷是不是工作、寫給 Agent 的指示，都只讀 Discord 使用者 ID 等於 Owner 的打字內容；其他人的話（就算冒用 Owner 的名字）、角色自己的話和對話摘要都不會送進去。其他人照常可以和角色聊天，只是不能交代工作。批准按鈕和操作細節只私訊給 Owner，私訊送不出去就拒絕；每次准許只涵蓋該操作。讀過網頁後重新要求寫檔／指令批准，刪除、受保護檔案指令和模型自己組出來的網址固定單次批准。任務結果預設私訊給 Owner，角色在頻道只說成功或失敗（設定「在頻道公開 Agent 的結果」可改成唸出來）。Owner 需允許同伺服器成員私訊，背景執行時仍可聊天。
+在 EdgeAgent「⋯ → 權限」開啟 Discord Agent，設定寫檔、執行指令、上網及可用資料夾；派工使用第一個資料夾，沒有設定時角色會請主人先設定。Agent 與角色需選同一基底與同一 LoRA，才能在角色租借期間共用推論。只有 Owner 打字的話能派工：Owner 在語音頻道的聊天室或討論串打字下令（要開「讀寫文字聊天」和 Developer Portal 的 Message Content Intent），用說的只是聊天（麥克風旁的任何聲音都會被當成 Owner）。判斷是不是工作、寫給 Agent 的指示，都只讀 Discord 使用者 ID 等於 Owner 的打字內容；其他人的話（就算冒用 Owner 的名字）、角色自己的話和對話摘要都不會送進去。其他人照常可以和角色聊天，只是不能交代工作。批准按鈕和操作細節只私訊給 Owner，私訊送不出去就拒絕；每次准許只涵蓋該操作。讀過網頁後重新要求寫檔／指令批准，刪除、受保護檔案指令和模型自己組出來的網址固定單次批准。受理的那則訊息會加上 ⚙️，完成換成 ✅、失敗或取消換成 ❌。任務結果預設私訊給 Owner；在語音頻道下的令，角色另外說一句接令和成功或失敗；在討論串下的令只靠表情，串裡只在私訊送不出去或工作還在進行時說一句（設定「在頻道公開 Agent 的結果」可改成把結果說出來）。Owner 需允許同伺服器成員私訊，背景執行時仍可聊天。
 
 設定頁提供聊天、Discord、聲音、聽力、本機模型與快捷鍵。變更自動保存；標示「需重開」的項目下次啟動生效。預設值在 `config.toml`，使用者變更在 `settings.json`，同名項目以後者優先。
 

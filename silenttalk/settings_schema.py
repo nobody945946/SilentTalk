@@ -75,8 +75,8 @@ PAGES: tuple[Page, ...] = (
                 ),
                 Setting(
                     "copilot", "character_agent", "讓主人交代 Agent 工作", "bool",
-                    "主人在語音頻道的聊天室打字下令（要開「讀寫文字聊天」），用說的不算；"
-                    "角色接令，批准和結果私訊主人。先在 EdgeAgent 權限頁開啟 Discord，"
+                    "主人打字下令（語音頻道的聊天室，或在文字頻道 @ 它開的討論串；要開「讀寫文字聊天」），"
+                    "用說的不算。受理的訊息加 ⚙️，完成換 ✅、失敗換 ❌；批准和結果私訊主人。先在 EdgeAgent 權限頁開啟 Discord，"
                     "設定可用資料夾，並讓 Agent 與角色使用相同基底和 LoRA。",
                 ),
                 Setting(
@@ -156,11 +156,13 @@ PAGES: tuple[Page, ...] = (
     Page("discord", "Discord", (
         Group(
             "文字聊天",
-            "只讀寫 Bot 所在語音頻道內建的聊天室，不碰其他文字頻道。",
+            "讀寫 Bot 所在語音頻道的聊天室，和它開的討論串。角色模式下主人在任何文字頻道 @ 它，"
+            "它就在那裡開一個討論串，對話都在串裡；其他文字頻道的訊息不讀。",
             (
                 Setting(
                     "discord", "text_chat", "讀寫文字聊天", "bool",
-                    "需要先在 Discord Developer Portal 開啟 Message Content Intent。",
+                    "需要先在 Discord Developer Portal 開啟 Message Content Intent。"
+                    "開討論串還要給 Bot「建立公開討論串」「在討論串中傳送訊息」「新增反應」「讀取訊息歷史」權限。",
                     restart=True,
                 ),
             ),

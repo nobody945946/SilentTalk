@@ -14,7 +14,7 @@ from silenttalk.copilot.character_state import (
 )
 from silenttalk.copilot.persona import PRESET_PERSONAS
 from silenttalk.copilot.runtime import CopilotRuntime
-from silenttalk.copilot.types import ConversationTurn, ReplySuggestions
+from silenttalk.copilot.types import VOICE_ROOM, ConversationTurn, ReplySuggestions
 
 
 class SlowFakeLLM:
@@ -26,6 +26,8 @@ class SlowFakeLLM:
         self.owner_name = ""
         self.state = CharacterState()
         self.agenda = ()
+        # The conversation each character_turn was given.
+        self.turns_seen: list[list[str]] = []
 
     def set_agent_dispatch(self, enabled: bool) -> None:
         self.agent_dispatch = enabled
@@ -69,6 +71,7 @@ class SlowFakeLLM:
     ) -> str:
         newest = next(turn.text for turn in reversed(turns) if not turn.is_self)
         self.calls.append(("character", newest, addressed, engagement))
+        self.turns_seen.append([turn.text for turn in turns])
         await self.release.wait()
         self.release.clear()
         return self.character_line
@@ -87,7 +90,9 @@ async def _runtime(
         on_turn=delivered.append,
         on_character_line=lambda line: delivered.append(("spoke", line)),
         on_character_text=(
-            (lambda line: delivered.append(("typed", line))) if text else None
+            (lambda line, place: delivered.append(
+                ("typed", line) if place == VOICE_ROOM else ("typed", line, place)
+            )) if text else None
         ),
     )
     llm = SlowFakeLLM()
@@ -137,7 +142,7 @@ async def test_filler_words_join_context_without_triggering(tmp_path: Path) -> N
     await _settle()
 
     assert llm.calls == []
-    assert [turn.text for turn in runtime._context.snapshot()] == ["嗯"]
+    assert [turn.text for turn in runtime._context(VOICE_ROOM).snapshot()] == ["嗯"]
     assert runtime.regenerate() is False
     await _stop(runtime)
 
@@ -207,7 +212,7 @@ async def test_character_sees_its_own_lines_and_the_engagement_setting(
     await _settle()
 
     assert llm.calls == [("character", "我剛剛吃了拉麵", False, "active")]
-    turns = runtime._context.snapshot()
+    turns = runtime._context(VOICE_ROOM).snapshot()
     assert [(turn.text, turn.is_self) for turn in turns] == [
         ("我先講一句", True),
         ("我剛剛吃了拉麵", False),
@@ -237,14 +242,14 @@ async def test_owner_mic_counts_only_in_character_mode(tmp_path: Path) -> None:
     runtime.accept_pcm(1, "Owner", b"options")
     runtime._handle_turn(1, "Owner", "我在講話")
     assert packets == []
-    assert "我在講話" not in [turn.text for turn in runtime._context.snapshot()]
+    assert "我在講話" not in [turn.text for turn in runtime._context(VOICE_ROOM).snapshot()]
 
     runtime.set_persona(PRESET_PERSONAS[0])
     runtime.set_character_mode(True)
     runtime.accept_pcm(1, "Owner", b"character")
     runtime._handle_turn(1, "Owner", "凱哥你好")
     assert packets == [(1, "Owner", b"character")]
-    assert "凱哥你好" in [turn.text for turn in runtime._context.snapshot()]
+    assert "凱哥你好" in [turn.text for turn in runtime._context(VOICE_ROOM).snapshot()]
     await _stop(runtime)
 
 
@@ -281,6 +286,66 @@ async def test_typed_lines_are_answered_by_typing(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_a_thread_is_its_own_conversation_answered_in_the_thread(tmp_path: Path) -> None:
+    """A thread the bot opened is a separate conversation: the character is
+    given only that thread's lines, answers by typing there, and the voice
+    room neither hears it nor counts it as talk (no lull reset)."""
+    runtime, llm, delivered = await _runtime(tmp_path, text=True)
+    runtime.set_persona(PRESET_PERSONAS[0])
+    runtime.set_character_mode(True)
+    runtime._handle_turn(2, "阿傑", "今天好熱喔")
+    heard = runtime._last_heard_at
+    runtime._handle_turn(3, "小綠", "幫我想個團名", "text", True, place=777, channel_id=777, message_id=9)
+    assert runtime._last_heard_at == heard
+    await _settle()
+    llm.release.set()  # the voice room spoke first
+    await _settle()
+    llm.release.set()
+    await _settle()
+
+    assert ("spoke", "收到") in delivered and ("typed", "收到", 777) in delivered
+    assert llm.turns_seen == [["今天好熱喔"], ["幫我想個團名"]]
+    runtime.record_self("收到", 777, via="text")  # what the controller does once it is sent
+    assert [t.text for t in runtime._context(777).snapshot()] == ["幫我想個團名", "收到"]
+    assert [t.text for t in runtime._context(VOICE_ROOM).snapshot()] == ["今天好熱喔"]
+    turns = [item for item in delivered if isinstance(item, ConversationTurn)]
+    assert [(t.place, t.via, t.is_self) for t in turns] == [
+        (VOICE_ROOM, "voice", False), (777, "text", False), (777, "text", True)]
+    await _stop(runtime)
+
+
+@pytest.mark.asyncio
+async def test_newer_lines_replace_older_ones_only_within_their_own_place(tmp_path: Path) -> None:
+    runtime, llm, _ = await _runtime(tmp_path, text=True)
+    runtime.set_persona(PRESET_PERSONAS[0])
+    runtime.set_character_mode(True)
+    runtime._handle_turn(2, "阿傑", "第一句")  # being answered
+    await _settle()
+    runtime._handle_turn(2, "阿傑", "第二句")
+    runtime._handle_turn(3, "小綠", "串裡一句", "text", True, place=777)
+    runtime._handle_turn(2, "阿傑", "第三句")  # replaces 第二句, keeps its turn in line
+    assert list(runtime._pending) == [VOICE_ROOM, 777]
+    for _ in range(3):
+        llm.release.set()
+        await _settle()
+    assert [call[1] for call in llm.calls] == ["第一句", "第三句", "串裡一句"]
+    await _stop(runtime)
+
+
+@pytest.mark.asyncio
+async def test_only_the_most_recent_threads_are_kept(tmp_path: Path) -> None:
+    runtime, _, _ = await _runtime(tmp_path)
+    runtime.set_character_mode(True)
+    for place in range(1, 18):
+        runtime._handle_turn(2, "阿傑", "嗨嗨", "text", place=place)
+    runtime._handle_turn(2, "阿傑", "第一個串又有人說話", "text", place=1)
+    runtime._handle_turn(2, "阿傑", "嗨嗨", "text", place=18)
+    threads = [place for place in runtime._contexts if place != VOICE_ROOM]
+    assert threads == [*range(4, 18), 1, 18]  # 2 and 3 were quiet the longest
+    await _stop(runtime)
+
+
+@pytest.mark.asyncio
 async def test_typed_lines_fall_back_to_speech_when_text_is_off(tmp_path: Path) -> None:
     runtime, llm, delivered = await _runtime(tmp_path)  # no on_character_text
     runtime.set_persona(PRESET_PERSONAS[0])
@@ -309,10 +374,10 @@ async def test_a_long_session_is_compacted_instead_of_truncated(tmp_path: Path) 
     await _settle()
 
     assert any(call[0] == "summarize" for call in llm.calls if isinstance(call, tuple))
-    assert runtime._context.summary == "稍早在聊晚餐"
-    texts = [turn.text for turn in runtime._context.snapshot()]
+    assert runtime._context(VOICE_ROOM).summary == "稍早在聊晚餐"
+    texts = [turn.text for turn in runtime._context(VOICE_ROOM).snapshot()]
     assert "第0句話" not in texts and "第11句話" in texts
-    assert len(runtime._context.snapshot()) == 6
+    assert len(runtime._context(VOICE_ROOM).snapshot()) == 6
     await _stop(runtime)
 
 
@@ -333,7 +398,7 @@ async def test_compaction_can_be_turned_off(tmp_path: Path) -> None:
 
     assert not any(call[0] == "summarize" for call in llm.calls if isinstance(call, tuple))
     # Without compaction the old turns are simply dropped from the prompt.
-    assert runtime._context.summary == ""
+    assert runtime._context(VOICE_ROOM).summary == ""
     await _stop(runtime)
 
 

@@ -63,6 +63,8 @@ class TranscriptRecorder:
             "speaker": character if turn.is_self and character else turn.speaker_name,
             "self": turn.is_self,
             "via": turn.via,
+            # 0 = the voice channel, otherwise the Discord thread it was said in
+            "place": turn.place,
             "text": turn.text,
         }
         try:

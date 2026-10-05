@@ -14,7 +14,7 @@ from silenttalk.agent_tasks import AgentTaskClient
 from silenttalk.config import Settings
 from silenttalk.copilot.persona import Persona
 from silenttalk.copilot.runtime import CopilotRuntime, ThinkingCallback, TurnCallback
-from silenttalk.copilot.types import ReplySuggestions
+from silenttalk.copilot.types import VOICE_ROOM, ReplySuggestions
 from silenttalk.discord_voice import DiscordAudioPlayer, DiscordVoiceClient
 from silenttalk.speech_queue import SpeechQueue
 from silenttalk.speech_settings import validate_rate_multiplier
@@ -67,6 +67,7 @@ class AppController:
                 on_agent_approval=self._agent_approval,
                 on_agent_line=self._speak_agent_line,
                 on_agent_private=self._agent_private,
+                on_task_mark=self._mark_task,
             )
         self._discord = DiscordVoiceClient(
             settings.discord,
@@ -77,6 +78,8 @@ class AppController:
                 if self._copilot and settings.discord.text_chat
                 else None
             ),
+            # Threads are conversations with the character, so only in character mode.
+            threads_open=lambda: self._copilot is not None and self._copilot.character_mode,
         )
         self._tts = EdgeTTSEngine(settings.tts, Path(self._temp.name))
         self._queue = SpeechQueue(
@@ -199,24 +202,30 @@ class AppController:
         text = normalize_text(raw_text, self._settings.app.max_text_length)
         self._schedule(self._send_text(text))
 
-    async def _send_text(self, text: str) -> None:
-        if not await self._discord.send_text(text):
-            self._status(AppState.ERROR, "訊息送不出去：確認 Bot 有這個頻道的發言權限。")
+    async def _send_text(self, text: str, place: int = VOICE_ROOM) -> None:
+        if not await self._discord.send_text(text, place):
+            self._status(AppState.ERROR, "訊息送不出去：確認 Bot 有這個頻道（或討論串）的發言權限。")
             return
         if self._copilot is not None:
             # Same rule as speech: only what actually reached the channel
             # counts as something "you" said.
-            self._copilot.record_self(text)
+            self._copilot.record_self(text, place, via="text")
 
-    def _type_as_character(self, line: str) -> None:
-        """Runs on the backend loop; the character answers a typed line."""
+    def _type_as_character(self, line: str, place: int = VOICE_ROOM) -> None:
+        """Runs on the backend loop; the character answers a typed line in
+        the place it came from (the voice channel's chat or a thread)."""
         if self._closing:
             return
         try:
             text = normalize_text(line, self._settings.app.max_text_length)
         except ValueError:
             return
-        self._schedule(self._send_text(text))
+        self._schedule(self._send_text(text, place))
+
+    def _mark_task(self, channel_id: int, message_id: int, state: str) -> None:
+        """⚙️ / ✅ / ❌ on the owner's message that handed over the work."""
+        if not self._closing:
+            self._schedule(self._discord.mark_task(channel_id, message_id, state))
 
     async def _agent_approval(self, payload: dict[str, object]) -> None:
         session_id = self._agent_tasks.session_id

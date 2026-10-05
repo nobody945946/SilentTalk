@@ -12,6 +12,7 @@ from discord.ext import voice_recv
 
 from silenttalk import voice_recv_patch
 from silenttalk.config import AudioConfig, DiscordConfig
+from silenttalk.copilot.types import VOICE_ROOM
 from silenttalk.state import AppState
 from silenttalk.tts.base import AudioResult
 
@@ -21,12 +22,15 @@ voice_recv_patch.apply()
 FRAME_BYTES = 3840
 StatusCallback = Callable[[AppState, str], None]
 PCMCallback = Callable[[int, str, bytes], None]
-# (author id, display name, content, addressed) typed in the channel's chat.
+# (author id, display name, content, addressed) of a typed line, with
+# keywords place (VOICE_ROOM or the thread), channel_id and message_id.
 # `addressed` is Discord's own signal: an @mention of the bot or a reply to
 # one of its messages - exact, unlike matching the name as a substring.
-TextCallback = Callable[[int, str, str, bool], None]
+TextCallback = Callable[..., None]
 # Discord's own limit; a character's line is far shorter, but a paste is not.
 MAX_TEXT_CHARS = 2000
+# On the owner's message that handed over work (the user chose the gear).
+TASK_MARKS = {"accepted": "\u2699\ufe0f", "done": "\u2705", "failed": "\u274c"}
 
 
 class AgentApprovalView(discord.ui.View):
@@ -83,6 +87,7 @@ class DiscordVoiceClient(discord.Client):
         status: StatusCallback,
         pcm_callback: PCMCallback | None = None,
         text_callback: TextCallback | None = None,
+        threads_open: Callable[[], bool] | None = None,
     ) -> None:
         intents = discord.Intents.none()
         intents.guilds = True
@@ -97,6 +102,11 @@ class DiscordVoiceClient(discord.Client):
         self._status = status
         self._pcm_callback = pcm_callback
         self._text_callback = text_callback
+        # Whether threads are conversations now (the character is on): the
+        # owner's @ in a text channel opens one, and its lines are read.
+        # The threads opened this session.
+        self._threads_open = threads_open or (lambda: True)
+        self._threads: set[int] = set()
         self._event_loop: asyncio.AbstractEventLoop | None = None
         self._voice_lock = asyncio.Lock()
         self._voice_monitor_task: asyncio.Task[None] | None = None
@@ -120,51 +130,126 @@ class DiscordVoiceClient(discord.Client):
         self._text_callback = callback
 
     async def on_message(self, message: discord.Message) -> None:
-        """Typed lines from the voice channel the bot is sitting in.
-
-        Only that channel's own chat: SilentTalk never reads the server's
-        other text channels, and nothing typed is written to disk.
-        """
+        """Typed lines the character takes part in: the chat of the voice
+        channel the bot sits in, and threads it opened. The owner's @ in any
+        text channel opens a thread there, so a conversation never floods the
+        channel. Other text-channel messages are not read, and nothing typed
+        is written to disk (records.py keeps transcripts only on the
+        records drive)."""
         callback = self._text_callback
-        voice = self.active_voice()
-        if callback is None or voice is None or message.channel.id != voice.channel.id:
+        if callback is None:
             return
         if message.author.bot or (self.user and message.author.id == self.user.id):
             return
         content = message.clean_content.strip()
         if not content:
             return  # attachment, sticker or embed only
+        voice = self.active_voice()
+        channel = message.channel
+        if voice is not None and channel.id == voice.channel.id:
+            place, addressed = VOICE_ROOM, self._mentions_me(message)
+        elif self._is_our_thread(channel) and self._threads_open():
+            place, addressed = channel.id, True
+        elif self._opens_thread(message):
+            thread = await self._open_thread(message)
+            if thread is None:
+                return
+            place, addressed = thread.id, True
+        else:
+            return
         name = str(
             getattr(message.author, "display_name", None)
             or getattr(message.author, "name", None)
             or message.author.id
         )
-        addressed = self.user is not None and (
+        _LOG.info(
+            "text_message_received char_count=%d addressed=%s place=%s",
+            len(content), addressed, "voice" if place == VOICE_ROOM else "thread",
+        )
+        callback(message.author.id, name, content, addressed,
+                 place=place, channel_id=channel.id, message_id=message.id)
+
+    def _mentions_me(self, message: discord.Message) -> bool:
+        return self.user is not None and (
             self.user in message.mentions
             or getattr(getattr(message.reference, "resolved", None), "author", None)
             == self.user
         )
-        _LOG.info(
-            "text_message_received char_count=%d addressed=%s", len(content), addressed
-        )
-        callback(message.author.id, name, content, addressed)
 
-    async def send_text(self, text: str) -> bool:
-        """Say something in the voice channel's text chat. False if it could
-        not be sent (not connected, missing permission, Discord error)."""
-        voice = self.active_voice()
-        channel = getattr(voice, "channel", None)
-        if channel is None or not hasattr(channel, "send"):
+    def _is_our_thread(self, channel: object) -> bool:
+        return isinstance(channel, discord.Thread) and (
+            channel.id in self._threads
+            or (self.user is not None and channel.owner_id == self.user.id)
+        )
+
+    def _opens_thread(self, message: discord.Message) -> bool:
+        """Only the owner opens a conversation, by @ in a text channel."""
+        return (
+            isinstance(message.channel, discord.TextChannel)
+            and message.author.id == self._config.owner_user_id
+            and self._mentions_me(message)
+            and self._threads_open()
+        )
+
+    async def _open_thread(self, message: discord.Message) -> discord.Thread | None:
+        me = getattr(message.guild, "me", None)
+        name = f"{getattr(me, 'display_name', None) or 'Bot'}・{time.strftime('%m/%d %H:%M')}"
+        try:
+            thread = await message.create_thread(name=name[:100], auto_archive_duration=1440)
+        except discord.HTTPException as exc:
+            _LOG.warning("thread_open_failed status=%s", getattr(exc, "status", "?"))
+            self._status(
+                AppState.ERROR,
+                "開不了討論串：請給 Bot 這個頻道的「建立公開討論串」和「在討論串中傳送訊息」權限。",
+            )
+            return None
+        self._threads.add(thread.id)
+        _LOG.info("thread_opened")
+        return thread
+
+    async def _channel(self, place: int) -> discord.abc.Messageable | None:
+        if place == VOICE_ROOM:
+            channel = getattr(self.active_voice(), "channel", None)
+            return channel if hasattr(channel, "send") else None
+        try:
+            return self.get_channel(place) or await self.fetch_channel(place)
+        except discord.HTTPException:
+            return None
+
+    async def send_text(self, text: str, place: int = VOICE_ROOM) -> bool:
+        """Say something in the voice channel's text chat or in a thread the
+        bot opened. False if it could not be sent (not connected, missing
+        permission, Discord error)."""
+        channel = await self._channel(place)
+        if channel is None:
             _LOG.info("text_send_skipped reason=no_channel")
             return False
         try:
-            await channel.send(text[:MAX_TEXT_CHARS])
+            await channel.send(text[:MAX_TEXT_CHARS], allowed_mentions=discord.AllowedMentions.none())
         except discord.Forbidden:
-            _LOG.warning("text_send_failed reason=forbidden channel_id=%s", channel.id)
+            _LOG.warning("text_send_failed reason=forbidden")
             return False
         except discord.HTTPException as exc:
             _LOG.warning("text_send_failed status=%s", getattr(exc, "status", "?"))
             return False
+        return True
+
+    async def mark_task(self, channel_id: int, message_id: int, state: str) -> bool:
+        """⚙️ on the owner's message while the Agent works on it, then ✅ or ❌."""
+        mark = TASK_MARKS[state]
+        try:
+            channel = self.get_channel(channel_id) or await self.fetch_channel(channel_id)
+            message = channel.get_partial_message(message_id)
+            await message.add_reaction(mark)
+            if state != "accepted" and self.user is not None:
+                try:
+                    await message.remove_reaction(TASK_MARKS["accepted"], self.user)
+                except discord.NotFound:
+                    pass
+        except (discord.HTTPException, AttributeError) as exc:
+            _LOG.warning("task_mark_failed state=%s error_type=%s", state, type(exc).__name__)
+            return False
+        _LOG.info("task_marked state=%s", state)
         return True
 
     async def _owner_dm(self) -> discord.abc.Messageable:
