@@ -1,7 +1,7 @@
 # 開發機工作檔（Linux、RTX 3090）
 
-更新：2026-10-05 晚上｜分支：SilentTalk、EdgeAgent 都用 `copilot-story-mode`
-你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事。**只寫現況和下一步**，過去的經過在 git 歷史和 `archive/`（只在這台機器、不進 git，不必讀）。上一版：`archive/dev-box-2026-10-05-v1.md`。
+更新：2026-10-05 深夜｜分支：SilentTalk、EdgeAgent 都用 `copilot-story-mode`
+你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事。**只寫現況和下一步**，過去的經過在 git 歷史和 `archive/`（只在這台機器、不進 git，不必讀）。上一版：`archive/dev-box-2026-10-05-v2.md`。
 
 ---
 
@@ -9,7 +9,7 @@
 
 - **角色**：戰鎚 40K 機械教的機魂「Machina-Prime-09A（馬基納）」，文雅、會打破第四面牆陪主人開玩笑。人設卡在 `.runtime/dev/chardata-ms1/personas.jsonl`（老師寫、使用者挑改，9 條核對過的 40K 用語）。**預設就是機魂，啟動直接進角色模式**（2026-10-05：「我有點想預設就開40k機魂，其他人設都過去了，留著架構但不想開」）：其他人設不再預設提供，人設系統留著。聲音：`VOICE_EFFECTS["machine_spirit"]`＋YunJhe +22 Hz。LoRA 是使用者自選，產品不預設套用。
 - **硬體**：一切都要在筆電跑得動（RTX 3050 Ti 4 GB、RAM 8 GB，平常只剩約 0.7 GB）。開發機不參與使用，只開發、評估、訓練。免費、不叫使用者做雜事。EdgeAgent 的 context 用 **16K**（2026-10-05）。
-- **Discord**：只有主人打字的話能派工（語音只聊天）；主人在文字頻道 @ 就從那則訊息開討論串，受理 ⚙️、完成 ✅／失敗 ❌。**批准只私訊主人；工作結果要留在原本的討論串，session 清空後也能從串裡接續**（2026-10-05：「我以為是在該threads裡面聊天，順便起到記憶的作用，未來就算我session清空，也可以從該threads接續對話」）。
+- **Discord**：只有主人打字的話能派工（語音只聊天）；主人在文字頻道 @ 就從那則訊息開討論串，受理 ⚙️、完成 ✅／失敗 ❌。**批准只私訊主人；工作結果留在原本的討論串，session 清空後也能從串裡接續**（2026-10-05：「我以為是在該threads裡面聊天，順便起到記憶的作用，未來就算我session清空，也可以從該threads接續對話」；討論串是公開的，頻道裡的人看得到結果）。
 - **權限**：刪檔一定要主人同意，沒回應＝拒絕，沒同意最多封存；日常唯讀指令不逐次問（「我不想做雞毛蒜皮的決策」，EdgeAgent `shell: "routine"`）。主人說唯讀的工作就不能寫檔。
 - **紀錄**：對話只寫進使用者的加密紀錄磁碟（AGENTS.md 規則 1）；手動匯出可以選一般資料夾（只限主人按匯出）。
 - **Agent 架構**（2026-10-05，使用者：「e4b實際聊天體驗奇差無比，我開始考慮他只調用封包好的工具使用就好，聊聊天也OK無傷大雅，但不用輸出甚麼生成性內容」；三方意見：Codex、Antigravity 在 `laptop-report` 第 4 回合最後兩節，開發機的在下面；使用者：「目前意見到齊」）。三方都**有條件支持**，共同的部分照做：
@@ -25,24 +25,20 @@
 
 | 項目 | 狀態 |
 |---|---|
-| SilentTalk Discord 角色＋派工 | ✅ 打字派工、討論串、表情、私訊批准、`BOT_PERMISSIONS`／邀請連結。結果目前私訊（要改，§3） |
-| EdgeAgent | ✅ 權限（含 `routine`）、MCP 權限層（`tool_search`、伺服器清單）、`web_research`、模式：工作／求知儀式／推演儀式、`translate_machine`（正規表示式、PowerShell、Excel 公式、SQL）、租借時自動共用角色模型（`79af802`）、對話匯出 TXT（`d793c2c`，筆電正式服務還沒重載） |
-| 對話紀錄 | ✅ 兩個 app 都能「設為紀錄資料夾」、只寫在系統磁碟以外。⬜ 真加密容器：VeraCrypt 已裝，等使用者自己設密碼 |
-| 筆電第 4 回合（Codex） | 清單 15/37；評分 15/18（第 3 回合 Antigravity 7/18，評分表見 §4 規則 13）。剩：正式服務重載（要使用者同意）、Discord 真人項目 D2–D14、加密容器 E2–E8、清暫存 F1 |
+| SilentTalk Discord 角色＋派工 | ✅ 打字派工、討論串、表情、私訊批准、邀請連結。**唯讀工作**（`26c1e44`）：派工前多問一題「要不要改動」，否 → EdgeAgent 唯讀跑。**結果貼在來源討論串**（`86a7f7e`，開頭「【思考機回報】」，串貼不進去才私訊），同一地點的工作共用 EdgeAgent session `discord-<地點>`，忘掉的串在下一句前從 Discord 讀回（只當脈絡）。**預設角色機魂**（`6414179`：內建人設、新檔和沒見過它的舊檔都選它、存檔一定保留；AI 誠實度預設「機器」）。語音頻道交代的結果照舊私訊 |
+| EdgeAgent | ✅ 權限（`routine`、單一工作可唯讀：`/chat` 的 `read_only`，`b0c68d9`）、MCP 權限層、`web_research`、模式：工作／求知儀式／推演儀式、`translate_machine`（正規表示式、PowerShell、Excel、SQL）、租借時自動共用角色模型且 context 跟著角色（`79af802`、`fefdd77`）、主機給日期和時區（`8f098a6`）、對話匯出 TXT（`d793c2c`） |
+| 對話紀錄 | ✅ 兩個 app 都能「設為紀錄資料夾」、只寫在系統磁碟以外。⬜ 真加密容器：VeraCrypt 已裝，等使用者自己設密碼（筆電第 5 回合 D） |
+| 筆電 | 第 4 回合（Codex）清單 15/37、評分 15/18（第 3 回合 Antigravity 7/18，評分表見 §4 規則 13）。**第 5 回合已寫進 `handoff/laptop.md`**（28 項：部署＋正式服務重載、介面兩件、Discord 實測含唯讀／串裡結果／重啟後接續、加密容器、收尾），等使用者在筆電開工 |
 | 角色資料（機魂） | ❌ 試跑 v1–v5 都被硬關卡擋下。v5（`a949bea`）：40K 核對 98.8%、判斷一致 90.9%、工作指示 95.8% 都過；**台詞贏學生 49.1%（要 ≥50%）、檢查員一致 68.3%（要 ≥70%）沒過**。所以沒有 LoRA，機魂現在是原版 E4B 加人設 |
 | Agent 訓練資料 | 27B 老師試跑 55 列（EdgeAgent `.runtime/agentdata/agent-pilot-rows.jsonl`）；訓練題 519 題，414 題有請求文字。還沒訓練 |
-| 公開下載 | `nobody945946/SilentTalk-download` 放 `windows-2026.10.02`。下一版等筆電驗證通過，用 `scripts/release_windows.py`（先乾跑清查 ZIP） |
+| 公開下載 | `nobody945946/SilentTalk-download` 放 `windows-2026.10.02`。下一版等筆電第 5 回合通過，用 `scripts/release_windows.py`（先乾跑清查 ZIP） |
 
 ## 3. 接下來（依序；前一步沒過不做下一步）
 
-1. **主機給 Agent 日期和時區**（`edge_agent/agent_bridge.mjs`；Pi 的系統提示只有 cwd）。這是 bug，修好不用 A/B。
-2. **租借時 Agent 跟著角色的 context**：`79af802` 取兩邊較大，EdgeAgent 預設 131072，新玩家一租借角色伺服器就開 128K×slot，`--fit on` 會把權重推到 CPU、聊天變慢。owner：`EdgeAgent._start_child`。
-3. **唯讀工作不能寫檔**（第 4 回合實測：使用者只要唯讀，Agent 多寫一個 62 bytes 的 .txt）：`task_from_owner` 判斷的限制變成那個任務的權限（寫檔、非唯讀指令直接 deny，不問），EdgeAgent 照任務權限執行；主人之後另外要求寫入才重新授權。合成測試走完整條路徑，不靠檔名或任務字串。
-4. **結果留在討論串、從串的歷史接續**：最終結果送到來源討論串（依 Discord 字數分段、只送一次），批准仍私訊；每串第一次接續或 session 清空後，從 Discord 那個串取有界歷史放 RAM；歷史不能派工、不重放舊批准，串之間不串話；取不到就照實說。owner：`runtime._report_detail`／`_says`、`agent_tasks.AgentTaskClient.run`、`discord_voice` 的串、`runtime._context`。
-5. **預設機魂**：機魂成為內附人設、沒有選人設時就用它；其他三個範本拿掉，人設系統和編輯器留著；啟動直接進角色模式（重啟腳本已帶 `--character-mode`）。使用者自己的 `personas.json` 不動。
-6. **筆電第 5 回合**：1–5 推上去後重寫 `handoff/laptop.md`（舊版進 `archive/`）：部署、正式服務重載、驗 1–5 和匯出、剩下的 D／E 項。
-7. **架構的量測**：合成的常見請求（新聞整理要日期範圍和來源、列檔／計數、匯出、上網研究、解釋機器輸出、整理資料夾），量 E4B 選對工具率、完成條件達成率、唯讀不寫入率、日期正確、來源可追查、會誤導率、筆電延遲；先封裝 2–3 個最常用的，配對比較贏才換。
-8. **角色資料**：查 v5 台詞輸給學生的原因再決定下一步（不降門檻）。
+1. **筆電第 5 回合**：看 `laptop-report` 的報告，重跑筆電的 commit 和測試，照 §4 規則 13 評分。
+2. **架構的量測**：合成的常見請求（新聞整理要日期範圍和來源、列檔／計數、匯出、上網研究、解釋機器輸出、整理資料夾），量 E4B 選對工具率、完成條件達成率、唯讀不寫入率、日期正確、來源可追查、會誤導率、筆電延遲；先封裝 2–3 個最常用的，配對比較贏才換。
+3. **唯讀工作能跑的指令**：現在只認 PowerShell 內建 cmdlet，`git diff`／`git log` 這類外部程式在唯讀工作一律被拒，所以「寫 commit 訊息」這種只讀的開發日常會做不到。在 `routine_shell` 加可證明唯讀的 git 子指令（不准 `--output`、`--no-index`、`-O`、全域選項），要有負面測試。
+4. **角色資料**：查 v5 台詞輸給學生的原因再決定下一步（不降門檻）。有 LoRA 套在 `task` 時，要用 `scripts/dev/task_scope_eval.py` 重量「要不要改動」那一題（現在量的是沒有 LoRA）。
 
 ## 4. 開發機規則（通用規則在 AGENTS.md）
 
@@ -64,9 +60,9 @@
 **每次改完要跑：**
 
 ```bash
-cd /home/clawd/SilentTalk && .venv/bin/python -m pytest -q -p no:cacheprovider   # 286 passed, 12 skipped
+cd /home/clawd/SilentTalk && .venv/bin/python -m pytest -q -p no:cacheprovider   # 299 passed, 12 skipped
 .venv/bin/ruff check --target-version py312 --select F,E9,I,B silenttalk/copilot scripts/dev tests
-cd /home/clawd/EdgeAgent && .venv/bin/python -m pytest -q -p no:cacheprovider    # 200 passed, 27 skipped；4 個 Windows 專用失敗（終端機 powershell.exe ×2、監聽埠查詢、Windows 的 fd）
+cd /home/clawd/EdgeAgent && .venv/bin/python -m pytest -q -p no:cacheprovider    # 204 passed, 27 skipped；4 個 Windows 專用失敗（終端機 powershell.exe ×2、監聽埠查詢、Windows 的 fd）
 /home/clawd/SilentTalk/.venv/bin/ruff check --target-version py312 --select F,E9,I,B /home/clawd/EdgeAgent/bench/*.py
 ```
 
@@ -95,6 +91,7 @@ EdgeAgent-dev 的 `.venv` 沒有 sqlglot，完整測試用主工作樹的 `.venv
 - Qwen 改程式：說做完卻錯 15/82；雜事說做完的 14 份錯 9（→ 雜事要做成現成工具）。
 - 27B 老師討論會誤導 14%；推演儀式讓全部模型從 35.3% 降到 20.1%。
 - 老師 Qwen3.6-35B-A3B（40K 94.7%）、檢查員 Gemma 4 31B（97.4%）。
+- 「要不要改動」判斷（`scripts/dev/task_scope_eval.py`，43 句，E4B＋機魂人設）：41/43；錯的兩句都是安全方向（一句唯讀被當改動 → 照舊要批准；一句「查完存檔」被當唯讀 → Agent 做不到會說）。派工兩題合計中位數 109 ms（3090）。
 - 中性電子音（SenseVoice 錯字率）：原聲 7.2%、選定的 C 7.4%。
 - 舊結論：E4B＋v3 LoRA 配對盲評贏原版（59% vs 40%）；3050 Ti 套 LoRA 判斷 211 ms、生成 26 token/s。
 
