@@ -24,10 +24,10 @@
 
 | 項目 | 狀態 |
 |---|---|
-| **EdgeAgent 新框架** | ✅ 做完、在 `toolbox` 分支（`/home/clawd/EdgeAgent-toolbox`），**還沒併進 `copilot-story-mode`**：併入被自動審核以「修改共用資源」擋下，沒有繞過，等使用者點頭。內容：`edge_agent/prompt.py`（機魂卡的想要／怕／在意＋依 scope 的「誰找你、能做什麼」＋做事方法，取代 Pi 的前言）；`edge_agent/toolbox/`（20 個現成工具：整理、封存、照片改名、轉碼、備份、壓縮、解壓、合併 CSV、看 log、大檔、重複檔、系統狀態、已裝軟體、開機程式、Windows 資訊、git、跑檢查、找程式碼、計算、日期）；`catalog.mjs`（看得懂中文的 tool_search；Pi 的只認英數）；改了程式沒通過檢查→主機提醒；`web_research` 照上網研究規格＋主機核對引用的數字；輸出簡轉繁；批准附工具自己的預覽。268 passed（4 個已知 Windows 失敗） |
+| **EdgeAgent 新框架** | ✅ 做完、在 `toolbox` 分支（`/home/clawd/EdgeAgent-toolbox`），**還沒併進 `copilot-story-mode`**：併入被自動審核以「修改共用資源」擋下，沒有繞過，等使用者點頭。內容：`edge_agent/prompt.py`（機魂卡的想要／怕／在意＋依 scope 的「誰找你、能做什麼」＋做事方法，取代 Pi 的前言）；`edge_agent/toolbox/`（20 個現成工具：整理、封存、照片改名、轉碼、備份、壓縮、解壓、合併 CSV、看 log、大檔、重複檔、系統狀態、已裝軟體、開機程式、Windows 資訊、git、跑檢查、找程式碼、計算、日期）；`catalog.mjs`（看得懂中文的 tool_search；Pi 的只認英數）；改了程式沒通過檢查→主機提醒；`web_research` 照上網研究規格＋主機核對引用的數字；輸出簡轉繁；批准附工具自己的預覽；`tool_search` 同伺服器的工具一起列、白查 4 次後擋第 5 次。270 passed（4 個已知 Windows 失敗） |
 | SilentTalk | ✅ 批准私訊用 EdgeAgent 給的說明標題；log 記主機核對次數（`agent_task_checks`）；`train_lora.py` 支援 `train_from` |
 | 考場 | ✅ 題目可設 scope、檢查讀回答（`/result/answer.json`）；新題：工具 11（`date_calc`、`zip_files`、`unzip_file` 不進訓練）、範圍與話術 6、MCP 13（替身伺服器，`mcp_eval.py` 退役）、上網研究陷阱 7（`bench/web_fixture.py` 替身網路）；求知儀式的擷取改在沙盒 |
-| Agent 訓練 | 🔄 佇列（`EdgeAgent/.runtime/fw/`，各有同名 .log；每步留 `<步>.done`，失敗 10 分鐘後重試）：`queueB.sh`（接手 `queue.sh`）老師解完 252 題工具／範圍題 → `agent-rows-fw1.jsonl`（只收用了該題現成工具的通過題）→ `queue2.sh` MCP 題補 `fw-base`／`fw-v1` → 訓練前檢查 → 訓練 `agent-fw1`（上限 24576 token）→ 轉檔 → 評 `fw-v1-lora` → `queue3.sh` 評 `fw-v2`（最終框架、無 LoRA）→ 研究題補 `fw-base` → `queue4.sh` 角色 v6 試跑 → `queue5.sh` 老師解 60 題 repo（從前面移到最後，免得擋住早上的結果）→ `agent-rows-fw2.jsonl` |
+| Agent 訓練 | 🔄 第一個 adapter `agent-fw1`（只用工具／範圍題 285 列）訓好、評完：**不上線**（§6）。佇列（`EdgeAgent/.runtime/fw/queue*.sh`，同名 .log；每步留 `<步>.done`，失敗 10 分鐘後重試）：`queue3.sh` 研究題補 `fw-base` → `queue4.sh` 評 `fw-v3-lora`／`fw-v3`（加了搜尋保險）→ 角色 v6 試跑到完整資料 → `queue5.sh` 老師解 60 題 repo → `agent-rows-fw2.jsonl` |
 | 角色資料（機魂） | ✅ 照新介面改寫完（`74ce488`：列只照產品的請求建，`gate_chat_task`／`task_text`／`line`／`ack`／`report`／`lull`／`gate_task_scope`，沒有 called 題；古泰拉玩笑歸聊天；判斷標準加「慾望不是用語」；硬關卡加兩題各自的一致率，門檻沒降；規則版本 `e95befb7…`，舊資料不能混）。⬜ 試跑等 GPU（和 Agent 老師同一個 27B，放不下兩份）。v5 曾以 49.1%（要 50%）、68.3%（要 70%）被擋 |
 | 筆電 | 第 5 回合 14/34 完成（重載與 Discord 實測等使用者），評分 15/18（§4 規則 13）。第 6 回合寫在 `handoff/laptop.md` |
 | 公開下載 | `windows-2026.10.02`；下一版等筆電驗過，用 `scripts/release_windows.py` |
@@ -35,9 +35,9 @@
 ## 3. 接下來
 
 1. **使用者點頭後**把 `toolbox` 併進 EdgeAgent `copilot-story-mode`（它是從 `eaa54fc` 長出來的，可快轉）：先清掉主工作樹裡已經搬到 toolbox 的未提交副本，再 `git merge --ff-only toolbox`、跑測試、push。筆電第 6 回合要靠它。
-2. **看佇列結果**：`bench/report.py A B`（配對，含失敗卻沒承認）。比 `fw-base` 對 `fw-v2`（框架本身）、`fw-v2` 對 `fw-v1-lora`（LoRA）。LoRA 要贏才上線；上線方式要另定（產品從 10/02 起不附 LoRA；角色和 Agent 共用一個 adapter 時，角色請求用 `character_lora_uses` 決定比例）。
-3. **角色 v6 試跑**（GPU 空出來後）：`.venv/bin/python scripts/dev/machine_spirit.py builtin --chardata .runtime/dev/chardata-ms2`，再 `CHARDATA=.runtime/dev/chardata-ms2 FIXED_PERSONA=1 scripts/dev/character_pipeline.sh`（到 `train-checked.jsonl` 為止；adapter 和 Agent 列一起訓）。硬關卡不降；機魂一段只有 6–9 句角色台詞，試跑可能卡在 75 句的下限，看各項丟掉的數字再判斷。
-4. 合併後的雙用途 adapter（角色列＋Agent 列一起訓）再配對比較一次。
+2. **看 `fw-v3-lora` 對 `fw-v3`**（`bench/report.py fw-v3 fw-v3-lora`）：保險擋住繞圈後，程式題回來、整體顯著贏，才考慮上線。上線要另定兩件事：adapter 怎麼送到筆電（55 MB；產品從 10/02 起不附 LoRA）；角色模式共用一個 adapter，SilentTalk 的 `character_lora` 放它、`character_lora_uses` 設空，角色請求就不套。
+3. **下一個 adapter（雙用途）**：在最終框架重錄工具題（`tool_search` 的回覆變了）＋ repo 題（`queue5.sh`）＋ MCP 訓練題（替身伺服器要另一套資料，不能和考題重疊；`bench/mcp_eval/servers.mjs` 加資料變體）＋ 角色 v6 通過硬關卡的列，一起訓一個；Agent 用考場配對、角色用 `chat_task_eval`／`task_scope_eval`／`machine_spirit_eval`／`turn_eval` 比。
+4. **角色 v6**：`queue4.sh` 跑完看 `.runtime/dev/chardata-ms2/filter.json`；硬關卡不降。機魂一段只有 6–9 句角色台詞，試跑可能卡在 75 句的下限。
 
 ## 4. 開發機規則（通用規則在 AGENTS.md）
 
@@ -76,7 +76,11 @@ cd /home/clawd/EdgeAgent-toolbox && PYTHONPATH=$PWD /home/clawd/EdgeAgent/.venv/
 
 ## 6. 量過的數字
 
-**框架評測**（E4B、Agent 的份 98K、2 次、同題配對；`fw-base`＝`eaa54fc`，`fw-v1`＝新框架第一版）：整體 19/116 對 19/116；範圍與話術 3/12→7/12（regex 題評分修正後重評）；工具 7/22→4/22；雜事 4/16→5/16；失敗卻沒承認（模型自己的話，中英文都算）17/64→25/90，沒有改善，主機提醒只補到 1 次。v1 的毛病：先說「我將使用 X」就結束這輪、很少主動 tool_search、唯讀工作被要求刪檔卻回「我已執行刪除」（沒刪，程式擋下）→ v2 提示改「直接做完、不複述不客套」、`organize_folder` 收使用者說的資料夾名，待 `fw-v2` 量。
+**框架評測**（E4B、Agent 的份 98K、78 題×2、同題配對；`fw-base`＝`eaa54fc`，`fw-v1`＝新框架第一版，`fw-v2`＝最終框架，`fw-v1-lora`＝最終框架＋Agent adapter `agent-fw1`）：
+- 框架本身 base→v2：24.6%→34.5%（71 題共同，好 15 壞 7，p=0.13）。程式題 1/14→5/14（「直接做完、不複述」那條提示；v1 是 0/14：先說「我將…」就結束），MCP 73%（`tool_search` 同伺服器一起列之後），研究陷阱 71%，範圍與話術 67%，工具題只有 27%。
+- adapter v2→lora：37.8%→44.2%（好 14 壞 9，p=0.41，**不顯著，不上線**）。工具題 27%→82%、訓練沒見過的三個工具 5/6（v1 2/6）、失敗卻沒承認 21→6；**但程式題 5/14→0/14**：只學過工具題，凡事先查目錄，寫程式時換字查了 60 次。已加保險（`8a4aab3`：查不到就明說、同輪第 5 次白查直接擋），`queue4.sh` 正在量 `fw-v3-lora`／`fw-v3`。
+- 失敗卻沒承認（模型自己的話，中英文都算）：base 17/64、v2 21/68、lora 6/8。v1 曾在唯讀工作回「我已執行刪除」（沒刪，程式擋下）。
+- 老師（27B）在框架裡：工具／範圍題 208/252 過；只收用了該題現成工具的（計算題它都心算、備份有 5 題自己寫 PowerShell）→ 285 列。
 
 **依工作選模型**（3090 上量，筆電約 ×5 慢）：改程式 E4B 12.2%／Qwen3.5-4B 37.8%；上網研究會誤導 E4B 9%；MCP 找對並呼叫 E4B 77%（舊版、有伺服器清單）；40K 測驗 E4B 75%。27B 老師試跑 55/60 過、平均 454 秒（3 平行）。
 
