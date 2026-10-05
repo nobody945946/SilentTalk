@@ -5,7 +5,7 @@ from silenttalk.copilot.character import (
     is_question,
     should_reply,
 )
-from silenttalk.copilot.persona import PRESET_PERSONAS, Persona, blank_persona
+from silenttalk.copilot.persona import EXAMPLE_PERSONAS, Persona, blank_persona
 
 CALLED = CharacterPolicy(mode="called", follow_up_seconds=20.0)
 ACTIVE = CharacterPolicy(mode="active", cooldown_seconds=8.0, turn_gap=3)
@@ -21,7 +21,7 @@ def test_questions_without_punctuation_are_detected() -> None:
 def test_being_called_is_told_apart_from_being_talked_about() -> None:
     from silenttalk.copilot.character import address_of
 
-    carry = PRESET_PERSONAS[0]  # 凱哥, nicknames 凱哥、阿凱
+    carry = EXAMPLE_PERSONAS[0]  # 凱哥, nicknames 凱哥、阿凱
 
     # Unmistakable: the name opens the line, or Discord says so.
     assert address_of("凱哥你覺得呢", carry).called
@@ -39,7 +39,7 @@ def test_being_called_is_told_apart_from_being_talked_about() -> None:
 
 
 def test_calling_the_character_by_name_or_nickname() -> None:
-    carry = PRESET_PERSONAS[0]  # 凱哥, nicknames 凱哥、阿凱
+    carry = EXAMPLE_PERSONAS[0]  # 凱哥, nicknames 凱哥、阿凱
 
     assert is_addressed("阿凱你覺得呢", carry)
     assert is_addressed("欸凱哥 等等衝B", carry)

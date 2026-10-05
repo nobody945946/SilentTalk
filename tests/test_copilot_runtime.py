@@ -12,7 +12,7 @@ from silenttalk.copilot.character_state import (
     CharacterStateStore,
     Concern,
 )
-from silenttalk.copilot.persona import PRESET_PERSONAS
+from silenttalk.copilot.persona import EXAMPLE_PERSONAS
 from silenttalk.copilot.runtime import CopilotRuntime
 from silenttalk.copilot.types import VOICE_ROOM, ConversationTurn, ReplySuggestions
 
@@ -166,7 +166,7 @@ async def test_regenerate_targets_newest_line(tmp_path: Path) -> None:
 
 async def _character_runtime(tmp_path: Path) -> tuple[CopilotRuntime, SlowFakeLLM, list]:
     runtime, llm, delivered = await _runtime(tmp_path)
-    runtime.set_persona(PRESET_PERSONAS[0])  # 凱哥
+    runtime.set_persona(EXAMPLE_PERSONAS[0])  # 凱哥
     runtime.set_character_mode(True)
     return runtime, llm, delivered
 
@@ -244,7 +244,7 @@ async def test_owner_mic_counts_only_in_character_mode(tmp_path: Path) -> None:
     assert packets == []
     assert "我在講話" not in [turn.text for turn in runtime._context(VOICE_ROOM).snapshot()]
 
-    runtime.set_persona(PRESET_PERSONAS[0])
+    runtime.set_persona(EXAMPLE_PERSONAS[0])
     runtime.set_character_mode(True)
     runtime.accept_pcm(1, "Owner", b"character")
     runtime._handle_turn(1, "Owner", "凱哥你好")
@@ -271,7 +271,7 @@ async def test_character_drops_a_reply_once_the_chat_moved_on(tmp_path: Path) ->
 @pytest.mark.asyncio
 async def test_typed_lines_are_answered_by_typing(tmp_path: Path) -> None:
     runtime, llm, delivered = await _runtime(tmp_path, text=True)
-    runtime.set_persona(PRESET_PERSONAS[0])
+    runtime.set_persona(EXAMPLE_PERSONAS[0])
     runtime.set_character_mode(True)
     runtime._handle_turn(2, "阿傑", "凱哥你在嗎", "text")
     await _settle()
@@ -291,7 +291,7 @@ async def test_a_thread_is_its_own_conversation_answered_in_the_thread(tmp_path:
     given only that thread's lines, answers by typing there, and the voice
     room neither hears it nor counts it as talk (no lull reset)."""
     runtime, llm, delivered = await _runtime(tmp_path, text=True)
-    runtime.set_persona(PRESET_PERSONAS[0])
+    runtime.set_persona(EXAMPLE_PERSONAS[0])
     runtime.set_character_mode(True)
     runtime._handle_turn(2, "阿傑", "今天好熱喔")
     heard = runtime._last_heard_at
@@ -317,7 +317,7 @@ async def test_a_thread_is_its_own_conversation_answered_in_the_thread(tmp_path:
 @pytest.mark.asyncio
 async def test_newer_lines_replace_older_ones_only_within_their_own_place(tmp_path: Path) -> None:
     runtime, llm, _ = await _runtime(tmp_path, text=True)
-    runtime.set_persona(PRESET_PERSONAS[0])
+    runtime.set_persona(EXAMPLE_PERSONAS[0])
     runtime.set_character_mode(True)
     runtime._handle_turn(2, "阿傑", "第一句")  # being answered
     await _settle()
@@ -348,7 +348,7 @@ async def test_only_the_most_recent_threads_are_kept(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_typed_lines_fall_back_to_speech_when_text_is_off(tmp_path: Path) -> None:
     runtime, llm, delivered = await _runtime(tmp_path)  # no on_character_text
-    runtime.set_persona(PRESET_PERSONAS[0])
+    runtime.set_persona(EXAMPLE_PERSONAS[0])
     runtime.set_character_mode(True)
     runtime._handle_turn(2, "阿傑", "凱哥你在嗎", "text")
     await _settle()
@@ -430,7 +430,7 @@ async def test_a_new_persona_gets_todays_concerns(tmp_path: Path) -> None:
     shown: list[tuple[str, ...]] = []
     runtime._on_agenda = shown.append
     _with_life(llm)
-    runtime.set_persona(PRESET_PERSONAS[0])
+    runtime.set_persona(EXAMPLE_PERSONAS[0])
     await _settle()
 
     assert shown == [("剛烤好草莓蛋糕", "想約大家週末打球")]
@@ -447,7 +447,7 @@ async def test_light_memory_carries_its_life_and_updates_only_when_quiet(
     monkeypatch.setattr(runtime_module, "_LULL_POLL_SECONDS", 0.01)
     monkeypatch.setattr(runtime_module, "_QUIET_UPDATE_SECONDS", 0.3)
     store = CharacterStateStore(tmp_path / "character_state.json")
-    store.save(PRESET_PERSONAS[0].id, CharacterState(concerns=(Concern("想揪大家週六打通宵"),)))
+    store.save(EXAMPLE_PERSONAS[0].id, CharacterState(concerns=(Concern("想揪大家週六打通宵"),)))
     runtime, llm, _ = await _runtime(
         tmp_path, config=CopilotConfig(character_memory="light", character_lull_seconds=0)
     )
@@ -455,7 +455,7 @@ async def test_light_memory_carries_its_life_and_updates_only_when_quiet(
         concerns=(Concern("想揪大家週六打通宵", "done", "約成了"), Concern("週六前買好零食"))
     )
     asked = _with_life(llm, moved_on)
-    runtime.set_persona(PRESET_PERSONAS[0])
+    runtime.set_persona(EXAMPLE_PERSONAS[0])
     await _settle()
     # Last time's concern is back, topped up to four.
     assert [c.text for c in llm.state.active_concerns()][0] == "想揪大家週六打通宵"  # type: ignore[attr-defined]
@@ -467,7 +467,7 @@ async def test_light_memory_carries_its_life_and_updates_only_when_quiet(
     assert "update" not in asked  # never mid-chat
     await asyncio.sleep(0.6)
     assert asked.count("update") == 1  # once the room has been quiet a while
-    saved = store.load(PRESET_PERSONAS[0].id)
+    saved = store.load(EXAMPLE_PERSONAS[0].id)
     assert {c.text: c.status for c in saved.concerns}["想揪大家週六打通宵"] == "done"
     await _stop(runtime)
 
@@ -475,15 +475,15 @@ async def test_light_memory_carries_its_life_and_updates_only_when_quiet(
 @pytest.mark.asyncio
 async def test_clearing_forgets_its_life(tmp_path: Path) -> None:
     store = CharacterStateStore(tmp_path / "character_state.json")
-    store.save(PRESET_PERSONAS[0].id, CharacterState(concerns=(Concern("想揪大家週六打通宵"),)))
+    store.save(EXAMPLE_PERSONAS[0].id, CharacterState(concerns=(Concern("想揪大家週六打通宵"),)))
     runtime, llm, _ = await _runtime(tmp_path, config=CopilotConfig(character_memory="light"))
     _with_life(llm)
-    runtime.set_persona(PRESET_PERSONAS[0])
+    runtime.set_persona(EXAMPLE_PERSONAS[0])
     await _settle()
     runtime.clear_life()
     await _settle()
 
-    texts = [c.text for c in store.load(PRESET_PERSONAS[0].id).concerns]
+    texts = [c.text for c in store.load(EXAMPLE_PERSONAS[0].id).concerns]
     assert "想揪大家週六打通宵" not in texts
     await _stop(runtime)
 

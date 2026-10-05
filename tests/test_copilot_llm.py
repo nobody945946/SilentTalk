@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from silenttalk.copilot.llm import LocalReplyModel
-from silenttalk.copilot.persona import PRESET_PERSONAS
+from silenttalk.copilot.persona import EXAMPLE_PERSONAS
 from silenttalk.copilot.types import AgentTask, ConversationTurn
 
 
@@ -118,7 +118,7 @@ def test_options_are_asked_on_the_end_of_the_character_chat() -> None:
     """Same chat as character mode, so the prompt cache holds from round to
     round and between the samples of one round."""
     model = LocalReplyModel(Path("unused.gguf"))
-    model.set_persona(PRESET_PERSONAS[0])
+    model.set_persona(EXAMPLE_PERSONAS[0])
     turns = _chat(CHAT)
     messages = model.option_messages(turns=turns)
     chat = model.character_messages(turns=turns, engagement="options", gate=True)
@@ -140,10 +140,10 @@ def test_options_after_your_own_line_get_their_own_request_turn() -> None:
 
 
 def test_character_line_parsing() -> None:
-    from silenttalk.copilot.persona import PRESET_PERSONAS
+    from silenttalk.copilot.persona import EXAMPLE_PERSONAS
 
     model = LocalReplyModel(Path("unused.gguf"))
-    model.set_persona(PRESET_PERSONAS[0])
+    model.set_persona(EXAMPLE_PERSONAS[0])
 
     assert model._parse_character_line("凱哥：穩啦，下波我先進\n多的", "衝B") == "穩啦，下波我先進"
     assert model._parse_character_line("SAY|好啊走", "衝B") == "好啊走"
@@ -153,7 +153,7 @@ def test_character_line_parsing() -> None:
 
 
 def test_character_keeps_the_act_by_default_and_can_be_told_to_own_up() -> None:
-    carry = PRESET_PERSONAS[0]
+    carry = EXAMPLE_PERSONAS[0]
     in_character = LocalReplyModel(Path("unused.gguf"))._build_turn_system_prompt(
         carry, "called"
     )
@@ -172,7 +172,7 @@ def test_the_nudge_follows_the_chosen_policy() -> None:
     in_character = LocalReplyModel(Path("unused.gguf"))
     admitting = LocalReplyModel(Path("unused.gguf"), ai_honesty="admit")
     for model in (in_character, admitting):
-        model.set_persona(PRESET_PERSONAS[0])
+        model.set_persona(EXAMPLE_PERSONAS[0])
 
     # Staying in character is what the model does anyway (A/B: 0/18 broke
     # character with or without a nudge), so the default path adds nothing.
@@ -182,7 +182,7 @@ def test_the_nudge_follows_the_chosen_policy() -> None:
 
 def test_character_is_told_not_to_repeat_a_recent_catchphrase() -> None:
     model = LocalReplyModel(Path("unused.gguf"))
-    model.set_persona(PRESET_PERSONAS[2])  # 黑焰
+    model.set_persona(EXAMPLE_PERSONAS[2])  # 黑焰
     turns = [ConversationTurn(2, "Ken", "打團嗎")]
 
     first = model.character_messages(turns=turns, addressed=True)[-1]["content"]
@@ -247,7 +247,7 @@ def test_character_chat_opening_with_its_own_line_starts_with_a_user_turn() -> N
 
 def test_hints_ride_only_on_the_newest_message() -> None:
     model = LocalReplyModel(Path("unused.gguf"))
-    model.set_persona(PRESET_PERSONAS[0])
+    model.set_persona(EXAMPLE_PERSONAS[0])
     messages = model.character_messages(turns=_chat(CHAT), addressed=True)
 
     assert "（最後這句是在叫你，要回應）" in messages[-1]["content"]
@@ -290,7 +290,7 @@ class _Scripted(LocalReplyModel):
 
     def __init__(self, gate: str, line: str = "穩啦") -> None:
         super().__init__(Path("unused.gguf"))
-        self.set_persona(PRESET_PERSONAS[0])
+        self.set_persona(EXAMPLE_PERSONAS[0])
         self.gate, self.line = gate, line
         self.requests: list[tuple[str, list[dict[str, str]]]] = []
 
@@ -371,7 +371,7 @@ def test_relationships_are_in_the_character_system_prompt() -> None:
 
     model = LocalReplyModel(Path("unused.gguf"))
     model.set_persona(
-        replace(PRESET_PERSONAS[1], relationships=(Relationship("阿明", "我老公，結婚三年"),))
+        replace(EXAMPLE_PERSONAS[1], relationships=(Relationship("阿明", "我老公，結婚三年"),))
     )
     system = model.character_messages(turns=_chat(CHAT))[0]["content"]
     assert "- 阿明：我老公，結婚三年" in system

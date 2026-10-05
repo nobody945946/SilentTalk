@@ -25,7 +25,7 @@ PROJECT_DIR = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_DIR))
 
 from silenttalk.config import AudioConfig, TTSConfig  # noqa: E402
-from silenttalk.copilot.persona import PRESET_PERSONAS  # noqa: E402
+from silenttalk.copilot.persona import EXAMPLE_PERSONAS  # noqa: E402
 from silenttalk.discord_voice import DiscordAudioPlayer  # noqa: E402
 from silenttalk.tts.edge import EdgeTTSEngine  # noqa: E402
 
@@ -110,7 +110,7 @@ async def main() -> int:
         engine = EdgeTTSEngine(TTSConfig(voice="zh-TW-HsiaoChenNeural"), Path(temp))
         styles = {
             "預設聲音": "default",
-            "黑焰（echo 音效）": PRESET_PERSONAS[2].voice_style(),
+            "黑焰（echo 音效）": EXAMPLE_PERSONAS[2].voice_style(),
         }
         print(
             "| 句子 | 聲音 | 檔案：第一個封包 | 串流：第一個封包 | 音訊長度 檔案／串流 |"

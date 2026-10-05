@@ -12,7 +12,7 @@ from silenttalk.copilot.character_state import (
     merge_state,
 )
 from silenttalk.copilot.llm import LocalReplyModel
-from silenttalk.copilot.persona import PRESET_PERSONAS
+from silenttalk.copilot.persona import EXAMPLE_PERSONAS
 from silenttalk.copilot.types import ConversationTurn
 
 LIFE = CharacterState(
@@ -105,10 +105,10 @@ def test_off_is_the_measured_prompt_and_light_adds_its_life_and_the_clock() -> N
     off = LocalReplyModel(Path("unused.gguf"))
     light = LocalReplyModel(Path("unused.gguf"), memory="light")
     for model in (off, light):
-        model.set_persona(PRESET_PERSONAS[0])
+        model.set_persona(EXAMPLE_PERSONAS[0])
         model.set_state(LIFE)
 
-    system = off._build_turn_system_prompt(PRESET_PERSONAS[0], "called")
+    system = off._build_turn_system_prompt(EXAMPLE_PERSONAS[0], "called")
     assert (
         "你今天心裡掛著的事（聊天時接得上就自然帶到，冷場時可以拿來開話題，不要硬塞）：\n"
         "- 想揪大家週六打通宵\n- 新滑鼠還沒拆\n"
@@ -116,14 +116,14 @@ def test_off_is_the_measured_prompt_and_light_adds_its_life_and_the_clock() -> N
     assert "【你自己的生活】" not in system and "加班" not in system
     assert "現在是" not in off.character_messages(turns=turns, addressed=True)[-1]["content"]
 
-    system = light._build_turn_system_prompt(PRESET_PERSONAS[0], "called")
+    system = light._build_turn_system_prompt(EXAMPLE_PERSONAS[0], "called")
     assert "【你自己的生活】" in system and "你最近：這週公司一直加班" in system
     assert "現在是星期" in light.character_messages(turns=turns, addressed=True)[-1]["content"]
 
 
 def test_new_concerns_follow_on_and_do_not_repeat() -> None:
     model = LocalReplyModel(Path("unused.gguf"), memory="light")
-    model.set_persona(PRESET_PERSONAS[0])
+    model.set_persona(EXAMPLE_PERSONAS[0])
     asked: list[str] = []
 
     def fake(messages, on_lines=None, max_tokens=240, character=False, temperature=0.65):
@@ -141,7 +141,7 @@ def test_new_concerns_follow_on_and_do_not_repeat() -> None:
 
 def test_updating_reads_the_chat_and_keeps_the_rest() -> None:
     model = LocalReplyModel(Path("unused.gguf"))
-    model.set_persona(PRESET_PERSONAS[0])
+    model.set_persona(EXAMPLE_PERSONAS[0])
     model.set_state(LIFE)
     seen: list[str] = []
 

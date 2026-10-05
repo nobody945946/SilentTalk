@@ -60,7 +60,7 @@ def main() -> int:
 
     from silenttalk import story_ui
     from silenttalk.config import config_defaults
-    from silenttalk.copilot.persona import PRESET_PERSONAS, PersonaState, PersonaStore
+    from silenttalk.copilot.persona import EXAMPLE_PERSONAS, PersonaState, PersonaStore
     from silenttalk.copilot.types import ConversationTurn, ReplySuggestions
     from silenttalk.phrases import QuickPhraseStore
     from silenttalk.preferences import PreferenceStore
@@ -79,7 +79,7 @@ def main() -> int:
     rerolled: list[bool] = []
     applied_settings: list[list[str]] = []
     personas = PersonaStore(temp / "personas.json")
-    personas.save(PersonaState(list(PRESET_PERSONAS), PRESET_PERSONAS[0].id))
+    personas.save(PersonaState(list(EXAMPLE_PERSONAS), EXAMPLE_PERSONAS[0].id))
     ui = SilentTalkUI(
         "F8",
         "F9",

@@ -60,6 +60,7 @@ from silenttalk.copilot.llm import (  # noqa: E402
     quiet_for,
 )
 from silenttalk.copilot.persona import (  # noqa: E402
+    EXAMPLE_PERSONAS,
     PRESET_PERSONAS,
     REPLY_LENGTHS,
     TEXT_FIELDS,
@@ -494,8 +495,8 @@ def held_out() -> tuple[set[str], set[str]]:
     meta = {key: [name for m in metas for name in m.get(key, [])]
             for key in ("persona_names_used", "human_names_used")}
     personas = set(meta.get("persona_names_used", []))
-    personas |= {p.name for p in PRESET_PERSONAS}
-    personas |= {n for p in PRESET_PERSONAS for n in p.nickname.split("、") if n}
+    personas |= {p.name for p in (*PRESET_PERSONAS, *EXAMPLE_PERSONAS)}
+    personas |= {n for p in (*PRESET_PERSONAS, *EXAMPLE_PERSONAS) for n in p.nickname.split("、") if n}
     # Nobody from the test set may appear in training data, whatever the role.
     return personas, set(meta.get("human_names_used", [])) | personas
 

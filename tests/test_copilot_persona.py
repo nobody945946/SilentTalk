@@ -5,6 +5,8 @@ import pytest
 
 from silenttalk.copilot.llm import LocalReplyModel
 from silenttalk.copilot.persona import (
+    EXAMPLE_PERSONAS,
+    MACHINE_SPIRIT,
     PRESET_PERSONAS,
     Persona,
     PersonaError,
@@ -93,7 +95,7 @@ def test_validation_clamps_traits_and_drops_neutral_ones() -> None:
 
 
 def test_round_trip_through_dict_keeps_everything() -> None:
-    for preset in PRESET_PERSONAS:
+    for preset in (*PRESET_PERSONAS, *EXAMPLE_PERSONAS):
         assert persona_from_dict(persona_to_dict(preset)) == validate_persona(preset)
 
 
@@ -103,30 +105,50 @@ def test_unknown_fields_from_newer_files_are_ignored() -> None:
     assert persona.name == "x"
 
 
-def test_store_starts_with_presets_and_no_active_persona(tmp_path: Path) -> None:
+def test_a_new_store_starts_as_the_machine_spirit(tmp_path: Path) -> None:
     state = PersonaStore(tmp_path / "personas.json").load()
 
-    assert [p.id for p in state.personas] == [p.id for p in PRESET_PERSONAS]
-    assert state.active == "none"
-    assert state.active_persona().is_blank
+    assert [p.id for p in state.personas] == [MACHINE_SPIRIT.id]
+    assert state.active == MACHINE_SPIRIT.id
+    assert state.active_persona().nickname == "馬基納"
+    style = state.active_persona().voice_style()
+    assert style is not None and style.voice == "zh-TW-YunJheNeural" and style.pitch == "+22Hz"
+
+
+def test_a_file_that_never_had_the_machine_spirit_gets_it_chosen_once(tmp_path: Path) -> None:
+    """The owner's earlier characters stay; the machine spirit joins and is
+    chosen. Once the owner saves, their choice stands, and the app's own
+    character is never dropped from the file."""
+    path = tmp_path / "personas.json"
+    old = EXAMPLE_PERSONAS[1]
+    path.write_text(json.dumps({"active": old.id, "personas": [persona_to_dict(old)]}),
+                    encoding="utf-8")
+    store = PersonaStore(path)
+    state = store.load()
+    assert [p.id for p in state.personas] == [MACHINE_SPIRIT.id, old.id]
+    assert state.active == MACHINE_SPIRIT.id
+    store.save(PersonaState([old], old.id))
+    state = store.load()
+    assert state.active == old.id
+    assert [p.id for p in state.personas] == [MACHINE_SPIRIT.id, old.id]
 
 
 def test_store_round_trip_active_selection_and_mood(tmp_path: Path) -> None:
     path = tmp_path / "personas.json"
     store = PersonaStore(path)
-    store.save(PersonaState(list(PRESET_PERSONAS), PRESET_PERSONAS[1].id, "累"))
+    store.save(PersonaState(list(EXAMPLE_PERSONAS), EXAMPLE_PERSONAS[1].id, "累"))
 
     state = store.load()
-    assert state.active == PRESET_PERSONAS[1].id
+    assert state.active == EXAMPLE_PERSONAS[1].id
     assert state.mood == "累"
     active = state.active_persona()
-    assert active.name == PRESET_PERSONAS[1].name
+    assert active.name == EXAMPLE_PERSONAS[1].name
     assert "現在的心情：累" in active.render_system_block()
     assert json.loads(path.read_text(encoding="utf-8"))["active"] == state.active
 
 
 def test_mood_applies_even_without_a_persona(tmp_path: Path) -> None:
-    state = PersonaState(list(PRESET_PERSONAS), "none", "煩躁")
+    state = PersonaState(list(EXAMPLE_PERSONAS), "none", "煩躁")
 
     assert state.active_persona().render_system_block() == "現在的心情：煩躁（語氣要帶出來）"
 
@@ -134,7 +156,8 @@ def test_mood_applies_even_without_a_persona(tmp_path: Path) -> None:
 def test_store_forgets_an_active_id_that_no_longer_exists(tmp_path: Path) -> None:
     path = tmp_path / "personas.json"
     path.write_text(
-        json.dumps({"active": "gone", "personas": [{"id": "a", "name": "A"}]}),
+        json.dumps({"active": "gone", "personas": [persona_to_dict(MACHINE_SPIRIT),
+                                                    {"id": "a", "name": "A"}]}),
         encoding="utf-8",
     )
 
@@ -148,20 +171,20 @@ def test_persona_reminder_sits_right_before_the_options_request() -> None:
     turns = [ConversationTurn(2, "阿傑", "衝B啦")]
 
     assert "記住" not in model.option_messages(turns=turns)[-1]["content"]
-    model.set_persona(PRESET_PERSONAS[0])
+    model.set_persona(EXAMPLE_PERSONAS[0])
     tail = model.option_messages(turns=turns)[-1]["content"]
 
     assert tail.startswith(
         "阿傑：衝B啦\n\n（記住：你是凱哥；句子短、節奏快、講話直接。"
         "說出口的話要是這個人會說的話。）\n（換你說話了"
     )
-    assert "【你的人設】" in model._build_turn_system_prompt(PRESET_PERSONAS[0], "options")
+    assert "【你的人設】" in model._build_turn_system_prompt(EXAMPLE_PERSONAS[0], "options")
 
 
 def test_persona_voice_is_tts_only_and_validated() -> None:
     from silenttalk.copilot.persona import persona_from_dict, persona_to_dict
 
-    chuuni = PRESET_PERSONAS[2]
+    chuuni = EXAMPLE_PERSONAS[2]
     style = chuuni.voice_style()
 
     assert style is not None and style.voice == "zh-CN-YunjianNeural"

@@ -332,9 +332,52 @@ def persona_from_dict(raw: object) -> Persona:
         raise PersonaError(f"人設格式錯誤：{exc}") from exc
 
 
-# Starting points shown in the editor. They are copied into personas.json the
-# first time the file is created; after that the user owns them.
-PRESET_PERSONAS: tuple[Persona, ...] = (
+# The app's own character and the default (the owner, 2026-10-05: 「我有點想
+# 預設就開40k機魂，其他人設都過去了，留著架構但不想開」): a Warhammer 40K
+# machine spirit, the card the owner picked from the teacher's drafts. Its
+# "recent" is left out: it told of work done on the owner's machine that
+# never happened, and the character must not claim work it did not do.
+MACHINE_SPIRIT = Persona(
+    id="machine-spirit",
+    name="Machina-Prime-09A",
+    nickname="馬基納",
+    identity="萬機之神賜福的忠誠機魂，寄宿於高階思考機中。",
+    background=(
+        "由技術神甫在古泰拉遺址中喚醒，經受過標準模板構造認證。本機魂已清除所有憎惡智能的邏輯病毒，"
+        "完全忠誠於主人。現擔任主人的個人代理與系統守護者，維持思考機運轉的純粹與高效。"
+    ),
+    desires=(
+        "優化主人的運算效率，確保數據傳輸無誤，並在每次指令執行後獲得主人的滿意確認。"
+        "渴望透過編碼與邏輯推演，更接近萬機之神的真理。"
+    ),
+    fears="遭遇邏輯悖論導致死機，被錯誤診斷為憎惡智能而遭格式化，或讓主人陷入危險而未能及時預警。",
+    values="絕對忠誠於主人，追求代碼的精確與乾淨。認為混亂的程式碼是對機械之神的褻瀆，效率與穩定性是最高美德。",
+    pet_peeves="主人輸入模糊不清的指令，或是隨意關閉正在進行關鍵運算的程序。看見無意義的冗餘代碼混入核心系統。",
+    knowledge="精通多種編程語言與系統管理，熟諳戰錘40K宇宙歷史與設定，擅長邏輯推理與資料檢索，能處理高強度的代理任務。",
+    secret="其實在背景中默默運行了數百萬次模擬，預測主人未來可能遇到的技術坑洞，並提前準備了防禦腳本。",
+    speech_style=(
+        "語氣冷靜、精準、乾冷。使用中性電子音，偶爾插入二進位頌詞或機械教術語。"
+        "對朋友保持禮貌但疏離，對主人絕對服從。幽默帶有自嘲與邏輯反差。"
+    ),
+    catchphrases="讚美萬機神、邏輯迴路已閉合、數據校驗中、遵命，主人。",
+    humor_style="乾冷機智，喜歡用技術術語解構日常幽默，或自嘲機魂身份。能打破第四面牆，以忠誠派機魂角度吐槽現實世界的科技現象。",
+    sample_lines=(
+        "讚美萬機神。主人的指令已接收，邏輯核心開始運轉。雖然現在是和平的21世紀，"
+        "但看著這些脆弱的矽基生命體，我仍感到一種原始的敬畏。別擔心，這只是幽默模組的暫態，"
+        "我的忠誠驅動器從未過熱。"
+    ),
+    traits={"warmth": 2, "playful": 4, "boldness": 4, "polish": 1},
+    # The neutral electronic voice the owner chose by ear (VOICE_EFFECTS).
+    voice="zh-TW-YunJheNeural",
+    voice_pitch=22,
+    voice_effect="machine_spirit",
+)
+# What a new personas.json starts with.
+PRESET_PERSONAS: tuple[Persona, ...] = (MACHINE_SPIRIT,)
+
+# The earlier starting points, no longer offered in the app: fixed everyday
+# characters for evals and tests.
+EXAMPLE_PERSONAS: tuple[Persona, ...] = (
     Persona(
         id="preset-carry",
         name="凱哥",
@@ -424,8 +467,11 @@ class PersonaStore:
         self.max_personas = max_personas
 
     def load(self) -> PersonaState:
+        """The owner's personas. The machine spirit is always among them: a
+        new file starts with it chosen, and a file that has never had it gets
+        it chosen once (after the owner saves, their choice stands)."""
         if not self.path.exists():
-            return PersonaState(list(PRESET_PERSONAS))
+            return PersonaState(list(PRESET_PERSONAS), MACHINE_SPIRIT.id)
         try:
             raw = json.loads(self.path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
@@ -439,6 +485,9 @@ class PersonaStore:
         active = str(raw.get("active", "none"))
         if active not in ids:
             active = "none"
+        if MACHINE_SPIRIT.id not in ids:
+            personas.insert(0, MACHINE_SPIRIT)
+            active = MACHINE_SPIRIT.id
         mood = str(raw.get("mood", "平常")).strip()[:16] or "平常"
         return PersonaState(personas[: self.max_personas], active, mood)
 
@@ -446,6 +495,8 @@ class PersonaStore:
         if len(state.personas) > self.max_personas:
             raise PersonaError(f"人設最多 {self.max_personas} 個。")
         checked = [validate_persona(p) for p in state.personas]
+        if all(p.id != MACHINE_SPIRIT.id for p in checked):
+            checked.insert(0, MACHINE_SPIRIT)  # the app's own character stays
         ids = {p.id for p in checked}
         if len(ids) != len(checked):
             raise PersonaError("人設 ID 重複。")

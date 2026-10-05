@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import os
 import shutil
+import tomllib
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-import tomllib
 from dotenv import load_dotenv
 
 from silenttalk.copilot.character import AI_HONESTY_MODES, ENGAGEMENT_MODES
@@ -91,7 +91,7 @@ class CopilotConfig:
     compact_batch_turns: int = 32
     # Asked whether it is an AI: "in_character" keeps the act, "admit" owns up,
     # "machine" is a machine in its own world (it may say so, never "an AI").
-    character_ai_honesty: str = "in_character"
+    character_ai_honesty: str = "machine"
     # The character may hand the owner's tasks to the EdgeAgent Agent (what
     # it may then do is EdgeAgent's Discord permission profile).
     character_agent: bool = False
@@ -330,7 +330,7 @@ def load_settings(project_dir: Path) -> Settings:
                 4, min(200, int(copilot.get("compact_batch_turns", 32)))
             ),
             character_ai_honesty=_one_of(
-                copilot.get("character_ai_honesty", "in_character"),
+                copilot.get("character_ai_honesty", "machine"),
                 [mode for mode, _ in AI_HONESTY_MODES],
                 "character_ai_honesty",
             ),

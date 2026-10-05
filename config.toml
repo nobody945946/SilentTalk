@@ -55,8 +55,9 @@ character_lora_uses = "called,active,line"
 # "called" = only when someone calls it, asks it or answers it; "active" = it
 # also joins in by itself when the topic suits it.
 # Asked "are you an AI?": "in_character" keeps the act (an NPC does not
-# announce it is scripted), "admit" owns up when sincerely asked.
-character_ai_honesty = "in_character"
+# announce it is scripted), "admit" owns up when sincerely asked, "machine"
+# is a machine character that says so (the default machine spirit).
+character_ai_honesty = "machine"
 # The owner's typed lines (needs [discord] text_chat) can hand work to the
 # EdgeAgent Agent; requires Discord access/workspace in EdgeAgent.
 character_agent = false

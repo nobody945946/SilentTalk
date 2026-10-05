@@ -241,7 +241,9 @@ def resolve_persona(persona_module: Any, test_set: TestSet, persona_id: str) -> 
             persona = replace(persona, relationships=(
                 persona_module.Relationship(owner, relation), *persona.relationships))
         return persona
-    for preset in persona_module.PRESET_PERSONAS:
+    # EXAMPLE_PERSONAS since the machine spirit became the only preset;
+    # older revisions (--old-rev) keep them in PRESET_PERSONAS.
+    for preset in (*persona_module.PRESET_PERSONAS, *getattr(persona_module, "EXAMPLE_PERSONAS", ())):
         if preset.id == persona_id:
             return preset
     for raw in test_set.meta.get("personas", []):
