@@ -161,6 +161,7 @@ def main() -> int:
             controller.set_character_mode if settings.copilot.enabled else None
         ),
         copilot_info=copilot_info,
+        invite_link=lambda: controller.invite_link,
     )
 
     runtime_issues = settings.validate_runtime()

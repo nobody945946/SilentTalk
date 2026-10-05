@@ -52,6 +52,7 @@ class SettingsPanel(tk.Frame):
         self._page_bodies: dict[str, tk.Frame] = {}
         self._page_items: dict[str, tuple[tk.Frame, tk.Label]] = {}
         self._custom_slots: dict[str, tk.Frame] = {}
+        self._custom_show_hooks: dict[str, list[Callable[[], None]]] = {}
         self._settings: dict[tuple[str, str], Setting] = {}
         self._restart_pending = False
 
@@ -126,11 +127,21 @@ class SettingsPanel(tk.Frame):
             )
         self._page_bodies[page_key].pack(fill="x", padx=(0, theme.px(18)))
         self._scroll.scroll_to_top()
+        for hook in self._custom_show_hooks.get(page_key, []):
+            hook()
 
-    def add_custom_group(self, page_key: str, build: Callable[[tk.Frame], None]) -> None:
+    def add_custom_group(
+        self,
+        page_key: str,
+        build: Callable[[tk.Frame], None],
+        *,
+        on_show: Callable[[], None] | None = None,
+    ) -> None:
         """Settings kept outside config.toml (the voice picker, what the model
         runs on) at the top of a page, built by the owner."""
         build(self._custom_slots[page_key])
+        if on_show is not None:
+            self._custom_show_hooks.setdefault(page_key, []).append(on_show)
 
     def value(self, section: str, key: str) -> Any:
         return self._value_of(section, key)

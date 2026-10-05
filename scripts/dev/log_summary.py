@@ -35,34 +35,16 @@ def _exception_type(record: dict) -> str:
 
 def _problem_name(record: dict) -> str:
     """Our own events start with a snake_case name. A library's message does
-    not ("1 packets were lost being flushed in decoder-5"), so show which
-    logger it came from and its first words with numbers masked."""
+    not, so show only which logger it came from without arbitrary message text."""
     text = str(record.get("event", ""))
     name = text.split(" ", 1)[0]
     if EVENT_NAME.fullmatch(name):
         return name
-    shape = re.sub(r"\d+", "N", " ".join(text.split()[:7]))[:60]
-    return f"{record.get('logger', '?')}：{shape}"
+    return str(record.get("logger", "?"))
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--log", type=Path, default=PROJECT_DIR / "silenttalk.log")
-    parser.add_argument("--all", action="store_true", help="every session in the file")
-    args = parser.parse_args()
-    if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(errors="replace")
-    if not args.log.is_file():
-        print(f"找不到 {args.log}")
-        return 1
-
-    records = []
-    for line in args.log.read_text(encoding="utf-8", errors="replace").splitlines():
-        try:
-            records.append(json.loads(line))
-        except json.JSONDecodeError:
-            continue
-    if not args.all:
+def generate_summary(records: list[dict], all_sessions: bool = False) -> str:
+    if not all_sessions:
         # The last app run or --stt-check run, whichever came last.
         starts = [
             i
@@ -115,6 +97,34 @@ def main() -> int:
     checks = events.get("copilot_stt_check", [])
     check_done = events.get("copilot_stt_check_done", [])
 
+    task_decisions = events.get("agent_task_decision", [])
+    task_dispatched = [r for r in task_decisions if r.get("dispatched") == "True"]
+    task_skipped = [r for r in task_decisions if r.get("dispatched") == "False"]
+    task_finished = events.get("agent_task_finished", [])
+    task_dispatch_failed = events.get("agent_task_dispatch_failed", [])
+
+    approvals = events.get("agent_approval_decided", [])
+    approved_true = [r for r in approvals if r.get("approved") == "True"]
+    approved_false = [r for r in approvals if r.get("approved") == "False"]
+    approval_failed = events.get("agent_approval_failed", [])
+    approval_timeout = events.get("agent_approval_timeout_failed", [])
+
+    private_results = events.get("agent_result_private", [])
+    private_delivered = [r for r in private_results if r.get("delivered") == "True"]
+    private_undelivered = [r for r in private_results if r.get("delivered") == "False"]
+    private_failed = events.get("agent_private_failed", [])
+    private_send_failed = events.get("private_send_failed", [])
+    private_all_failures = len(private_failed) + len(private_send_failed)
+
+    threads_opened = events.get("thread_opened", [])
+    threads_failed = events.get("thread_open_failed", [])
+
+    tasks_marked = events.get("task_marked", [])
+    marks_accepted = [r for r in tasks_marked if r.get("state") == "accepted"]
+    marks_done = [r for r in tasks_marked if r.get("state") == "done"]
+    marks_failed = [r for r in tasks_marked if r.get("state") == "failed"]
+    marks_mark_failed = events.get("task_mark_failed", [])
+
     def median_of(rows: list[dict[str, str]], key: str, fmt: str) -> str:
         values = []
         for r in rows:
@@ -146,7 +156,7 @@ def main() -> int:
             ):
                 found = re.search(rf"{key}=(\d+)", text)
                 totals[key] += int(found.group(1)) if found else 0
-        dave = re.search(r"dave=(\S+)(.*)$", received[-1])
+        dave = re.search(r"dave=([A-Za-z0-9_.-]+)", received[-1])
         packets = totals["rtp_packets"]
         return (
             f"{len(received)} 次；收到 {packets} 個語音封包、路上遺失 "
@@ -157,15 +167,21 @@ def main() -> int:
             f"；大小不對 {totals['odd_frames']}、沒 DAVE session 丟掉 {totals['dropped_no_session']}"
             f"、解碼錯誤 {totals['decode_errors']}、有 padding {totals['padded']}"
             f"、DAVE 解不開丟掉 {totals['dave_dropped']}、SSRC 未對應丟掉 {totals['unknown_ssrc']}"
-            f"、DAVE 復原 {totals['recoveries']}；最後一次 DAVE：{dave.group(1)}{dave.group(2)}"
+            f"、DAVE 復原 {totals['recoveries']}；最後一次 DAVE：{dave.group(1)}"
             if dave
             else ""
         )
 
+    device_str = (
+        " ".join(re.findall(r"[A-Za-z0-9_().,:+\-]+", str(devices[-1]["event"]).split(" ", 1)[-1]))
+        if devices
+        else "—"
+    )
+
     rows = [
         (
             "GPU（llama.cpp 看到的）",
-            str(devices[-1]["event"]).split(" ", 1)[-1] if devices else "—",
+            device_str or "—",
         ),
         (
             "連上 Discord（ready／resumed）",
@@ -184,9 +200,11 @@ def main() -> int:
         ("STT 斷出的句子", str(len(events.get("copilot_turn_final", [])))),
         (
             "STT 片段音量／頻譜平坦度（人聲 < 0.3，雜訊約 0.56）",
-            f"中位數 {median_of(segments, 'level_dbfs', '.1f')} dBFS／"
-            f"{median_of(segments, 'flatness', '.2f')}；像雜訊（> 0.4）"
-            f"{sum(float(r.get('flatness', 0)) > 0.4 for r in segments)}/{len(segments)} 段",
+            (
+                f"中位數 {median_of(segments, 'level_dbfs', '.1f')} dBFS／"
+                f"{median_of(segments, 'flatness', '.2f')}；像雜訊（> 0.4）"
+                f"{sum(float(r.get('flatness', 0)) > 0.4 for r in segments)}/{len(segments)} 段"
+            ),
         ),
         (
             "真人辨識測試（--stt-check）",
@@ -231,15 +249,81 @@ def main() -> int:
         ),
         ("說出口的句子", f"{len(jobs)}（串流 {len(streamed)}）"),
         ("TTS 到第一段聲音（串流）", ms(streamed, "synthesis_ms")),
+        (
+            "Agent 派工判斷",
+            f"{len(task_decisions)}（派工 {len(task_dispatched)}、不派工 {len(task_skipped)}"
+            + (f"、失敗 {len(task_dispatch_failed)}" if task_dispatch_failed else "")
+            + "）",
+        ),
+        (
+            "Agent 派工判斷延遲",
+            ms(task_decisions, "latency_ms"),
+        ),
+        (
+            "Agent 任務執行時間",
+            ms(task_finished, "elapsed_ms"),
+        ),
+        (
+            "Agent 批准",
+            f"{len(approvals)}（准許 {len(approved_true)}、拒絕 {len(approved_false)}"
+            + (f"、失敗 {len(approval_failed)}" if approval_failed else "")
+            + (f"、逾時 {len(approval_timeout)}" if approval_timeout else "")
+            + "）",
+        ),
+        (
+            "Agent 批准往返延遲",
+            ms(approvals, "roundtrip_ms"),
+        ),
+        (
+            "Agent 私訊結果",
+            f"{len(private_results)}（送達 {len(private_delivered)}、未送達 {len(private_undelivered)}"
+            + (f"、失敗 {private_all_failures}" if private_all_failures else "")
+            + "）",
+        ),
+        (
+            "討論串建立",
+            f"{len(threads_opened)}"
+            + (f"（失敗 {len(threads_failed)}）" if threads_failed else ""),
+        ),
+        (
+            "訊息表情標記（⚙️／✅／❌）",
+            f"{len(tasks_marked)}（accepted {len(marks_accepted)}、done {len(marks_done)}、failed {len(marks_failed)}"
+            + (f"、失敗 {len(marks_mark_failed)}" if marks_mark_failed else "")
+            + "）",
+        ),
     ]
-    print("| 項目 | 數字 |")
-    print("|---|---|")
+    out: list[str] = [
+        "| 項目 | 數字 |",
+        "|---|---|",
+    ]
     for name, value in rows:
-        print(f"| {name} | {value} |")
-    print()
-    print("警告／錯誤（只列事件名稱和次數）：")
+        out.append(f"| {name} | {value} |")
+    out.append("")
+    out.append("警告／錯誤（只列事件名稱和次數）：")
     for name, count in problems.most_common() or [("沒有", 0)]:
-        print(f"- {name}" + (f" × {count}" if count else ""))
+        out.append(f"- {name}" + (f" × {count}" if count else ""))
+    return "\n".join(out)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--log", type=Path, default=PROJECT_DIR / "silenttalk.log")
+    parser.add_argument("--all", action="store_true", help="every session in the file")
+    args = parser.parse_args()
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(errors="replace")
+    if not args.log.is_file():
+        print(f"找不到 {args.log}")
+        return 1
+
+    records = []
+    for line in args.log.read_text(encoding="utf-8", errors="replace").splitlines():
+        try:
+            records.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+
+    print(generate_summary(records, all_sessions=args.all))
     return 0
 
 

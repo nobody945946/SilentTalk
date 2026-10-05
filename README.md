@@ -32,7 +32,7 @@ SilentTalk 是 Discord 語音角色與回覆建議玩具。下載後啟動同一
 1. 在 Discord Developer Portal 建立 Application 與 Bot。
 2. 把 Bot 的邀請連結交給要使用的 Server 的管理員，由他開啟並選擇 Server：
    <https://discord.com/oauth2/authorize?client_id=1552128066719981608&scope=bot&permissions=309240859712>
-   （換成別的 Bot 時，`client_id` 改成它的 Application ID。）連結已勾好 Bot 用到的 8 個權限：View Channel、Connect、Speak、Send Messages、Read Message History、Add Reactions、Create Public Threads、Send Messages in Threads。權限清單只寫在 `silenttalk/discord_voice.py` 的 `BOT_PERMISSIONS`，連結由同檔的 `invite_url()` 產生；Bot 登入後 `AppController.invite_link` 就是這條連結。
+   （換成別的 Bot 時，`client_id` 改成它的 Application ID。）連結已勾好 Bot 用到的 8 個權限：View Channel、Connect、Speak、Send Messages、Read Message History、Add Reactions、Create Public Threads、Send Messages in Threads。權限清單只寫在 `silenttalk/discord_voice.py` 的 `BOT_PERMISSIONS`，連結由同檔的 `invite_url()` 產生；Bot 登入後 `AppController.invite_link` 就是這條連結（連上 Discord 後，在「設定 → Discord」頁也可直接複製）。
 3. 取得 Bot Token，並在 Discord Developer Mode 複製自己的 User ID。
 4. 初次啟動時，在授權介面輸入這兩項資料。
 
@@ -105,7 +105,7 @@ LoRA 是個人資產。產品只提供載入框架，不附帶、下載或自動
 ## 常見問題與驗收
 
 - **下載中斷／元件損壞：**重跑同一啟動器。只部署用 `啟動 SilentTalk.cmd --setup-only`；完整驗收用 `--check`，會實際載入 STT、租借角色並歸還，不連 Discord。正在租借時先退出會話。
-- **Bot 沒加入或缺權限：**確認 Owner ID，並請 Server 管理員用邀請連結再邀請一次（會補上缺的權限）。
+- **Bot 沒加入或缺權限：**確認 Owner ID，並請 Server 管理員用邀請連結再邀請一次（會補上缺的權限；可在「設定 → Discord」頁複製連結）。
 - **F8 無反應：**確認已啟動，並檢查其他程式是否占用快捷鍵。
 - **播放中斷線：**已開始的句子不自動重播以避免回音；程式恢復連線後讓下一句接續。
 - **換模型失敗：**確認沒有 Agent 工作或角色租借，且模型已下載完整、格式與引擎相容。
