@@ -30,7 +30,9 @@ SilentTalk 是 Discord 語音角色與回覆建議玩具。下載後啟動同一
 ### 首次 Discord 授權
 
 1. 在 Discord Developer Portal 建立 Application 與 Bot。
-2. 把 Bot 的邀請連結交給要使用的 Server 的管理員，由他開啟並選擇 Server：`https://discord.com/oauth2/authorize?client_id=<Application ID>&scope=bot&permissions=309240859712`。連結已勾好 Bot 用到的 8 個權限：View Channel、Connect、Speak、Send Messages、Read Message History、Add Reactions、Create Public Threads、Send Messages in Threads。權限清單只寫在 `silenttalk/discord_voice.py` 的 `BOT_PERMISSIONS`，連結由同檔的 `invite_url()` 產生；Bot 登入後 `AppController.invite_link` 就是這條連結。
+2. 把 Bot 的邀請連結交給要使用的 Server 的管理員，由他開啟並選擇 Server：
+   <https://discord.com/oauth2/authorize?client_id=1552128066719981608&scope=bot&permissions=309240859712>
+   （換成別的 Bot 時，`client_id` 改成它的 Application ID。）連結已勾好 Bot 用到的 8 個權限：View Channel、Connect、Speak、Send Messages、Read Message History、Add Reactions、Create Public Threads、Send Messages in Threads。權限清單只寫在 `silenttalk/discord_voice.py` 的 `BOT_PERMISSIONS`，連結由同檔的 `invite_url()` 產生；Bot 登入後 `AppController.invite_link` 就是這條連結。
 3. 取得 Bot Token，並在 Discord Developer Mode 複製自己的 User ID。
 4. 初次啟動時，在授權介面輸入這兩項資料。
 

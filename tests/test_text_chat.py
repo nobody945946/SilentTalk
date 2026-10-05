@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from dataclasses import dataclass, field
+from pathlib import Path
 from types import SimpleNamespace
 
 import discord
@@ -248,3 +250,14 @@ def test_the_invite_link_asks_for_every_permission_the_bot_uses_and_no_more() ->
     link = invite_url(1552128066719981608)
     assert link == ("https://discord.com/oauth2/authorize?client_id=1552128066719981608"
                     "&scope=bot&permissions=309240859712")
+
+
+def test_the_readme_carries_the_invite_link_for_the_current_permissions() -> None:
+    """The README keeps the bot's invite link; when BOT_PERMISSIONS changes,
+    this fails until the link there is updated too."""
+    readme = (Path(__file__).resolve().parents[1] / "README.md").read_text(encoding="utf-8")
+    links = re.findall(r"https://discord\.com/oauth2/authorize\?[^>\s)`]+", readme)
+    assert links, "README has no invite link"
+    for link in links:
+        client_id = int(re.search(r"client_id=(\d+)", link).group(1))
+        assert link == invite_url(client_id), f"README link is out of date: {link}"
