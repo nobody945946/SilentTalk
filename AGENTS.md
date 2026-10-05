@@ -10,6 +10,11 @@
 | **Windows**（使用者的 RTX 3050 Ti 筆電，`C:\Users\...\SilentTalk`） | `handoff/laptop.md` | `handoff/reports/laptop.md` | `laptop-report` |
 | **Linux** 開發機（`/home/clawd/SilentTalk`，RTX 3090） | `handoff/dev-box.md` | 直接改 `handoff/dev-box.md` | `copilot-story-mode` |
 
+**分工（使用者 2026-10-05 決定）**：
+- 筆電：Windows 上的一切（部署、只在 Windows 出現的錯誤，不管是誰寫的程式）、介面（EdgeAgent 網頁、SilentTalk 的設定和人設編輯器）、Discord 實測、加密硬碟和對話紀錄的設定。
+- 開發機：模型（基底、LoRA、訓練資料）、評測（`bench/`）、機器語言翻譯器（`edge_agent/lingua/`）、Agent 的工具和角色邏輯。
+- 需要對方範圍的改動時，寫進你的回報（筆電）或對方的工作檔（開發機），由對方做；不要自己改。
+
 - 工作檔是給**機器**的，不分是哪個 agent：筆電上的 Codex 和 Antigravity 讀同一份。**同一台機器一次只開一個 agent**；換人時，新的 agent 照工作檔寫的方式從上一個停下的地方接手。
 - 工作檔是自足的：**不要另外讀** README、ARCHITECTURE、程式碼或另一台機器的工作檔，除非你的工作檔叫你去讀某個段落。
 - 使用者只說「開工」「照做」「繼續」時，就是照上表那份工作檔做。

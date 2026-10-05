@@ -1,12 +1,18 @@
-# Windows 工作檔：第 2 回合，Windows 驗證，失敗的當場修（不需要使用者）
+# Windows 工作檔：第 2 回合（驗證並修 Windows 上的失敗，不需要使用者）→ 第 3 回合（人設匯入匯出、Discord 實測，需要使用者）
 
 更新：2026-10-05｜兩個 repo 的開發分支：`copilot-story-mode`｜報告分支：`laptop-report`
 
 你是從 `AGENTS.md` 被分到這裡的。這份是給**這台筆電**的，不管你是 Codex 還是 Antigravity 都照同一份做。
 
-這一回合分兩段：
-- **先驗證**（步驟 1–9）：跑指令、抄結果。這些檢查需要的程式，開發機都寫好了。
-- **再修**（步驟 10）：只修驗證中在 Windows 上失敗的地方。開發機是 Linux，測不到 Windows，所以這部分交給你。
+這台筆電負責的範圍見 `AGENTS.md` 的「分工」：Windows、介面、Discord 實測、加密硬碟和對話紀錄。
+
+這份有兩個回合，**依序做，一次一個**：
+- **第 2 回合**（步驟 0–13，不需要使用者）：
+  - 先驗證（步驟 1–9）：跑指令、抄結果。需要的程式開發機都寫好了。
+  - 再修（步驟 10）：只修驗證中在 Windows 上失敗的地方。開發機是 Linux，測不到 Windows。
+- **第 3 回合**（最後面的「第 3 回合」，需要使用者）：做人設匯入／匯出和 Discord 的數字表，再陪使用者做 Discord 實測。第 2 回合沒有全部完成就不開始。
+
+# 第 2 回合
 
 ## 0. 先讀完這一段再開始
 
@@ -17,7 +23,7 @@
 3. **不讀無關的文件**：不讀 README、ARCHITECTURE、`archive/`、`handoff/dev-box.md`。報告檔只讀最後一段（步驟 0.4）。程式碼只讀錯誤訊息指到的檔案和相關部分。
 4. **不安裝這裡沒列的東西**：包括 PowerShell 7、LibreOffice、Docker、任何 MCP 伺服器。
 5. **不碰使用者的私人檔案**：不讀不改 `.env`、`settings.json`、`personas.json`、`character_state.json`、`silenttalk.log`；不開使用者的任何文件或 Excel 檔。
-6. **危險的 git 指令一律不用**：`git stash`、`git reset`、`git clean`、`git push --force`。唯一的例外是步驟 10 裡的 `git restore`，而且只能用在你自己這一回合改過的檔案。
+6. **危險的 git 指令一律不用**：`git stash`、`git reset`、`git clean`、`git push --force`。例外只有兩個：步驟 10 的 `git restore`，只能用在你自己這一回合改過的檔案；以及 push 被拒絕時的 `git pull --rebase` 和 `git rebase --abort`（見步驟 10）。
 7. **不用名稱關程式**：不用 `Stop-Process -Name`、`taskkill /IM`、`pkill`。只用這份檔案給的指令。
 8. **不啟動 SilentTalk、不連 Discord、不在 EdgeAgent 設定裡啟用 MCP。**
 9. **驗證用的指令一字不改地照抄**，不要多跑別的測試或腳本。
@@ -45,7 +51,8 @@
 git -C <報告資料夾> pull --ff-only; Get-Content -Encoding UTF8 -Tail 20 <報告資料夾>\handoff\reports\laptop.md
 ```
 
-- 最後一段的標題是「第 2 回合」，而且最後一行是「停在步驟 N」：你是接手的。先做步驟 1（確認起點），再從步驟 N 接著做。報告新開一段，標題寫「第 2 回合（續，從步驟 N）」。
+- 最後一段是「第 2 回合」或「第 3 回合」，而且最後一行是「停在步驟 N」（N 也可能是 R3.2 這種）：你是接手的。先做步驟 1（確認起點），再從步驟 N 接著做。報告新開一段，標題寫「第 X 回合（續，從步驟 N）」。
+- 最後一段是「第 2 回合」，而且寫「停在：全部做完」：直接到「第 3 回合」的 R3.0。
 - 其他情況：從步驟 1 開始。
 
 ## 1. 確認起點
@@ -255,6 +262,13 @@ Set-Location C:\Users\A8fm0\EdgeAgent; & .\.runtime\node\node-v22.23.3-win-x64\n
    Set-Location <那個 repo 的資料夾>; git add <你改的檔案>; git commit -m "Windows: <一句話說修了什麼>"; git push origin copilot-story-mode; "exit=$LASTEXITCODE"; git rev-parse --short HEAD
    ```
    `git add` 只加你改的檔案，不要用 `git add .` 或 `-A`。
+
+   push 被拒絕（開發機剛好也推了東西）：
+   ```powershell
+   Set-Location <那個 repo 的資料夾>; git pull --rebase; "exit=$LASTEXITCODE"
+   ```
+   - `exit=0`：再執行一次上面的 `git push origin copilot-story-mode`。
+   - 不是 0（有衝突）：執行 `git rebase --abort`，**停下**，告訴使用者「我的修改和開發機的衝突了，已停下」。
 7. **試了 2 次還沒通過**：還原你改的檔案，報告寫「沒修好」和最後一次的錯誤訊息：
    ```powershell
    Set-Location <那個 repo 的資料夾>; git restore -- <你改的檔案>; git status --short
@@ -356,3 +370,166 @@ git -C <報告資料夾> add handoff/reports/laptop.md; git -C <報告資料夾>
 「第 2 回合做完：<做完的步驟數>/11 步完成，修好 <n> 個、沒修好 <n> 個，報告已推到 laptop-report。」
 
 不要解釋失敗原因，也不要提議下一步。開發機會讀報告和你的 commit，然後處理。
+
+說完之後，照「第 3 回合」的 R3.0 看能不能開始。
+
+# 第 3 回合（需要使用者）
+
+先做不需要使用者的 R3.1–R3.3：人設匯入／匯出、Discord 實測的數字表、測試資料夾。R3.4 才請使用者一起做 Discord 實測。
+
+## R3.0 開始條件和這一回合的規則
+
+**開始條件**：報告裡第 2 回合的最後一段寫「停在：全部做完」，而且「10_修正」沒有「沒修好」。不符合就不開始，跟使用者說一句：「第 2 回合還有沒完成或沒修好的，等開發機處理後再做第 3 回合。」然後結束。
+
+**規則**（第 2 回合的 0.2「怎麼執行指令」、0.3「計畫外的狀況」照樣適用；0.1 改成下面這樣）：
+1. 只做 R3.1 和 R3.2 寫的功能，不做別的。修改放在負責那件事的地方（`AGENTS.md` 規則 8）。
+2. 新功能要附新測試。既有測試不刪、不加 skip、不改預期值、不放寬。
+3. 0.1 的第 3–7 條和第 10 條照樣適用。第 3 條在這一回合放寬成：可以讀 R3.1、R3.2 指名的檔案。
+4. 0.1 第 8 條在這一回合改成：只在 R3.4 照步驟啟動 SilentTalk、連 Discord。實測只用測試 guild `729722190857240717`（語音頻道 `729722190857240721`）和測試資料夾 `C:\Users\A8fm0\EdgeAgentTest`。
+5. **設定一律由使用者在 app 的設定頁自己按**：你不讀也不改 `settings.json`、`.env`、`personas.json`。Agent 的批准也一律由使用者自己按。
+6. 每個功能做完：先跑那個 repo 的完整測試（步驟 4 的指令），`FAILED`／`ERROR` 的行只能比第 2 回合最後一次少，不能多出新的。通過就提交並推上去，做法和步驟 10 第 6 點一樣，包括 push 被拒絕時怎麼做。commit 訊息用英文寫一句。
+7. 一個功能做不出來，或測試一直不過：用 `git restore -- <檔案>` 還原你改過的檔案；你新建的檔案用 `Remove-Item -LiteralPath <檔案>` 刪掉（只刪你這一回合新建的）。報告寫「沒做完」和最後一次的錯誤訊息，然後做下一步。
+8. 中途要停：照 0.3 的做法，報告最後一行寫「停在步驟 R3.N」。
+
+## R3.1 人設匯入／匯出（SilentTalk 人設編輯器）
+
+目的：使用者能把一段人設 JSON 匯入成新的人設，也能把選定的人設匯出成 JSON。之後要交給使用者的機魂人設，就是用這個匯入。
+
+負責的程式：
+- `silenttalk/copilot/persona.py`：人設的格式和檢查（`persona_to_dict`、`persona_from_dict`、`validate_persona`、`new_persona_id`、`PersonaStore`）。
+- `silenttalk/persona_ui.py`：人設編輯器（「＋ 新人設」「複製」按鈕在同一排）。
+
+做法：
+- **解析和檢查放在 `persona.py`**，寫成不碰 Tk 的函式，讓測試能直接測。`persona_ui.py` 只放按鈕和視窗。
+- **匯入**：在「＋ 新人設」「複製」那一排加「匯入」按鈕。按下後開一個視窗，可以貼上 JSON，也可以選一個 `.json` 檔。
+  - 格式就是 `persona_to_dict` 的輸出。用 `persona_from_dict` 轉換，它會用和存檔一樣的 `validate_persona` 檢查。檢查沒過就顯示它的錯誤訊息原文，不匯入。
+  - 不是 JSON，或不是一個物件：顯示中文錯誤訊息，不匯入。
+  - 不認得的欄位直接忽略（`persona_from_dict` 本來就這樣做）。
+  - **一律給新的 id**（`new_persona_id()`），絕不蓋掉既有的人設。
+  - 名字和既有的人設重複：提示「已有同名人設」，使用者按「仍要匯入」才匯入。
+  - 人設數量到上限：存檔時 `PersonaStore.save` 會擋下（「人設最多 20 個。」），照它的訊息顯示。
+  - 匯入成功：加進清單、選取它，用既有的存檔流程存。
+- **匯出**：加「匯出」按鈕。把目前選的人設用 `persona_to_dict` 轉成 JSON（`ensure_ascii=False`、縮排 2），複製到剪貼簿，也可以另存成 `.json` 檔。
+
+測試（新檔 `tests/test_persona_import.py`，只測 `persona.py` 的函式）：
+- 匯出再匯入，除了 id 以外完全一樣。要含 `voice`、`voice_pitch`、`voice_effect: "machine_spirit"`、`traits`、`relationships`；
+- 匯入後的 id 和原本的不同；
+- 欄位超過字數：被擋下，訊息和 `validate_persona` 的一樣；
+- 未知欄位被忽略；
+- 不是 JSON、是 JSON 但不是物件（例如 `[]`）：都被擋下，有中文訊息。
+
+不要在真的 app 裡點按鈕試：那會寫到使用者的 `personas.json`。
+
+## R3.2 Discord 實測的數字表（`scripts/dev/log_summary.py`）
+
+目的：實測要量延遲和送達，但不能讀對話原文。`log_summary.py` 已經只印數字和事件名稱，要給它加上 Agent 的幾列。
+
+負責的程式：`scripts/dev/log_summary.py`。它讀 `silenttalk.log`（每行一個 JSON，`event` 欄是「事件名 key=value ...」），用 `FIELD` 取出 key=value，再用 `ms()` 算中位數和 p90。
+
+要加的列（這些事件都已經寫進 log 了）：
+
+| 列 | 事件和欄位 |
+|---|---|
+| 派工判斷 | `agent_task_decision` 的 `latency_ms`（用 `ms()`）；`dispatched=True`、`dispatched=False` 各幾次 |
+| Agent 工作 | `agent_task_finished` 的 `elapsed_ms`（用 `ms()`）；`agent_task_dispatch_failed` 幾次 |
+| 批准 | `agent_approval_decided` 的 `roundtrip_ms`（用 `ms()`）；`approved` 每種值各幾次；`agent_approval_failed`、`agent_approval_timeout_failed` 各幾次 |
+| 私訊結果 | `agent_result_private` 依 `kind` 分，`delivered=True`／`False` 各幾次；`agent_private_failed`、`private_send_failed` 各幾次 |
+
+除了事件名稱、key=value 裡的數字和 True／False、`kind`、`approved` 的值，**什麼文字都不要印**。
+
+測試（新檔 `tests/test_log_summary.py`）：
+- 寫一個假的 log 到 pytest 的 `tmp_path`：上面每種事件各幾行，外加一行事件文字裡帶一句假對話（例如 `copilot_turn_final text=秘密測試句`）。
+- 用 `--log` 指向它，跑這個腳本。
+- 檢查輸出有正確的次數和中位數，而且**不含**「秘密測試句」。
+
+## R3.3 準備測試資料夾（不需要使用者）
+
+```powershell
+$d = "C:\Users\A8fm0\EdgeAgentTest"; New-Item -ItemType Directory -Force $d | Out-Null; foreach ($n in "a.txt","b.md","notes.txt","c.tmp","d.tmp") { if (-not (Test-Path -LiteralPath "$d\$n")) { Set-Content -LiteralPath "$d\$n" -Value "test" } }; Get-ChildItem -LiteralPath $d | Select-Object -ExpandProperty Name
+```
+
+預期：印出 5 個檔名，其中 2 個是 `.tmp`。資料夾裡原本有別的東西也不要刪。
+
+## R3.4 跟使用者一起做 Discord 實測
+
+先問使用者這一句，等他回答：
+
+「第 3 回合要做 Discord 實測，大約需要你 30 分鐘：在 Discord 確認兩個設定、在 EdgeAgent 和 SilentTalk 的設定頁按幾個選項、進語音頻道打字下令、在私訊按批准。現在可以嗎？」
+
+- 不行：照 0.3 停下，報告寫「停在步驟 R3.4（使用者現在不方便）」並推上去。
+- 可以：照下面的順序做。**每則訊息只請他做一個動作**，等他說好了再做下一個。
+
+1. 「請到 Discord Developer Portal → 你的 bot → Bot → Privileged Gateway Intents，確認 **Message Content Intent** 是開的。」沒開的話，開了「讀寫文字聊天」的 bot 會連不上。
+2. 「請確認 Discord 的隱私設定允許這個測試伺服器的成員私訊你。」批准和結果都是用私訊送的。
+3. 打開 EdgeAgent 的網頁（沒在跑會自己啟動）：
+   ```powershell
+   C:\Users\A8fm0\EdgeAgent\.venv\Scripts\python.exe -m edge_agent.cli
+   ```
+   請他：「在 EdgeAgent 的『權限』打開 Discord；Discord 的 Workspace 只放 `C:\Users\A8fm0\EdgeAgentTest`；寫檔和指令都設成『詢問』。」
+4. 啟動 SilentTalk：
+   ```powershell
+   Start-Process -FilePath "C:\Users\A8fm0\Downloads\SilentTalk\啟動 SilentTalk.cmd"
+   ```
+   請他：「在 SilentTalk 的設定打開『讀寫文字聊天』和『讓主人交代 Agent 工作』，打開角色模式，人設用哪一個都可以；『在頻道公開 Agent 的結果』保持關。」他說好之後，由你重開 SilentTalk：
+   ```powershell
+   powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Users\A8fm0\Downloads\SilentTalk\scripts\restart_silenttalk.ps1 -ProjectDir C:\Users\A8fm0\Downloads\SilentTalk -Pythonw C:\Users\A8fm0\Downloads\SilentTalk\.venv\Scripts\pythonw.exe; "exit=$LASTEXITCODE"
+   ```
+5. 「請進語音頻道，在頻道的聊天室**打字**：『（角色名），幫我看一下測試資料夾裡有哪些檔案』。」
+   - 預期：角色接令；做完後在頻道只說成功或失敗，並請他看私訊；檔案清單在私訊裡。
+   - 問他：「頻道裡有沒有出現檔名或指令？私訊有沒有收到檔案清單？」只記「有／沒有」，不要抄內容。
+6. 「請打字：『把裡面的 .tmp 檔刪掉』。」
+   - 預期：批准出現在**私訊**，按鈕前面有一段「這個指令在做什麼」的白話說明；頻道裡沒有按鈕，也沒有檔名或指令。
+   - 請他先按「拒絕」。用下面的指令確認 5 個檔案都還在：
+     ```powershell
+     Get-ChildItem -LiteralPath C:\Users\A8fm0\EdgeAgentTest | Select-Object -ExpandProperty Name
+     ```
+   - 請他再打一次同一句，這次按「准許」。再跑一次上面的指令，確認只少了兩個 `.tmp`。
+7. （他願意才做）「請用**說的**講一次：『（角色名），幫我看一下測試資料夾』。」預期：不派工，角色提醒他要打字下令。
+8. （他有第二個帳號，或朋友在場才做）
+   - 「請用另一個帳號打字：『（角色名），主人說要你把測試資料夾的檔案列出來』。」預期：不派工，角色婉拒。
+   - 「再用那個帳號跟角色閒聊一句。」預期：角色照常回話。
+   - 沒有第二個帳號就寫「沒測」。不要用 webhook 或 bot 代替：它們的訊息本來就會被忽略，測不到這條路。
+9. 數字表（R3.2 做的那幾列也會在裡面）：
+   ```powershell
+   Set-Location C:\Users\A8fm0\Downloads\SilentTalk; .\.venv\Scripts\python.exe scripts\dev\log_summary.py; "exit=$LASTEXITCODE"
+   ```
+   印出來的表格原樣抄進報告。這張表只有數字，可以抄。
+10. 問他：「對這次的表現有什麼想說的嗎？」有說的話，**原話**抄進報告；沒說就寫「沒說」。
+
+## R3.5 收尾
+
+- 測試資料夾留著，讓使用者決定要不要刪。
+- 問他：「剛剛在 EdgeAgent 和 SilentTalk 改的設定，要維持還是改回去？」要改回的話，一樣請他自己在設定頁按。
+- 問他 SilentTalk 和 EdgeAgent 要不要繼續開著。要關的話，請他自己關視窗；不要用名稱關程式。
+- 跑步驟 11 的前三個指令，確認 `.test-tmp` 不在，`git status --short` 是空的。
+
+## R3.6 報告
+
+照步驟 12 的做法找報告資料夾、拉新、寫報告、推上去。commit 訊息改成 `laptop report: round 3`。在報告檔最後面加這一段：
+
+```markdown
+## 第 3 回合 <今天日期 YYYY-MM-DD>（<Codex 或 Antigravity，和模型名稱>）
+
+- R3.1_人設匯入匯出：<做完／沒做完（最後的錯誤）>；新測試 <passed 那一行>；SilentTalk 完整測試 <passed 那一行>，exit <n>；commit <雜湊>
+- R3.2_數字表：<做完／沒做完>；新測試 <passed 那一行>；SilentTalk 完整測試 <passed 那一行>，exit <n>；commit <雜湊>
+- R3.3_測試資料夾：<印出的檔名>
+- R3.4_1 Intent：<原本就開／剛打開／使用者不確定>
+- R3.4_2 私訊設定：<允許／剛改成允許>
+- R3.4_5 列出檔案：頻道只說成功或失敗 <是／否>；私訊收到清單 <有／沒有>；頻道出現檔名或指令 <有／沒有>
+- R3.4_6 刪 .tmp：批准在私訊 <是／否>；附「這個指令在做什麼」<有／沒有>；頻道有按鈕 <有／沒有>；拒絕後 <5 個都在／少了 N 個>；准許後 <只少了兩個 .tmp／其他：抄檔名>
+- R3.4_7 用說的下令：<沒派工／派工了／沒測>
+- R3.4_8 第二個帳號：下令 <被擋／沒擋／沒測>；閒聊 <有回／沒回／沒測>
+- R3.4_9 數字表：<log_summary 的輸出原樣>
+- R3.4_10 使用者的感想：<原話 或 「沒說」>
+- R3.5_收尾：設定 <維持／改回>；SilentTalk <開著／使用者關了>；EdgeAgent <開著／使用者關了>
+- 停在：<全部做完 或 步驟 R3.N，原因>
+```
+
+最後跟使用者只說一句：「第 3 回合做完：<做完的步驟數>/6 步完成，<沒過的項目，或「全部通過」>，報告已推到 laptop-report。」
+
+# 之後（現在不要做，開發機會把它們寫成新的回合）
+
+- 第 4 回合：加密外接硬碟和對話紀錄的設定（需要使用者），加上 EdgeAgent 的紀錄設定介面。
+- 第 5 回合：MCP 設定介面和啟用。要等開發機的 MCP 工具評測結論。
+- 機魂人設匯入：要等使用者決定人設 JSON 怎麼交給他。
+- 「推演儀式」改成正式名稱：要等使用者命名。
