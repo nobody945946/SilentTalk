@@ -23,6 +23,7 @@
   - Agent 要執行 PowerShell 指令而請求批准時，批准卡片（和 SilentTalk 的 Discord 私訊）會先附上這個指令的白話和影響。
 - **上網研究工具** `web_research`：程式搜尋、讀網頁、挑出最相關的 6 段附編號和網址。
 - **MCP**：可接本機 HTTP 伺服器（`url`，只准 127.0.0.1／localhost）；`read_only_tools` 讓擁有者替沒標記的工具擔保唯讀（台股伺服器 173 個工具都沒標記）。
+- **新模式「推演儀式」**（暫名）：討論資料和想法時用，第一則訊息帶上討論守則（`edge_agent/skills/discussion`）。模式改成單一設定：`/chat` 收 `"mode": "work" | "interview" | "discussion"`（取代原本的 `interview: true`）；網頁選單有三個選項，既有的瀏覽器檢查已照新選單改好。
 - **新相依套件**：`sqlglot==30.21.0`、`pymavlink==2.4.50`、`capstone==5.0.9`（`pyproject.toml` 變了，`bootstrap.ps1` 會重裝）。
 
 ## 2. 這一回合要做的事（依序；每一步做完照 §4 回報）
@@ -47,7 +48,7 @@
 1. `translate_machine` 的命令列：在 EdgeAgent 的 venv 跑
    `"ls -r *.log | rm -WhatIf" | .venv\Scripts\python.exe -m edge_agent.lingua powershell`
    回報輸出裡的「解讀環境：」那一行，以及有沒有寫出「ls 是 Get-ChildItem 的別名」「rm 是 Remove-Item 的別名」「只是模擬」。
-2. **批准卡片**：用既有的真 Edge 瀏覽器檢查（`tests/browser_check.mjs` 那一套），加一個情境：權限 shell 設成「問」，請 Agent 執行 `Get-Date`；等批准卡片出現後確認卡片裡有「這個指令在做什麼」的展開區塊，然後按「拒絕」。在既有的檢查 owner 裡加，不另寫新腳本。回報檢查結果和視窗大小。
+2. **瀏覽器檢查**：先照原本方式跑 `tests/browser_check.mjs`，確認選單是「工作／求知儀式／推演儀式」三個，送出時 `/chat` 帶 `mode`。**批准卡片**：在同一套檢查加一個情境：權限 shell 設成「問」，請 Agent 執行 `Get-Date`；等批准卡片出現後確認卡片裡有「這個指令在做什麼」的展開區塊，然後按「拒絕」。在既有的檢查 owner 裡加，不另寫新腳本。回報檢查結果和視窗大小。
 3. **上網研究**：用 Node 直接呼叫 `edge_agent/web_tools.mjs` 的 `webResearch('Python 3.12 是哪一天發布的？', ['Python 3.12 release date'])`，只回報：讀了幾個網頁、回了幾段、段落裡有沒有出現「2023」。不要把網頁內容寫進報告。
 4. `tests/test_mcp.py` 在 Windows 的結果（包含新的 `url`、`read_only_tools` 驗證）。這回合**不要**在 EdgeAgent 設定裡啟用任何 MCP 伺服器。
 
