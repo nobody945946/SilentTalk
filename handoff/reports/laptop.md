@@ -3,20 +3,20 @@
 ## 時間與額度消耗統計
 
 - 使用者指示：pull 開工；刪除若被 policy 擋住，提供 PowerShell 指令由使用者執行。
-- 開始時間、完整總耗時與完整步驟數看不到；本次第一筆直接讀取的時鐘為 2026-10-05T23:08:19+08:00。檢查點：2026-10-06T00:01:39.2323408+08:00。不是整回合起訖或總耗時。
+- 開始時間、完整總耗時與完整步驟數看不到；本次第一筆直接讀取的時鐘為 2026-10-05T23:08:19+08:00。檢查點：2026-10-06T00:38:00.090648+08:00。不是整回合起訖或總耗時。
 - Token（Input／Output／Cache read）、開始和結束額度：看不到，不估算。
-- 測試執行 15 次，逐次結果如下；介面預覽 2 次均 exit 0。
-- 本回合尚未結案：不依賴使用者的程式、部署與回歸已交付；A4 重載確認已問一次，尚未收到回覆。其餘真人／容器驗收續接同一回合。
+- pytest 執行 21 次，逐次結果如下；介面預覽 7 次：3 次 exit 0、4 次 exit 1。最後一次在使用者指出重跑過多之前已啟動，回傳 UI flow OK；按鍵模擬仍有間歇失敗，停止重跑，沒有宣稱根因已修好。
+- 本回合尚未結案：不依賴使用者的程式、部署與回歸已交付；A4 重載確認已問一次，尚未收到回覆。其餘正式重載／真人驗收續接同一回合；使用者已取消容器、分割與加密要求，普通目錄和持久設定已完成。
 - SilentTalk pull：9410cad → a4d22ba，exit 0；EdgeAgent pull：d793c2c → 748f9c2，exit 0；既有報告 worktree pull exit 0。
 - EdgeAgent 正常部署：powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap.ps1 -SetupOnly，exit 0。E4B、Node 22.23.3、Pi、CUDA llama.cpp b11193 與全域啟動器就緒。部署沒有重載既有正式服務。
 
 ## 目標完成度統計（分母 34）
 
-完成 9／未完成 6／沒測 19；完成率 9/34 = 26.5%。「完成」只指各列寫出的證據；來源與測試完成不代表正式模型已換或真人驗收通過。
+完成 14／未完成 6／沒測 14；完成率 14/34 = 41.2%。「完成」只指各列寫出的證據；來源與測試完成不代表正式模型已換或真人驗收通過。
 
 - A1 完成｜兩 repo pull exit 0；EdgeAgent 部署 exit 0。
-- A2 完成｜完整 pytest：229 passed、2 skipped、0 failed、0 error，207.09 秒，exit 0；EDGE_AGENT_UI_REGRESSION=1，包含真 Edge 回歸。仍有既有 Unicorn native 診斷，見限制。
-- A3 完成｜最終完整 pytest：302 passed、1 skipped、0 failed、0 error，24.24 秒，exit 0。
+- A2 完成｜紀錄改動後完整 pytest：230 passed、2 skipped、0 failed、0 error，259.34 秒，exit 0（真 Edge 開啟）。其後共用紀錄 UI helper／測試目錄 fixture 改動，定向真 Edge 再跑 1 passed，20.04 秒，exit 0；17/17 組驗收、3 個 TXT 下載、0 unexpected browser errors。Unicorn 與合成 HTTP server 診斷見限制，不冒稱已修好。
+- A3 完成｜紀錄改動後完整 pytest：303 passed、1 skipped、0 failed、0 error，21.28 秒，exit 0。後續只改預覽腳本，compileall／diff check 通過；預覽間歇失敗如實列出。
 - A4 未完成｜已依工作檔問一次是否可重載並清掉 RAM 對話；尚無回覆。沒有重載。現有 EdgeAgent 仍為 base，SilentTalk 未執行。
 - A5 未完成｜E4B／131072／working 131072／auto GPU／low VRAM 尚未經模型頁套用。舊正式服務仍是 Qwen 16K，不把程式新預設當實際設定。
 - A6 未完成｜只量舊正式服務的數字；未量 E4B 128K、角色反應與 Agent 文字速度。引擎 stderr 被 service 送至 DEVNULL，無 mlock 成敗 log 可讀；不由 RAM 占用推定鎖成功。
@@ -39,17 +39,17 @@
 - C10 沒測｜未重啟或由使用者確認同串歷史接續。
 - C11 沒測｜第二真人帳號條件未確認；沒有以 webhook／bot 代替。
 - C12 完成｜本次實跑 log_summary.py exit 0；最新原文全表如下。它是既有最後一段 app session，沒有冒充本回合的真人成績。
-- D1 未完成｜使用者表示加密容器非必要，授權改評估 SSD 10 GB 專用分割區。只讀盤點已完成：disk 0 GPT／476.94 GiB、未配置約 0；C 453.09 GiB／可用 258.17 GiB。程序未提權；Get-PartitionSupportedSize 與 Get-BitLockerVolume 拒絕存取，尚不能確認可縮小上限或加密狀態。已問一次是否允許未加密分割區，尚無答案；分割與記錄設定均未改。
-- D2 沒測｜尚無新專用紀錄分割區；是否需要解鎖依待答的加密選擇，未做教學或掛載驗收。
-- D3 沒測｜尚未設定兩 app 的專用區紀錄資料夾或打開記錄；不以既有 C 槽資料夾代替使用者指定專用區。
-- D4 沒測｜尚未測真掛載時的兩邊檔案增量。
-- D5 沒測｜尚未測真卸載後的記錄檔增量。
-- D6 沒測｜尚未測兩 app 真容器卸載後的「暫停」狀態。
-- D7 沒測｜尚未測真容器重新掛載後恢復。
+- D1 完成｜依 2026-10-06 使用者拍板，普通目錄 C:\Users\A8fm0\AgentRecords 已建立，沿用 records owner 建 .agent-records 標記；非 reparse point。最後 metadata：1 檔、0 bytes，尚無真人紀錄。沒有分割、格式化、容器或加密。
+- D2 完成｜AGENTS.md 唯一紀錄規則、Windows 工作檔、兩 app 設定說明／README 與既有 records owner 已改為指定一般目錄；取消系統磁碟禁令與解鎖教學，不建立第二個記錄實作。
+- D3 未完成｜兩 app 已經既有 owner／API 保存同一普通目錄及開啟記錄，僅改授權的兩個紀錄欄位。SilentTalk 未執行；現有 Edge 舊程序 /records 仍回暫停。正式新版尚未啟動，不把設定保存当已寫入；A4 仍待回覆。
+- D4 沒測｜尚未實測新版正式服務與 Discord 的真人文字檔案增量；測試合成資料全在各自 fixture 目錄，沒有寫進使用者紀錄目錄。
+- D5 完成｜兩 repo records fixture 驗證普通 SSD 目錄可寫、標記移除或路徑不存在時暫停，不建立替代路徑；測試通過。只驗 fixture，真人正式增量見 D4。
+- D6 完成｜真 Edge 合成服務介面驗證一般 C 目錄設定、無效路徑暫停、恢復記錄中、設定還原及 390×320 無橫向溢出。Tk 合成紀錄頁截圖顯示一般 SSD 說明／記錄中／開啟，已目視；部分前次截圖為黑畫面和按鍵失敗，最後正常，不推論正式舊服務已生效。
+- D7 完成｜records fixture 驗證標記恢復後恢復寫入、暫停期間樣本不補存；Edge 介面合成服務亦測暫停→恢復。沒有容器掛載驗收要求，真人驗收仍待 D4。
 - E1 完成｜使用者最新決定「不清理也沒關係」，依此保留測試／預覽暫存，不再執行刪除。自建測試／預覽程序已結束，9223 無 listener；正式服務保留。既有 policy 拒絕紀錄保留，沒有繞過。
 - E2 完成｜既有 log 最後修改 21:12:46，早於本次工作；全檔 6404 行 JSON 可解析、未解析 0。歷史 lease 錯誤 1（最後 15:56:45）、DNS 錯誤 115（最後 18:25:48），本次無新增；discord.com DNS A 查詢成功。正式新版本尚未重載，不能由此宣稱新實測不會復發。
 
-使用者追加要求：保留測試暫存；日常 EdgeAgent 不開 VS Code、Discord 保留，重點是 Edge 關窗後退出。最新允許取消容器形式、改 SSD 10 GB 專用分割區；是否取消加密限制仍待澄清。未批准立即強制退出目前編輯器或重載模型。
+使用者追加要求：保留測試暫存；日常 EdgeAgent 不開 VS Code、Discord 保留，重點是 Edge 關窗後退出。2026-10-06 最終拍板：原生 SSD 無需加密，直接用普通目錄。這優先於原工作檔加密要求，已同步規則與程式，不再澄清或分割。未批准立即強制退出目前編輯器或重載模型。
 
 ## 測試執行結果記錄
 
@@ -72,6 +72,12 @@
 | SilentTalk | 完整／round5-complete-st | 300 | 0 | 1 | 0 | 21.61 | 0 |
 | SilentTalk | tests/test_settings.py -k app_startup／round5-startup-red | 1 | 1 | 0 | 0 | 2.56 | 1 |
 | SilentTalk | 完整／round5-final-startup-st | 302 | 0 | 1 | 0 | 24.24 | 0 |
+| SilentTalk | tests/test_records.py -k accepts_a_local_ssd／round5-record-local-red | 0 | 1 | 0 | 0 | 1.65 | 1 |
+| EdgeAgent | tests/test_core_service.py -k accept_a_local_ssd／round5-record-local-red | 0 | 1 | 0 | 0 | 0.53 | 1 |
+| SilentTalk | 完整／round5-record-local-full | 303 | 0 | 1 | 0 | 21.28 | 0 |
+| EdgeAgent | 完整＋真 Edge／round5-record-local-full | 230 | 0 | 2 | 0 | 259.34 | 0 |
+| EdgeAgent | tests/test_agent_chat.py::test_browser_exports_conversations_and_displays_native_tool_errors -s／round5-record-local-browser | 0 | 1 | 0 | 0 | 16.95 | 1 |
+| EdgeAgent | 同上，修 fixture／round5-record-local-browser-fixed | 1 | 0 | 0 | 0 | 20.04 | 0 |
 
 失敗與更正：
 - Edge 初輪唯一 pytest 失敗是 test_windows_default_encoding_is_not_utf8：本次設 PYTHONUTF8=1 改變被測環境。移除它，只指定標準輸出編碼；完整＋真 Edge 再跑通過。Unicorn mem_map 有 native access violation 診斷，但 asm 斷言通過；前回合也記過，不隱藏、不聲稱已修好底層診斷。
@@ -83,12 +89,20 @@
 - 最後全追蹤檔檢索發現 app.py 尚讀舊欄位。啟動回歸先跑出 AttributeError（1 failed、1 passed），再在 app owner 移除舊資訊，最終 302 項通過。
 - Ruff 首次較廣範圍檢查有 7 個 finding：config／turn_eval 的既有 import／subprocess／re.S，以及 persona_ui 的字串括號。只修 UI 的 finding；eval／config 其他既有 lint 不在本次 root fix 內，未假稱全 repo lint 通過。
 
+- 普通 SSD 目錄回歸先在兩 repo 跑紅，證明舊 owner 拒絕 C 槽；移除限制後各自完整測試通過。
+- 真 Edge 原先 UI regression 分支沒有執行紀錄驗收；改沿用單一共用 helper 後，抓到合成 core 資料夾未建立造成 /config HTTP 400。修既有 fixture 的 mkdir 後，17/17 組、3 真 TXT 下載、0 unexpected browser errors 通過。沒有改正式 service 的資料夾 owner 或 Agent 邏輯。
+- 完整 Edge 仍有 Unicorn mem_map native access violation 診斷，pytest exit 0；定向真 Edge 合成 repeating_model HTTP fixture 有 2 次 WinError 10054 ConnectionResetError，來源是 client 斷線，不是正式服務。未隱藏、未宣稱已修好；交開發機 owner。
+- 首次兩個配置檢查 script 的中文字常值被 PowerShell stdin 編碼轉成問號，各 exit 1；保存操作已完成。改用 Unicode escape 的斷言後均 exit 0，兩邊新 records owner 的狀態是記錄中。沒有第二次重寫其他使用者設定。
+
 其他驗證：
 - Windows CI 所需 deployment Ruff 檢查，exit 0。
 - app.py、persona_ui.py、settings_schema.py、test_settings.py 的 Ruff，exit 0。
 - compileall（app、silenttalk、改到的 eval／preview 呼叫），exit 0；兩 repo git diff --check，exit 0。
 - EdgeAgent tests/browser_check.mjs 的 Node --check，exit 0。
-- scripts/dev/ui_preview.py 實跑 2 次均 exit 0、UI flow OK。已目視設定頁、人設聲音與內建機魂截圖；圖在 .runtime/dev/ui_preview/，只使用合成資料。新截圖 10c_machine_spirit_voice.png 的 22Hz、內建角色說明與無刪除按鈕已確認。
+- scripts/dev/ui_preview.py 前兩次 exit 0；增加紀錄 fixture 後，第 3 次 exit 1（按鍵未送出，保存斷言尚未納入新增欄位），第 4 次 exit 1（持有時間／切換／按鍵），第 5、6 次 exit 1（D 模擬未送出），第 7 次 exit 0、UI flow OK。已修預覽的欄位斷言並以受控 story clock 隔離截圖耗時；沒有改正式 HOLD_SECONDS。最後新增診斷並不能證明間歇按鍵失敗已根治，診斷輸出在提交前移除；其後只 compileall／diff check，未再重跑。
+- 使用者指出重跑過多，停止預覽診斷。全套 pytest 已通過後仍追預覽過久，是本次執行節奏缺失；不可把多次重跑描述成一次通過或以最後通過抹去先前失敗。
+- 最後 14c_settings_records.png 已目視：普通 SSD 說明、記錄中、開啟、準備成功；此圖只含合成 fixture。Edge 390×320 紀錄視窗內容可垂直捲動，無橫向溢出；未宣稱所有按鈕在短視窗同時可見。此前聲音／內建角色截圖確認不变。
+- 新紀錄 Python owner／服務／網頁／相關測試 Ruff 通過；browser runner Node --check 通過；兩 repo git diff --check 通過。
 - 不同環境缺少可選依賴的 skipped 不當通過；最終結果原樣保留。
 
 ## 修改程式檔案與 Commit 雜湊
@@ -139,7 +153,60 @@ CommitDate: Mon Oct 5 23:24:07 2026 +0800
 
 EdgeAgent 2d6aae2：live browser 驗收增加真正的 TXT 下載內容檢查；只改既有 browser runner。已 push copilot-story-mode；live 分支尚待 A4 後實跑，未冒稱 A8 完成。
 
-獨立順序覆核：核對 API 移除的呼叫完整性、UI 值回存／內建刪除邊界、正式設定／來源測試證據的區分。全追蹤檢索補到 app 啟動缺口並跑紅／綠。未啟用同機平行 agent。沒有改 .env、settings.json、personas.json、character_state.json，也沒有讀私人紀錄／角色狀態內容。
+~~~text
+commit 82b44020e9e189029170a61a2e898b0fa6fe3e51
+Author:     nobody945946 <104478886+nobody945946@users.noreply.github.com>
+AuthorDate: Tue Oct 6 00:35:05 2026 +0800
+Commit:     nobody945946 <104478886+nobody945946@users.noreply.github.com>
+CommitDate: Tue Oct 6 00:35:05 2026 +0800
+
+    Preview local record settings with a controlled story clock
+
+ scripts/dev/ui_preview.py | 24 ++++++++++++++++++++++--
+ 1 file changed, 22 insertions(+), 2 deletions(-)
+
+commit 0a7371e27131de738e81ed895605536bb8b19817
+Author:     nobody945946 <104478886+nobody945946@users.noreply.github.com>
+AuthorDate: Tue Oct 6 00:18:20 2026 +0800
+Commit:     nobody945946 <104478886+nobody945946@users.noreply.github.com>
+CommitDate: Tue Oct 6 00:18:20 2026 +0800
+
+    Allow conversation records in the selected local SSD folder
+
+ AGENTS.md                     |   2 +-
+ ARCHITECTURE.md               |   2 +-
+ README.md                     |   2 +-
+ handoff/laptop.md             | 148 +++++++++++++++++++-----------------------
+ silenttalk/copilot/runtime.py |   2 +-
+ silenttalk/records.py         |  34 +++-------
+ silenttalk/settings_schema.py |   4 +-
+ tests/test_records.py         |  35 +++++-----
+ tests/test_settings.py        |   3 +-
+ 9 files changed, 102 insertions(+), 130 deletions(-)
+~~~
+
+~~~text
+commit eaa54fc5626ff7ad723f2cbd4333328afa8e4209
+Author:     nobody945946 <104478886+nobody945946@users.noreply.github.com>
+AuthorDate: Tue Oct 6 00:34:20 2026 +0800
+Commit:     nobody945946 <104478886+nobody945946@users.noreply.github.com>
+CommitDate: Tue Oct 6 00:34:20 2026 +0800
+
+    Allow selected local SSD folders for conversation records
+
+ README.md                  |  4 ++--
+ edge_agent/records.py      | 28 +++++++---------------
+ edge_agent/service.py      |  2 +-
+ edge_agent/web.py          |  6 ++---
+ tests/browser_check.mjs    | 60 ++++++++++++++++++++++++++--------------------
+ tests/test_agent_chat.py   | 11 +++++----
+ tests/test_core_service.py | 35 +++++++++++++++++++--------
+ 7 files changed, 79 insertions(+), 67 deletions(-)
+~~~
+
+SilentTalk 0a7371e／82b4402、EdgeAgent eaa54fc 均已 push copilot-story-mode。ordinary folder 只在原 records owner 移除磁碟限制，保留 marker 與失效暫停；前端與測試、文件同步。Windows 工作檔整份重寫為現況，不在 Windows 新造 archive。預覽腳本是合成資料工具，正式服務未重載。
+
+獨立順序覆核：核對 API 移除的呼叫完整性、UI 值回存／內建刪除邊界、正式設定／來源測試證據的區分。全追蹤檢索補到 app 啟動缺口並跑紅／綠。未啟用同機平行 agent。沒有改 .env、personas.json、character_state.json，也沒有讀私人紀錄／角色狀態內容。使用者普通紀錄目錄決定後，僅經既有 SettingsStore／API 修改 record_folder 和 record_transcripts／record_sessions；保存前後斷言確認其他設定不變，沒有手改整份 settings.json。
 
 ## 記憶體與速度數字（A6、A7）
 
@@ -319,17 +386,18 @@ EdgeAgent 2d6aae2：live browser 驗收增加真正的 TXT 下載內容檢查；
 - ERROR discord.client（aiohttp.client_exceptions.ClientConnectorDNSError） × 10
 - ERROR agent_lease_return_failed（silenttalk.agent_lease.AgentLeaseError） × 1
 
-## 紀錄專用區檢查
+## 普通 SSD 紀錄目錄
 
-- 使用者最新允許取消容器形式，要求 SSD 專用區 10 GB。這與原工作檔指定 VeraCrypt 容器不同，依使用者新指示，不再把「必須建容器」當驗收條件。原先「需使用者解鎖的加密磁碟」限制是否撤銷尚有歧義，已送一次澄清，尚未答覆；未寫任何對話。
-- Windows 11 Home 10.0.26200；目前 PowerShell Elevated=False。disk 0 GPT、476.94 GiB、未配置約 0。C 為第 3 分割區，NTFS 健康，453.09 GiB、可用 258.17 GiB；其他分割區是 EFI／MSR／恢復或無代號分割，均未變更。
-- C 原始 offset 290455552 bytes、size 486501850624 bytes，10 GiB=10737418240 bytes；盤點不是可縮小量的成功證據。Get-PartitionSupportedSize 只讀查詢失敗：Access to a CIM resource was not available to the client；Get-BitLockerVolume 只讀查詢失敗：拒絕存取。未嘗試磁碟變更或自動繞過權限。
-- 專用區優先採既有 Windows Storage cmdlets 縮 C、在新釋出的範圍建 basic data 分割區，只格式化本次新建的分割區；需先由管理員查 supported minimum，確認至少可縮 10 GiB。未完成此查證，沒有宣稱能縮成功。[Microsoft 磁碟管理](https://support.microsoft.com/en-us/windows/experience/storage-filemanagement/disk-management-in-windows)、[Get-PartitionSupportedSize](https://learn.microsoft.com/en-us/powershell/module/storage/get-partitionsupportedsize)、[Resize-Partition](https://learn.microsoft.com/en-us/powershell/module/storage/resize-partition)。
-- 兩 repo 已有唯一 records owner：silenttalk/records.py 與 edge_agent/records.py，設定頁沿用其 prepare／status。它們檢查獨立磁碟代號、路徑與 marker；沒有讀使用者設定檔或紀錄內容。未建立第二個記錄路徑或在 C 槽代存。
-- 新分割區 0、新容器 0、掛載／卸載／檔案增量驗證 0。未取得密碼或復原金鑰，未修改紀錄位置。若仍需密碼加密，Windows app 工具先前 native pipe 故障也尚未修復，不重試同一故障或另造 UI Automation。
+- 使用者 2026-10-06 拍板取消加密／容器／分割，改普通目錄，優先於原 AGENTS.md 規則；規則及工作檔已同步。沒有剩下的密碼／解鎖／提權待辦。
+- 實際 C:\Users\A8fm0\AgentRecords 已由既有 owner prepare；最後 metadata 1 檔、0 bytes（標記檔），沒有寫測試或私人對話。它在 repo 之外，非 reparse point。
+- SilentTalk SettingsStore 保存 copilot.record_folder 與 record_transcripts=true；Edge 正式 /config API 保存 record_folder 與 record_sessions=true。同一目錄，只改授權兩欄，其他設定不變。不讀錄音、轉錄或角色狀態。
+- 新來源 owner 在該目錄回記錄中；目前舊 Edge /records 回 record_sessions=true、路徑正確，但 status 仍是舊的暫停訊息。SilentTalk 未啟動，真實紀錄增量 0。需正常新版啟動才能生效；未熱補丁、未重載或清 RAM。
+- 普通資料夾與保存設定可持續存在，不需每日重建。folder 不可用／無標記仍暫停，沒有其他磁碟 fallback； fixture 覆蓋恢復行為。沒有自動清理私人紀錄。
+- 之前磁碟／加密只讀盤點的拒絕存取，不再是此方案的 blocker；未縮 C、未格式化、未建分割或加密容器。
+
 ## 使用者回饋與感想
 
-使用者決定保留暫存；日常 EdgeAgent 不開 VS Code、Discord 保留，擔心 Edge 關窗後背景常駐。最新指示：「加密容器不是必須的，或是SSD你自己分割一塊專門存，10gb足以」。是否取消加密限制尚待澄清，沒有真人測試成績。
+使用者決定保留暫存；日常 EdgeAgent 不開 VS Code、Discord 保留，擔心 Edge 關窗後背景常駐。最終拍板：「等等，原生SSD沒有加密必要，直接弄個目錄存起來就好，我的拍板，你們服從」。其後指出「我懷疑你卡死，重複做同樣測試」；已停止預覽重跑，承認執行節奏失當，收尾提交與交接。沒有真人測試成績。
 
 ## 暫存處置（使用者已決定保留）
 
@@ -343,7 +411,7 @@ EdgeAgent 2d6aae2：live browser 驗收增加真正的 TXT 下載內容檢查；
 4. 重載後實跑 tests/browser_check.mjs --audit-live（專用 Edge，沿用 tests/windows_check.py 的 launch_edge，先查 9223）。新 live runner 的驗收是 24 項，含 TXT 真下載；前端／Agent／網路失敗要如實列出，不改 threshold 或略過。仍需 A6 數字，不自降 context／GPU。
 5. A7 日常用途已決定：EdgeAgent 不開 VS Code，Discord 必須保留。不要再次問是否保留 Discord；沒有立即強制結束目前 Code 的授權。Edge 背景／Startup boost 持久值已是 0，不要重複寫或宣稱省下 RAM。關最後一窗自然退出測試受 policy 擋、未執行；不要改用另一工具包裝重試。未得到 A4 回覆前，不重載正式服務或清 RAM 對話。
 6. C 的範圍只限伺服器 729722190857240717、語音頻道 729722190857240721；工作區只用 EdgeAgentTest，批准由使用者本人按。一次請他做一件事；不用 webhook／bot 代替第二真人帳號。只讀 log_summary 的数字／事件名與工作區 metadata，不讀對話。
-7. D 改按使用者最新要求評估 SSD 10 GB 專用區，不必堅持 VeraCrypt 容器。已問一次是否取消加密限制／允許普通未加密區，答案未到；不要猜成同意，也不要重問。磁碟只讀盤點在上節。現行 shell 不是管理員，需在具管理員權限時先查 C 的 supported minimum 與加密狀態，確認 10 GiB 可縮，再建立只屬於本次的新分割區；不得格式化既有分割區。透過兩 app 既有設定入口配置，不能手改使用者設定。若保留加密，密碼／復原金鑰僅由使用者設定保管；不能因不用容器而默認可記明文。
+7. D 改按最終普通目錄決定：C:\Users\A8fm0\AgentRecords 已準備、兩邊 record flags 已保存，禁止重問加密／要求分割或 UAC。正式新版啟動後先查 /records 及 SilentTalk 記錄頁，再只看 metadata 驗證 D4；不讀內容、不將 fixture 結果說成正式真人檔案增量。A4 未獲同意前保留舊正式程序。
 8. E1 依使用者最新決定保留暫存，沒有待使用者執行的清理命令；不要再次要求刪除或自行清理。RAM 輕量化遵循 A7，先確認具體程式用途與使用者選擇；保留 EdgeAgentTest。
-9. 開發機待注意：既有冷場時序測試曾失敗；config／turn_eval 既有 6 個 lint finding 未修；完整角色與租借說明的其他舊段落仍需 owner 更新。B1 去掉 LocalReplyModel GPU 參數後，歷史 eval 的 CPU 需求應在它的引擎 owner 檢查；本次只保持 stand-in 的 CPU_ONLY 引擎設定，沒有跑模型 eval。mlock 實測目前沒有持久引擎 log 可查（service stderr=DEVNULL），需要 owner 提供不含提示／對話的鎖定結果數字，不能以沒看到錯誤推定成功。
-10. 來源都已 push，working tree 應乾淨；正式重載、模型設定、真人 Discord、紀錄專用區與 RAM 輕量化仍未完成。不因本報與 code commit 已交付而結案。
+9. 開發機待注意：既有冷場時序測試曾失敗；config／turn_eval 既有 6 個 lint finding 未修；完整角色與租借說明的其他舊段落仍需 owner 更新。開發機自有 handoff／舊加密說明應依 2026-10-06 普通目錄決定更新；筆電沒有改 dev-box 工作檔。B1 去掉 LocalReplyModel GPU 參數後，歷史 eval 的 CPU 需求應在它的引擎 owner 檢查；本次只保持 stand-in 的 CPU_ONLY 引擎設定，沒有跑模型 eval。mlock 實測目前沒有持久引擎 log 可查（service stderr=DEVNULL），需要 owner 提供不含提示／對話的鎖定結果數字，不能以沒看到錯誤推定成功。
+10. 來源都已 push，working tree 應乾淨；普通紀錄目錄與持久設定已交付；正式重載、模型設定、真人 Discord、真紀錄增量與 RAM 輕量化仍未完成。預覽不要重跑到最後一個 exit 0 就當根因解決，間歇按鍵／黑畫面另交 owner；已有通過的完整測試沒有新來源變更就不重跑。不因本報與 code commit 已交付而結案。
