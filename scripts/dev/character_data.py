@@ -49,6 +49,8 @@ from typing import Any
 PROJECT_DIR = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_DIR))
 
+import provenance  # noqa: E402  (scripts/dev)
+
 from silenttalk.copilot.llm import (  # noqa: E402
     _JOIN_AFTER_QUIET_LINES as JOIN_AFTER_QUIET_LINES,
 )
@@ -71,8 +73,6 @@ from silenttalk.copilot.persona import (  # noqa: E402
 )
 from silenttalk.copilot.script import to_taiwan_traditional  # noqa: E402
 from silenttalk.copilot.types import ConversationTurn  # noqa: E402
-
-import provenance  # noqa: E402  (scripts/dev)
 
 # CHARDATA_DIR keeps each round's data apart (v1 stays in chardata/).
 OUT_DIR = (

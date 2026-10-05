@@ -450,7 +450,7 @@ def synthetic_chat(turns: int) -> tuple[tuple[str, str], ...]:
     """Repeat the fixed chat with numbered lines for long-context benchmarks."""
     chat = [
         (speaker, f"{text}（第{index + 1}句）")
-        for index, (speaker, text) in zip(range(turns), CHAT * ((turns // len(CHAT)) + 1))
+        for index, (speaker, text) in enumerate((CHAT * (turns // len(CHAT) + 1))[:turns])
     ]
     if turns > len(CHAT):
         first_external = next(index for index, (speaker, _) in enumerate(chat) if speaker != BOT)
