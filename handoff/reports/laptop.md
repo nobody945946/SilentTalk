@@ -3,7 +3,7 @@
 ## 時間與額度消耗統計
 
 - 使用者指示：pull 開工；刪除若被 policy 擋住，提供 PowerShell 指令由使用者執行。
-- 開始時間、完整總耗時與完整步驟數看不到；本次第一筆直接讀取的時鐘為 2026-10-05T23:08:19+08:00。檢查點：2026-10-05T23:52:17.4170218+08:00。不是整回合起訖或總耗時。
+- 開始時間、完整總耗時與完整步驟數看不到；本次第一筆直接讀取的時鐘為 2026-10-05T23:08:19+08:00。檢查點：2026-10-06T00:01:39.2323408+08:00。不是整回合起訖或總耗時。
 - Token（Input／Output／Cache read）、開始和結束額度：看不到，不估算。
 - 測試執行 15 次，逐次結果如下；介面預覽 2 次均 exit 0。
 - 本回合尚未結案：不依賴使用者的程式、部署與回歸已交付；A4 重載確認已問一次，尚未收到回覆。其餘真人／容器驗收續接同一回合。
@@ -39,9 +39,9 @@
 - C10 沒測｜未重啟或由使用者確認同串歷史接續。
 - C11 沒測｜第二真人帳號條件未確認；沒有以 webhook／bot 代替。
 - C12 完成｜本次實跑 log_summary.py exit 0；最新原文全表如下。它是既有最後一段 app session，沒有冒充本回合的真人成績。
-- D1 未完成｜VeraCrypt 建立介面需要 Windows app 操作；Computer Use 已初始化，但 2 次 list_apps 都報 native pipe 不存在（os error 2）。未建立容器、未取得或輸入密碼。
-- D2 沒測｜尚無真容器，也沒有使用者「會掛載」的確認。
-- D3 沒測｜未設定兩 app 的真容器紀錄資料夾或打開記錄。
+- D1 未完成｜使用者表示加密容器非必要，授權改評估 SSD 10 GB 專用分割區。只讀盤點已完成：disk 0 GPT／476.94 GiB、未配置約 0；C 453.09 GiB／可用 258.17 GiB。程序未提權；Get-PartitionSupportedSize 與 Get-BitLockerVolume 拒絕存取，尚不能確認可縮小上限或加密狀態。已問一次是否允許未加密分割區，尚無答案；分割與記錄設定均未改。
+- D2 沒測｜尚無新專用紀錄分割區；是否需要解鎖依待答的加密選擇，未做教學或掛載驗收。
+- D3 沒測｜尚未設定兩 app 的專用區紀錄資料夾或打開記錄；不以既有 C 槽資料夾代替使用者指定專用區。
 - D4 沒測｜尚未測真掛載時的兩邊檔案增量。
 - D5 沒測｜尚未測真卸載後的記錄檔增量。
 - D6 沒測｜尚未測兩 app 真容器卸載後的「暫停」狀態。
@@ -49,7 +49,7 @@
 - E1 完成｜使用者最新決定「不清理也沒關係」，依此保留測試／預覽暫存，不再執行刪除。自建測試／預覽程序已結束，9223 無 listener；正式服務保留。既有 policy 拒絕紀錄保留，沒有繞過。
 - E2 完成｜既有 log 最後修改 21:12:46，早於本次工作；全檔 6404 行 JSON 可解析、未解析 0。歷史 lease 錯誤 1（最後 15:56:45）、DNS 錯誤 115（最後 18:25:48），本次無新增；discord.com DNS A 查詢成功。正式新版本尚未重載，不能由此宣稱新實測不會復發。
 
-使用者追加要求：暫存保留，優先持續有效的 RAM 輕量化；日常使用 EdgeAgent 不開 VS Code、Discord 保留，重點是 Edge 瀏覽器關閉後不要背景常駐。此決定不等於批准立即強制關閉目前編輯器或重載模型。
+使用者追加要求：保留測試暫存；日常 EdgeAgent 不開 VS Code、Discord 保留，重點是 Edge 關窗後退出。最新允許取消容器形式、改 SSD 10 GB 專用分割區；是否取消加密限制仍待澄清。未批准立即強制退出目前編輯器或重載模型。
 
 ## 測試執行結果記錄
 
@@ -319,15 +319,17 @@ EdgeAgent 2d6aae2：live browser 驗收增加真正的 TXT 下載內容檢查；
 - ERROR discord.client（aiohttp.client_exceptions.ClientConnectorDNSError） × 10
 - ERROR agent_lease_return_failed（silenttalk.agent_lease.AgentLeaseError） × 1
 
-## 紀錄容器檢查
+## 紀錄專用區檢查
 
-真容器新增 0；掛載／卸載／記錄增量驗證 0。Windows Computer Use 的兩次探測均 native pipe 不存在，os error 2。沒有讀密碼、復原金鑰、對話或角色自己的狀態，也沒有修改記錄位置。
-
-使用的 Windows 技能為 C:/Users/A8fm0/.codex/plugins/cache/openai-bundled/computer-use/26.810.52044/skills/computer-use/SKILL.md；其 docs/guidance.md 明定 "Do not mix direct PowerShell UI Automation code in the same turn as Computer Use. Use only the Computer Use JS APIs for Windows app automation." 因工具連接故障，未另造 PowerShell UI Automation 路徑；不是需要使用者重新批准工具，密碼仍只能由使用者自己設。
-
+- 使用者最新允許取消容器形式，要求 SSD 專用區 10 GB。這與原工作檔指定 VeraCrypt 容器不同，依使用者新指示，不再把「必須建容器」當驗收條件。原先「需使用者解鎖的加密磁碟」限制是否撤銷尚有歧義，已送一次澄清，尚未答覆；未寫任何對話。
+- Windows 11 Home 10.0.26200；目前 PowerShell Elevated=False。disk 0 GPT、476.94 GiB、未配置約 0。C 為第 3 分割區，NTFS 健康，453.09 GiB、可用 258.17 GiB；其他分割區是 EFI／MSR／恢復或無代號分割，均未變更。
+- C 原始 offset 290455552 bytes、size 486501850624 bytes，10 GiB=10737418240 bytes；盤點不是可縮小量的成功證據。Get-PartitionSupportedSize 只讀查詢失敗：Access to a CIM resource was not available to the client；Get-BitLockerVolume 只讀查詢失敗：拒絕存取。未嘗試磁碟變更或自動繞過權限。
+- 專用區優先採既有 Windows Storage cmdlets 縮 C、在新釋出的範圍建 basic data 分割區，只格式化本次新建的分割區；需先由管理員查 supported minimum，確認至少可縮 10 GiB。未完成此查證，沒有宣稱能縮成功。[Microsoft 磁碟管理](https://support.microsoft.com/en-us/windows/experience/storage-filemanagement/disk-management-in-windows)、[Get-PartitionSupportedSize](https://learn.microsoft.com/en-us/powershell/module/storage/get-partitionsupportedsize)、[Resize-Partition](https://learn.microsoft.com/en-us/powershell/module/storage/resize-partition)。
+- 兩 repo 已有唯一 records owner：silenttalk/records.py 與 edge_agent/records.py，設定頁沿用其 prepare／status。它們檢查獨立磁碟代號、路徑與 marker；沒有讀使用者設定檔或紀錄內容。未建立第二個記錄路徑或在 C 槽代存。
+- 新分割區 0、新容器 0、掛載／卸載／檔案增量驗證 0。未取得密碼或復原金鑰，未修改紀錄位置。若仍需密碼加密，Windows app 工具先前 native pipe 故障也尚未修復，不重試同一故障或另造 UI Automation。
 ## 使用者回饋與感想
 
-使用者決定保留暫存，優先 RAM。最新指定：「以後使用edge不會開vscode，要關掉edge瀏覽器也很容易，就是怕關不乾淨而已，DC要留著」。沒有新增真人測試成績。
+使用者決定保留暫存；日常 EdgeAgent 不開 VS Code、Discord 保留，擔心 Edge 關窗後背景常駐。最新指示：「加密容器不是必須的，或是SSD你自己分割一塊專門存，10gb足以」。是否取消加密限制尚待澄清，沒有真人測試成績。
 
 ## 暫存處置（使用者已決定保留）
 
@@ -341,7 +343,7 @@ EdgeAgent 2d6aae2：live browser 驗收增加真正的 TXT 下載內容檢查；
 4. 重載後實跑 tests/browser_check.mjs --audit-live（專用 Edge，沿用 tests/windows_check.py 的 launch_edge，先查 9223）。新 live runner 的驗收是 24 項，含 TXT 真下載；前端／Agent／網路失敗要如實列出，不改 threshold 或略過。仍需 A6 數字，不自降 context／GPU。
 5. A7 日常用途已決定：EdgeAgent 不開 VS Code，Discord 必須保留。不要再次問是否保留 Discord；沒有立即強制結束目前 Code 的授權。Edge 背景／Startup boost 持久值已是 0，不要重複寫或宣稱省下 RAM。關最後一窗自然退出測試受 policy 擋、未執行；不要改用另一工具包裝重試。未得到 A4 回覆前，不重載正式服務或清 RAM 對話。
 6. C 的範圍只限伺服器 729722190857240717、語音頻道 729722190857240721；工作區只用 EdgeAgentTest，批准由使用者本人按。一次請他做一件事；不用 webhook／bot 代替第二真人帳號。只讀 log_summary 的数字／事件名與工作區 metadata，不讀對話。
-7. D1 工具 native pipe 故障尚未解除；不得再循環重試同一失敗或改用被技能禁止的 PowerShell UI Automation。工具恢復後準備 10 GB VeraCrypt wizard；密碼頁完全交給使用者，密碼／復原金鑰不經工具、檔案或回報。不設自動解鎖，掛載教學要得到使用者會了的確認。
+7. D 改按使用者最新要求評估 SSD 10 GB 專用區，不必堅持 VeraCrypt 容器。已問一次是否取消加密限制／允許普通未加密區，答案未到；不要猜成同意，也不要重問。磁碟只讀盤點在上節。現行 shell 不是管理員，需在具管理員權限時先查 C 的 supported minimum 與加密狀態，確認 10 GiB 可縮，再建立只屬於本次的新分割區；不得格式化既有分割區。透過兩 app 既有設定入口配置，不能手改使用者設定。若保留加密，密碼／復原金鑰僅由使用者設定保管；不能因不用容器而默認可記明文。
 8. E1 依使用者最新決定保留暫存，沒有待使用者執行的清理命令；不要再次要求刪除或自行清理。RAM 輕量化遵循 A7，先確認具體程式用途與使用者選擇；保留 EdgeAgentTest。
 9. 開發機待注意：既有冷場時序測試曾失敗；config／turn_eval 既有 6 個 lint finding 未修；完整角色與租借說明的其他舊段落仍需 owner 更新。B1 去掉 LocalReplyModel GPU 參數後，歷史 eval 的 CPU 需求應在它的引擎 owner 檢查；本次只保持 stand-in 的 CPU_ONLY 引擎設定，沒有跑模型 eval。mlock 實測目前沒有持久引擎 log 可查（service stderr=DEVNULL），需要 owner 提供不含提示／對話的鎖定結果數字，不能以沒看到錯誤推定成功。
-10. 來源都已 push，working tree 應乾淨；正式重載、模型設定、真人 Discord、真容器與 RAM 輕量化仍未完成。不因本報與 code commit 已交付而結案。
+10. 來源都已 push，working tree 應乾淨；正式重載、模型設定、真人 Discord、紀錄專用區與 RAM 輕量化仍未完成。不因本報與 code commit 已交付而結案。
