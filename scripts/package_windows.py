@@ -17,6 +17,7 @@ APPLICATION_FILES = {
     "requirements.txt",
     "README.md",
     "ARCHITECTURE.md",
+    "LICENSE",
     "啟動 SilentTalk.cmd",
     "scripts/bootstrap.ps1",
     "scripts/setup_copilot.py",

@@ -128,3 +128,14 @@ python scripts/package_windows.py --edge-source <EdgeAgent來源包.zip> --outpu
 ```
 
 打包器從 Git commit 讀取應用程式 allowlist，核對 EdgeAgent SHA256，再放入既有下載快取；可用 `--revision` 指定 commit。產品與模型管理只有同一套部署／啟動流程。
+
+## 授權
+
+SilentTalk 與 EdgeAgent 以 [PolyForm Strict License 1.0.0](LICENSE) 授權，著作權屬於 nobody945946。以下是白話摘要，實際以英文條文為準：
+
+- **可以**：個人、非商業的使用，例如自己玩、學習、研究、興趣專案；學校、公益團體、研究與政府機構也可以使用。
+- **不可以**：重新散布或轉載（想分享請給[官方下載頁](https://github.com/nobody945946/SilentTalk-download/releases/latest)的連結）；修改後發布或做成衍生作品；用於商業目的。
+- **免責**：在法律允許的範圍內，軟體照現狀提供，不做任何保證；使用造成的損失（例如 Agent 改動或刪除了檔案），作者不負責。
+- **違反時**：收到書面通知後 32 天內改正並補救，可以繼續使用；否則授權終止。
+
+這份授權只涵蓋 nobody945946 撰寫的程式。`edge_agent/skills/grill-me` 改寫自 [mattpocock/skills](https://github.com/mattpocock/skills)，依其 MIT 授權（同資料夾的 `LICENSE`）。安裝時下載的 Python 與 Node 套件、推論引擎、語音模型與語言模型，各自依原本的授權條款，不在這份授權範圍內。
