@@ -24,8 +24,6 @@ def test_silenttalk_sends_character_configuration_through_http_api(
         character_lora="character.gguf",
         llama_port=18088,
         llm_context_size=32768,
-        llm_gpu_layers=99,
-        llm_low_vram=True,
     )
     calls: list[tuple[str, dict[str, object], float]] = []
     monkeypatch.setattr(
@@ -125,8 +123,6 @@ def test_copilot_smoke_keeps_only_model_names_for_e4b(tmp_path: Path) -> None:
         llama_port=18088,
         llm_context_size=32768,
         max_reply_chars=72,
-        llm_gpu_layers=99,
-        llm_low_vram=True,
     )
 
     model = copilot_smoke.build_reply_model(tmp_path, config)

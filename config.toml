@@ -41,12 +41,6 @@ auto_popup = true
 # be installed in EdgeAgent's models directory. Adapters are optional and
 # must match the exact base model used for training.
 llm_model = "gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf"
-# Layers offloaded to the GPU; 0 = CPU only (about 3x slower, still usable).
-llm_gpu_layers = 99
-# 8-bit KV cache + flash attention: 1.7B uses ~1.4 GB instead of ~1.6 GB (4B:
-# ~2.8 GB instead of ~3.1 GB). Falls back to the normal cache automatically if
-# the GPU driver can't do it.
-llm_low_vram = true
 # Optional personal adapter filename (empty by default). No personal adapter
 # is included, downloaded or selected by the product.
 character_lora = ""
@@ -61,8 +55,6 @@ character_ai_honesty = "machine"
 # The owner's typed lines (needs [discord] text_chat) can hand work to the
 # EdgeAgent Agent; requires Discord access/workspace in EdgeAgent.
 character_agent = false
-# Agent results go to the owner's DMs; true = the character says them aloud.
-agent_report_public = false
 # Transcripts (text only) kept on the user's encrypted external drive: the
 # folder must hold the setup marker (.agent-records) or nothing is written.
 record_transcripts = false

@@ -300,9 +300,7 @@ class LocalReplyModel:
         port: int = 18088,
         context_size: int = 2048,
         max_reply_chars: int = 72,
-        gpu_layers: int = 99,
         request_timeout_seconds: float = 15.0,
-        low_vram: bool = True,
         can_type: bool = False,
         ai_honesty: str = "in_character",
         lora_path: Path | None = None,
@@ -324,8 +322,6 @@ class LocalReplyModel:
         self._port = port
         self._context_size = context_size
         self._max_reply_chars = max(24, max_reply_chars)
-        self._gpu_layers = max(0, gpu_layers)
-        self._low_vram = low_vram
         self._can_type = can_type
         self._ai_honesty = ai_honesty
         self._agent_dispatch = agent_dispatch

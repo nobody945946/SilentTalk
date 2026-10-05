@@ -76,8 +76,6 @@ class CopilotConfig:
     llama_port: int = 18088
     auto_popup: bool = True
     llm_model: str = DEFAULT_LLM_MODEL
-    llm_gpu_layers: int = 99
-    llm_low_vram: bool = True
     # Character-mode LoRA adapter owned by EdgeAgent ("" = none), and
     # which requests use it (copilot.llm.LORA_PARTS); summaries never do.
     character_lora: str = ""
@@ -95,10 +93,6 @@ class CopilotConfig:
     # The character may hand the owner's tasks to the EdgeAgent Agent (what
     # it may then do is EdgeAgent's Discord permission profile).
     character_agent: bool = False
-    # The Agent's results and approval details go to the owner's DMs; the
-    # channel only hears whether it worked. True: the character says the
-    # result aloud in the channel.
-    agent_report_public: bool = False
     # Transcripts (text, no audio) on the user's encrypted external drive
     # (silenttalk/records.py); off until the user sets the folder and turns
     # it on.
@@ -318,8 +312,6 @@ def load_settings(project_dir: Path) -> Settings:
             llama_port=max(1024, min(65535, int(copilot.get("llama_port", 18088)))),
             auto_popup=bool(copilot.get("auto_popup", True)),
             llm_model=llm_model,
-            llm_gpu_layers=max(0, min(999, int(copilot.get("llm_gpu_layers", 99)))),
-            llm_low_vram=bool(copilot.get("llm_low_vram", True)),
             character_lora=character_lora,
             character_lora_uses=character_lora_uses,
             compact_context=bool(copilot.get("compact_context", True)),
@@ -335,7 +327,6 @@ def load_settings(project_dir: Path) -> Settings:
                 "character_ai_honesty",
             ),
             character_agent=bool(copilot.get("character_agent", False)),
-            agent_report_public=bool(copilot.get("agent_report_public", False)),
             record_transcripts=bool(copilot.get("record_transcripts", False)),
             record_folder=str(copilot.get("record_folder", "")).strip(),
             character_engagement=_one_of(

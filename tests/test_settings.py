@@ -15,6 +15,25 @@ from silenttalk.settings_ui import SettingsPanel
 from silenttalk.ui import SilentTalkUI
 
 
+@pytest.fixture(scope="module")
+def settings_ui():
+    """Exercise real panels in one app/Tcl interpreter, as production does."""
+    try:
+        ui = SilentTalkUI(
+            "F8", "F9", lambda _: None, lambda: None, lambda: None,
+            config_defaults=config_defaults(Path(".")),
+            invite_link=lambda: "",
+        )
+    except tk.TclError:
+        if os.name == "nt":
+            raise
+        pytest.skip("No graphical display available for Tk")
+    try:
+        yield ui
+    finally:
+        ui.close()
+
+
 def _project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setenv("DISCORD_BOT_TOKEN", "test-token")
     monkeypatch.setenv("OWNER_USER_ID", "123456789")
@@ -64,6 +83,100 @@ def test_every_setting_on_the_page_has_a_default_to_reset_to() -> None:
     assert missing == []
 
 
+def test_retired_agent_settings_are_absent_and_old_overrides_are_ignored(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import inspect
+    from dataclasses import fields
+
+    from silenttalk.config import CopilotConfig
+    from silenttalk.copilot.llm import LocalReplyModel
+
+    retired = {"llm_gpu_layers", "llm_low_vram", "agent_report_public"}
+    assert retired.isdisjoint(s.key for s in all_settings())
+    assert retired.isdisjoint(f.name for f in fields(CopilotConfig))
+    assert retired.isdisjoint(config_defaults(Path("."))["copilot"])
+    assert {"gpu_layers", "low_vram"}.isdisjoint(
+        inspect.signature(LocalReplyModel).parameters
+    )
+    project = _project(tmp_path, monkeypatch)
+    store = SettingsStore(project / "settings.json")
+    store.save({"copilot": dict.fromkeys(retired, "obsolete")})
+    before = store.path.read_bytes()
+    load_settings(project)
+    assert store.path.read_bytes() == before
+
+
+@pytest.mark.parametrize("enabled", [True, False])
+def test_app_startup_uses_current_model_settings(tmp_path, monkeypatch, enabled):
+    import sys
+    from dataclasses import replace
+    from unittest.mock import Mock
+
+    import app
+
+    settings = load_settings(_project(tmp_path, monkeypatch))
+    settings = replace(settings, copilot=replace(settings.copilot, enabled=enabled))
+    controller = Mock()
+    ui_factory = Mock()
+    monkeypatch.setattr(sys, "argv", ["app.py", "--character-mode"])
+    monkeypatch.setattr(app, "configure_logging", lambda _: None)
+    monkeypatch.setattr(app, "load_settings", lambda _: settings)
+    monkeypatch.setattr(app, "config_defaults", lambda _: {})
+    monkeypatch.setattr(app, "AppController", Mock(return_value=controller))
+    monkeypatch.setattr(app, "SilentTalkUI", ui_factory)
+
+    assert app.main() == 0
+    arguments = ui_factory.call_args.kwargs
+    assert arguments["copilot_info"] == (
+        [("回覆模型", settings.copilot.llm_model), ("語音辨識", settings.copilot.stt_engine)]
+        if enabled else []
+    )
+    assert arguments["start_character_mode"] is True
+    controller.start.assert_called_once()
+    ui_factory.return_value.run.assert_called_once()
+
+
+def test_persona_editor_preserves_voice_values_and_protects_builtin(
+    tmp_path: Path, settings_ui
+) -> None:
+    from dataclasses import replace
+
+    from silenttalk.copilot.persona import MACHINE_SPIRIT, PersonaState, PersonaStore
+    from silenttalk.persona_ui import PersonaPanel
+
+    root = settings_ui.root
+    store = PersonaStore(tmp_path / "personas.json")
+    custom = replace(MACHINE_SPIRIT, id="custom", name="Test", voice_pitch=23, voice_speed=7)
+    store.save(PersonaState([MACHINE_SPIRIT, custom], MACHINE_SPIRIT.id))
+    statuses = []
+    try:
+        panel = PersonaPanel(root, store, on_apply=lambda _: None, on_status=statuses.append)
+        assert panel._collect().voice_pitch == 22
+        assert panel._save(apply=True)
+        assert store.load().active_persona().voice_pitch == 22
+        before = store.path.read_bytes()
+        panel._delete()
+        panel._delete()
+        assert store.path.read_bytes() == before
+        assert panel._state.active == MACHINE_SPIRIT.id
+        assert panel._state.find(MACHINE_SPIRIT.id) is not None
+        assert any("內建" in message for message in statuses)
+
+        panel._open(custom.id)
+        assert panel._collect().voice_pitch == 23
+        assert panel._collect().voice_speed == 7
+        panel._voice_knobs["voice_pitch"].set(24, notify=True)
+        assert panel._save(apply=True)
+        saved = store.load().find(custom.id)
+        assert (saved.voice_pitch, saved.voice_speed) == (24, 7)
+        panel._delete()
+        panel._delete()
+        assert store.load().find(custom.id) is None
+    finally:
+        panel.destroy()
+
+
 def test_choices_offered_are_values_the_config_accepts(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -100,14 +213,8 @@ def test_merge_keeps_sections_the_user_never_touched() -> None:
     assert merged == {"a": {"x": 1, "y": 9}, "b": {"z": 3}}
 
 
-def test_settings_discord_invite_link_displays_and_updates() -> None:
-    try:
-        root = tk.Tk()
-        root.withdraw()
-    except tk.TclError:
-        if os.name == "nt":
-            raise
-        pytest.skip("No graphical display available for Tk")
+def test_settings_discord_invite_link_displays_and_updates(settings_ui) -> None:
+    root = settings_ui.root
 
     try:
         link_state = ""
@@ -158,25 +265,13 @@ def test_settings_discord_invite_link_displays_and_updates() -> None:
         assert len(entries) == 1
         assert entries[0].get() == expected_url
     finally:
-        root.destroy()
+        panel.destroy()
 
 
-def test_silenttalk_ui_invite_link_card() -> None:
-    try:
-        root = tk.Tk()
-        root.withdraw()
-        root.destroy()
-    except tk.TclError:
-        if os.name == "nt":
-            raise
-        pytest.skip("No graphical display available for Tk")
-
+def test_silenttalk_ui_invite_link_card(settings_ui, monkeypatch) -> None:
     link_state = ""
-    ui = SilentTalkUI(
-        "F8", "F9", lambda _: None, lambda: None, lambda: None,
-        config_defaults=config_defaults(Path(".")),
-        invite_link=lambda: link_state,
-    )
+    ui = settings_ui
+    monkeypatch.setattr(ui, "_invite_link_getter", lambda: link_state)
     try:
         ui.settings_panel.show("discord")
         assert ui._invite_card_body is not None
@@ -200,19 +295,13 @@ def test_silenttalk_ui_invite_link_card() -> None:
                             found = True
         assert found, "Entry with invite link not found"
     finally:
-        ui.close()
+        ui.settings_panel.show("chat")
 
 
-def test_records_settings_prepare_and_show_status(tmp_path, monkeypatch):
+def test_records_settings_prepare_and_show_status(tmp_path, monkeypatch, settings_ui):
     from silenttalk import records
     monkeypatch.setattr(records, "_system_drive", lambda: "")
-    try:
-        root = tk.Tk()
-    except tk.TclError:
-        if os.name == "nt":
-            raise
-        pytest.skip("No graphical display available for Tk")
-    root.withdraw()
+    root = settings_ui.root
     messages = []
     try:
         panel = SettingsPanel(root, None, config_defaults(Path(".")), on_status=messages.append)
@@ -233,5 +322,5 @@ def test_records_settings_prepare_and_show_status(tmp_path, monkeypatch):
         panel._prepare_records()
         assert messages[-1].startswith("無法設定紀錄資料夾")
     finally:
-        root.destroy()
+        panel.destroy()
 

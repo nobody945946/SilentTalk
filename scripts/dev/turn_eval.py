@@ -85,8 +85,6 @@ COPILOT_DEFAULTS: dict[str, Any] = {
     "context_char_budget": 2400,
     "max_reply_chars": 72,
     "llm_model": "gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf",
-    "llm_gpu_layers": 99,
-    "llm_low_vram": True,
     "compact_context": True,
     "compact_keep_turns": 20,
     "compact_batch_turns": 12,
@@ -291,8 +289,6 @@ def copilot_config() -> dict[str, Any]:
     if config_path.exists():
         with config_path.open("rb") as handle:
             values.update(tomllib.load(handle).get("copilot", {}))
-    if CPU_ONLY:
-        values["llm_gpu_layers"] = 0
     return values
 
 
@@ -323,8 +319,6 @@ def make_model(
         port=EVAL_PORT,
         context_size=int(config["llm_context_size"]),
         max_reply_chars=int(config["max_reply_chars"]),
-        gpu_layers=int(config["llm_gpu_layers"]),
-        low_vram=bool(config["llm_low_vram"]),
         ai_honesty=honesty,
         # CPU-only prefill of a fresh persona prompt can pass the app's 15 s.
         request_timeout_seconds=180.0 if CPU_ONLY else 15.0,
@@ -370,7 +364,7 @@ class LeaseStandIn:
         args = build_server_args(
             str(EVAL_SERVER), model_path, port=EVAL_PORT,
             context_size=int(config["llm_context_size"]), threads=8,
-            gpu_layers=int(config["llm_gpu_layers"]), low_vram=bool(config["llm_low_vram"]),
+            gpu_layers=0 if CPU_ONLY else 99, low_vram=True,
             lora_path=lora, slots=2 if lora is not None else 1)
         self.process = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         for _ in range(600):

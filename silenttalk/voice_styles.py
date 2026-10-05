@@ -131,12 +131,6 @@ VOICE_EFFECTS: dict[str, tuple[str, str | None]] = {
         "acompressor=threshold=-20dB:ratio=3:attack=4:release=70" + _LEVEL.format(gain=10),
     ),
 }
-PITCH_STEPS: tuple[tuple[int, str], ...] = (
-    (-30, "很低"), (-15, "低"), (0, "一般"), (15, "高"), (30, "很高")
-)
-SPEED_STEPS: tuple[tuple[int, str], ...] = (
-    (-20, "很慢"), (-10, "慢"), (0, "一般"), (10, "快"), (20, "很快")
-)
 
 
 def persona_voice_style(

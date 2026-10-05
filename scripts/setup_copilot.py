@@ -185,8 +185,6 @@ def check_runtime(section: dict) -> None:
             "lora": section.get("character_lora", ""),
             "port": int(section.get("llama_port", 18088)),
             "context_size": int(section.get("llm_context_size", 32768)),
-            "gpu_layers": int(section.get("llm_gpu_layers", 99)),
-            "low_vram": bool(section.get("llm_low_vram", True)),
         }
         result = agent_lease.post_json(
             "/character", {"owner_pid": owner, "character": configuration}, timeout=360

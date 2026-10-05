@@ -8,6 +8,7 @@ from dataclasses import replace
 
 from silenttalk import theme
 from silenttalk.copilot.persona import (
+    MACHINE_SPIRIT,
     RECOMMENDED_PROMPT_CHARS,
     REPLY_LENGTHS,
     TEXT_FIELDS,
@@ -23,8 +24,6 @@ from silenttalk.copilot.persona import (
 )
 from silenttalk.voice_styles import (
     PERSONA_VOICES,
-    PITCH_STEPS,
-    SPEED_STEPS,
     VOICE_EFFECTS,
 )
 from silenttalk.widgets import (
@@ -35,6 +34,7 @@ from silenttalk.widgets import (
     Field,
     ScrollArea,
     Segmented,
+    Stepper,
     TraitSlider,
     wrap_to_width,
 )
@@ -60,8 +60,10 @@ SECTIONS: tuple[tuple[str, str, tuple[str, ...], bool], ...] = (
     ),
     (
         "他想要什麼",
-        "這一段最重要：想要的、怕的、在意的、最近發生的事，決定他會聊什麼、"
-        "冷場時會說什麼，也是別人認識他的地方。寫得越具體越像真人。",
+        (
+            "這一段最重要：想要的、怕的、在意的、最近發生的事，決定他會聊什麼、"
+            "冷場時會說什麼，也是別人認識他的地方。寫得越具體越像真人。"
+        ),
         ("desires", "fears", "values", "recent", "background"),
         True,
     ),
@@ -330,11 +332,11 @@ class PersonaPanel(tk.Frame):
             chip = Chip(grid, label, lambda v=voice: self._pick_voice(v), size=9)
             chip.grid(row=index // 3, column=index % 3, sticky="w", padx=(0, 6), pady=2)
             self._voice_chips[voice] = chip
-        self._voice_knobs: dict[str, Segmented] = {}
-        for key, label, steps in (
-            ("voice_pitch", "音高", [(str(v), t) for v, t in PITCH_STEPS]),
-            ("voice_speed", "語速", [(str(v), t) for v, t in SPEED_STEPS]),
-            ("voice_effect", "音效", [(k, name) for k, (name, _) in VOICE_EFFECTS.items()]),
+        self._voice_knobs: dict[str, Stepper | Segmented] = {}
+        for key, label, limit, unit in (
+            ("voice_pitch", "音高", 50, "Hz"),
+            ("voice_speed", "語速", 40, "%"),
+            ("voice_effect", "音效", 0, ""),
         ):
             row = tk.Frame(box, bg=theme.PANEL)
             row.pack(fill="x", pady=(2, 4))
@@ -342,7 +344,16 @@ class PersonaPanel(tk.Frame):
                 row, text=label, width=4, anchor="w", bg=theme.PANEL, fg=theme.MUTED,
                 font=theme.font(9),
             ).pack(side="left", padx=(0, 10))
-            knob = Segmented(row, steps, lambda _v: self._changed())
+            if key == "voice_effect":
+                knob = Segmented(
+                    row, [(k, name) for k, (name, _) in VOICE_EFFECTS.items()],
+                    lambda _v: self._changed(),
+                )
+            else:
+                knob = Stepper(
+                    row, minimum=-limit, maximum=limit, unit=unit,
+                    command=lambda _v: self._changed(),
+                )
             knob.pack(side="left")
             self._voice_knobs[key] = knob
         actions = tk.Frame(box, bg=theme.PANEL)
@@ -521,8 +532,8 @@ class PersonaPanel(tk.Frame):
                     self._sliders[axis.key].set(persona.trait(axis.key))
                 self._length.set(persona.reply_length)
                 self._pick_voice(persona.voice)
-                self._voice_knobs["voice_pitch"].set(str(_nearest(persona.voice_pitch, PITCH_STEPS)))
-                self._voice_knobs["voice_speed"].set(str(_nearest(persona.voice_speed, SPEED_STEPS)))
+                self._voice_knobs["voice_pitch"].set(persona.voice_pitch)
+                self._voice_knobs["voice_speed"].set(persona.voice_speed)
                 self._voice_knobs["voice_effect"].set(persona.voice_effect)
                 for frame, _, _ in self._relation_rows:
                     frame.destroy()
@@ -531,7 +542,10 @@ class PersonaPanel(tk.Frame):
                     self._add_relation_row(rel)
                 if not persona.relationships:
                     self._add_relation_row()
-                self._delete_button.pack(side="left")
+                if persona.id == MACHINE_SPIRIT.id:
+                    self._delete_button.pack_forget()
+                else:
+                    self._delete_button.pack(side="left")
                 self._save_button.pack(side="left", padx=(6, 0))
                 self._use_button.pack_forget()
                 self._use_button.pack(side="left", padx=(6, 0))
@@ -629,6 +643,8 @@ class PersonaPanel(tk.Frame):
             return
         active = persona.id == self._state.active
         parts = ["● 使用中" if active else "未使用"]
+        if persona.id == MACHINE_SPIRIT.id:
+            parts.append("內建角色，不能刪除")
         if self._dirty:
             parts.append("未儲存的修改")
         self._subtitle.configure(
@@ -765,6 +781,9 @@ class PersonaPanel(tk.Frame):
         persona = self._current()
         if persona is None:
             return
+        if persona.id == MACHINE_SPIRIT.id:
+            self._on_status("機魂是內建角色，不能刪除；可編輯或複製人設。")
+            return
         if not getattr(self, "_confirm_delete", False):
             self._confirm_delete = True
             self._delete_button.configure(text="再按一次確認刪除")
@@ -802,8 +821,3 @@ class PersonaPanel(tk.Frame):
 def _trim(text: str, limit: int) -> str:
     compact = " ".join(text.split())
     return compact if len(compact) <= limit else compact[: limit - 1] + "…"
-
-
-def _nearest(value: int, steps: tuple[tuple[int, str], ...]) -> int:
-    """Hand-edited personas.json may hold any value; show the closest step."""
-    return min((step for step, _ in steps), key=lambda step: abs(step - value))

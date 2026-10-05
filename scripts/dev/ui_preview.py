@@ -60,7 +60,9 @@ def main() -> int:
 
     from silenttalk import story_ui
     from silenttalk.config import config_defaults
-    from silenttalk.copilot.persona import EXAMPLE_PERSONAS, PersonaState, PersonaStore
+    from silenttalk.copilot.persona import (
+        EXAMPLE_PERSONAS, MACHINE_SPIRIT, PersonaState, PersonaStore,
+    )
     from silenttalk.copilot.types import ConversationTurn, ReplySuggestions
     from silenttalk.phrases import QuickPhraseStore
     from silenttalk.preferences import PreferenceStore
@@ -98,7 +100,7 @@ def main() -> int:
         settings_store=SettingsStore(temp / "settings.json"),
         config_defaults=config_defaults(PROJECT_DIR),
         apply_settings=lambda tables: applied_settings.append(sorted(tables)),
-        copilot_info=[("回覆模型", "gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf"), ("省 VRAM", "開")],
+        copilot_info=[("回覆模型", "gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf")],
         font_override=args.font,
     )
 
@@ -234,6 +236,9 @@ def main() -> int:
     ui.persona_panel._preview_voice()
     ui.persona_panel._scroll._canvas.yview_moveto(1.0)
     shot("10b_persona_preview")
+    ui.persona_panel._open(MACHINE_SPIRIT.id)
+    ui.persona_panel._scroll._canvas.yview_moveto(0.8)
+    shot("10c_machine_spirit_voice")
     ui.show_page("voice")
     shot("11_voice")
     ui.show_page("settings")

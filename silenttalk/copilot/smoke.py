@@ -217,8 +217,6 @@ def build_reply_model(
         port=config.llama_port,
         context_size=config.llm_context_size,
         max_reply_chars=config.max_reply_chars,
-        gpu_layers=config.llm_gpu_layers,
-        low_vram=config.llm_low_vram,
         lora_path=(
             Path(config.character_lora) if config.character_lora else None
         ),

@@ -74,8 +74,7 @@ async def generate(args: argparse.Namespace) -> None:
     old = te.load_old_modules(args.rev)
     te.ensure_llama_server_on_path()
     config = te.copilot_config()
-    if args.cpu:
-        config["llm_gpu_layers"] = 0
+    te.CPU_ONLY = args.cpu
     llm_dir = te.E4B_MODEL_DIR
     model_path = llm_dir / (args.model or config["llm_model"])
     old_path = llm_dir / args.old_model if args.old_model else model_path

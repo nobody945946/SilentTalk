@@ -75,14 +75,10 @@ PAGES: tuple[Page, ...] = (
                 ),
                 Setting(
                     "copilot", "character_agent", "讓主人交代 Agent 工作", "bool",
-                    "主人打字下令（語音頻道的聊天室，或在文字頻道 @ 它開的討論串；要開「讀寫文字聊天」），"
-                    "用說的不算。受理的訊息加 ⚙️，完成換 ✅、失敗換 ❌；批准和結果私訊主人。先在 EdgeAgent 權限頁開啟 Discord，"
-                    "設定可用資料夾，並讓 Agent 與角色使用相同基底和 LoRA。",
-                ),
-                Setting(
-                    "copilot", "agent_report_public", "在頻道公開 Agent 的結果", "bool",
-                    "關閉時（建議）：結果和要批准的細節只私訊給主人，角色在頻道只說成功或失敗。"
-                    "開啟後角色會在頻道唸出結果，頻道裡的人都聽得到。",
+                    "主人在文字頻道 @ 它會開工作討論串，串裡主人的訊息交給 Agent；"
+                    "唯讀工作不需批准，要改動時私訊主人批准，結果貼在串裡。"
+                    "任何人叫機魂查資料、寫文章等聊天室工作，結果回到原聊天室；用說的不能動電腦。"
+                    "先開「讀寫文字聊天」，並在 EdgeAgent 權限頁啟用 Discord、設定可用資料夾。",
                 ),
             ),
         ),
@@ -291,16 +287,6 @@ PAGES: tuple[Page, ...] = (
                         ("Qwen3.5-4B-Q4_K_M.gguf", "Qwen3.5 4B（品質相近，約 2.9 GB VRAM）"),
                         ("Qwen3-1.7B-Q4_K_M.gguf", "Qwen3 1.7B（較弱，CPU 稍快）"),
                     ),
-                    restart=True,
-                ),
-                Setting(
-                    "copilot", "llm_gpu_layers", "GPU 層數", "int",
-                    "0＝完全用 CPU（慢約 3 倍但仍可用）；99＝盡量放進 GPU。",
-                    minimum=0, maximum=99, step=1, restart=True,
-                ),
-                Setting(
-                    "copilot", "llm_low_vram", "省 VRAM 模式", "bool",
-                    "8-bit KV cache＋flash attention，省約 0.2–0.3 GB。驅動不支援時自動退回。",
                     restart=True,
                 ),
                 Setting(
