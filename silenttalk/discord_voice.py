@@ -422,14 +422,16 @@ class DiscordVoiceClient(discord.Client):
         if payload.get("after_web"):
             reason += "；讀過網頁之後的操作"
         details = json.dumps(payload.get("arguments", {}), ensure_ascii=False)[:1500]
-        # EdgeAgent's own reading of a shell command (PowerShell's parser,
-        # edge_agent/lingua): sent first, in as many messages as it takes.
+        # EdgeAgent's own reading of the operation (PowerShell's parser for a
+        # command, a ready-made tool's own plan), titled by EdgeAgent: sent
+        # first, in as many messages as it takes.
         explain = str(payload.get("explain") or payload.get("explain_error") or "")
+        title = str(payload.get("explain_title") or "這個操作在做什麼（EdgeAgent 自己算出的，不是模型猜的）")
         view = AgentApprovalView(self._config.owner_user_id, str(payload["call_id"]), decide)
         try:
             dm = await self._owner_dm()
             if explain:
-                text = "這個指令在做什麼（PowerShell 自己解析的結果，不是模型猜的）：\n" + explain
+                text = f"{title}：\n{explain}"
                 for start in range(0, len(text), MAX_TEXT_CHARS):
                     await dm.send(text[start:start + MAX_TEXT_CHARS], allowed_mentions=discord.AllowedMentions.none())
             await dm.send(f"{reason} · {payload.get('tool', '')}\n{details}\n僅准許一次。",

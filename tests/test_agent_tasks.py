@@ -253,9 +253,11 @@ async def test_a_command_approval_comes_with_its_explanation_first():
         return True
 
     await client.send_approval({"call_id": "c1", "tool": "powershell", "arguments": {"command": "Remove-Item x"},
-                                "explain": "影響：會刪除：x" + "。" * 2100}, decide)
+                                "explain": "影響：會刪除：x" + "。" * 2100,
+                                "explain_title": "這個指令在做什麼（PowerShell 自己解析的結果）"}, decide)
     texts = [text for text, _ in dm.sent]
-    assert texts[0].startswith("這個指令在做什麼") and "會刪除：x" in texts[0]
+    # EdgeAgent titles its own explanation (a command's parse, a tool's plan).
+    assert texts[0].startswith("這個指令在做什麼（PowerShell 自己解析的結果）：") and "會刪除：x" in texts[0]
     assert all(len(text) <= 2000 for text in texts) and len(texts) == 3
     assert dm.sent[-1][1] is not None and "Remove-Item x" in texts[-1]
     dm.sent[-1][1].stop()
