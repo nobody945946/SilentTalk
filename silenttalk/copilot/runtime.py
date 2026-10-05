@@ -22,7 +22,12 @@ from silenttalk.copilot.llm import (
 from silenttalk.copilot.persona import Persona, blank_persona
 from silenttalk.copilot.stt import StreamingTranscriber
 from silenttalk.copilot.stt_offline import OfflineTranscriber
-from silenttalk.copilot.types import VOICE_ROOM, ConversationTurn, ReplySuggestions
+from silenttalk.copilot.types import (
+    VOICE_ROOM,
+    AgentTask,
+    ConversationTurn,
+    ReplySuggestions,
+)
 from silenttalk.records import TranscriptRecorder
 
 _LOG = logging.getLogger(__name__)
@@ -681,15 +686,17 @@ class CopilotRuntime:
         epoch = self._agent_epoch
         started = time.monotonic()
         try:
-            instruction = await self._llm.task_from_owner(
+            task = await self._llm.task_from_owner(
                 turns=turns, engagement=self._character_policy.mode,
             )
-            _LOG.info("agent_task_decision latency_ms=%d dispatched=%s",
-                      round((time.monotonic() - started) * 1000), bool(instruction))
+            _LOG.info("agent_task_decision latency_ms=%d dispatched=%s read_only=%s",
+                      round((time.monotonic() - started) * 1000), task is not None,
+                      task is not None and task.read_only)
             if epoch != self._agent_epoch:
                 return True
-            if not instruction or not self._character_mode or not self._config.character_agent:
+            if task is None or not self._character_mode or not self._config.character_agent:
                 return False
+            instruction = task.text
             if self._agent_job is not None and not self._agent_job.done():
                 await self._task_line("report", _BUSY, trigger.place)
                 return True
@@ -704,7 +711,7 @@ class CopilotRuntime:
                 return True
             self._task_result = ""
             self._agent_job = asyncio.create_task(
-                self._run_agent_task(instruction, workspace, epoch), name="discord-agent-task",
+                self._run_agent_task(task, workspace, epoch), name="discord-agent-task",
             )
             return True
         except asyncio.CancelledError:
@@ -720,14 +727,14 @@ class CopilotRuntime:
                     await self._task_line("report", detail, trigger.place)
             return True
 
-    async def _run_agent_task(self, instruction: str, workspace: str, epoch: int) -> None:
+    async def _run_agent_task(self, task: AgentTask, workspace: str, epoch: int) -> None:
         assert self._agent_tasks is not None
         started = time.monotonic()
         async def on_event(kind: str, payload: dict[str, object]) -> None:
             if epoch == self._agent_epoch:
                 await self._agent_event(kind, payload)
         try:
-            await self._agent_tasks.run(instruction, workspace, on_event)
+            await self._agent_tasks.run(task.text, workspace, on_event, read_only=task.read_only)
         finally:
             _LOG.info("agent_task_finished elapsed_ms=%d", round((time.monotonic() - started) * 1000))
 

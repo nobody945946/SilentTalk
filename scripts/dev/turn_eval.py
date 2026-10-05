@@ -548,9 +548,12 @@ async def run_new(args: argparse.Namespace, test_set: TestSet) -> list[dict[str,
                 task = ""
                 if agent_persona() and line["speaker"] == OWNER_NAME:
                     # What the app asks first for the owner's lines: is it work?
-                    task = await model.task_from_owner(turns=list(turns), engagement=conv.engagement)
+                    found = await model.task_from_owner(turns=list(turns), engagement=conv.engagement)
+                    # Older revisions (--old-rev) return the text alone.
+                    task = getattr(found, "text", found) or ""
                     task_fields = {"task_expected": bool(line.get("task")),
-                                   "task_said": bool(task), "task_text": task}
+                                   "task_said": bool(task), "task_text": task,
+                                   "task_read_only": getattr(found, "read_only", None)}
                 if task:
                     reply = await model.character_turn(
                         turns=list(turns), engagement=conv.engagement, task_hint=("ack", task))

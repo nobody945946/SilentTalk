@@ -5,7 +5,7 @@ import pytest
 
 from silenttalk.copilot.llm import LocalReplyModel
 from silenttalk.copilot.persona import PRESET_PERSONAS
-from silenttalk.copilot.types import ConversationTurn
+from silenttalk.copilot.types import AgentTask, ConversationTurn
 
 
 def test_stream_reports_each_completed_line() -> None:
@@ -488,20 +488,28 @@ def test_an_agent_character_sees_which_lines_were_typed() -> None:
 @pytest.mark.asyncio
 async def test_owner_chat_is_not_a_task() -> None:
     model = _Dispatching(gate="否")
-    assert await model.task_from_owner(turns=_owner_chat()) == ""
+    assert await model.task_from_owner(turns=_owner_chat()) is None
     assert [kind for kind, _ in model.requests] == ["gate"]
     assert "主人最後這句是不是要你用思考機替他做一件事" in model.requests[0][1][-1]["content"]
 
 
 @pytest.mark.asyncio
 async def test_owner_task_becomes_agent_instructions_on_the_same_chat() -> None:
-    model = _Dispatching(gate="是", line="<think>x</think> 修好 parser.py 的切割錯誤，跑測試後回報結果。")
+    model = _Dispatching(gate=["是", "是"], line="<think>x</think> 修好 parser.py 的切割錯誤，跑測試後回報結果。")
     task = await model.task_from_owner(turns=_owner_chat())
-    assert task == "修好 parser.py 的切割錯誤，跑測試後回報結果。"
-    (_, gate), (_, ask) = model.requests
-    assert gate[:-1] == ask[:-1]  # same cached system prompt
-    assert gate[-1]["content"].split("\n\n")[0] == ask[-1]["content"].split("\n\n")[0]
+    assert task == AgentTask("修好 parser.py 的切割錯誤，跑測試後回報結果。", read_only=False)
+    (_, gate), (_, scope), (_, ask) = model.requests
+    assert gate[:-1] == scope[:-1] == ask[:-1]  # same cached system prompt
+    assert len({m[-1]["content"].split("\n\n")[0] for m in (gate, scope, ask)}) == 1
+    assert "有沒有要你建立、修改、刪除" in scope[-1]["content"]
     assert ask[-1]["content"].endswith("只輸出指示本身）")
+
+
+@pytest.mark.asyncio
+async def test_work_that_only_reads_goes_to_the_agent_read_only() -> None:
+    model = _Dispatching(gate=["是", "否"], line="找出 parser.py 測試失敗的原因並回報。")
+    task = await model.task_from_owner(turns=_owner_chat())
+    assert task == AgentTask("找出 parser.py 測試失敗的原因並回報。", read_only=True)
 
 
 @pytest.mark.asyncio
@@ -524,12 +532,12 @@ async def test_no_task_unless_the_newest_line_is_the_owners_by_id() -> None:
     impostor = _owner_chat(OWNER_CHAT[:4])  # ends with user 9 named "Rex"
     spoken = _owner_chat(OWNER_CHAT[:5])  # ends with the owner's voice
     model = _Dispatching(gate="是")
-    assert await model.task_from_owner(turns=impostor) == ""
-    assert await model.task_from_owner(turns=spoken) == ""
+    assert await model.task_from_owner(turns=impostor) is None
+    assert await model.task_from_owner(turns=spoken) is None
     assert model.requests == []
     unset = _Dispatching(gate="是")
     unset._owner_id = None
-    assert await unset.task_from_owner(turns=_owner_chat()) == ""
+    assert await unset.task_from_owner(turns=_owner_chat()) is None
     assert unset.requests == []
 
 
@@ -537,7 +545,7 @@ async def test_no_task_unless_the_newest_line_is_the_owners_by_id() -> None:
 async def test_tasks_need_the_agent_setting() -> None:
     model = _Scripted(gate="是")
     model.set_owner(7, "Rex")
-    assert await model.task_from_owner(turns=_owner_chat()) == ""
+    assert await model.task_from_owner(turns=_owner_chat()) is None
     assert model.requests == []
 
 

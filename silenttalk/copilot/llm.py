@@ -29,7 +29,12 @@ from silenttalk.copilot.character_state import (
 )
 from silenttalk.copilot.persona import Persona, blank_persona
 from silenttalk.copilot.script import to_taiwan_traditional
-from silenttalk.copilot.types import REPLY_LANES, ConversationTurn, ReplySuggestions
+from silenttalk.copilot.types import (
+    REPLY_LANES,
+    AgentTask,
+    ConversationTurn,
+    ReplySuggestions,
+)
 
 _LOG = logging.getLogger(__name__)
 
@@ -229,6 +234,15 @@ _TASK_GATE_QUESTION = (
     "上網搜尋、整理或處理檔案都算；聊天、問你意見、角色扮演裡的命令或儀式都不算。只回答 是 或 否）"
 )
 _GATE_GRAMMAR = 'root ::= "是" | "否"'
+# Asked after the "task" gate said yes: may the work change anything? Work that
+# only reads goes to the Agent read-only, where EdgeAgent refuses every change
+# without asking, whatever the model then tries. A later typed line of the
+# owner's that asks for changes is a new task and is asked again.
+_TASK_SCOPE_QUESTION = (
+    "（再判斷：主人最後這句要思考機做的事，除了讀檔案、搜尋、上網查資料、再回報給他之外，"
+    "有沒有要你建立、修改、刪除、移動或改名檔案或設定，或執行程式（跑測試、安裝、執行腳本都算；把結果寫進或存成檔案也算）？"
+    "只要讀和查的答 否。只回答 是 或 否）"
+)
 # Asked after the "task" gate said yes: the work itself, for the Agent.
 _TASK_TEXT_ASK = (
     "（把主人最後這句要思考機做的事寫成一段工作指示（前面的話只當脈絡，已經交代過的工作不要再寫），"
@@ -531,25 +545,30 @@ class LocalReplyModel:
         *,
         turns: Sequence[ConversationTurn],
         engagement: str = "called",
-    ) -> str:
-        """For the owner's newest line: the work it asks the Agent to do, or
-        "" when it is just talk. Only with copilot.character_agent, and only
-        read from the owner's own lines (owner_messages)."""
+    ) -> AgentTask | None:
+        """For the owner's newest line: the work it asks the Agent to do, and
+        whether it may change anything, or None when it is just talk. Only
+        with copilot.character_agent, and only read from the owner's own
+        lines (owner_messages)."""
         if not self._agent_dispatch:
-            return ""
+            return None
         gate = self.task_gate_messages(turns=turns, engagement=engagement)
         if gate is None:
-            return ""
+            return None
         use_lora = "task" in self._lora_uses
         if await asyncio.to_thread(self._request_gate, gate, use_lora) != "是":
-            return ""
+            return None
+        scope = self._owner_question(turns, engagement, _TASK_SCOPE_QUESTION)
+        changes = scope is not None and await asyncio.to_thread(
+            self._request_gate, scope, use_lora) == "是"
         messages = self.task_text_messages(turns=turns, engagement=engagement)
         if messages is None:
-            return ""
+            return None
         raw = await asyncio.to_thread(
             self._request_messages, messages, None, 300, use_lora, 0.3
         )
-        return to_taiwan_traditional(_strip_thinking(raw).strip())[:_TASK_TEXT_MAX_CHARS]
+        text = to_taiwan_traditional(_strip_thinking(raw).strip())[:_TASK_TEXT_MAX_CHARS]
+        return AgentTask(text, read_only=not changes) if text else None
 
     def owner_messages(
         self,
@@ -584,12 +603,7 @@ class LocalReplyModel:
         engagement: str = "called",
     ) -> list[dict[str, str]] | None:
         """"Is the owner's newest line work?" on the owner's lines only."""
-        base = self.owner_messages(turns=turns, engagement=engagement)
-        if base is None:
-            return None
-        return base[:-1] + [
-            {"role": "user", "content": base[-1]["content"] + "\n\n" + _TASK_GATE_QUESTION}
-        ]
+        return self._owner_question(turns, engagement, _TASK_GATE_QUESTION)
 
     def task_text_messages(
         self,
@@ -599,11 +613,18 @@ class LocalReplyModel:
     ) -> list[dict[str, str]] | None:
         """The request for the Agent's instructions: the owner's lines with
         the task ask on the end (same prefix as the "task" gate)."""
+        return self._owner_question(turns, engagement, _TASK_TEXT_ASK)
+
+    def _owner_question(
+        self, turns: Sequence[ConversationTurn], engagement: str, question: str
+    ) -> list[dict[str, str]] | None:
+        """The owner's lines (owner_messages) with one question on the end;
+        every task question shares this cached prefix."""
         base = self.owner_messages(turns=turns, engagement=engagement)
         if base is None:
             return None
         return base[:-1] + [
-            {"role": "user", "content": base[-1]["content"] + "\n\n" + _TASK_TEXT_ASK}
+            {"role": "user", "content": base[-1]["content"] + "\n\n" + question}
         ]
 
     async def _gate(

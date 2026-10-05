@@ -35,7 +35,11 @@ class AgentTaskClient:
             )
         return str(roots[0])
 
-    async def run(self, text: str, workspace: str, on_event: TaskEvent) -> None:
+    async def run(
+        self, text: str, workspace: str, on_event: TaskEvent, *, read_only: bool = True
+    ) -> None:
+        """One task as one EdgeAgent session. `read_only`: the owner asked only
+        to read, and EdgeAgent then refuses every change in this task."""
         if self.session_id is not None:
             raise AgentLeaseError("Agent 工作正在進行。")
         session_id = self.session_id = str(uuid4())
@@ -52,6 +56,7 @@ class AgentTaskClient:
                         "client": "discord",
                         "agent": True,
                         "working_dir": workspace,
+                        "read_only": read_only,
                     },
                 ) as response,
             ):

@@ -45,6 +45,15 @@ VOICE_ROOM = 0
 
 
 @dataclass(frozen=True, slots=True)
+class AgentTask:
+    """Work the owner typed for the Agent. `read_only`: the owner asked only to
+    read and look things up, so EdgeAgent refuses every change in this task."""
+
+    text: str
+    read_only: bool = True
+
+
+@dataclass(frozen=True, slots=True)
 class ReplyLane:
     """One fixed reply direction: LLM output tag, story-mode key, UI label."""
 

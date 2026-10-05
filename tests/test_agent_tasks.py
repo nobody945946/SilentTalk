@@ -14,7 +14,7 @@ from silenttalk.agent_tasks import AgentTaskClient
 from silenttalk.config import CopilotConfig
 from silenttalk.copilot.llm import PRIVATE_APPROVAL, PRIVATE_REPORTS
 from silenttalk.copilot.runtime import CopilotRuntime, _Trigger
-from silenttalk.copilot.types import VOICE_ROOM
+from silenttalk.copilot.types import VOICE_ROOM, AgentTask
 from silenttalk.discord_voice import AgentApprovalView, DiscordVoiceClient
 
 
@@ -90,6 +90,8 @@ async def test_sse_denial_and_failure_use_discord_profile_and_first_workspace(tm
         assert state["requests"][0]["client"] == "discord"
         assert state["requests"][0]["agent"] is True
         assert state["requests"][0]["working_dir"] == str(tmp_path)
+        # Unless told otherwise a task is read-only: EdgeAgent refuses changes.
+        assert state["requests"][0]["read_only"] is True
         assert state["approvals"][0]["scope"] == "once"
         assert client.session_id is None
     finally:
@@ -181,7 +183,7 @@ async def test_cancelled_dispatch_cannot_revive_after_reenable(
 
     async def decision(**kwargs):
         await pause("decision")
-        return "fixture"
+        return AgentTask("fixture")
 
     async def notice(**kwargs):
         await pause("ack")
@@ -260,7 +262,7 @@ async def test_owner_dispatch_runs_in_background_and_failure_gets_character_repo
         async def task_from_owner(self, **kwargs):
             calls.append("dispatch")
             assert kwargs["turns"][-1].speaker_id == 1
-            return "fixture"
+            return AgentTask("fixture")
 
         async def character_turn(self, **kwargs):
             hint = kwargs.get("task_hint")
@@ -276,7 +278,7 @@ async def test_owner_dispatch_runs_in_background_and_failure_gets_character_repo
         async def workspace(self):
             return str(tmp_path)
 
-        async def run(self, text, workspace, callback):
+        async def run(self, text, workspace, callback, *, read_only):
             entered.set()
             await released.wait()
             await callback("error", {"message": "fixture failure"})
@@ -554,17 +556,17 @@ async def test_a_closed_dm_fails_instead_of_falling_back_to_the_channel():
     assert await client.send_private("結果") is False
 
 
-def _marked_runtime(tmp_path, *, delivered=True):
+def _marked_runtime(tmp_path, *, delivered=True, read_only=True):
     """A character runtime whose Agent lists a folder; records the marks on
     the owner's message, what is typed where, what is spoken and the DMs."""
-    seen = SimpleNamespace(marks=[], typed=[], spoken=[], hints=[], private=[])
+    seen = SimpleNamespace(marks=[], typed=[], spoken=[], hints=[], private=[], read_only=[])
 
     class Model:
         def set_owner(self, user_id, name):
             pass
 
         async def task_from_owner(self, **kwargs):
-            return "列出測試資料夾"
+            return AgentTask("列出測試資料夾", read_only=read_only)
 
         def __getattr__(self, name):  # the setters apply_settings calls
             return lambda *args: None
@@ -581,7 +583,8 @@ def _marked_runtime(tmp_path, *, delivered=True):
         async def workspace(self):
             return str(tmp_path)
 
-        async def run(self, text, workspace, callback):
+        async def run(self, text, workspace, callback, *, read_only):
+            seen.read_only.append(read_only)
             await callback("delta", {"text": "a.txt c.tmp"})
             await callback("done", {})
 
@@ -632,6 +635,21 @@ async def test_work_from_a_thread_is_marked_on_the_message_instead_of_announced(
         assert seen.private == ["a.txt c.tmp"]
         # No 「接令」 or 「完成了」 lines: the gear and the check say it.
         assert seen.hints == [] and seen.typed == [] and seen.spoken == []
+    finally:
+        await _close(runtime)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("read_only", [True, False])
+async def test_the_tasks_scope_reaches_edgeagent(tmp_path, read_only):
+    """Work the owner asked only to read goes to EdgeAgent read-only; work
+    that asks for changes goes with the owner's usual permissions."""
+    runtime, seen = _marked_runtime(tmp_path, read_only=read_only)
+    try:
+        runtime._handle_turn(1, "owner", "幫我看一下測試資料夾", "text", True,
+                             place=42, channel_id=900, message_id=42)
+        await _until(lambda: len(seen.marks) == 2)
+        assert seen.read_only == [read_only]
     finally:
         await _close(runtime)
 
