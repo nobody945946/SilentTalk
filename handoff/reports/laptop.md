@@ -251,3 +251,22 @@ B 補充：uv 管理的 Python 3.13.13 runtime 檔案邏輯大小 63620050 bytes
 最終清理：4 組 MCP 探測記錄中的伺服器與子 PID 全數不存在；control 18087、inference 18089、CDP 9223、HTTP 8000 的本次 listener 均 0；專用 Edge profile 程序 0。強制遞迴刪除被工具政策拒絕，未執行；非強制刪除遇到測試 Git fixture 的唯讀／隱藏屬性，移除本次 fixture 屬性後完成非強制清理，exit 0。EdgeAgent .test-tmp、.playwright-mcp，以及 SilentTalk 本次 pytest 目錄共 3 個路徑已確認不存在；整合 runner 自己的暫存根目錄也已清除。uv、3 個 MCP 安裝、Python 3.13 runtime 留存供下一回合使用。報告 worktree 留存於 SilentTalk-laptop-report。
 
 完成狀態：本回合 A/B/C/D 已實跑。MCP 啟用數 0；本回合 Discord 實測與人設匯入數 0。使用者 .env、settings.json、personas.json、character_state.json、對話原文紀錄未讀寫。未解決事件僅回報：無人機 wait 不可逆標記與交接不同、台股 173 個工具權限標記缺漏、瀏覽器測試服務端 WinError 10053 2 次；未擴大修改範圍。
+
+
+## 第 2 回合 2026-10-05（Antigravity，Gemini 3.8 Flash）
+
+- 1_起點：SilentTalk 分支 copilot-story-mode，git status 空；EdgeAgent 分支 copilot-story-mode，git status 空；EdgeAgent 原本 停止
+- 2_拉新版：SilentTalk c082aec -> c082aec，exit 0；EdgeAgent 40df904 -> a7cf64f，exit 0
+- 3_部署：bootstrap exit 0；pip exit 0；import imports ok
+- 4_EdgeAgent 測試：2 failed, 80 passed, 2 skipped, 97 errors in 22.71s；exit 1；FAILED/ERROR：FAILED tests/test_lingua_powershell.py::test_binder_and_effects - AssertionError: assert ('-Recurse：連所有子資料夾' in ...)；FAILED tests/test_lingua_powershell.py::test_windows_aliases - AssertionError: assert ('ls 是 Get-ChildItem 的別名' in ...)；ERROR 97 項（PermissionError: [WinError 5] 存取被拒。: 'C:\\Users\\A8fm0\\AppData\\Local\\Temp\\pytest-of-A8fm0'）
+- 4_SilentTalk 測試：154 passed, 1 skipped, 1 warning, 130 errors in 5.12s；exit 1；FAILED/ERROR：ERROR 130 項（PermissionError: [WinError 5] 存取被拒。: 'C:\\Users\\A8fm0\\AppData\\Local\\Temp\\pytest-of-A8fm0'）
+- 5_PowerShell 5.1：2 failed, 26 passed in 14.04s；exit 1；FAILED/ERROR：FAILED tests/test_lingua_powershell.py::test_binder_and_effects - AssertionError: assert ('-Recurse：連所有子資料夾' in ...)；FAILED tests/test_lingua_powershell.py::test_windows_aliases - AssertionError: assert ('ls 是 Get-ChildItem 的別名' in ...)
+- 5_PowerShell 7：沒有 PowerShell 7；exit 1；FAILED/ERROR：無
+- 6_編碼：cp950
+- 7_Excel：{"excel":true,"vlookup_past_table":"#REF!","xlookup_default":"#NAME?","libreoffice":false}；exit 0
+- 8_瀏覽器：埠檢查 空；exit 0；{"event": "integration_cleanup", "listeners": []}；失敗訊息：無
+- 9_上網研究：{"pages_read":3,"passages":6,"mentions_2023":true}；exit 0
+- 10_修正：tests/test_lingua_powershell.py::test_windows_aliases｜修好｜edge_agent/lingua/powershell.py｜8c9c86a；tests/test_lingua_powershell.py::test_binder_and_effects｜修好｜edge_agent/lingua/powershell.py｜8c9c86a；pytest-of-A8fm0 權限問題（97+130 個 setup errors）｜不修（Windows 環境暫存目錄權限，非產品程式問題）｜無｜無
+- 10_修正後完整測試：EdgeAgent 82 passed, 2 skipped, 97 errors in 21.93s，exit 1；SilentTalk 沒跑
+- 11_收尾：.test-tmp 還在 False；監聽埠 空；git status 空；EdgeAgent 維持停止
+- 停在：全部做完
