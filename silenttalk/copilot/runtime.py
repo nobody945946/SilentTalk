@@ -872,6 +872,13 @@ class CopilotRuntime:
                 self._task_hints.append(("report", PRIVATE_REPORTS["approval_undelivered"], place))
                 _LOG.warning("agent_approval_failed error_type=%s", type(exc).__name__)
         elif kind in {"done", "error", "cancelled"}:
+            if kind == "done":
+                # EdgeAgent's own checks on the answer, as counts only: code
+                # changed with no passing check, cited numbers its sources do
+                # not back, and how often Simplified text had to be converted.
+                _LOG.info("agent_task_checks unverified=%d source_problems=%d converted=%d",
+                          len(payload.get("unverified") or []), len(payload.get("source_problems") or []),
+                          int(payload.get("converted") or 0))
             result = self._task_result if kind == "done" else str(payload.get("message", "工作已取消。"))
             self._task_result = ""
             origin, self._agent_origin = self._agent_origin, None

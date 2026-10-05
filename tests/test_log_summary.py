@@ -36,6 +36,9 @@ def test_log_summary_parses_agent_events_and_never_leaks_dialogue(tmp_path: Path
             "result": secrets[4],
         },
         {
+            "event": "agent_task_checks unverified=2 source_problems=1 converted=3",
+        },
+        {
             "event": "agent_approval_decided approved=True roundtrip_ms=1500",
         },
         {
@@ -105,6 +108,7 @@ def test_log_summary_parses_agent_events_and_never_leaks_dialogue(tmp_path: Path
     assert "| 討論串讀回 | 1（讀不到 1） |" in summary
     assert "中位數 185 ms" in summary
     assert "| Agent 任務執行時間 | 中位數 3400 ms、p90 3400 ms（n=1） |" in summary
+    assert "| Agent 主機核對（完成的工作） | 1（改了程式沒通過檢查 1、來源對不上的數字 1、簡轉繁觸發 3） |" in summary
     assert "| Agent 批准 | 2（准許 1、拒絕 1、失敗 1、逾時 1） |" in summary
     assert "中位數 1150 ms" in summary
     assert "| Agent 私訊結果 | 2（送達 1、未送達 1、失敗 2） |" in summary

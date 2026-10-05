@@ -12,7 +12,9 @@ llama.cpp source tree of the same build as llama-server):
 Rows are chats ({"messages": [...], "tools": [...]?, "train": "last"|"all"}).
 "last" (the default, character data) trains on the final assistant message;
 "all" (Agent trajectories) trains on every assistant turn, tool calls
-included, never on tool results. Each trained span is exactly what the
+included, never on tool results; with "train_from": n only on the turns from
+message n on (the Agent's tool list grows mid-task, so the turns before were
+written under fewer tools and are trained in a row of their own). Each trained span is exactly what the
 model writes after the prompt the server builds for that turn
 (scripts/dev/template_parity.py checks the two templates agree).
 """
@@ -239,6 +241,8 @@ def _tokenize(tokenizer, messages: list[dict], row: dict) -> dict[str, list[int]
     turns = [i for i, m in enumerate(messages) if m["role"] == "assistant"]
     if row.get("train", "last") == "last":
         turns = turns[-1:]
+    else:
+        turns = [i for i in turns if i >= row.get("train_from", 0)]
     if not turns or turns[-1] != len(messages) - 1 and row.get("train", "last") == "last":
         raise ValueError("the last message must be the trained answer")
     full = render(messages, False)

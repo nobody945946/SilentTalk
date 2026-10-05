@@ -101,6 +101,10 @@ def generate_summary(records: list[dict], all_sessions: bool = False) -> str:
     task_dispatched = [r for r in task_decisions if r.get("dispatched") == "True"]
     task_skipped = [r for r in task_decisions if r.get("dispatched") == "False"]
     task_finished = events.get("agent_task_finished", [])
+    task_checks = events.get("agent_task_checks", [])
+
+    def total(rows: list[dict[str, str]], key: str) -> int:
+        return sum(int(r.get(key, "0") or 0) for r in rows)
     lookups = events.get("agent_chat_task_decision", [])
     lookups_yes = [r for r in lookups if r.get("chat_task") == "True"]
     posted = events.get("agent_result_posted", [])
@@ -273,6 +277,11 @@ def generate_summary(records: list[dict], all_sessions: bool = False) -> str:
         (
             "Agent 任務執行時間",
             ms(task_finished, "elapsed_ms"),
+        ),
+        (
+            "Agent 主機核對（完成的工作）",
+            f"{len(task_checks)}（改了程式沒通過檢查 {sum(int(r.get('unverified', '0') or 0) > 0 for r in task_checks)}、"
+            f"來源對不上的數字 {total(task_checks, 'source_problems')}、簡轉繁觸發 {total(task_checks, 'converted')}）",
         ),
         (
             "Agent 批准",
