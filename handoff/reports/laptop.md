@@ -538,3 +538,12 @@ Date:   Mon Oct 5 14:57:51 2026 +0800
   5. 容器位置預備目錄 C:\Users\A8fm0\EncryptedRecords，空；大小 10 GB。VeraCrypt 在 C:\Program Files\VeraCrypt。尚未建立 .hc 檔。官方 Windows CLI 的 /create 必須帶密碼，無密碼會拒絕，所以沒有拿 CLI 製作容器。沒有設自動解鎖。
   6. 正式 SilentTalk 父／子 PID 12864、16572（會變動，以實際 PID 查詢）；正式 EdgeAgent 因角色正常使用而啟動。使用者 F8 確認了，不要再加桌面轉接補丁。自建真 Edge 整合程序已清理，listeners=[] 指的是測試終了時，不能冒稱目前正式程式沒有 listener。
   7. 同一台機器只開一個 agent；本次沒有 sub-agent。編輯器問題已完成，不要再拆分 Python 模組或改使用者設定檔。兩來源 repo source clean；報告寫在既有 SilentTalk-laptop-report worktree，延續此節，不切主資料夾分支。
+
+### 第 4 回合續行檢查點：2026-10-05 15:12:52+08:00
+
+- 上述 37 項狀態與測試結果不變；本回合尚未結束。
+- 使用者已在介面開啟角色派工。讀取有效設定確認 character_agent=true；角色基底 E4B、character_lora 空字串（不使用）。Agent 持久設定仍是 Qwen3.5-4B、lora 空字串；沒有透過 API 或改檔替使用者切換。
+- 本機 V1 adapter 的檔名為 character-e2b-lora-v1.q8_0.gguf，屬於 E2B，不能當作 E4B 的 adapter。已向使用者說明目前角色不使用 LoRA，Agent 也應選不使用，並請他透過模型介面選 E4B 後套用。
+- 更正上一段操作判斷：暫停角色不會釋放模型 lease。既有 runtime.set_character_mode 僅停止角色回應；llm.stop 才 release_character。這不是本回合可擅自改動的角色邏輯。已用 PID 關閉本回合啟動的 SilentTalk 12864、16572；其後 GET /status 確認 mode=base、ready=true、agent_slot=0、model=Qwen3.5-4B。目前先不要重啟 SilentTalk，等使用者套用 E4B 且 LoRA 不使用，再正常啟動。
+- F1 仍未完成：清除本回合 round4 暫存路徑的 PowerShell 動作被工具自動審核拒絕，只有 blocked by policy，沒有更細原因。整個清理命令未執行；沒有換工具繞過。前一次替使用者開啟 Edge 也被同樣原因拒絕，改提供本機頁面連結。
+- 續行位置：等待使用者回覆模型介面 E4B、LoRA 不使用已套用；核對持久設定與 runtime 後正常啟動 SilentTalk，核對共享 Agent slot，再做 D。A4 的 context 決定仍待使用者；E2 尚未建容器。不要把此次檢查點算成 Discord 實測。
