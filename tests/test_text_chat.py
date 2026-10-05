@@ -49,6 +49,7 @@ class FakeMessage:
     id: int = 1
     mentions: list = field(default_factory=list)
     reference: object = None
+    attachments: list = field(default_factory=list)
     guild: object = None
 
 
@@ -152,8 +153,10 @@ def _thread_client(character: bool = True) -> tuple[DiscordVoiceClient, list, li
     client = DiscordVoiceClient(
         DiscordConfig("unused", OWNER, text_chat=True),
         lambda state, message: errors.append(message),
+        # Lines without files leave out the empty attachment list.
         text_callback=lambda user_id, name, content, addressed, **where: typed.append(
-            (user_id, content, addressed, where)
+            (user_id, content, addressed,
+             {k: v for k, v in where.items() if v or k != "attachments"})
         ),
         threads_open=lambda: character,
     )
@@ -294,3 +297,27 @@ def test_the_owners_reply_to_the_character_is_a_chat_not_a_thread() -> None:
     assert not reply.opened
     assert typed == [(OWNER, "那明天呢", True,
                       {"place": 900, "channel_id": 900, "message_id": 70, "agent": False})]
+
+
+def test_a_reply_to_an_image_offers_that_image_and_nothing_else() -> None:
+    """Pointing at an image: reply to it and call the character. Files of
+    the calling message and the replied one are offered (readable kinds and
+    sizes only); the line says what came with it."""
+    client, typed, _ = _thread_client()
+    client._names = lambda text: "機魂" in text
+
+    def file(name, size):
+        async def read():
+            return b"fixture"
+        return SimpleNamespace(filename=name, size=size, read=read)
+
+    image_post = SimpleNamespace(author=FakeAuthor(789, "Alice"),
+                                 attachments=[file("menu.png", 300_000), file("clip.mp4", 3_000)])
+    line = ThreadableMessage(FakeAuthor(321, "Bob"), _text_channel(900), "機魂 這張寫什麼", id=80,
+                             reference=SimpleNamespace(resolved=image_post),
+                             attachments=[file("huge.png", 9_000_000), file("notes.txt", 1_000)])
+    asyncio.run(client.on_message(line))  # type: ignore[arg-type]
+    [(user, content, addressed, where)] = typed
+    assert content == "機魂 這張寫什麼（附件：notes.txt、menu.png）"
+    assert [name for name, _ in where.pop("attachments")] == ["notes.txt", "menu.png"]
+    assert where == {"place": 900, "channel_id": 900, "message_id": 80, "agent": False}

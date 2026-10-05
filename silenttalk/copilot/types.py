@@ -49,7 +49,8 @@ class AgentTask:
     """Work for the Agent and how far it may reach (EdgeAgent's task scope):
     "read" (the owner's work that only reads this computer), "change" (the
     owner's work that changes things, each change approved in his DMs) or
-    "public" (a lookup anyone may ask for: the web alone)."""
+    "public" (work anyone in a chat may ask for: that chat's posts and the
+    public web in, one message out)."""
 
     text: str
     scope: str = "read"

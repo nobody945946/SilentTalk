@@ -38,6 +38,19 @@ AGENT_RESULT_HEAD = "【思考機回報】"
 # A thread's earlier lines, oldest first: (author ID, display name, text,
 # kind) with kind "mine" (the character), "agent" (a posted result) or "text".
 HistoryLine = tuple[int, str, str, str]
+# Files the Agent can read (EdgeAgent decodes them in memory: images go to
+# the model, documents as text), and how large. Only the calling message's
+# and those of the message it replies to are offered - never anything else
+# posted in the channel, whatever the model asks for.
+READABLE_IMAGES = {".png", ".jpg", ".jpeg", ".gif", ".bmp"}
+READABLE_DOCUMENTS = {
+    ".txt", ".md", ".csv", ".json", ".log", ".xml", ".yaml", ".yml", ".ini", ".toml",
+    ".html", ".css", ".js", ".ts", ".py", ".ps1", ".sql", ".c", ".h", ".cpp", ".cs",
+    ".java", ".go", ".rs", ".pdf", ".docx",
+}
+MAX_ATTACHMENTS = 4
+IMAGE_BYTES = 8_000_000
+DOCUMENT_BYTES = 2_000_000
 # Everything the bot does in a server, asked for in its invite link so a
 # server admin grants it in one click: join and speak in voice, read and type
 # in the voice channel's chat, open threads and talk in them, mark the owner's
@@ -173,8 +186,12 @@ class DiscordVoiceClient(discord.Client):
         if message.author.bot or (self.user and message.author.id == self.user.id):
             return
         content = message.clean_content.strip()
-        if not content:
-            return  # attachment, sticker or embed only
+        files = self._attachments(message)
+        if not content and not files:
+            return  # a sticker, an embed or a file no one can read
+        if files:
+            names = "、".join(name for name, _ in files)
+            content = f"{content}（附件：{names}）" if content else f"（附件：{names}）"
         voice = self.active_voice()
         channel = message.channel
         agent = False
@@ -208,7 +225,24 @@ class DiscordVoiceClient(discord.Client):
             "voice" if place == VOICE_ROOM else ("thread" if agent else "channel"),
         )
         callback(message.author.id, name, content, addressed,
-                 place=place, channel_id=channel.id, message_id=message.id, agent=agent)
+                 place=place, channel_id=channel.id, message_id=message.id, agent=agent,
+                 attachments=tuple(files))
+
+    @staticmethod
+    def _attachments(message: discord.Message) -> list[tuple[str, Callable[[], Awaitable[bytes]]]]:
+        """The readable files of this message and of the message it replies
+        to (the usual way to point at an image: reply to it and call the
+        character): (name, read), read only when work is handed over."""
+        replied = getattr(message.reference, "resolved", None)
+        found = [*message.attachments, *getattr(replied, "attachments", ())]
+        chosen = []
+        for item in found:
+            suffix = Path(item.filename).suffix.lower()
+            limit = (IMAGE_BYTES if suffix in READABLE_IMAGES
+                     else DOCUMENT_BYTES if suffix in READABLE_DOCUMENTS else 0)
+            if 0 < item.size <= limit:
+                chosen.append((item.filename, item.read))
+        return chosen[:MAX_ATTACHMENTS]
 
     def _mentions_me(self, message: discord.Message) -> bool:
         return self.user is not None and (

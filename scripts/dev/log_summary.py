@@ -101,8 +101,8 @@ def generate_summary(records: list[dict], all_sessions: bool = False) -> str:
     task_dispatched = [r for r in task_decisions if r.get("dispatched") == "True"]
     task_skipped = [r for r in task_decisions if r.get("dispatched") == "False"]
     task_finished = events.get("agent_task_finished", [])
-    lookups = events.get("agent_lookup_decision", [])
-    lookups_yes = [r for r in lookups if r.get("lookup") == "True"]
+    lookups = events.get("agent_chat_task_decision", [])
+    lookups_yes = [r for r in lookups if r.get("chat_task") == "True"]
     posted = events.get("agent_result_posted", [])
     posted_ok = [r for r in posted if r.get("posted") == "True"]
     history_read = events.get("thread_history_read", [])
@@ -256,10 +256,10 @@ def generate_summary(records: list[dict], all_sessions: bool = False) -> str:
         ("說出口的句子", f"{len(jobs)}（串流 {len(streamed)}）"),
         ("TTS 到第一段聲音（串流）", ms(streamed, "synthesis_ms")),
         (
-            "查公開資料判斷（叫到機魂的句子）",
-            f"{len(lookups)}（去查 {len(lookups_yes)}、自己回 {len(lookups) - len(lookups_yes)}）",
+            "聊天工作判斷（叫到機魂的句子）",
+            f"{len(lookups)}（交給 Agent {len(lookups_yes)}、自己回 {len(lookups) - len(lookups_yes)}）",
         ),
-        ("查公開資料判斷延遲", ms(lookups, "latency_ms")),
+        ("聊天工作判斷延遲", ms(lookups, "latency_ms")),
         (
             "Agent 派工判斷（主人的 Agent 串）",
             f"{len(task_decisions)}（派工 {len(task_dispatched)}、不派工 {len(task_skipped)}"

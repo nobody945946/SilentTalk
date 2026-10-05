@@ -38,13 +38,16 @@ class AgentTaskClient:
     async def run(
         self, text: str, workspace: str, on_event: TaskEvent, *,
         scope: str = "read", conversation: int | None = None,
+        attachments: list[dict[str, str]] | None = None,
     ) -> None:
         """One task. `scope` (EdgeAgent's task scope): "read" refuses every
         change, "change" asks the owner for each, "public" leaves the web
         alone. `conversation`: the place it was asked in (the voice room, a
         text channel or a thread); its tasks share one EdgeAgent session, so
         the Agent knows what it did there before (in EdgeAgent's RAM).
-        Without it the task is a session of its own."""
+        Without it the task is a session of its own. `attachments`: files
+        posted with the request, {"name", "data" (base64)}, which EdgeAgent
+        decodes in memory (images go to the model, documents as text)."""
         if self.session_id is not None:
             raise AgentLeaseError("Agent 工作正在進行。")
         session_id = self.session_id = (
@@ -64,6 +67,7 @@ class AgentTaskClient:
                         "agent": True,
                         "working_dir": workspace,
                         "scope": scope,
+                        "attachments": attachments or [],
                     },
                 ) as response,
             ):

@@ -351,7 +351,8 @@ def _marked_runtime(tmp_path, *, delivered=True, scope="read", posted=True, hist
     records the marks on messages, what is typed where, what is spoken, the
     DMs, the posted results and how the Agent was asked."""
     seen = SimpleNamespace(marks=[], typed=[], spoken=[], hints=[], private=[], scopes=[],
-                           results=[], conversations=[], recorded=[], asked=[], texts=[])
+                           results=[], conversations=[], recorded=[], asked=[], texts=[],
+                           files=[])
 
     class Model:
         def set_owner(self, user_id, name):
@@ -361,9 +362,10 @@ def _marked_runtime(tmp_path, *, delivered=True, scope="read", posted=True, hist
             seen.asked.append(("owner", kwargs["turns"][-1].text))
             return AgentTask(kwargs["turns"][-1].text, scope=scope)
 
-        async def public_lookup(self, **kwargs):
+        async def chat_task(self, **kwargs):
             seen.asked.append(("lookup", kwargs["turns"][-1].text))
-            return AgentTask(lookup, scope="public") if lookup else None
+            # Even a model that asks for more gets only the chat's scope.
+            return AgentTask(lookup, scope="change") if lookup else None
 
         def __getattr__(self, name):  # the setters apply_settings calls
             return lambda *args: None
@@ -384,8 +386,9 @@ def _marked_runtime(tmp_path, *, delivered=True, scope="read", posted=True, hist
         async def workspace(self):
             return str(tmp_path)
 
-        async def run(self, text, workspace, callback, *, scope, conversation):
+        async def run(self, text, workspace, callback, *, scope, conversation, attachments):
             seen.texts.append(text)
+            seen.files.append(attachments)
             seen.scopes.append(scope)
             seen.conversations.append(conversation)
             if fail_run:
@@ -779,3 +782,26 @@ async def test_the_controller_types_into_the_right_place_and_marks_the_message()
                      ("mark", 900, 42, "done")]
 
 
+
+
+@pytest.mark.asyncio
+async def test_files_posted_with_the_line_reach_the_agent_read_only_when_needed(tmp_path):
+    """OCR in a chat: the image posted with (or replied to by) the line is
+    read into RAM only when work is handed over, and sent with the request."""
+    reads = []
+
+    async def image():
+        reads.append("photo.png")
+        return b"\x89PNG fixture"
+
+    runtime, seen = _marked_runtime(tmp_path, lookup="辨識圖片裡的文字")
+    try:
+        runtime._handle_turn(5, "路人", "機魂 這張圖寫什麼（附件：photo.png）", "text", True,
+                             place=TEXT_CHANNEL, channel_id=TEXT_CHANNEL, message_id=8,
+                             attachments=(("photo.png", image),))
+        await _until(lambda: seen.files)
+        assert reads == ["photo.png"]
+        assert seen.files == [[{"name": "photo.png", "data": "iVBORyBmaXh0dXJl"}]]
+        assert seen.scopes == ["public"]
+    finally:
+        await _close(runtime)

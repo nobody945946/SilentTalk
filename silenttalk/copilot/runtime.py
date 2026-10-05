@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import logging
 import time
 from collections import deque
@@ -54,6 +55,9 @@ ResultCallback = Callable[[str, int], Awaitable[bool]]
 # [(author ID, name, text, kind)], kind "mine", "agent" or "text"
 # (DiscordVoiceClient.thread_history).
 HistoryCallback = Callable[[int, int, int], Awaitable[list[tuple[int, str, str, str]]]]
+# A file someone posted with the line (or in the message it replies to): its
+# name and how to read it. The Discord client chooses which, never the model.
+Attachment = tuple[str, Callable[[], Awaitable[bytes]]]
 
 # "嗯", "好", "喔" are context, not something worth four reply options.
 _MIN_TRIGGER_CHARS = 2
@@ -91,6 +95,8 @@ class _Trigger:
     place: int = VOICE_ROOM
     channel_id: int = 0
     message_id: int = 0
+    # Files posted with the line, read only if the line hands work over.
+    attachments: tuple[Attachment, ...] = ()
 
 
 class CopilotRuntime:
@@ -260,7 +266,7 @@ class CopilotRuntime:
     def accept_text(
         self, speaker_id: int, speaker_name: str, text: str, addressed: bool = False,
         *, place: int = VOICE_ROOM, channel_id: int = 0, message_id: int = 0,
-        agent: bool = False,
+        agent: bool = False, attachments: tuple[Attachment, ...] = (),
     ) -> None:
         """A line someone typed; safe from any thread. `addressed`: Discord
         says it @mentioned the bot or replied to it. `place`: VOICE_ROOM (the
@@ -275,6 +281,7 @@ class CopilotRuntime:
             lambda: self._handle_turn(
                 speaker_id, speaker_name, text, "text", addressed,
                 place=place, channel_id=channel_id, message_id=message_id, agent=agent,
+                attachments=attachments,
             ),
             place, message_id, agent,
         )
@@ -586,6 +593,7 @@ class CopilotRuntime:
         channel_id: int = 0,
         message_id: int = 0,
         agent: bool = False,
+        attachments: tuple[Attachment, ...] = (),
     ) -> None:
         # In copilot mode the bot speaks *for* the owner, so the owner's own mic
         # is not conversation; in character mode the owner is one more friend.
@@ -616,7 +624,7 @@ class CopilotRuntime:
         addressed = mentioned or (self._character_mode and self._names(text))
         trigger = _Trigger(
             speaker_name, text, seq, addressed, via, time.monotonic(), speaker_id,
-            place, channel_id, message_id,
+            place, channel_id, message_id, tuple(attachments),
         )
         self._latest_trigger = trigger
         if agent:
@@ -737,26 +745,28 @@ class CopilotRuntime:
 
     async def _respond(self, trigger: _Trigger) -> None:
         """A line in a chat (the voice room or a text channel) that called the
-        character: a lookup of public information goes to the Agent (anyone
-        may ask; the web alone), anything else gets the character's answer."""
+        character: work that stays within this chat goes to the Agent (anyone
+        may ask), anything else gets the character's answer."""
         if trigger.addressed and self._config.character_agent and self._agent_tasks is not None:
             epoch = self._agent_epoch
             context = self._context(trigger.place)
             started = time.monotonic()
             try:
-                task = await self._llm.public_lookup(
+                task = await self._llm.chat_task(
                     turns=context.snapshot(), summary=context.summary,
                     engagement=self._character_policy.mode,
                 )
             except asyncio.CancelledError:
                 raise
             except Exception as exc:  # noqa: BLE001 - the character still answers
-                _LOG.warning("agent_lookup_decision_failed error_type=%s", type(exc).__name__)
+                _LOG.warning("agent_chat_task_decision_failed error_type=%s", type(exc).__name__)
                 task = None
-            _LOG.info("agent_lookup_decision latency_ms=%d lookup=%s",
+            _LOG.info("agent_chat_task_decision latency_ms=%d chat_task=%s",
                       round((time.monotonic() - started) * 1000), task is not None)
             if task is not None:
-                await self._dispatch(trigger, task, epoch)
+                # Whatever the model wrote, work asked in a chat reaches only
+                # what is in that chat and the web (EdgeAgent's "public").
+                await self._dispatch(trigger, AgentTask(task.text, scope="public"), epoch)
                 return
         await self._speak(trigger)
 
@@ -808,7 +818,7 @@ class CopilotRuntime:
                 return
             self._task_result = ""
             self._agent_job = asyncio.create_task(
-                self._run_agent_task(task, workspace, epoch, trigger.place),
+                self._run_agent_task(task, workspace, epoch, trigger.place, trigger.attachments),
                 name="discord-agent-task",
             )
         except asyncio.CancelledError:
@@ -822,16 +832,26 @@ class CopilotRuntime:
                 await self._finish("error", str(exc), trigger, task.scope)
 
     async def _run_agent_task(
-        self, task: AgentTask, workspace: str, epoch: int, place: int
+        self, task: AgentTask, workspace: str, epoch: int, place: int,
+        attachments: tuple[Attachment, ...] = (),
     ) -> None:
         assert self._agent_tasks is not None
         started = time.monotonic()
         async def on_event(kind: str, payload: dict[str, object]) -> None:
             if epoch == self._agent_epoch:
                 await self._agent_event(kind, payload)
+        # The files posted with the line, read into RAM only now that they
+        # are needed; one that cannot be read is left out (the Agent says
+        # what it did not get).
+        files = []
+        for name, read in attachments:
+            try:
+                files.append({"name": name, "data": base64.b64encode(await read()).decode()})
+            except Exception as exc:  # noqa: BLE001 - a lost attachment is not a lost task
+                _LOG.warning("agent_attachment_failed error_type=%s", type(exc).__name__)
         try:
             await self._agent_tasks.run(task.text, workspace, on_event,
-                                        scope=task.scope, conversation=place)
+                                        scope=task.scope, conversation=place, attachments=files)
         finally:
             _LOG.info("agent_task_finished elapsed_ms=%d", round((time.monotonic() - started) * 1000))
 

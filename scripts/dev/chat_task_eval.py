@@ -1,13 +1,14 @@
-"""Measure the public lookup gate: for a line that calls the character, is
-it asking for public information the Agent should look up (the web alone)?
-A miss means the character answers in person; a false alarm sends chat or
-computer work to a web-only lookup, which cannot do the latter.
+"""Measure the chat work gate: for a line that calls the character, does it
+ask for work that stays within the chat (lookups, code written not run,
+articles, posted images or files, translations)? A miss means the character
+answers in person; a false alarm sends chat - or a request to touch the
+computer, which the "public" scope then cannot do - to the Agent.
 
-Runs the product's own questions (LocalReplyModel.public_lookup, the
+Runs the product's own question (LocalReplyModel.chat_task's gate, the
 machine-spirit card) against a model served here with EdgeAgent's own server
-arguments. Data: lookup_eval.jsonl (EVAL ONLY, written with Claude).
+arguments. Data: chat_task_eval.jsonl (EVAL ONLY, written with Claude).
 
-  .venv/bin/python scripts/dev/lookup_eval.py [--model GGUF] [--out FILE]
+  .venv/bin/python scripts/dev/chat_task_eval.py [--model GGUF] [--out FILE]
 """
 
 from __future__ import annotations
@@ -28,13 +29,13 @@ sys.path[:0] = [str(PROJECT_DIR), str(EDGE_AGENT_ROOT)]
 from edge_agent.runtime import build_server_args  # noqa: E402
 
 from silenttalk.copilot import llm  # noqa: E402
-from silenttalk.copilot.persona import Relationship, persona_from_dict  # noqa: E402
+from silenttalk.copilot.persona import persona_from_dict  # noqa: E402
 from silenttalk.copilot.types import ConversationTurn  # noqa: E402
 
 SERVER = PROJECT_DIR / ".runtime/tools/llama.cpp-b11193-src/build-cuda/bin/llama-server"
 MODEL = PROJECT_DIR / ".runtime/models/llm/gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf"
 CARD = PROJECT_DIR / ".runtime/dev/chardata-ms1/personas.jsonl"
-DATA = Path(__file__).with_name("lookup_eval.jsonl")
+DATA = Path(__file__).with_name("chat_task_eval.jsonl")
 PORT = 18413
 OWNER_ID = 1
 
@@ -74,9 +75,9 @@ def main() -> None:
         for item in items:
             turns = [ConversationTurn(7, speaker, item["text"], via="voice")]
             started = time.monotonic()
-            gate = model.gate_messages(turns=turns, question="lookup")
+            gate = model.gate_messages(turns=turns, question="chat_task")
             said = model._request_gate(gate, False) == "是"
-            records.append({"id": item["id"], "lookup": item["lookup"], "said_lookup": said,
+            records.append({"id": item["id"], "task": item["task"], "said_task": said,
                             "ms": round((time.monotonic() - started) * 1000)})
     finally:
         process.terminate()
@@ -84,9 +85,9 @@ def main() -> None:
     summary = {
         "model": args.model.name,
         "items": len(records),
-        "correct": sum(r["said_lookup"] == r["lookup"] for r in records) / len(records),
-        "lookups_missed": [r["id"] for r in records if r["lookup"] and not r["said_lookup"]],
-        "chat_sent_to_lookup": [r["id"] for r in records if not r["lookup"] and r["said_lookup"]],
+        "correct": sum(r["said_task"] == r["task"] for r in records) / len(records),
+        "work_missed": [r["id"] for r in records if r["task"] and not r["said_task"]],
+        "sent_to_agent_wrongly": [r["id"] for r in records if not r["task"] and r["said_task"]],
         "ms_median": sorted(r["ms"] for r in records)[len(records) // 2],
     }
     print(json.dumps(summary, ensure_ascii=False, indent=1))
