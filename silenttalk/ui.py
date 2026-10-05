@@ -110,6 +110,7 @@ class SilentTalkUI:
         copilot_info: Sequence[tuple[str, str]] = (),
         font_override: str | None = None,
         invite_link: Callable[[], str] | None = None,
+        start_shown: bool = False,
     ) -> None:
         self._submit_callback = submit
         self._stop_callback = stop_playback
@@ -240,7 +241,10 @@ class SilentTalkUI:
         if not self._copilot_enabled:
             self._ai_dot.set(theme.DIM, "AI 關閉")
         self.show_page(self._mode if self._mode in CHAT_MODES else "manual", focus=False)
-        self.popup.withdraw()
+        if start_shown:
+            self.show()
+        else:
+            self.popup.withdraw()
 
         self._hotkeys = GlobalHotkeys(
             {

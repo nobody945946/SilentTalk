@@ -162,6 +162,7 @@ def main() -> int:
         ),
         copilot_info=copilot_info,
         invite_link=lambda: controller.invite_link,
+        start_shown=True,
     )
 
     runtime_issues = settings.validate_runtime()
