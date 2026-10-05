@@ -1,4 +1,4 @@
-"""Transcripts go only to the user's records drive (AGENTS.md rule 1)."""
+"""Transcripts go only to the user's selected folder (AGENTS.md rule 1)."""
 
 from __future__ import annotations
 
@@ -21,22 +21,27 @@ from silenttalk.records import (
 )
 
 
-@pytest.fixture(autouse=True)
-def fixture_drive(monkeypatch):
-    # Synthetic conversations only; the acceptance fixture stands in for a mounted drive.
-    monkeypatch.setattr(records, "_system_drive", lambda: "")
-
-
-def test_prepare_rejects_system_disk_even_with_a_marker(tmp_path, monkeypatch):
-    monkeypatch.setattr(
-        records, "_system_drive", lambda: tmp_path.drive.casefold() or "C:"
-    )
-    (tmp_path / MARKER).touch()
-    with pytest.raises(ValueError, match="系統磁碟"):
-        prepare_record_folder(str(tmp_path))
+def test_prepare_accepts_a_local_ssd_folder_and_records(tmp_path):
+    assert prepare_record_folder(str(tmp_path)) == tmp_path.resolve()
     recorder = TranscriptRecorder(enabled=True, folder=str(tmp_path))
-    assert not recorder.write(_turn(1, "fixture", "fixture"))
-    assert not (tmp_path / "silenttalk").exists()
+    assert recorder.write(_turn(1, "fixture", "LOCAL_SSD_FIXTURE"))
+    (tmp_path / MARKER).unlink()
+    assert not recorder.write(_turn(1, "fixture", "PAUSED_FIXTURE"))
+    assert not recorder.ready()
+    prepare_record_folder(str(tmp_path))
+    assert recorder.ready()
+    assert recorder.write(_turn(1, "fixture", "RESUMED_FIXTURE"))
+    assert [line["text"] for line in _lines(tmp_path)] == [
+        "LOCAL_SSD_FIXTURE", "RESUMED_FIXTURE"
+    ]
+
+
+def test_prepare_rejects_a_file(tmp_path):
+    file = tmp_path / "fixture.txt"
+    file.write_text("fixture", encoding="utf-8")
+    with pytest.raises(ValueError, match="紀錄資料夾"):
+        records.prepare_record_folder(str(file))
+    assert not (tmp_path / MARKER).exists()
 
 
 def test_prepare_requires_existing_folder_and_status_follows_mount(tmp_path):

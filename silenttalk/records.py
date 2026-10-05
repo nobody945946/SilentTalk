@@ -1,12 +1,12 @@
-"""Conversation records on the user's encrypted disk (AGENTS.md rule 1).
+"""Conversation records in the user's selected folder (AGENTS.md rule 1).
 
 The user keeps transcripts so the Agent and the character can grow from them
 (「我不希望agent用完就忘」). They are written only:
 
 - under the folder set in settings (copilot.record_folder), and only while that
-  folder holds the marker file the setup step wrote (MARKER): a drive that is
-  unplugged or still locked, or any other disk, gets nothing, and nothing is
-  kept elsewhere to be written later;
+  folder holds the marker file the setup step wrote (MARKER). Local SSD folders
+  are allowed; an unavailable or unprepared folder gets nothing, and nothing
+  is kept elsewhere to be written later;
 - as text (who, when, typed or spoken, what); never audio.
 
 They are the user's own record, not shared: no announcement in the channel
@@ -20,8 +20,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
-import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -29,34 +27,22 @@ from pathlib import Path
 from silenttalk.copilot.types import ConversationTurn
 
 _LOG = logging.getLogger(__name__)
-# Written by the setup step on the encrypted drive; its presence is the
-# signal that this folder is the user's records drive and is unlocked.
+# Written by setup to identify the folder selected for records.
 MARKER = ".agent-records"
 
 
-def _system_drive() -> str:
-    return (
-        os.environ.get("SystemDrive", "C:").casefold()
-        if sys.platform == "win32"
-        else ""
-    )
-
-
 def validate_record_folder(folder: str) -> Path:
-    """Resolve before checking the drive, including junctions and symlinks."""
+    """Require an existing folder, resolving junctions and symlinks."""
     if not isinstance(folder, str) or not folder.strip():
-        raise ValueError("請先選擇加密磁碟上的資料夾")
+        raise ValueError("請先選擇紀錄資料夾")
     path = Path(folder).resolve(strict=True)
     if not path.is_dir():
         raise ValueError("紀錄資料夾不存在")
-    system = _system_drive()
-    if system and (path.drive.casefold() == system or len(path.drive) != 2):
-        raise ValueError("請選擇系統磁碟以外、具有獨立磁碟代號的加密磁碟")
     return path
 
 
 def prepare_record_folder(folder: str) -> Path:
-    """Mark an existing folder selected on the user's unlocked encrypted disk."""
+    """Mark the existing folder selected by the user for records."""
     path = validate_record_folder(folder)
     (path / MARKER).touch(exist_ok=True)
     return path
@@ -71,7 +57,7 @@ def recording_status(enabled: bool, folder: str) -> str:
             return "記錄中"
     except (OSError, ValueError, RuntimeError):
         pass
-    return "暫停：磁碟沒接上、容器沒掛上或沒解鎖；請確認紀錄資料夾已設定"
+    return "暫停：紀錄資料夾無法使用或尚未設定；請確認資料夾與標記檔"
 
 
 @dataclass
@@ -86,7 +72,7 @@ class TranscriptRecorder:
         self.enabled, self.folder = enabled, folder
 
     def ready(self) -> bool:
-        """Recording is on and the records drive is there and unlocked."""
+        """Recording is on and the selected folder is available and prepared."""
         return recording_status(self.enabled, self.folder) == "記錄中"
 
     def write(self, turn: ConversationTurn, character: str = "") -> bool:

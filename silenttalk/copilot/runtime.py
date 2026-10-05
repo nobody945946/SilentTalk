@@ -129,7 +129,7 @@ class CopilotRuntime:
         self._on_suggestions = on_suggestions
         self._on_error = on_error
         self._on_turn = on_turn
-        # Transcripts on the user's encrypted records drive (records.py).
+        # Transcripts in the user's selected records folder (records.py).
         self._recorder = TranscriptRecorder(
             enabled=config.record_transcripts, folder=config.record_folder,
         )

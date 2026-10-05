@@ -298,9 +298,8 @@ def test_silenttalk_ui_invite_link_card(settings_ui, monkeypatch) -> None:
         ui.settings_panel.show("chat")
 
 
-def test_records_settings_prepare_and_show_status(tmp_path, monkeypatch, settings_ui):
+def test_records_settings_prepare_and_show_status(tmp_path, settings_ui):
     from silenttalk import records
-    monkeypatch.setattr(records, "_system_drive", lambda: "")
     root = settings_ui.root
     messages = []
     try:

@@ -138,13 +138,13 @@ PAGES: tuple[Page, ...] = (
     Page("records", "紀錄", (
         Group(
             "對話紀錄",
-            "只寫進你設定的加密磁碟（外接硬碟，或 SSD 上的加密容器）（資料夾裡要有設定時建立的標記檔）；硬碟沒接上或沒解鎖就不記錄，"
+            "只寫進你選擇的紀錄資料夾，原生 SSD 上的一般目錄也可以。資料夾無法使用或尚未設定時就暫停，"
             "也不會改寫到別的地方。只存文字，不存錄音。",
             (
                 Setting("copilot", "record_transcripts", "記錄對話", "bool"),
                 Setting(
                     "copilot", "record_folder", "記錄資料夾", "text",
-                    "加密磁碟（外接硬碟，或 SSD 上的加密容器）上的資料夾，例如 E:\\AgentRecords。",
+                    "已存在的紀錄資料夾，例如 C:\\AgentRecords；選好後按「設為紀錄資料夾」。",
                 ),
             ),
         ),
