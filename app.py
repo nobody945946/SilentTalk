@@ -5,12 +5,6 @@ import asyncio
 import sys
 from pathlib import Path
 
-# Ensure .venv site-packages is in sys.path
-_project_dir = Path(__file__).resolve().parent
-_venv_site = _project_dir / ".venv" / "Lib" / "site-packages"
-if _venv_site.is_dir() and str(_venv_site) not in sys.path:
-    sys.path.insert(0, str(_venv_site))
-
 from silenttalk.config import ConfigError, config_defaults, load_settings
 from silenttalk.controller import AppController
 from silenttalk.copilot.persona import PersonaStore
@@ -56,9 +50,6 @@ def main() -> int:
     args = parser.parse_args()
 
     project_dir = Path(__file__).resolve().parent
-    from silenttalk.windows_desktop import attach_interactive_desktop
-
-    attach_interactive_desktop()
     configure_logging(project_dir)
     try:
         settings = load_settings(project_dir)
@@ -171,7 +162,6 @@ def main() -> int:
         ),
         copilot_info=copilot_info,
         invite_link=lambda: controller.invite_link,
-        start_shown=True,
         start_character_mode=args.character_mode,
     )
 

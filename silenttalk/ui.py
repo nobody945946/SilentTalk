@@ -39,7 +39,6 @@ from silenttalk.widgets import (
     hint_row,
     wrap_to_width,
 )
-from silenttalk.windows_desktop import attach_interactive_desktop
 
 # Three places, like a phone's tab bar: talking, who you are, and settings.
 # Everything else is a layer inside one of them. (key, glyph, label); glyphs
@@ -111,7 +110,6 @@ class SilentTalkUI:
         copilot_info: Sequence[tuple[str, str]] = (),
         font_override: str | None = None,
         invite_link: Callable[[], str] | None = None,
-        start_shown: bool = False,
         start_character_mode: bool = False,
     ) -> None:
         self._submit_callback = submit
@@ -154,7 +152,6 @@ class SilentTalkUI:
         # The chat view to return to from another page, character included.
         self._chat_view = self._chat_mode
 
-        attach_interactive_desktop()
         _enable_crisp_text()
         self.root = tk.Tk()
         self.root.withdraw()
@@ -246,10 +243,7 @@ class SilentTalkUI:
             self._set_character_mode(True)
         else:
             self.show_page(self._mode if self._mode in CHAT_MODES else "manual", focus=False)
-        if start_shown:
-            self.show()
-        else:
-            self.popup.withdraw()
+        self.popup.withdraw()
 
         self._hotkeys = GlobalHotkeys(
             {
@@ -700,7 +694,7 @@ class SilentTalkUI:
     def run(self) -> None:
         try:
             self._hotkeys.start()
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - hotkey thread failures are reported in the UI.
             self.set_status(AppState.ERROR, f"快捷鍵失敗：{exc}")
         self.root.mainloop()
 

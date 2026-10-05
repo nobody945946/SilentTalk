@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import tkinter as tk
 from pathlib import Path
 
@@ -104,6 +105,8 @@ def test_settings_discord_invite_link_displays_and_updates() -> None:
         root = tk.Tk()
         root.withdraw()
     except tk.TclError:
+        if os.name == "nt":
+            raise
         pytest.skip("No graphical display available for Tk")
 
     try:
@@ -164,17 +167,16 @@ def test_silenttalk_ui_invite_link_card() -> None:
         root.withdraw()
         root.destroy()
     except tk.TclError:
+        if os.name == "nt":
+            raise
         pytest.skip("No graphical display available for Tk")
 
     link_state = ""
-    try:
-        ui = SilentTalkUI(
-            "F8", "F9", lambda _: None, lambda: None, lambda: None,
-            config_defaults=config_defaults(Path(".")),
-            invite_link=lambda: link_state,
-        )
-    except tk.TclError:
-        pytest.skip("No graphical display available for Tk")
+    ui = SilentTalkUI(
+        "F8", "F9", lambda _: None, lambda: None, lambda: None,
+        config_defaults=config_defaults(Path(".")),
+        invite_link=lambda: link_state,
+    )
     try:
         ui.settings_panel.show("discord")
         assert ui._invite_card_body is not None
@@ -199,4 +201,37 @@ def test_silenttalk_ui_invite_link_card() -> None:
         assert found, "Entry with invite link not found"
     finally:
         ui.close()
+
+
+def test_records_settings_prepare_and_show_status(tmp_path, monkeypatch):
+    from silenttalk import records
+    monkeypatch.setattr(records, "_system_drive", lambda: "")
+    try:
+        root = tk.Tk()
+    except tk.TclError:
+        if os.name == "nt":
+            raise
+        pytest.skip("No graphical display available for Tk")
+    root.withdraw()
+    messages = []
+    try:
+        panel = SettingsPanel(root, None, config_defaults(Path(".")), on_status=messages.append)
+        panel.set_value("copilot", "record_folder", str(tmp_path))
+        panel.set_value("copilot", "record_transcripts", True)
+        panel._refresh_record_status(schedule=False)
+        assert panel._record_status.get().startswith("暫停")
+        panel._prepare_records()
+        assert (tmp_path / records.MARKER).is_file()
+        assert panel._record_status.get() == "記錄中"
+        (tmp_path / records.MARKER).unlink()
+        panel._refresh_record_status(schedule=False)
+        assert panel._record_status.get().startswith("暫停")
+        panel.set_value("copilot", "record_transcripts", False)
+        panel._refresh_record_status(schedule=False)
+        assert panel._record_status.get() == "關閉"
+        panel.set_value("copilot", "record_folder", str(tmp_path / "missing"))
+        panel._prepare_records()
+        assert messages[-1].startswith("無法設定紀錄資料夾")
+    finally:
+        root.destroy()
 

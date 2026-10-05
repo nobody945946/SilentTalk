@@ -38,9 +38,6 @@ class GlobalHotkeys:
             raise RuntimeError("全域快捷鍵註冊逾時。")
 
     def _run(self) -> None:
-        from silenttalk.windows_desktop import attach_interactive_desktop
-
-        attach_interactive_desktop()
         user32 = ctypes.windll.user32
         kernel32 = ctypes.windll.kernel32
         self._thread_id = kernel32.GetCurrentThreadId()

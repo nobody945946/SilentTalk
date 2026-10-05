@@ -9,10 +9,47 @@ from pathlib import Path
 
 import pytest
 
+from silenttalk import records
 from silenttalk.config import CopilotConfig
 from silenttalk.copilot.runtime import CopilotRuntime
 from silenttalk.copilot.types import ConversationTurn
-from silenttalk.records import MARKER, TranscriptRecorder
+from silenttalk.records import (
+    MARKER,
+    TranscriptRecorder,
+    prepare_record_folder,
+    recording_status,
+)
+
+
+@pytest.fixture(autouse=True)
+def fixture_drive(monkeypatch):
+    # Synthetic conversations only; the acceptance fixture stands in for a mounted drive.
+    monkeypatch.setattr(records, "_system_drive", lambda: "")
+
+
+def test_prepare_rejects_system_disk_even_with_a_marker(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        records, "_system_drive", lambda: tmp_path.drive.casefold() or "C:"
+    )
+    (tmp_path / MARKER).touch()
+    with pytest.raises(ValueError, match="系統磁碟"):
+        prepare_record_folder(str(tmp_path))
+    recorder = TranscriptRecorder(enabled=True, folder=str(tmp_path))
+    assert not recorder.write(_turn(1, "fixture", "fixture"))
+    assert not (tmp_path / "silenttalk").exists()
+
+
+def test_prepare_requires_existing_folder_and_status_follows_mount(tmp_path):
+    missing = tmp_path / "missing"
+    with pytest.raises(OSError):
+        prepare_record_folder(str(missing))
+    assert not missing.exists()
+    assert recording_status(False, str(tmp_path)) == "關閉"
+    assert recording_status(True, str(tmp_path)).startswith("暫停")
+    assert prepare_record_folder(str(tmp_path)) == tmp_path.resolve()
+    assert recording_status(True, str(tmp_path)) == "記錄中"
+    (tmp_path / MARKER).unlink()
+    assert recording_status(True, str(tmp_path)).startswith("暫停")
 
 
 def _turn(speaker_id: int, name: str, text: str, **extra) -> ConversationTurn:
@@ -20,8 +57,11 @@ def _turn(speaker_id: int, name: str, text: str, **extra) -> ConversationTurn:
 
 
 def _lines(folder: Path) -> list[dict]:
-    return [json.loads(line) for path in sorted((folder / "silenttalk").glob("*.jsonl"))
-            for line in path.read_text(encoding="utf-8").splitlines()]
+    return [
+        json.loads(line)
+        for path in sorted((folder / "silenttalk").glob("*.jsonl"))
+        for line in path.read_text(encoding="utf-8").splitlines()
+    ]
 
 
 def test_nothing_is_written_without_the_marker_or_when_off(tmp_path: Path) -> None:
@@ -50,18 +90,31 @@ def test_every_line_is_kept_with_who_when_and_how(tmp_path: Path) -> None:
     assert recorder.write(_turn(1, "阿遠", "遵命", is_self=True), character="馬基納")
     assert recorder.write(_turn(1, "阿遠", "串裡說的", via="text", place=777))
     lines = _lines(tmp_path)
-    assert [(l["speaker"], l["text"], l["via"], l["self"], l["place"]) for l in lines] == [
-        ("阿遠", "機魂 在嗎", "text", False, 0), ("小綠", "我也在", "voice", False, 0),
-        ("馬基納", "遵命", "voice", True, 0), ("阿遠", "串裡說的", "text", False, 777)]
-    assert all(set(l) == {"time", "speaker_id", "speaker", "self", "via", "place", "text"} for l in lines)
+    assert [
+        (l["speaker"], l["text"], l["via"], l["self"], l["place"]) for l in lines
+    ] == [
+        ("阿遠", "機魂 在嗎", "text", False, 0),
+        ("小綠", "我也在", "voice", False, 0),
+        ("馬基納", "遵命", "voice", True, 0),
+        ("阿遠", "串裡說的", "text", False, 777),
+    ]
+    assert all(
+        set(l) == {"time", "speaker_id", "speaker", "self", "via", "place", "text"}
+        for l in lines
+    )
 
 
 @pytest.mark.asyncio
-async def test_the_runtime_records_every_turn_and_settings_apply_live(tmp_path: Path) -> None:
+async def test_the_runtime_records_every_turn_and_settings_apply_live(
+    tmp_path: Path,
+) -> None:
     (tmp_path / MARKER).write_text("")
     runtime = CopilotRuntime(
-        tmp_path, replace(CopilotConfig(), record_transcripts=False), 1,
-        lambda value: None, lambda value: None,
+        tmp_path,
+        replace(CopilotConfig(), record_transcripts=False),
+        1,
+        lambda value: None,
+        lambda value: None,
     )
     runtime._character_mode = True
     runtime._loop = asyncio.get_running_loop()

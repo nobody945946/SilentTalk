@@ -12,6 +12,7 @@ from collections.abc import Callable
 from typing import Any
 
 from silenttalk import theme
+from silenttalk.records import prepare_record_folder, recording_status
 from silenttalk.settings_schema import PAGES, Page, Setting
 from silenttalk.settings_store import SettingsError, SettingsStore
 from silenttalk.widgets import (
@@ -98,6 +99,9 @@ class SettingsPanel(tk.Frame):
         left.configure(width=max(theme.px(150), left.winfo_reqwidth()))
 
         self.reload()
+        self._record_status = tk.StringVar()
+        self.add_custom_group("records", self._build_records_group)
+        self._refresh_record_status()
         self.show(PAGES[0].key)
 
     # ---- public ----------------------------------------------------------------
@@ -156,6 +160,31 @@ class SettingsPanel(tk.Frame):
         self._changed(setting, value)
 
     # ---- building --------------------------------------------------------------
+
+    def _build_records_group(self, parent: tk.Frame) -> None:
+        box = card(parent)
+        box.outer.pack(fill="x", pady=(0, theme.px(12)))
+        Chip(box, "設為紀錄資料夾", self._prepare_records).pack(anchor="w")
+        label = tk.Label(box, textvariable=self._record_status, bg=theme.PANEL,
+                         fg=theme.TEXT, font=theme.font(10), anchor="w", justify="left")
+        wrap_to_width(label).pack(fill="x", pady=theme.px(8))
+
+    def _prepare_records(self) -> None:
+        try:
+            prepare_record_folder(str(self.value("copilot", "record_folder") or ""))
+        except (OSError, ValueError, RuntimeError) as exc:
+            self._on_status(f"無法設定紀錄資料夾：{exc}")
+            return
+        self._on_status("已設為紀錄資料夾")
+        self._refresh_record_status(schedule=False)
+
+    def _refresh_record_status(self, *, schedule: bool = True) -> None:
+        self._record_status.set(recording_status(
+            bool(self.value("copilot", "record_transcripts")),
+            str(self.value("copilot", "record_folder") or ""),
+        ))
+        if schedule:
+            self.after(1000, self._refresh_record_status)
 
     def _build_page(self, page: Page) -> tk.Frame:
         body = tk.Frame(self._scroll.body, bg=theme.BG)
@@ -223,7 +252,7 @@ class SettingsPanel(tk.Frame):
         tk.Frame(row, bg=theme.LINE, height=1).pack(fill="x", pady=(theme.px(10), 0))
 
     def _build_editor(self, row: tk.Frame, setting: Setting) -> Any:
-        change = lambda value, s=setting: self._changed(s, value)  # noqa: E731
+        change = lambda value, s=setting: self._changed(s, value)
         if setting.kind == "bool":
             return Toggle(row, change)
         if setting.kind == "choice":

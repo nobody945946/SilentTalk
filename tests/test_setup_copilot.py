@@ -212,3 +212,30 @@ if (Test-DeploymentReady '{tmp_path}' 'agent') {{ throw 'Missing component accep
         timeout=30,
     )
     assert result.returncode == 0, result.stderr.decode(errors="replace")
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows process selection")
+def test_restart_selects_only_the_exact_script_argument():
+    restart = Path(__file__).parents[1] / "scripts/restart_silenttalk.ps1"
+    script = rf"""
+$errors = $null
+$ast = [Management.Automation.Language.Parser]::ParseFile('{restart}', [ref]$null, [ref]$errors)
+if ($errors.Count -gt 0) {{ throw 'Invalid restart script' }}
+$owner = $ast.Find({{ param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Test-SilentTalkProcess' }}, $true)
+. ([scriptblock]::Create($owner.Extent.Text))
+$appPath = 'C:\fixture space\app.py'
+$process = [pscustomobject]@{{ Name='pythonw.exe'; ExecutablePath='C:\Python\pythonw.exe'; CommandLine='"C:\Python\pythonw.exe" "C:\fixture space\app.py" --character-mode' }}
+if (-not (Test-SilentTalkProcess $process)) {{ throw 'Exact script was not selected' }}
+$process.CommandLine = '"C:\Python\pythonw.exe" "C:\other\app.py" "C:\fixture space\app.py" --character-mode'
+if (Test-SilentTalkProcess $process) {{ throw 'Unrelated script argument was selected' }}
+$process.CommandLine = '"C:\Python\pythonw.exe" "C:\fixture space\app.py.other" --character-mode'
+if (Test-SilentTalkProcess $process) {{ throw 'Prefix match was selected' }}
+$process.CommandLine = '"C:\Python\pythonw.exe" "C:\fixture space\app.py"'
+$process.Name = 'other.exe'
+if (Test-SilentTalkProcess $process) {{ throw 'Unrelated executable was selected' }}
+"""
+    result = subprocess.run(
+        ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
+        capture_output=True, check=False, timeout=30,
+    )
+    assert result.returncode == 0, result.stderr.decode(errors="replace")

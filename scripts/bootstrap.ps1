@@ -216,8 +216,10 @@ try {
         $credentialsReady = $LASTEXITCODE -eq 0
     } catch { }
     if (-not $credentialsReady) {
-        Invoke-Checked (Join-Path $ProjectDir '.venv\Scripts\python.exe') @('-m', 'silenttalk.credentials')
+        & (Join-Path $ProjectDir '.venv\Scripts\python.exe') -m silenttalk.credentials
+        if ($LASTEXITCODE -ne 0) { throw 'SilentTalk credentials were not configured.' }
     }
-    Invoke-Checked (Join-Path $ProjectDir '.venv\Scripts\python.exe') @('-c', 'from pathlib import Path; from silenttalk.config import load_settings; load_settings(Path.cwd())')
+    & (Join-Path $ProjectDir '.venv\Scripts\python.exe') -c 'from pathlib import Path; from silenttalk.config import load_settings; load_settings(Path.cwd())'
+    if ($LASTEXITCODE -ne 0) { throw 'SilentTalk configuration is invalid.' }
 } finally { Pop-Location }
 & (Join-Path $ProjectDir 'scripts\restart_silenttalk.ps1') -ProjectDir $ProjectDir -Pythonw (Join-Path $ProjectDir '.venv\Scripts\pythonw.exe')

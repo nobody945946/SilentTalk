@@ -1,4 +1,4 @@
-"""Conversation records on the user's encrypted external drive (AGENTS.md rule 1).
+"""Conversation records on the user's encrypted disk (AGENTS.md rule 1).
 
 The user keeps transcripts so the Agent and the character can grow from them
 (「我不希望agent用完就忘」). They are written only:
@@ -20,6 +20,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -30,6 +32,46 @@ _LOG = logging.getLogger(__name__)
 # Written by the setup step on the encrypted drive; its presence is the
 # signal that this folder is the user's records drive and is unlocked.
 MARKER = ".agent-records"
+
+
+def _system_drive() -> str:
+    return (
+        os.environ.get("SystemDrive", "C:").casefold()
+        if sys.platform == "win32"
+        else ""
+    )
+
+
+def validate_record_folder(folder: str) -> Path:
+    """Resolve before checking the drive, including junctions and symlinks."""
+    if not isinstance(folder, str) or not folder.strip():
+        raise ValueError("請先選擇加密磁碟上的資料夾")
+    path = Path(folder).resolve(strict=True)
+    if not path.is_dir():
+        raise ValueError("紀錄資料夾不存在")
+    system = _system_drive()
+    if system and (path.drive.casefold() == system or len(path.drive) != 2):
+        raise ValueError("請選擇系統磁碟以外、具有獨立磁碟代號的加密磁碟")
+    return path
+
+
+def prepare_record_folder(folder: str) -> Path:
+    """Mark an existing folder selected on the user's unlocked encrypted disk."""
+    path = validate_record_folder(folder)
+    (path / MARKER).touch(exist_ok=True)
+    return path
+
+
+def recording_status(enabled: bool, folder: str) -> str:
+    if not enabled:
+        return "關閉"
+    try:
+        path = validate_record_folder(folder)
+        if (path / MARKER).is_file():
+            return "記錄中"
+    except (OSError, ValueError, RuntimeError):
+        pass
+    return "暫停：磁碟沒接上、容器沒掛上或沒解鎖；請確認紀錄資料夾已設定"
 
 
 @dataclass
@@ -45,7 +87,7 @@ class TranscriptRecorder:
 
     def ready(self) -> bool:
         """Recording is on and the records drive is there and unlocked."""
-        return self.enabled and bool(self.folder) and (Path(self.folder) / MARKER).is_file()
+        return recording_status(self.enabled, self.folder) == "記錄中"
 
     def write(self, turn: ConversationTurn, character: str = "") -> bool:
         """Append one line; False when it was not written (off, drive
@@ -68,11 +110,11 @@ class TranscriptRecorder:
             "text": turn.text,
         }
         try:
-            path = Path(self.folder) / "silenttalk" / f"{day}.jsonl"
+            path = validate_record_folder(self.folder) / "silenttalk" / f"{day}.jsonl"
             path.parent.mkdir(exist_ok=True)
             with path.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(record, ensure_ascii=False) + "\n")
-        except OSError as exc:
+        except (OSError, ValueError, RuntimeError) as exc:
             self._note(f"failed {type(exc).__name__}")
             return False
         self._note("on")

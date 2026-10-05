@@ -20,7 +20,7 @@ if (-not (Test-Path -LiteralPath $appPath)) {
     throw "app.py not found: $appPath"
 }
 
-function Test-LegacySilentTalkProcess {
+function Test-SilentTalkProcess {
     param([object]$Process)
 
     if ($Process.Name -ine "pythonw.exe") {
@@ -32,48 +32,11 @@ function Test-LegacySilentTalkProcess {
     if ([string]::IsNullOrWhiteSpace([string]$Process.CommandLine)) {
         return $false
     }
-    if ($Process.CommandLine -notmatch '(?i)(^|[\s"])app\.py([\s"]|$)') {
-        return $false
-    }
-
-    try {
-        $exePath = [IO.Path]::GetFullPath([string]$Process.ExecutablePath)
-        $scriptsDir = Split-Path $exePath -Parent
-        if ((Split-Path $scriptsDir -Leaf) -ine "Scripts") {
-            return $false
-        }
-
-        $venvDir = Split-Path $scriptsDir -Parent
-        if ((Split-Path $venvDir -Leaf) -ine ".venv") {
-            return $false
-        }
-
-        $rootDir = Split-Path $venvDir -Parent
-        return (
-            (Test-Path -LiteralPath (Join-Path $rootDir "app.py")) -and
-            (Test-Path -LiteralPath (Join-Path $rootDir "config.toml")) -and
-            (Test-Path -LiteralPath (Join-Path $rootDir "silenttalk\__init__.py"))
-        )
-    }
-    catch {
-        return $false
-    }
-}
-
-function Test-SilentTalkProcess {
-    param([object]$Process)
-
-    if ($Process.Name -ine "pythonw.exe") {
-        return $false
-    }
-
     $commandLine = [string]$Process.CommandLine
-    if (-not [string]::IsNullOrWhiteSpace($commandLine) -and $commandLine.Contains("--silenttalk-desktop")) {
-        return $true
-    }
-
-    # Migration path for releases before the explicit desktop marker existed.
-    return Test-LegacySilentTalkProcess $Process
+    # Match the script argument immediately after the executable; a mention in
+    # another application's arguments must not make that process a target.
+    $absoluteApp = '(?i)^\s*(?:"[^"]+"|\S+)\s+"?' + [regex]::Escape($appPath) + '"?(?:\s|$)'
+    return $commandLine -match $absoluteApp
 }
 
 $mutex = New-Object System.Threading.Mutex($false, "Local\SilentTalk.Restart")
@@ -136,29 +99,12 @@ try {
         }
     }
 
-    $launcherScript = Join-Path $projectDirPath 'scripts\launch_desktop.py'
-    $pythonExe = Join-Path $projectDirPath '.venv\Scripts\python.exe'
-    $launchedPid = $null
-    if ((Test-Path -LiteralPath $launcherScript) -and (Test-Path -LiteralPath $pythonExe)) {
-        try {
-            $launchOutput = & $pythonExe $launcherScript
-            Write-Host $launchOutput
-            if ($launchOutput -match 'PID:\s*(\d+)') {
-                $launchedPid = [int]$matches[1]
-            }
-        } catch {
-            Write-Warning "Direct desktop launch failed; falling back to Start-Process."
-        }
+    $newProcess = Start-Process -FilePath $pythonwPath -ArgumentList @(('"' + $appPath + '"'), "--character-mode") -WorkingDirectory $projectDirPath -WindowStyle Hidden -PassThru
+    Start-Sleep -Seconds 2
+    if ($newProcess.HasExited) {
+        throw "SilentTalk exited immediately after launch (exit code $($newProcess.ExitCode))."
     }
-    if ($null -eq $launchedPid) {
-        $newProcess = Start-Process -FilePath $pythonwPath -ArgumentList @("app.py", "--silenttalk-desktop") -WorkingDirectory $projectDirPath -PassThru
-        Start-Sleep -Milliseconds 250
-        if ($newProcess.HasExited) {
-            throw "SilentTalk exited immediately after launch (exit code $($newProcess.ExitCode))."
-        }
-        $launchedPid = $newProcess.Id
-        Write-Host "SilentTalk started. PID: $launchedPid"
-    }
+    Write-Host "SilentTalk started. PID: $($newProcess.Id)"
 }
 finally {
     if ($hasMutex) {
