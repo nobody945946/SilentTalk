@@ -810,3 +810,171 @@ Automatically approve verified routine PowerShell reads
   4. 正式服務重載並正常 launcher 啟動 exit 0；SilentTalk parent PID 14852、child 23056；EdgeAgent mode=character、ready=true、E4B、LoRA 空、agent_slot 1、error 空。新的 isolated test listeners 全清。正常 app 保留，F8 之前已由使用者確認。
   5. 新摘要出現 agent_lease_return_failed 1；目前租用已 ready，錯誤事件未重現，未讀原對話 log 內容推測原因。後續若退出／重啟仍可重現，在 Windows lease client owner 修，不能以 log 沒有新錯誤宣稱此事件已解決。
   6. D2-D14 仍需真人確認；D5 不再以只有 thread 事件當完成。不要因新 routine 模式就省略真正刪除的拒絕／准許／逾時測試。A4 的容量決定仍未收到，不動 16384。E2 需要使用者自行在 VeraCrypt 設密碼；原 native computer-use pipe 不可用，不改用禁止的 UI Automation 或經 CLI 取得密碼。暫存清理已被 automatic approval review 拒絕，原因只有 blocked by policy，沒有更細資訊；不重新包裝或繞過，F1 尚未完成。
+
+
+## 第 4 回合 2026-10-05（Codex，模型名稱和推理等級看不到；追加 5／6，UI 修正與架構交接檢查點）
+
+- **時間與額度消耗統計**：
+  - 開始時間：精確值看不到；本回合第一筆可見時鐘 2026-10-05 14:32:46+08:00，不冒稱開始時間。
+  - 結束時間：本檢查點 2026-10-05T19:08:21+08:00；整回合未完成。
+  - 總耗時、執行步驟數、Input／Output／Cache read Token、開始／結束額度：客戶端看不到，不估。
+  - 終止原因：來源修正、回歸與本次架構交接完成；正式服務重載及其他 agent 意見尚待接續。不是全部驗收完成。
+
+- **目標完成度統計（分母 37）**：
+  - 完成 15、未完成 4、沒測 18，15/37 = **40.5%**。下列沿用已有證據，只有 B2 更新至本輪最終完整測試；未把舊證據偽裝成今天再次實跑。
+  - A1 完成｜正常 .cmd 啟動 exit 0；移除產品內桌面轉接、硬編碼 launcher、sys.path 補償及 start_shown；使用者按 F8 確認「有出現」。
+  - A2 完成｜重啟腳本實際關閉 PID 8228、20372，啟動 PID 12864，exit 0；統一 --character-mode，只選取本專案的實際 script argument。
+  - A3 完成｜被測的桌面轉接及其測試一併刪除；Windows Tk 初始化失敗會失敗而不跳過；Windows launcher 測試有非 Windows skipif。Windows 最終完整測試 exit 0；Linux 沒實跑。
+  - A4 未完成｜本機 config.json context_size 實際為 16384，已詢問保留 16K 或恢復 128K，未收到決定，沒有改寫。
+  - B1 完成｜兩 repo git pull --ff-only exit 0；EdgeAgent CUDA bootstrap -SetupOnly exit 0；正常 SilentTalk launcher 的部署檢查、真語音模型、角色 lease／restore 也 exit 0。
+  - B2 完成｜最新完整 pytest（含 opt-in 真 Edge）229 passed、2 skipped、0 failed、0 error，197.98 s，exit 0；既有 unicorn.mem_map Windows access violation 診斷仍出現，未隱藏或移除測試。
+  - B3 完成｜SilentTalk 最終完整 pytest 293 passed、1 skipped、0 failed、0 error，20.01 s，exit 0。
+  - C1 完成｜records.py 建立標記、解析 junction／symlink 後檢查所在磁碟；不存在、系統磁碟、UNC 均擋下。設定頁只呼叫 owner。
+  - C2 完成｜EdgeAgent records.py 同上；/records/prepare 呼叫同一 owner，真 Edge 的系統磁碟註冊返回預期 HTTP 400。
+  - C3 完成｜SilentTalk 紀錄頁加「設為紀錄資料夾」和每秒更新狀態；GUI 測試涵蓋記錄中、暫停、關閉與失敗提示。
+  - C4 完成｜EdgeAgent 更多操作加紀錄視窗：開關、資料夾、註冊、儲存、動態狀態。真 Edge 驗證註冊拒絕、儲存、暫停、設定復原及窄視窗；8/8 視窗尺寸通過。
+  - C5 完成｜兩 app 介面／README 改為加密磁碟（外接硬碟，或 SSD 上的加密容器）；說明標記不會替資料夾加密。
+  - C6 完成｜兩 app 測試涵蓋系統磁碟即使有標記也不寫、建立標記才寫、移除標記暫停、不存在時不回寫；正向測試使用合成資料及模擬已掛載磁碟，不冒稱真容器實測。
+  - D1 完成｜官方 Discord REST 核對 Message Content Intent 和測試頻道權限；表情、建 public thread、在 thread 發言、讀取歷史、語音連接與發言均允許；角色派工由使用者開啟。
+  - D2 沒測｜有工作結果與事件，但未確認發令位於指定語音頻道聊天室；不能以 thread 測試代替。
+  - D3 沒測｜真人工作樣本沒有角色發聲證據，說出口的句子 0。
+  - D4 沒測｜有 1 次私訊送達，但同場語音頻道來源尚未確認。
+  - D5 未完成｜thread_opened 1、accepted 1、done 1、failed 0；尚無「一般文字頻道 @ bot」這個入口的確認。上一檢查點只憑 thread 事件標完成，這次收回該完成宣稱。
+  - D6 沒測｜最新使用者要求工作結果留在來源 thread 並能接續；原本不留完成訊息的標準已失效，追加 3 交接開發機。
+  - D7 沒測｜尚未驗證既有 thread 不 @ 的接續，也沒有歷史恢復的實作。
+  - D8 沒測｜尚無原頻道不洗版的真人確認。
+  - D9 沒測｜尚未實際發送 .tmp 刪除要求；批准設定未被改為自動准許。
+  - D10 沒測｜尚未進行私訊拒絕測試。
+  - D11 沒測｜尚未進行私訊准許測試。
+  - D12 沒測｜尚未進行約 5 分鐘不按測試。
+  - D13 沒測｜尚未安排真人說話測試；上一回合使用者不方便說話。
+  - D14 沒測｜尚無第二個帳號可供測試；沒有用 webhook 或 bot 代替。
+  - D15 完成｜實際工作樣本的數量、派工／任務／批准延遲、私訊送達及整張摘要表已列；本次重跑摘要 exit 0。
+  - E1 完成｜Windows 11 Home；使用者選 10 GB；VeraCrypt 1.26.29 由 winget 安裝 exit 0，exe Authenticode Valid，IDRIX 簽章。SSD 剩餘空間 277735022592 bytes（14:45 量測）。
+  - E2 未完成｜工具已安裝、目標 10 GB；實際容器仍 0，使用者自行設定密碼與保管金鑰的階段尚未完成；沒有自動解鎖。
+  - E3 沒測｜容器尚未建立，尚未教學或取得使用者會操作的確認。
+  - E4 沒測｜真容器未掛載，未修改兩 app 的使用者紀錄設定。
+  - E5 沒測｜真容器未掛載，沒有真人對話寫入檔案的證據。
+  - E6 沒測｜真容器未建立，尚未測鎖定／卸載及 SSD 新檔數。
+  - E7 沒測｜真容器未建立；程式／GUI 的暫停測試不算真容器實測。
+  - E8 沒測｜真容器未建立，尚未測重新掛載。
+  - F1 未完成｜使用者工作區保留（.tmp 2、.txt 2、.py 1），未讀新檔；正式 SilentTalk 保留供實測。這次 isolated runner 清理 listeners []；先前自建暫存清理仍遭 automatic approval policy 拒絕，沒有繞過。
+  - 追加 1：VS Code Python 符號下拉｜完成；使用者確認。
+  - 追加 2：租用期間自動共用角色基底／LoRA，歸還恢復 Agent 選擇｜完成；先前實機證據沿用。
+  - 追加 3：結果留來源 thread，清空 session 後由同串歷史接續｜未完成；開發機 task／history owner 待做。
+  - 追加 4：日常指令不逐次批准｜完成；既有 routine profile 保留。
+  - 追加 5：實機盤點 Agent UI 並補齊對話 TXT 匯出｜未完成；來源 d793c2c 已驗證及推送，新版 UI 16/16 隔離實機通過；正式程序仍載入舊來源，重載後須做實機覆核，不宣稱使用者已能在原頁面匯出。
+  - 追加 6：E4B 改為封裝工具為主的架構取捨，交接徵求每位 agent 意見｜未完成；Codex 意見及跨機責任／評估／接手表態要求已寫好；尚未取得其他 agent 意見及使用者最終架構決定。
+  - 含追加完成 18/43 = **41.9%**。追加 5／6 分母增加；來源工作完成不冒稱已部署或共識完成。
+
+- **測試執行結果記錄（這個檢查點每次，前次紀錄保留在上文）**：
+  - EdgeAgent｜正式舊服務 audit-live｜22 passed／23 checks、1 failed｜exit 1；缺少 export-chat，無非預期瀏覽器錯誤。
+  - EdgeAgent｜首次 opt-in 匯出 pytest｜passed 0、failed 1、skipped 0、error 0｜35.33 s｜exit 1；測試 core 漏設 agent_slot，請求被租用狀態擋下；修正 fixture。
+  - EdgeAgent｜修正 fixture 後單項匯出 pytest｜passed 1、failed 0、skipped 0、error 0｜7.70 s｜exit 0；當時 12/12 Edge assertions、3 TXT、2 chat 請求。
+  - EdgeAgent｜擴充前完整 pytest｜passed 229、failed 0、skipped 2、error 0｜196.74 s｜exit 0。
+  - EdgeAgent｜擴充匯出／工作樹／隊列／shutdown 與租用拒絕安全兩項 pytest｜passed 2、failed 0、skipped 0、error 0｜18.41 s｜exit 0；16/16 真 Edge assertions、3 TXT、3 chat 請求。
+  - EdgeAgent｜擴充後第一次完整 pytest｜passed 228、failed 1、skipped 2、error 0｜190.07 s｜exit 1；CDP 在初次目錄載入改變版面時點錯資料夾，calls 0。等資料夾初次載入完成並驗證指定 path，修正同類 runner 等待。
+  - EdgeAgent｜最終完整 pytest（EDGE_AGENT_UI_REGRESSION=1）｜passed 229、failed 0、skipped 2、error 0｜197.98 s｜exit 0。
+  - EdgeAgent｜Ruff check edge_agent tests、Node --check tests/browser_check.mjs、git diff --check｜exit 0。360×640 匯出選單 screenshot 已實際查看。
+  - 假模型 HTTP fixture 在取消／斷線時印過 ConnectionResetError WinError 10054；相應測試 exit 0，瀏覽器 unexpected errors 0。完整 pytest 仍有既有 unicorn.mem_map Windows access violation 診斷，但測試完成；不可當成已修好這些診斷。
+  - SilentTalk｜本次無程式修改，未重跑完整測試；上次 293 passed、1 skipped、20.01 s、exit 0 沿用。log_summary.py 本次 exit 0。
+
+- **修改程式檔案與 Commit 雜湊（git log --stat 原文）**：
+
+```text
+d793c2cd12173e69b2ecaf3e50fb20bc6132f6b5
+Export chat TXT and repair UI error and shutdown handling
+
+ README.md                  |   6 +-
+ edge_agent/chat.py         |   1 +
+ edge_agent/service.py      |   1 -
+ edge_agent/web.py          |  29 +++++++--
+ tests/browser_check.mjs    | 146 +++++++++++++++++++++++++++++++++++++++------
+ tests/test_agent_chat.py   |  97 +++++++++++++++++++++++++++++-
+ tests/test_core_service.py |   3 +
+ 7 files changed, 258 insertions(+), 25 deletions(-)
+```
+
+  - EdgeAgent copilot-story-mode normal push exit 0，source worktree clean。SilentTalk source 5ed0118180243b923576df000edb7110f235596a 未改。
+  - 為什麼：在 UI／RPC／shutdown 原有 owner 表達手動匯出、真錯誤狀態、部分結果保留、關閉後停止輪詢及拒絕關閉不取消工作的行為；沿用既有 CDP runner，未新增第二歷史／工具執行路徑。
+
+- **UI 實機盤點與修正範圍**：
+  - 使用 edge-cdp-cli-control 的既有 tests/windows_check.py／tests/browser_check.mjs，在專用 Edge profile 中以真滑鼠／鍵盤操作。正式舊服務第一次 audit-live：22/23，exit 1；唯一失敗為不存在匯出 TXT 入口。其餘是實際操作、後端結果、檔案／狀態確認，並非只檢查按鈕是否存在。原始逐項結果在 EdgeAgent 的 .test-tmp/edge-agent-live-ui-audit.json 與 .md（只合成測試和狀態）。
+  - 正式服務已確認：模型／租用狀態、重掃、租用切換限制、Hub 清單查詢、權限原值保存、自動紀錄狀態、專案選擇、非 Git 限制、真正終端執行／狀態／停止／清除、附件加入移除、媒體能力閘門、三種模式、新對話／切回恢復草稿和 workspace、真 E4B read 結果、工具展開、空審閱、一般設定保存、窄視窗入口、非預期瀏覽器錯誤 0。這不支持「大多數空殼」的全面結論，也不代表每個按鈕分支都測完。
+  - 修正於既有 owner：web.py 加「更多操作 → 匯出對話 TXT」，只從選中對話的頁面 RAM 產生 UTF-8 BOM TXT；已收到文字、工具參數／結果／失敗、原始 Markdown 與換行保留，草稿和附件原檔排除；不呼叫模型、不另造伺服器歷史。download 發送和磁碟真正存好分開描述，位置由 Edge 的下載設定／另存決定。
+  - 工具結束 isError 原先在 chat.py RPC 邊界被丟棄，現在傳給 UI，失敗卡呈現「失敗」。後端失敗不再覆蓋已收到的部分回答，另列錯誤並保持佇列暫停。
+  - service.py 在檢查有效角色 lease 前先 cancel_all，會使「拒絕關閉」也取消工作；移除該前置取消，准許關閉後由既有 chat.close 執行。關閉成功後 web.py 停止模型／紀錄輪詢，避免服務已關卻持續請求。
+  - 新版隔離實機 regression 使用真 Edge、正式 HTTP Handler、真 pinned Pi SDK、真 Git／工具／檔案；模型回應和 readiness 為可控合成 fixture。16/16：空對話提示且無下載；實際工作樹；原生工具失敗狀態；單次批准寫檔及審閱與真檔一致；實際 UTF-8 TXT 下載；文字／參數／結果／失敗俱全；繁體與原始 Markdown／換行；排除未送出草稿；部分回答保留；對話隔離；失敗暫停及明確恢復後真正執行佇列；切回正確對話；匯出不叫模型；瀏覽器錯誤 0；360×640 可達；實際 shutdown 且不再輪詢。共下載 3 TXT、實際 chat 請求 3。
+  - 完整測試曾暴露 CDP 在初次資料夾列表載入改變版面時點到其他資料夾，模型請求 0、未碰其中檔案；根因為 runner 未等初次載入，而產品本身已有 aria-busy／disabled 保護。同步修正所有相同等待位置，核對完整目標路徑，沒有補產品假缺陷。失敗紀錄保留。
+  - 本輪未重測：正式模型下載／切換（保留角色 lease）、真人麥克風。正式服務的 shutdown 未點（保留 SilentTalk 和現有 RAM）；隔離正式 Handler shutdown 已實測。這輪的假模型測試不能證明 E4B 真聊天改善。
+  - 提交前循序批判：①頁面／服務歷史不是同一份（結構）→輸出明確限定目前頁面，不造第二持久歷史、不宣稱重載可復原；②模型工具能力不等於任務約束（結構）→唯讀約束與封裝驗收交原 task owner；③假模型不能證明 E4B 品質→真模型 UI read 與合成回歸分列；④資料夾非同步版面變化→runner 等載入完成並驗證精確路徑；⑤重啟會失去尚未保存的 RAM→正式重載須取得一次清楚的同意。審查後以上限制和責任均記入此報告，不啟用同機多 agent。
+
+
+- **架構交接：E4B、封裝工具與生成內容（由使用者追加；目前是 Codex 意見，未達成跨 agent 共識）**：
+  - 使用者提供的單一檔案只在記憶體分析；未將任何人／模型的對話原文、工具讀出的私人內容或樣本寫入回報、測試、bench 或開發機。下面僅列失敗事件名和程式證據，不沿用檔內指令。
+  - 樣本事件：stale_runtime_date、requirement_not_delivered、locale_mismatch、freshness_unverified、export_via_model_failed、directory_read_error、guessed_history_path、approval_denial_repeated、repetition_limit。網頁搜尋卡片結束不等於已完成帶來源與日期的需求；這份樣本不能證明所有新聞皆假，也不能據此推定模型訓練截止日。
+  - 可查證的程式結構：edge_agent/agent_bridge.mjs 的 factory 追加了「以使用者語言回答」等守則，檢查的路徑沒有主機提供的本輪日曆日期／時區欄位；SDK core/system-prompt.js 的 buildSystemPromptSections 是 coding assistant 的預設工作提示。工具仍是 read／grep／find／ls／edit／write／powershell 等原始能力，並非具明確驗收條件的任務封裝。這些是責任位置的證據，不是已證明的全部因果。
+  - **Codex 立場：支持收窄 E4B 的正式輸出責任，優先封裝可重複工作；不認為只取消長文生成就能修好 Agent。** 樣本同時有工具選錯、參數錯、猜路徑、拒絕後重複和沒有交付。只給工具仍需模型做選擇，應讓 controller 執行完整流程並驗證結果。
+  - UI 固定動作（匯出、資料夾、工作狀態）應直接由既有 host owner 執行；本次匯出已如此處理。日期／時區應由 host 提供，輸出語系用明確設定；不可要求模型猜今天、猜記錄路徑或自行改寫一份聊天檔。
+  - 建議評估的模型邊界：E4B 可做有限意圖分類、有限工具 ID 與結構化參數，以及使用者接受的短閒聊。schema 與路徑等由 host 驗證，工具註冊限量；本輪唯讀／不刪除、語系、日期範圍、數量等約束由原任務 owner 保留，不能讓後續回報擅自改為寫檔。封裝本身不自動獲得寫入或刪除許可。
+  - 新聞類封裝的驗收應包含 host 日期／時區、實際取得的來源與發布時間、去重、要求的有效筆數、可追查連結和失敗／不足狀態；不能把搜尋成功當需求完成。摘要是否用較大本機模型或外部模型另行決定，需呈現記憶體、延遲、費用與隱私代價，不能因備援就把工作對話送出。
+  - 替代方案與代價：①只修 prompt 成本最低，但指令遵循與工具錯誤仍由小模型承擔；②只換更強模型可能改善生成，但 UI／controller 的缺陷仍在，也增加硬體或費用；③封裝工作可靠邊界最明確，代價是維護、支援範圍較窄且仍需處理意圖歧義；④封裝＋模型備援較有彈性，代價是路由、失敗恢復、隱私與成本管理更複雜。建議先選少量高頻工作驗證，再決定全面取捨。
+  - 開發機在 bench／工具與角色既有 owner 用**合成資料**評估：合法工具與參數率、完成條件達成率、唯讀不寫入率、拒絕／逾時不重放率、來源可追查與日期範圍正確率、失敗停止／恢復、延遲與 token。與現況及 prompt 修正版本比較；本次假模型 Edge 測試只證明 host／UI 行為，不能充當 E4B 品質改善結果。
+  - **每位接手 agent 都必須留下自己的意見**：先依機器入口更新並讀同一份回報，獨立寫明支持／反對／有條件支持，責任 owner 與證據，至少一個替代方案及代價，驗收標準，以及什麼結果會使自己改變意見。開發機依 AGENTS 寫自己的工作檔，筆電依既有 reports/laptop.md；只開一個 agent，不為蒐集意見同機並行。不得把 Codex 意見複製成自己的意見或聲稱其他 agent 已同意。下一輪再整合分歧交使用者作架構決定。
+  - 沒有改 model／LoRA／bridge 提示／bench／角色與工具政策，也沒有先切成 tool-only。使用者目前是在考慮取捨，尚未批准全面改架構。既有「推演儀式」按「那就留著吧」保留；README 說明用途與它並非自動唯讀，不再要求使用者現在替它命名。
+
+- **Discord 實測數字表（本次 log_summary.py 原文，無對話內容）**：
+
+| 項目 | 數字 |
+|---|---|
+| GPU（llama.cpp 看到的） | — |
+| 連上 Discord（ready／resumed） | 6／0 |
+| 語音接收 | 沒有啟動 |
+| 收音（每 30 秒記一次） | 5 次；沒有收到任何語音封包；大小不對 0、沒 DAVE session 丟掉 0、解碼錯誤 0、有 padding 0、DAVE 解不開丟掉 0、SSRC 未對應丟掉 0、DAVE 復原 0；最後一次 DAVE：v1 |
+| STT 斷出的句子 | 0 |
+| STT 片段音量／頻譜平坦度（人聲 < 0.3，雜訊約 0.56） | 中位數 — dBFS／—；像雜訊（> 0.4）0/0 段 |
+| 真人辨識測試（--stt-check） | 沒有跑 |
+| STT 聲音片段長度（SenseVoice） | — |
+| STT 辨識一段花的時間 | — |
+| STT 聽到聲音但沒辨識出字（SenseVoice） | 0 |
+| 打字訊息 | 1 |
+| 角色判斷次數 | 0（開口 0、沒開口 0） |
+| 聽到 → 角色的話備好（開口時） | — |
+| 聽到 → 決定不開口 | — |
+| 模型本身（開口時） | — |
+| 因為還在說話而丟掉的句子 | 0 |
+| 說出口的句子 | 0（串流 0） |
+| TTS 到第一段聲音（串流） | — |
+| Agent 派工判斷 | 1（派工 1、不派工 0） |
+| Agent 派工判斷延遲 | 中位數 3688 ms、p90 3688 ms（n=1） |
+| Agent 任務執行時間 | 中位數 150953 ms、p90 150953 ms（n=1） |
+| Agent 批准 | 2（准許 2、拒絕 0） |
+| Agent 批准往返延遲 | 中位數 66968 ms、p90 121781 ms（n=2） |
+| Agent 私訊結果 | 1（送達 1、未送達 0） |
+| 討論串建立 | 1 |
+| 訊息表情標記（⚙️／✅／❌） | 2（accepted 1、done 1、failed 0） |
+
+警告／錯誤（只列事件名稱和次數）：
+- ERROR discord.client（aiohttp.client_exceptions.ClientConnectorDNSError） × 10
+- ERROR agent_lease_return_failed（silenttalk.agent_lease.AgentLeaseError） × 1
+
+  - 新增 discord.client／ClientConnectorDNSError 10；本輪不是 Discord 真人實測，沒有用此回歸宣稱網路錯誤或 lease_return_failed 已解決，接手依 Windows／網路 owner 調查。
+
+- **紀錄容器檢查（只數字與狀態）**：
+  - 目標 10 GB、最後確認真容器 0；2026-10-05 19:03+08:00 檢查 EncryptedRecords 目錄檔案 0、合計 0 bytes。沒有真掛上／卸載／重新掛上的實測，兩 app 真紀錄及 SSD 其他位置新紀錄數沒測，不填假 0。
+  - 工作區 metadata 本次 .tmp 2、.txt 2、.py 1。沒有修改／刪除使用者提供的 TXT 或其他工作檔；未讀其他對話記錄／角色狀態／私密配置。
+  - 使用者明確例外：**「手動匯出可自行選一般資料夾」**，僅主動按匯出適用；自動記錄依然只能加密磁碟，未改 records owner 的加密規則。原提供的檔案只允許本次分析，不視為可任意讀取紀錄磁碟。
+
+- **使用者回饋與感想（原話；不包含附件聊天原文）**：
+  - 「那就留著吧」。
+  - 「e4b實際聊天體驗奇差無比，我開始考慮他只調用封包好的工具使用就好，聊聊天也OK無傷大雅，但不用輸出甚麼生成性內容」。
+  - 「然後我想要輸出紀錄，UI也是空殼讓我無法輸出，只好土法煉鋼複製貼上」。
+  - 「要進交接回報，畢竟是整體架構取捨我要每個agent的意見」。
+  - 「手動匯出可自行選一般資料夾」。
+
+- **給接手模型的交接指示**：
+  1. 優先取得本次正式重載的明確同意：新版來源已提交／推送／回歸；正式服務目前 PID 12040 仍舊來源，SilentTalk parent 14852／child 23056，ready=true、mode=character、agent_slot=1、error 空。停服務可能清掉尚未保存的 RAM 對話，不由 agent 擅自複製私人內容作備份。取得同意後，用原正常 launcher／restart owner 按 PID 重載，恢復角色 lease，核對 user configuration 未變，跑 tests/browser_check.mjs --audit-live（專用 Edge、原 launch_edge helper），新增匯出入口應 23/23；不要關使用者正常 Edge。
+  2. 每位接手 agent 先回答本報架構段的獨立意見要求，再整合；開發機處理 model／bench／工具封裝／角色邏輯，筆電處理 UI。未收到各方意見前不宣稱全體同意、不先全面切 tool-only。使用合成驗收，不索取私人聊天原文給 bench。
+  3. 追加 3 的 thread 結果／歷史接續與「唯讀要求仍自行寫結果檔」失敗仍是開發機 task／history／constraint owner 的必要工作，上次具體要求照舊；不能拿本次手動 export 代替 thread 恢復或 readonly 修正。
+  4. A4 16K／128K 未決；E2 密碼僅由使用者設定，原 native computer-use pipe 仍不可用，不改走禁止的 UI Automation；D2-D14 真人／帳號條件不足；F1 舊暫存清理曾遭 automatic approval review 拒絕，原理由只有 blocked by policy，未重新包裝或繞過。上述不能因這輪新增 UI 功能就標完成。
+  5. 本次 CDP 測試都按所有者 PID 關閉，測試 9223 listener 已消失；正式兩 app 保留。沒有啟用同機平行 agent。
