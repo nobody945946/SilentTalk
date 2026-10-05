@@ -547,3 +547,83 @@ Date:   Mon Oct 5 14:57:51 2026 +0800
 - 更正上一段操作判斷：暫停角色不會釋放模型 lease。既有 runtime.set_character_mode 僅停止角色回應；llm.stop 才 release_character。這不是本回合可擅自改動的角色邏輯。已用 PID 關閉本回合啟動的 SilentTalk 12864、16572；其後 GET /status 確認 mode=base、ready=true、agent_slot=0、model=Qwen3.5-4B。目前先不要重啟 SilentTalk，等使用者套用 E4B 且 LoRA 不使用，再正常啟動。
 - F1 仍未完成：清除本回合 round4 暫存路徑的 PowerShell 動作被工具自動審核拒絕，只有 blocked by policy，沒有更細原因。整個清理命令未執行；沒有換工具繞過。前一次替使用者開啟 Edge 也被同樣原因拒絕，改提供本機頁面連結。
 - 續行位置：等待使用者回覆模型介面 E4B、LoRA 不使用已套用；核對持久設定與 runtime 後正常啟動 SilentTalk，核對共享 Agent slot，再做 D。A4 的 context 決定仍待使用者；E2 尚未建容器。不要把此次檢查點算成 Discord 實測。
+
+### 第 4 回合續行檢查點：2026-10-05 15:36:06+08:00
+
+- 使用者追加要求（追加 2）：租借時由 SilentTalk 與 EdgeAgent 自動協調模型／LoRA，不再要求手動切 EdgeAgent。此要求取代 laptop 工作檔背景中兩邊手選相同模型的流程；本回合依使用者最新要求改動既有 UI／控制租借協調 owner，模型檔、LoRA 權重、訓練、角色派工判斷與工具邏輯均未修改。
+- 追加 2 **完成**：SilentTalk 已經經 /character 傳模型／LoRA，不需新增 API 或另一份設定。EdgeAgent._start_child 在租借期間配置獨立 Agent slot 並自動跟隨租借的基底／LoRA，歸還恢復原獨立模型；不寫入 config.json。共用 context 取較大要求並受租借模型上限限制。模型頁顯示目前 LoRA 與歸還後的模型選擇。已移除「只有兩邊手選相同才共用」判斷，同步修改測試與兩邊 README。
+- **更新後完成度**：原清單完成 14、未完成 4、沒測 19，14/37 = **37.8%**。A1-A3、B1-B3、C1-C6、E1 狀態沿用；D1 改為完成。A4、D15、E2、F1 未完成；D2-D14、E3-E8 沒測。追加 1 編輯器下拉選單完成，追加 2 自動租借共用完成；含追加共完成 16/39 = **41.0%**。本回合尚未結束，結束時間／總耗時／客戶端步驟、Token、額度仍看不到。
+- D1 **完成**：使用現有 bot 身分只做 Discord REST 唯讀檢查（未連新 Gateway，未讀訊息或發訊息）。限定測試伺服器／語音頻道，實際頻道 permission checks：add_reactions、read_messages、send_messages、read_message_history、connect、speak、create_public_threads、send_messages_in_threads 全為 true；具備討論串所需權限的文字頻道數 1。應用程式 Message Content Intent flag=true，有效設定 text_chat=true。上次正常啟動 log_summary 沒有 PrivilegedIntentsRequired。無需再要求使用者邀請一次。權限核對依據 https://docs.discord.com/developers/topics/permissions 。
+- **新增測試執行紀錄**：
+  - EdgeAgent｜test_core_service.py｜passed 44、failed 0、skipped 0、error 0｜1.62 s｜exit 0。包含不同基底／adapter、租借與歸還、config 檔 bytes 不變、model context 上限，租借獨占與工作中拒絕切换仍受測。
+  - SilentTalk｜test_agent_lease.py｜passed 9、failed 0、skipped 0、error 0｜3.54 s｜exit 0。
+  - EdgeAgent｜完整 pytest｜passed 199、failed 0、skipped 2、error 0｜180.01 s｜exit 0。仍有原本 unicorn.mem_map 的 Windows fatal exception 字樣，但測試繼續並以 exit 0 結束；沒有跳過或移除這組測試。
+  - EdgeAgent｜tests/windows_check.py --browser --lease-sharing｜exit 0；總秒數看不到。原 UI 八種 viewport、unexpected_errors=0；租借 UI 檢查 6/6、unexpected_errors=0。截圖 edge-agent-lease-status.png 已看，390×320 可捲動、無水平溢出。cleanup listeners=[]。
+  - 真模型共用：獨立設定 Qwen3.5-4B，租借 E4B（不同基底），Agent slot=1；並行 Agent read 工具完成、error=0、8719 ms；角色回覆 3 token、438 ms。歸還 Qwen3.5-4B、ready=true；preferences_unchanged=true。這是合成 fixture 的模型／API 測試，不算 D 的真人 Discord 實測，也不算 E 的加密容器實測。
+  - Ruff check／format check、Node --check、git diff --check 通過。首次 Node 命令誤用不存在的 node-v24.14.0 路徑，未啟動；改用 runtime 指定的 node-v22.23.3，exit 0。
+  - 首次 restart 腳本命令漏 ProjectDir、Pythonw，exit 1；补上既有必要參數後 exit 0，正常啟動 PID 10712（子 PID 25728）。兩個來源分支皆已 push，source clean。
+- **正式程式驗證**：重新啟動後 GET /status：mode=character、ready=true、agent_slot=1、model=gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf、lora 空字串、error 空字串。GET /config 仍是 Qwen3.5-4B、lora 空字串、context_size=16384。使用者不需要再手動配對，A4 的 context 決定仍未收到。
+- **本段新增 commit（git log --stat 原文）**：
+
+```text
+commit 79af80201ef579a03862546918001a369bad2b58
+Author: nobody945946 <104478886+nobody945946@users.noreply.github.com>
+Date:   Mon Oct 5 15:32:56 2026 +0800
+
+    Automatically share SilentTalk's leased model with the Agent
+
+ README.md                  |  4 +--
+ edge_agent/service.py      | 51 +++++++++++++++++---------------
+ edge_agent/web.py          |  2 +-
+ tests/browser_check.mjs    | 21 ++++++++++++-
+ tests/test_core_service.py | 73 ++++++++++++++++++++++++++++++++++------------
+ tests/windows_check.py     | 72 +++++++++++++++++++++++++++++++++++++++++++++
+ 6 files changed, 177 insertions(+), 46 deletions(-)
+
+commit 5ed0118180243b923576df000edb7110f235596a
+Author: nobody945946 <104478886+nobody945946@users.noreply.github.com>
+Date:   Mon Oct 5 15:32:57 2026 +0800
+
+    Document automatic Agent model sharing during character leases
+
+ README.md | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+```
+
+- **Discord 數字表更新（發送真人測試前的 log_summary.py 原文）**：
+
+| 項目 | 數字 |
+|---|---|
+| GPU（llama.cpp 看到的） | — |
+| 連上 Discord（ready／resumed） | 5／0 |
+| 語音接收 | dave_version=1 |
+| 收音（每 30 秒記一次） | 8 次；沒有收到任何語音封包；大小不對 0、沒 DAVE session 丟掉 0、解碼錯誤 0、有 padding 0、DAVE 解不開丟掉 0、SSRC 未對應丟掉 0、DAVE 復原 0；最後一次 DAVE：v1 |
+| STT 斷出的句子 | 0 |
+| STT 片段音量／頻譜平坦度（人聲 < 0.3，雜訊約 0.56） | 中位數 — dBFS／—；像雜訊（> 0.4）0/0 段 |
+| 真人辨識測試（--stt-check） | 沒有跑 |
+| STT 聲音片段長度（SenseVoice） | — |
+| STT 辨識一段花的時間 | — |
+| STT 聽到聲音但沒辨識出字（SenseVoice） | 0 |
+| 打字訊息 | 0 |
+| 角色判斷次數 | 0（開口 0、沒開口 0） |
+| 聽到 → 角色的話備好（開口時） | — |
+| 聽到 → 決定不開口 | — |
+| 模型本身（開口時） | — |
+| 因為還在說話而丟掉的句子 | 0 |
+| 說出口的句子 | 0（串流 0） |
+| TTS 到第一段聲音（串流） | — |
+| Agent 派工判斷 | 0（派工 0、不派工 0） |
+| Agent 派工判斷延遲 | — |
+| Agent 任務執行時間 | — |
+| Agent 批准 | 0（准許 0、拒絕 0） |
+| Agent 批准往返延遲 | — |
+| Agent 私訊結果 | 0（送達 0、未送達 0） |
+| 討論串建立 | 0 |
+| 訊息表情標記（⚙️／✅／❌） | 0（accepted 0、done 0、failed 0） |
+
+警告／錯誤（只列事件名稱和次數）：
+- 沒有
+
+- **紀錄容器**：真容器仍 0；未新增容器實测，未讀使用者的對話／角色狀態。F1 暫存清理仍受上段 automatic policy rejection 阻擋，未重新嘗試。
+- **使用者回饋與感想（原話）**：「改了，還有既然都租用了，讓silent溝通後改一改就好吧，還要手動切edge我覺得不夠順暢」。
+- **接續位置**：目前正在請使用者於指定測試伺服器的語音頻道聊天室送一項唯讀工作，回報 ⚙️→✅、角色語音與私訊結果，從 D2-D4 接續。後續文字頻道仍由使用者挑；不讀真人訊息內容，只用 log_summary 事件數字與使用者回饋驗收。原工作區 EdgeAgentTest 檔案沒動。E2-E8 與 A4 待使用者，F1 待收尾；正式 SilentTalk 已留著，請勿再要求手動切模型。
