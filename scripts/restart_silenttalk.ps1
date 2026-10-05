@@ -136,14 +136,29 @@ try {
         }
     }
 
-    $newProcess = Start-Process -FilePath $pythonwPath -ArgumentList @("app.py", "--silenttalk-desktop") -WorkingDirectory $projectDirPath -PassThru
-
-    Start-Sleep -Milliseconds 250
-    if ($newProcess.HasExited) {
-        throw "SilentTalk exited immediately after launch (exit code $($newProcess.ExitCode))."
+    $launcherScript = Join-Path $projectDirPath 'scripts\launch_desktop.py'
+    $pythonExe = Join-Path $projectDirPath '.venv\Scripts\python.exe'
+    $launchedPid = $null
+    if ((Test-Path -LiteralPath $launcherScript) -and (Test-Path -LiteralPath $pythonExe)) {
+        try {
+            $launchOutput = & $pythonExe $launcherScript
+            Write-Host $launchOutput
+            if ($launchOutput -match 'PID:\s*(\d+)') {
+                $launchedPid = [int]$matches[1]
+            }
+        } catch {
+            Write-Warning "Direct desktop launch failed; falling back to Start-Process."
+        }
     }
-
-    Write-Host "SilentTalk started. PID: $($newProcess.Id)"
+    if ($null -eq $launchedPid) {
+        $newProcess = Start-Process -FilePath $pythonwPath -ArgumentList @("app.py", "--silenttalk-desktop") -WorkingDirectory $projectDirPath -PassThru
+        Start-Sleep -Milliseconds 250
+        if ($newProcess.HasExited) {
+            throw "SilentTalk exited immediately after launch (exit code $($newProcess.ExitCode))."
+        }
+        $launchedPid = $newProcess.Id
+        Write-Host "SilentTalk started. PID: $launchedPid"
+    }
 }
 finally {
     if ($hasMutex) {

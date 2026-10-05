@@ -5,6 +5,12 @@ import asyncio
 import sys
 from pathlib import Path
 
+# Ensure .venv site-packages is in sys.path
+_project_dir = Path(__file__).resolve().parent
+_venv_site = _project_dir / ".venv" / "Lib" / "site-packages"
+if _venv_site.is_dir() and str(_venv_site) not in sys.path:
+    sys.path.insert(0, str(_venv_site))
+
 from silenttalk.config import ConfigError, config_defaults, load_settings
 from silenttalk.controller import AppController
 from silenttalk.copilot.persona import PersonaStore
