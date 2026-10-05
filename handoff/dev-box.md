@@ -1,7 +1,7 @@
 # 開發機工作檔（Linux、RTX 3090）
 
 更新：2026-10-05 深夜｜分支：SilentTalk、EdgeAgent 都用 `copilot-story-mode`
-你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事。**只寫現況和下一步**，過去的經過在 git 歷史和 `archive/`（只在這台機器、不進 git，不必讀）。上一版：`archive/dev-box-2026-10-05-v5.md`。
+你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事。**只寫現況和下一步**，過去的經過在 git 歷史和 `archive/`（只在這台機器、不進 git，不必讀）。上一版：`archive/dev-box-2026-10-05-v6.md`。
 
 ---
 
@@ -95,6 +95,7 @@ EdgeAgent-dev 的 `.venv` 沒有 sqlglot，完整測試用主工作樹的 `.venv
 - 老師 Qwen3.6-35B-A3B（40K 94.7%）、檢查員 Gemma 4 31B（97.4%）。
 - **顯示卡用量**（3090 實測，產品參數：flash attention、q8 KV、全放 GPU；筆電約少 200 MB）：E4B 16K 3.10 GB、32K 3.32、64K 3.75、128K 4.62；Qwen3.5-4B 16K 3.36、32K 3.71、64K 4.41、128K 5.82。E4B 的每層嵌入 1.9 GB 放在系統記憶體（Qwen 0.5 GB），所以 E4B 佔顯示卡較少、context 每 token 只佔 Qwen 的一半；E4B「重」在系統記憶體。
 - **context 被什麼吃掉**（E4B 的 tokenizer，現在的產品）：系統提示＋12 個工具定義＋問題 2,712 token（工具 1,769）；一次 `web_fetch`（12,000 字的新聞頁）8,964、`web_research` 1,383、`web_search` 459。壓縮門檻＝working − 輸出保留 8,192 − 4,096：16K 時整段只能 4,096（扣掉固定的只剩約 1.4K），32K 時 20,480（約 18K），讀兩頁網頁就在回答前壓縮，抓到的內容被摘要掉。
+- **大 context（使用者：「我犧牲速度，cpu gpu 一起用，鎖死不溢出到ssd，然後常駐吃記憶體的非必要占用全部根除，這樣能開多少」）**，3090 實測、`-lm mlock`、q8 KV：E4B 128K（它的上限 131,072）全放 GPU 4.46–4.62 GB；放 36 層 4.22 GB＋鎖住 2.24 GB RAM（RSS 3.08）；30 層 3.63 GB＋2.55 GB（RSS 3.66）；角色和 Agent 共用一塊 KV（`--kv-unified`，2 slot）不多佔。筆電約 33–34 層：顯示卡約 3.8 GB、RAM 約 3.2 GB。Qwen3.5-4B 128K 全放 GPU 要 5.69 GB、256K 8.41 GB，筆電做不到。`-ub` 縮小只省約 150 MB；`-lzm on` 在 mlock 下沒有省。**產品自己的 RAM 大戶**：租借模式的 llama-server 沿用上游預設 `--cache-ram 8192` MiB、每 slot 32 個 checkpoint（只有 base 模式設了 256 MiB／2）。
 - 「要不要改動」判斷（`scripts/dev/task_scope_eval.py`，43 句，E4B＋機魂人設）：41/43；錯的兩句都是安全方向（一句唯讀被當改動 → 照舊要批准；一句「查完存檔」被當唯讀 → Agent 做不到會說）。派工兩題合計中位數 109 ms（3090）。
 - 中性電子音（SenseVoice 錯字率）：原聲 7.2%、選定的 C 7.4%。
 - 舊結論：E4B＋v3 LoRA 配對盲評贏原版（59% vs 40%）；3050 Ti 套 LoRA 判斷 211 ms、生成 26 token/s。
