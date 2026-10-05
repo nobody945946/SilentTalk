@@ -87,3 +87,25 @@ def test_unverified_dependency_is_rejected_before_package_creation(distribution)
     with pytest.raises(ValueError, match="SHA256"):
         package_windows.build(edge, output)
     assert not output.exists()
+
+
+def test_a_release_dry_run_packages_the_new_manifest_before_it_is_committed(distribution):
+    edge, output, manifest, _, _ = distribution
+    new = {**manifest, "release": "bootstrap-v99"}
+    package_windows.build(edge, output, manifest=new)
+    with zipfile.ZipFile(output) as archive:
+        packed = json.loads(archive.read("SilentTalk/scripts/edge-agent-distribution.json"))
+    assert packed == new
+
+
+def test_a_changed_edgeagent_needs_a_newer_version_and_gets_the_next_release():
+    from scripts.release_windows import next_edge_release
+
+    current = {"repository": "o/EdgeAgent", "minimum_version": "2.0.1", "release": "bootstrap-v7",
+               "asset": "edge-agent-windows-source-v7.zip", "sha256": "a" * 64}
+    assert next_edge_release(current, "2.0.1", "a" * 64) is None  # nothing changed
+    with pytest.raises(SystemExit, match="raise the version"):
+        next_edge_release(current, "2.0.1", "b" * 64)
+    assert next_edge_release(current, "2.1.0", "b" * 64) == {
+        "repository": "o/EdgeAgent", "minimum_version": "2.1.0", "release": "bootstrap-v8",
+        "asset": "edge-agent-windows-source-v8.zip", "sha256": "b" * 64}

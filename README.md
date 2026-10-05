@@ -1,6 +1,6 @@
 # SilentTalk
 
-SilentTalk 是 Discord 語音角色與回覆建議玩具。下載後啟動同一個入口，即會自動部署依賴與獨立的本機編程 Agent：[EdgeAgent](https://github.com/nobody945946/EdgeAgent)。
+SilentTalk 是 Discord 語音角色與回覆建議玩具。下載後啟動同一個入口，即會自動部署依賴與獨立的本機編程 Agent：EdgeAgent（已包在下載檔裡）。
 
 | 產品 | 用途 | 啟動入口 |
 |---|---|---|
@@ -11,13 +11,13 @@ SilentTalk 是 Discord 語音角色與回覆建議玩具。下載後啟動同一
 
 ## 下載、安裝與啟動
 
-支援 Windows x64。下載 [Windows 發行包](https://github.com/nobody945946/SilentTalk/releases/tag/windows-2026.10.02)，解壓到要使用的資料夾，雙擊 `啟動 SilentTalk.cmd`。
+支援 Windows x64。從公開的 [SilentTalk 下載頁](https://github.com/nobody945946/SilentTalk-download/releases/latest) 下載最新的 `silenttalk-windows-*.zip`，解壓到要使用的資料夾，雙擊 `啟動 SilentTalk.cmd`。不需要 GitHub 帳號。
 
 首次啟動會自動準備 Python 3.12、各自的 venv 與依賴、Git、Node／Pi SDK、推論引擎、公開 Agent 與角色基底、FFmpeg，以及語音辨識模型。不需預裝 Python、Git、winget 或 CUDA Toolkit；已有可用 NVIDIA 驅動時選擇 CUDA，否則使用 CPU，速度依硬體而異。
 
 首次下載約 7–8 GB，建議保留至少 16 GB 可用磁碟空間。固定版本下載會驗證 SHA256；大型模型可續傳。中斷時重跑同一啟動器，完成的資產會沿用。後續啟動檢查部署完成紀錄與必要元件；元件缺損或版本改變時，由同一安裝流程修復。
 
-目前 repository 與 GitHub 發行頁是私人的，取得 ZIP 需有存取權限。玩家 ZIP 已附驗證過的 EdgeAgent 來源，取得後不必再登入 GitHub。直接從 repository 原始碼啟動而未備妥 EdgeAgent 時，仍需授權取得私人來源。
+下載頁是公開的，只放在 Windows 上驗證過的發行檔；ZIP 已附 EdgeAgent，安裝全程不用登入 GitHub。原始碼 repository 不公開；只有直接從 repository 原始碼啟動、而且沒有 ZIP 附的 EdgeAgent 時，才需要 repository 的存取權限。
 
 | 項目 | 預設位置 |
 |---|---|
@@ -77,7 +77,7 @@ Agent 預設為 `Qwen3.5-4B-Q4_K_M.gguf`、131,072 token context、thinking off�
 
 模型下載與熱切換使用 EdgeAgent 右上角「⋯ → 模型模組」：從 Hugging Face 列出檔案、下載並驗證後，選擇模型再「套用並切換」。下載完成不會自動切換。支援目前 llama.cpp 可載入的單檔 GGUF；切換失敗會嘗試恢復原配置。工作或角色租借中不能切換，先結束工作或退出 SilentTalk。
 
-完整操作與實測由 EdgeAgent 文件維護：[使用與模型管理](https://github.com/nobody945946/EdgeAgent/blob/copilot-story-mode/README.md)、[驗證與限制](https://github.com/nobody945946/EdgeAgent/blob/copilot-story-mode/VALIDATION.md)。
+完整操作與實測由 EdgeAgent 自己的文件維護，安裝後在 Agent 安裝目錄（預設 `%USERPROFILE%\EdgeAgent`）：`README.md`（使用與模型管理）、`VALIDATION.md`（驗證與限制）。
 
 ### SilentTalk 的角色模型與 LoRA
 

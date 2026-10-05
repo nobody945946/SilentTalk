@@ -42,14 +42,19 @@ def build(
     *,
     project: Path = PROJECT,
     revision: str = "HEAD",
+    manifest: dict[str, str] | None = None,
 ) -> dict[str, str | int]:
+    """`manifest`: the EdgeAgent manifest to package instead of the
+    committed one (a release's dry run, before the new one is committed)."""
     commit = (
         _git(project, "rev-parse", "--verify", f"{revision}^{{commit}}")
         .decode()
         .strip()
     )
     manifest_path = "scripts/edge-agent-distribution.json"
-    manifest = json.loads(_git(project, "show", f"{commit}:{manifest_path}"))
+    override = manifest is not None
+    if manifest is None:
+        manifest = json.loads(_git(project, "show", f"{commit}:{manifest_path}"))
     source = edge_source.read_bytes()
     if hashlib.sha256(source).hexdigest() != manifest["sha256"]:
         raise ValueError("EdgeAgent source SHA256 mismatch")
@@ -92,9 +97,12 @@ def build(
     temporary = output.with_name(output.name + ".part")
     with zipfile.ZipFile(temporary, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for name in paths:
-            archive.writestr(
-                "SilentTalk/" + name, _git(project, "show", f"{commit}:{name}")
+            content = (
+                (json.dumps(manifest, indent=2) + "\n").encode()
+                if override and name == manifest_path
+                else _git(project, "show", f"{commit}:{name}")
             )
+            archive.writestr("SilentTalk/" + name, content)
         archive.writestr("SilentTalk/.runtime/downloads/" + asset, source)
     temporary.replace(output)
     return {
