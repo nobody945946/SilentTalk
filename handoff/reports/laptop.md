@@ -374,3 +374,167 @@ B 補充：uv 管理的 Python 3.13.13 runtime 檔案邏輯大小 63620050 bytes
   1. 雙端核心服務環境已修復並就緒：EdgeAgent (2.1.0) 與 SilentTalk 全套測試 100% 通過（181 passed 與 292 passed）。
   2. 雙 Slot 模型租借衝突已解決：基底模型已統一為 `Qwen3.5-4B-Q4_K_M.gguf`，context 設為 16K，可支援 Agent slot 1 與 Character 角色對話同步並行。
   3. 未完成的 Discord 實測部分：需請使用者使用邀請連結 `https://discord.com/oauth2/authorize?client_id=1552128066719981608&scope=bot&permissions=309240859712` 補齊 Bot 的「建立公開討論串」與「新增反應」權限後，在 Discord 進行語音聊天室下令與討論串下令實測。
+
+## 第 4 回合 2026-10-05（Codex，模型名稱和推理等級看不到；進行中檢查點）
+
+- **時間與額度消耗統計**：
+  - 開始時間：看不到；第一個有實際時鐘證據的時間是 2026-10-05 14:32:46+08:00。
+  - 結束時間：尚未結束；本次檢查點 2026-10-05 15:02:58+08:00。
+  - 總耗時：看不到精確起點，不估整回合耗時。
+  - 執行步驟數：看不到客戶端統計。
+  - 累積 Token 消耗：Input 看不到；Output 看不到；Cache read 看不到。
+  - 額度：開始時看不到；檢查點看不到。
+  - 終止原因：未終止；不需要使用者的程式修改、部署及完整測試已完成，正請使用者啟用 Discord 派工設定。A4 的 context 選擇仍待回覆。
+
+- **目標完成度統計（分母 37，照工作檔的清單）**：
+  - 完成 13 項，未完成 5 項，沒測 19 項（完成率 **35.1%**，13/37；這是檢查點，不是整回合完成）。
+  - A1 完成｜正常 .cmd 啟動 exit 0；移除產品內桌面轉接、硬編碼 launcher、sys.path 補償及 start_shown；使用者按 F8 確認「有出現」。
+  - A2 完成｜重啟腳本實際關閉 PID 8228、20372，啟動 PID 12864，exit 0；統一 --character-mode，只選取本專案的實際 script argument。
+  - A3 完成｜被測的桌面轉接及其測試一併刪除；Windows Tk 初始化失敗會失敗而不跳過；Windows launcher 測試有非 Windows skipif。Windows 最終完整測試 exit 0；Linux 沒實跑。
+  - A4 未完成｜本機 config.json context_size 實際為 16384，已詢問保留 16K 或恢復 128K，未收到決定，沒有改寫。
+  - B1 完成｜兩 repo git pull --ff-only exit 0；EdgeAgent CUDA bootstrap -SetupOnly exit 0；正常 SilentTalk launcher 的部署檢查、真語音模型、角色 lease／restore 也 exit 0。
+  - B2 完成｜EdgeAgent 最終完整 pytest 187 passed、2 skipped、0 failed、0 error，153.68 s，exit 0。
+  - B3 完成｜SilentTalk 最終完整 pytest 293 passed、1 skipped、0 failed、0 error，20.01 s，exit 0。
+  - C1 完成｜records.py 建立標記、解析 junction／symlink 後檢查所在磁碟；不存在、系統磁碟、UNC 均擋下。設定頁只呼叫 owner。
+  - C2 完成｜EdgeAgent records.py 同上；/records/prepare 呼叫同一 owner，真 Edge 的系統磁碟註冊返回預期 HTTP 400。
+  - C3 完成｜SilentTalk 紀錄頁加「設為紀錄資料夾」和每秒更新狀態；GUI 測試涵蓋記錄中、暫停、關閉與失敗提示。
+  - C4 完成｜EdgeAgent 更多操作加紀錄視窗：開關、資料夾、註冊、儲存、動態狀態。真 Edge 驗證註冊拒絕、儲存、暫停、設定復原及窄視窗；8/8 視窗尺寸通過。
+  - C5 完成｜兩 app 介面／README 改為加密磁碟（外接硬碟，或 SSD 上的加密容器）；說明標記不會替資料夾加密。
+  - C6 完成｜兩 app 測試涵蓋系統磁碟即使有標記也不寫、建立標記才寫、移除標記暫停、不存在時不回寫；正向測試使用合成資料及模擬已掛載磁碟，不冒稱真容器實測。
+  - D1 未完成｜正常啟動已連上 Discord，最新 log_summary 沒有 PrivilegedIntentsRequired；尚未補齊並確認 bot 的討論串／表情權限。
+  - D2 沒測｜等待使用者啟用角色派工，及選好同基底模型。
+  - D3 沒測｜尚未有語音頻道文字派工。
+  - D4 沒測｜尚未有派工私訊結果。
+  - D5 沒測｜尚未選文字頻道及補齊討論串權限。
+  - D6 沒測｜尚未開測試討論串。
+  - D7 沒測｜尚未開測試討論串。
+  - D8 沒測｜尚未開測試討論串。
+  - D9 沒測｜尚未實際發送 .tmp 刪除要求；批准設定未被改為自動准許。
+  - D10 沒測｜尚未進行私訊拒絕測試。
+  - D11 沒測｜尚未進行私訊准許測試。
+  - D12 沒測｜尚未進行約 5 分鐘不按測試。
+  - D13 沒測｜尚未安排真人說話測試；上一回合使用者不方便說話。
+  - D14 沒測｜尚無第二個帳號可供測試；沒有用 webhook 或 bot 代替。
+  - D15 未完成｜已執行摘要並貼下面整張表，任務數為 0，沒有實測延遲或送達證據。
+  - E1 完成｜Windows 11 Home；使用者選 10 GB；VeraCrypt 1.26.29 由 winget 安裝 exit 0，exe Authenticode Valid，IDRIX 簽章。SSD 剩餘空間 277735022592 bytes（14:45 量測）。
+  - E2 未完成｜已安裝工具並建立空的 EncryptedRecords 目錄，沒有建立容器、沒有設定自動解鎖，也沒有看／產生／保存密碼或復原金鑰；需要使用者的密碼設定階段。
+  - E3 沒測｜容器尚未建立，尚未教學或取得使用者會操作的確認。
+  - E4 沒測｜真容器未掛載，未修改兩 app 的使用者紀錄設定。
+  - E5 沒測｜真容器未掛載，沒有真人對話寫入檔案的證據。
+  - E6 沒測｜真容器未建立，尚未測鎖定／卸載及 SSD 新檔數。
+  - E7 沒測｜真容器未建立；程式／GUI 的暫停測試不算真容器實測。
+  - E8 沒測｜真容器未建立，尚未測重新掛載。
+  - F1 未完成｜EdgeAgentTest 保留（.tmp 2、.txt 1、.py 1）；正式 SilentTalk 為 F8 與 Discord 測試留著；自建測試程序已退出。待使用者決定設定與正式程式是否保留，測試暫存收尾仍待完成。
+  - 使用者追加要求（另列，不算進 37）：追加 1 恢復 VS Code 導覽列的類別／函式下拉清單｜完成：Python 2026.6.0、Pylance 2026.4.1 安裝 exit 0，Pylance 日誌確認 service.py 分析與索引；使用者確認「已經有了」。未修改編輯器 settings.json。
+  - 含追加的完成率：**36.8%**（14/38）。
+
+- **測試執行結果記錄**（每一次都記，含失敗的）：
+  - SilentTalk｜test_records.py、test_settings.py｜passed 15、failed 0、skipped 0、error 0｜8.11 s｜exit 0；既有 pytest cache 權限警告，後續測試禁用 cacheprovider。
+  - EdgeAgent｜test_core_service.py、test_agent_chat.py｜passed 71、failed 0、skipped 0、error 0｜65.49 s｜exit 0；同上 cache 警告。
+  - SilentTalk｜完整｜passed 291、failed 0、skipped 1、error 0｜26.53 s｜exit 0。
+  - EdgeAgent｜完整｜passed 183、failed 0、skipped 2、error 0｜120.58 s｜exit 0。
+  - SilentTalk｜完整｜passed 292、failed 0、skipped 1、error 0｜16.87 s｜exit 0。
+  - EdgeAgent｜完整（最終）｜passed 187、failed 0、skipped 2、error 0｜153.68 s｜exit 0。
+  - SilentTalk｜test_setup_copilot.py、test_settings.py｜passed 21、failed 0、skipped 0、error 0｜16.58 s｜exit 0；新增 fixture 的 Python escape warning 已改 raw f-string，最終完整重跑消失。
+  - SilentTalk｜完整（最終）｜passed 293、failed 0、skipped 1、error 0｜20.01 s｜exit 0。
+  - EdgeAgent 兩次完整測試都有 unicorn.mem_map 的 Windows access violation／faulthandler 診斷輸出，但 pytest 均完成且 exit 0；沒有隱藏、跳過或放寬 asm 測試，沒有改動 lingua／評測邏輯。
+  - 真 Edge browser runner｜2 次均 exit 0、8/8 視窗尺寸、未預期瀏覽器錯誤 0。第 1 次服務端有 WinError 10053（切頁已斷線還寫 /models）；在 Handler.handle 的 HTTP 連線 owner 處理，新增 3 種斷線及保留其他錯誤的測試；第 2 次不再出現 traceback，integration_cleanup listeners=[]。
+  - 正常 .cmd 啟動器｜第 1 次 exit 1（安裝後 Invoke-Checked 不在外層 scope），改為啟動處直接執行並檢查 exit code；第 2 次 exit 0。重啟腳本 exit 0，舊 PID 消失、新 PID 存活。
+  - 兩 repo 修改範圍 Ruff check exit 0；EdgeAgent Ruff format check exit 0、網頁 script／browser runner Node 語法檢查 exit 0；兩 repo git diff --check exit 0。
+
+- **修改程式檔案與 Commit 雜湊**（下方原文來自 git log --stat）：
+  - `0936b45`（SilentTalk）：Restore Windows launcher ownership and add encrypted-disk record setup
+    - 為什麼：移除為 agent 隱藏桌面而加的產品補償，修正實測重現的啟動參數和 PowerShell scope；在 records owner 補齊設定與防止系統磁碟寫入。
+  - `8a8adb7`（EdgeAgent）：Add encrypted-disk recording controls and handle browser disconnects
+    - 為什麼：在既有 records／HTTP／網頁 owner 補齊紀錄設定，處理 Windows 真瀏覽器重現的斷線。兩 commit 已推到 copilot-story-mode，exit 0。
+
+```text
+commit 0936b45aa95df3394d54ccd768d7040bd36fac89
+Author: nobody945946 <104478886+nobody945946@users.noreply.github.com>
+Date:   Mon Oct 5 14:57:48 2026 +0800
+
+    Restore Windows launcher ownership and add encrypted-disk record setup
+
+ README.md                      |  2 +-
+ app.py                         | 10 -----
+ scripts/bootstrap.ps1          |  6 ++-
+ scripts/launch_desktop.py      | 84 ------------------------------------------
+ scripts/restart_silenttalk.ps1 | 74 +++++--------------------------------
+ silenttalk/hotkeys.py          |  3 --
+ silenttalk/records.py          | 50 +++++++++++++++++++++++--
+ silenttalk/settings_schema.py  |  4 +-
+ silenttalk/settings_ui.py      | 31 +++++++++++++++-
+ silenttalk/ui.py               | 10 +----
+ silenttalk/windows_desktop.py  | 73 ------------------------------------
+ tests/test_records.py          | 73 +++++++++++++++++++++++++++++++-----
+ tests/test_settings.py         | 51 +++++++++++++++++++++----
+ tests/test_setup_copilot.py    | 27 ++++++++++++++
+ tests/test_windows_desktop.py  | 25 -------------
+ 15 files changed, 228 insertions(+), 295 deletions(-)
+
+commit 8a8adb791b6d07e4e12cb1ffb6ee261843e3a62b
+Author: nobody945946 <104478886+nobody945946@users.noreply.github.com>
+Date:   Mon Oct 5 14:57:51 2026 +0800
+
+    Add encrypted-disk recording controls and handle browser disconnects
+
+ README.md                  |  2 +-
+ edge_agent/records.py      | 60 ++++++++++++++++++++++++++++++++++++++++++----
+ edge_agent/service.py      | 27 +++++++++++++++++++++
+ edge_agent/web.py          | 24 ++++++++++++++++---
+ tests/browser_check.mjs    | 30 ++++++++++++++++++++++-
+ tests/test_agent_chat.py   |  7 +++++-
+ tests/test_core_service.py | 54 ++++++++++++++++++++++++++++++++++++++++-
+ 7 files changed, 192 insertions(+), 12 deletions(-)
+```
+
+- **Discord 實測數字表（log_summary.py 原文）**：
+
+| 項目 | 數字 |
+|---|---|
+| GPU（llama.cpp 看到的） | — |
+| 連上 Discord（ready／resumed） | 3／0 |
+| 語音接收 | dave_version=1 |
+| 收音（每 30 秒記一次） | 8 次；沒有收到任何語音封包；大小不對 0、沒 DAVE session 丟掉 0、解碼錯誤 0、有 padding 0、DAVE 解不開丟掉 0、SSRC 未對應丟掉 0、DAVE 復原 0；最後一次 DAVE：v1 |
+| STT 斷出的句子 | 0 |
+| STT 片段音量／頻譜平坦度（人聲 < 0.3，雜訊約 0.56） | 中位數 — dBFS／—；像雜訊（> 0.4）0/0 段 |
+| 真人辨識測試（--stt-check） | 沒有跑 |
+| STT 聲音片段長度（SenseVoice） | — |
+| STT 辨識一段花的時間 | — |
+| STT 聽到聲音但沒辨識出字（SenseVoice） | 0 |
+| 打字訊息 | 0 |
+| 角色判斷次數 | 0（開口 0、沒開口 0） |
+| 聽到 → 角色的話備好（開口時） | — |
+| 聽到 → 決定不開口 | — |
+| 模型本身（開口時） | — |
+| 因為還在說話而丟掉的句子 | 0 |
+| 說出口的句子 | 0（串流 0） |
+| TTS 到第一段聲音（串流） | — |
+| Agent 派工判斷 | 0（派工 0、不派工 0） |
+| Agent 派工判斷延遲 | — |
+| Agent 任務執行時間 | — |
+| Agent 批准 | 0（准許 0、拒絕 0） |
+| Agent 批准往返延遲 | — |
+| Agent 私訊結果 | 0（送達 0、未送達 0） |
+| 討論串建立 | 0 |
+| 訊息表情標記（⚙️／✅／❌） | 0（accepted 0、done 0、failed 0） |
+
+警告／錯誤（只列事件名稱和次數）：
+- 沒有
+
+- **紀錄容器檢查（只寫數字）**：
+  - 真容器數 0；真人對話檔案數與大小：沒測；SSD 其他位置新紀錄檔：沒測。沒有打開任何使用者紀錄。
+
+- **使用者回饋與感想（原話）**：
+  - 容器大小：「10 GB」。
+  - 編輯器下拉清單：「已經有了」。
+  - F8 視窗：「有出現」。
+
+- **給接手模型的交接指示**：
+  1. 這回合仍在進行；不能照第 3 回合「全部做完」判斷。接續 A4、D1-D15、E2-E8、F1；本節 37 項逐行狀態是目前基準。
+  2. 使用者尚未決定 context 保留 16K 或恢復 128K；本機實際 16384，不要擅自改。角色模型目前 E4B、Agent 設定 Qwen3.5-4B，LoRA 相同，character_agent=false。現在正請使用者在 SilentTalk「設定 → 聊天」開啟「讓主人交代 Agent 工作」。之後由使用者在模型介面選同一基底／LoRA（保留角色 E4B），不能改預設 config.toml。
+  3. Discord 僅伺服器 729722190857240717、語音頻道 729722190857240721；文字頻道由使用者選。權限使用 UI 邀請連結，批准由使用者在私訊按。EdgeAgentTest 已有 2 個 .tmp 與其他 2 檔，尚未刪除。未發送測試指令。
+  4. Computer Use sky.list_windows native pipe 找不到；依技能做一次重試、reset 重建後仍失敗，沒有繼續迴圈，也沒有偷偷用 PowerShell UI Automation。CLI、真 Edge CDP 和使用者眼睛確認可用。容器建立不能把使用者的密碼傳給 agent／CLI；安裝 VeraCrypt 已完成，下一步需可用 UI 控制或由使用者的密碼階段接手。
+  5. 容器位置預備目錄 C:\Users\A8fm0\EncryptedRecords，空；大小 10 GB。VeraCrypt 在 C:\Program Files\VeraCrypt。尚未建立 .hc 檔。官方 Windows CLI 的 /create 必須帶密碼，無密碼會拒絕，所以沒有拿 CLI 製作容器。沒有設自動解鎖。
+  6. 正式 SilentTalk 父／子 PID 12864、16572（會變動，以實際 PID 查詢）；正式 EdgeAgent 因角色正常使用而啟動。使用者 F8 確認了，不要再加桌面轉接補丁。自建真 Edge 整合程序已清理，listeners=[] 指的是測試終了時，不能冒稱目前正式程式沒有 listener。
+  7. 同一台機器只開一個 agent；本次沒有 sub-agent。編輯器問題已完成，不要再拆分 Python 模組或改使用者設定檔。兩來源 repo source clean；報告寫在既有 SilentTalk-laptop-report worktree，延續此節，不切主資料夾分支。
