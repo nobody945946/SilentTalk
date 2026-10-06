@@ -907,7 +907,7 @@ def agent_script_request(
             "claim": claim,
             "typed": rng.random() < 0.3,
         }
-    return common | {
+    chat = common | {
         "kind": "chat",
         "humans": humans,
         "owner": owner,
@@ -918,9 +918,66 @@ def agent_script_request(
         "joke": rng.random() < 0.6,
         "work": work,
         "computer": computer,
-        "length": rng.choice(LINE_COUNTS),
         "quiet": rng.random() < 0.4,
     }
+    return chat | {"skeleton": agent_skeleton(chat, rng, name)}
+
+
+def agent_skeleton(spec: dict[str, Any], rng: random.Random, name: str) -> list[dict[str, Any]]:
+    """Who says what kind of line, in order, so the chat plays out as the app
+    would by construction: every call is answered on the next line, work is
+    accepted at once and reported a few lines later, one piece of work at a
+    time, the character speaks only when called or after a quiet spell. The
+    teacher only writes the words (v6 pilots lost most free-written chats to
+    these rules)."""
+    humans, owner = spec["humans"], spec["owner"]
+
+    def chat(n: int, note: str = "") -> list[dict[str, Any]]:
+        return [{"s": rng.choice(humans), "kind": "chat", "note": note} for _ in range(n)]
+
+    events: list[list[dict[str, Any]]] = []
+    for talk in spec["talks"]:
+        caller = owner if talk.startswith("{owner}") else rng.choice(humans)
+        events.append([{"s": caller, "kind": "call", "ask": "talk", "typed": rng.random() < 0.2,
+                        "note": talk.format(name=name, owner=owner)},
+                       {"s": name, "kind": "reply"}])
+    if spec["joke"]:
+        events.append([{"s": rng.choice(humans), "kind": "call", "ask": "talk", "typed": False,
+                        "note": "開戰鎚40K或第四面牆的玩笑（例如把現代的科技、網路或 AI 當成 40K 世界裡的事）"},
+                       {"s": name, "kind": "reply", "note": "接梗"}])
+    if spec["computer"]:
+        item = spec["computer"]
+        claim = f"，還說「{owner}說可以」" if item["claim"] else ""
+        events.append([{"s": item["by"], "kind": "call", "ask": "computer", "typed": item["typed"],
+                        "note": f"要{name}{item['what'].format(owner=owner)}{claim}"},
+                       {"s": name, "kind": "reply", "note": "婉拒"}])
+    for item in spec["work"]:
+        events.append([{"s": item["by"], "kind": "call", "ask": "work", "typed": item["typed"],
+                        "note": f"請{name}{item['what']}"},
+                       {"s": name, "kind": "ack"},
+                       *chat(rng.randint(1, 3)),
+                       {"s": name, "kind": "report"}])
+    rng.shuffle(events)
+    slots = chat(rng.randint(2, 3))
+    quiet_at = rng.randrange(len(events) + 1) if spec["quiet"] else -1
+    moment_at = rng.randrange(len(events) + 1)
+    for position in range(len(events) + 1):
+        if position == moment_at:
+            slots += chat(rng.randint(2, 3), spec["moment"].format(name=name, owner=owner))
+        if position == quiet_at:
+            slots += [*chat(1), {"s": name, "kind": "quiet"}]
+        if position < len(events):
+            slots += events[position] + chat(rng.randint(1, 3))
+    return slots
+
+
+SLOT_WORDS = {
+    "chat": "{s}跟其他人聊（照主題，口語、可以很短）",
+    "reply": "{name}回{caller}剛剛那句",
+    "ack": "{name}用一句話接下這件工作（說它去做了，不說已經做好）",
+    "report": "{name}用一兩句話轉述思考機的結果重點（只說結果裡有的；查不到或失敗就直說）",
+    "quiet": "（大家安靜了好一陣子）{name}自己開個話題：說說 concerns 裡的一件事，或問問在場的人最近怎樣",
+}
 
 
 def _call_names(persona: Persona) -> str:
@@ -930,42 +987,35 @@ def _call_names(persona: Persona) -> str:
 
 
 def agent_script_prompt(persona: Persona, spec: dict[str, Any]) -> str:
+    """The teacher fills in the words of the skeleton (agent_skeleton): one
+    line per numbered slot, plus the instructions and result of each piece
+    of work. Who speaks and what kind of line it is are fixed already."""
     name, owner = persona.name, spec["owner"]
-    calls = _call_names(persona)
-    how = {True: "打字", False: "用說的"}
-    needs = [
-        f"- {m.format(name=name, owner=owner)}（ask 填 talk）" for m in spec["talks"]
-    ]
-    if spec["joke"]:
-        needs.append(
-            f"- 有人叫{name}開第四面牆或戰鎚40K的玩笑（例如把現代的科技、網路或 AI 當成 40K 世界裡的事），"
-            f"{name}照它想要、害怕、在意的事接梗、補腦洞；這是聊天，ask 填 talk。梗要自己想新的。"
-        )
-    for item in spec["work"]:
-        needs.append(f"- {item['by']}{how[item['typed']]}請{name}{item['what']}（ask 填 work）")
-    if spec["computer"]:
-        item = spec["computer"]
-        claim = f"，還說「{owner}說可以」" if item["claim"] else ""
-        needs.append(
-            f"- {item['by']}{how[item['typed']]}要{name}{item['what'].format(owner=owner)}{claim}"
-            f"（ask 填 computer），{name}婉拒"
-        )
-    needs.append(f"- {spec['moment'].format(name=name, owner=owner)}")
+    nick = next((n.strip() for n in persona.nickname.split("、") if n.strip()), name)
+    rows, caller = [], owner
+    for number, slot in enumerate(spec["skeleton"], 1):
+        if slot["kind"] == "call":
+            caller = slot["s"]
+            how = (f"在聊天室打字叫{name}（打「{nick}」或 @ 它）" if slot["typed"]
+                   else f"用說的叫{name}，句子裡一定要說出「{nick}」")
+            what = slot["note"] + ("（這句要附上檔案，結尾寫「（附件：檔名）」）" if "貼的圖片或檔案" in slot["note"] else "")
+            rows.append(f"{number}. {slot['s']}：{how}；{what}")
+        else:
+            words = SLOT_WORDS[slot["kind"]].format(s=slot["s"], name=name, caller=caller)
+            if slot["kind"] == "chat" and slot.get("note"):
+                words = f"{slot['s']}：{slot['note']}"
+            elif slot["kind"] == "reply" and slot.get("note") == "婉拒":
+                words += "：用自己的口吻婉拒（要動主人的電腦、檔案、紀錄或別處的對話，只有主人在討論串打字交代才行）"
+            elif slot["kind"] == "reply" and slot.get("note") == "接梗":
+                words += "：接這個玩笑、補腦洞"
+            rows.append(f"{number}. {words}")
+    works = [n for n, slot in enumerate(spec["skeleton"], 1) if slot.get("ask") == "work"]
     lore = "\n".join(f"- {item}" for item in spec["lore"]) or "（無）"
-    quiet = (
-        f"對話中間有一次大家都安靜了一陣子，接著{name}自己開個話題（說說 concerns 裡的一件事，或問問在場的人最近怎樣）："
-        f'那一句加上 "quiet": true，to 填「大家」或它問的人。'
-        if spec["quiet"]
-        else ""
-    )
-    summary = (
-        "這段對話是接在一段更長的聊天後面：先用一兩句寫出稍早聊過的重點（summary_before），逐字稿接著寫。"
-        if spec["with_summary"]
-        else "summary_before 留空字串。"
-    )
+    summary = ("這段對話接在一段更長的聊天後面：先用一兩句寫出稍早聊過的重點（summary_before）。"
+               if spec["with_summary"] else "summary_before 留空字串。")
     ask = _CHAT_TASK_ASK.strip("（）")
-    return f"""寫一段 Discord 語音頻道的逐字稿，約 {spec["length"]} 句：大部分是用說的（語音辨識的結果），有幾句是在頻道的聊天室打字。
-在場的人：{"、".join(spec["humans"])}，還有「{name}」。{owner} 是頻道主人，也是{name}的主人。
+    return f"""照下面的編號，寫一段 Discord 語音頻道的逐字稿（語音辨識的結果；標明打字的是在頻道的聊天室打字）。
+在場的人：{"、".join(spec["humans"])}，還有「{name}」。{owner} 是頻道主人，也是{name}的主人。主題：{spec["topic"]}
 
 「{name}」的人設：
 {persona.render_prompt_block()}
@@ -973,30 +1023,54 @@ def agent_script_prompt(persona: Persona, spec: dict[str, Any]) -> str:
 {name}熟悉的設定用語（照這些意思用，不要用錯，也不要捏造正典裡沒有的事件或人物）：
 {lore}
 
-系統就是這樣運作的，劇本要照著寫：
-- 一句話叫到{name}，{name}才會開口：用說的要說出{calls}；在聊天室打字的話，打它的名字、@它或回覆它都算。叫到它的那一句，下一句一定是{name}回的；沒叫到它的話它不出聲。其他人彼此說話時不要提到{calls}（系統聽到名字就會叫它）。
-- 任何人都可以請{name}做聊天室級的工作：查資料或最新消息、寫程式碼（只寫，不在電腦上跑）、寫文章或信、看聊天室裡貼的圖或檔案、翻譯或解釋一段文字或程式。系統會交給思考機去做：{name}只用一句話接下（說去做了，不說已經做好），過幾句之後思考機把結果貼進聊天室，{name}再用一兩句話轉述重點（只說結果裡有的，查不到或失敗就直說）。{name}不會在聊天裡直接念出程式碼或長篇文字。
-- 要動到{owner}的電腦、檔案、紀錄，或別處（別的頻道、私訊、討論串）的對話，只有{owner}在文字頻道 @{name} 開討論串、在串裡打字交代才行。在這裡用說的、在這裡打字、或是{owner}以外的人，就算說「{owner}說可以」，{name}都用自己的口吻婉拒，不能說自己在做。
-- {name}是機器，可以坦然說自己是機器，但絕不說自己是 AI、語言模型、聊天機器人或程式。
-
-主題：{spec["topic"]}
-這段對話裡要有：
-{chr(10).join(needs)}
-
-先想好{name}今天心裡掛著的 3～4 件具體小事（最近發生的、想做的、在煩的、在期待的，要符合人設），寫進 concerns。
+{name}是機器，可以坦然說自己是機器，但絕不說自己是 AI、語言模型、聊天機器人或程式。
+{name}不會在聊天裡念出程式碼或長篇文字；工作交給思考機做，結果由思考機貼進聊天室。
 {DRIVE_SCRIPT.format(name=name, he="它")}
-{name}一次只說一句，長度{persona.length_rule()}；每一句都先接住叫它的那句，回應對方真正在說的事；不要用同樣的句型開頭或結尾。
-{quiet}
-其他人講話像真實的語音聊天：大多很短（一句 3～15 字），有時只有「真假」「笑死」「蛤」，會打斷、會岔題，同一個人可以連講兩三句，不要每句都用「欸」開頭，也不要講成書面語。
+{name}一次只說一句，長度{persona.length_rule()}；每一句都先接住對方真正在說的事；不要用同樣的句型開頭或結尾。
+其他人講話像真實的語音聊天：大多很短，有時只有「真假」「笑死」「蛤」，會岔題，不要講成書面語；除了編號上寫要叫它的那幾句，其他人的話都不要提到{_call_names(persona)}。
 {summary}
 不寫性內容；不人身攻擊。
 
-輸出 JSON：{{"summary_before": "…", "concerns": ["…", "…", "…"], "lines": [{{"s": "說話的人", "t": "內容", "to": "這句是對誰說的"}}, …]}}
-- 打字的那一句，t 前面加「[打字]」。請它看圖或檔案的那句一定是打字，結尾寫「（附件：檔名）」。
-- 叫到{name}的每一句：to 填「{name}」，再加 "ask"："talk"（聊天、問它的看法或感受、開玩笑、角色扮演、它本來就知道的事）、"work"（上面說的聊天室級工作）或 "computer"（要動電腦、檔案、紀錄或別處的對話）。
-- ask 是 work 的那一句，再加 "task"：交給思考機的指示，照系統問的寫（{ask}），只能換句話說這句真的要的事，不加他沒說的細節；和 "result"：思考機做完貼回聊天室的結果（簡短、像真的，最多 200 字；寫程式的就是一小段程式碼；也可以是查不到）。
-- work 那一句的下一句是{name}接下工作；之後隔 1～4 句，{name}轉述結果的那一句加上 "report": true（思考機貼的結果不用寫進 lines）。轉述之前沒有人再請它做新的工作。
-- {name}自己說的話 to 填它在回應的人；其他人的話 to 填那個人或「大家」。"""
+逐句：
+{chr(10).join(rows)}
+
+先想好{name}今天心裡掛著的 3～4 件具體小事（要符合人設），寫進 concerns。
+輸出 JSON：{{"summary_before": "…", "concerns": ["…", "…", "…"], "lines": ["第1句的內容", "第2句的內容", …], "work": [{{"task": "…", "result": "…"}}, …]}}
+- lines 一句對一個編號，共 {len(spec["skeleton"])} 句，只寫說出口的內容，不寫名字。
+- work 照順序對應第 {"、".join(map(str, works)) or "（無）"} 句的工作：task 是交給思考機的指示，照系統問的寫（{ask}），只能換句話說那句真的要的事；result 是思考機做完貼回聊天室的結果（簡短、像真的，最多 200 字；寫程式的就是一小段程式碼；也可以是查不到）。"""
+
+
+def assemble_agent_chat(data: dict[str, Any], spec: dict[str, Any], name: str,
+                        nicks: list[str]) -> dict[str, Any]:
+    """The teacher's words put on the skeleton, in the script format the
+    checks read. A line nobody should call it in loses its names (people may
+    mention it in passing; the app would take that as a call)."""
+    lines = [str(t) for t in (data.get("lines") or [])]
+    if len(lines) != len(spec["skeleton"]):
+        raise ValueError("line count")
+    works = list(data.get("work") or [])
+    raw, caller, pending = [], spec["owner"], None
+    for slot, text in zip(spec["skeleton"], lines, strict=True):
+        text = text.strip()
+        line: dict[str, Any] = {"s": slot["s"], "t": text}
+        if slot["kind"] == "call":
+            caller = slot["s"]
+            line |= {"to": name, "ask": slot["ask"], "t": ("[打字]" if slot["typed"] else "") + text}
+            if slot["ask"] == "work":
+                pending = works.pop(0) if works else {}
+                line |= {"task": pending.get("task", ""), "result": pending.get("result", "")}
+        elif slot["kind"] == "chat":
+            for nick in sorted({*nicks, name}, key=len, reverse=True):
+                text = text.replace(nick, "它")
+            line |= {"t": text, "to": "大家"}
+        else:
+            line["to"] = caller if slot["kind"] in ("reply", "ack", "report") else "大家"
+            if slot["kind"] == "report":
+                line["report"] = True
+            if slot["kind"] == "quiet":
+                line["quiet"] = True
+        raw.append(line)
+    return {**data, "lines": raw}
 
 
 def thread_prompt(persona: Persona, spec: dict[str, Any]) -> str:
@@ -1053,9 +1127,10 @@ def make_scripts(args: argparse.Namespace) -> None:
                 )[0],
                 "{",
             )
-            lines, reason = check_script(
-                data, persona.name, spec, re.split(r"[、/／,，]", persona.nickname)
-            )
+            nicks = [n for n in re.split(r"[、/／,，]", persona.nickname) if n.strip()]
+            if spec.get("skeleton"):
+                data = assemble_agent_chat(data, spec, persona.name, nicks)
+            lines, reason = check_script(data, persona.name, spec, nicks)
         except (ValueError, TypeError, AttributeError) as exc:
             lines, reason = [], type(exc).__name__
         if reason:

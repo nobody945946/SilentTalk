@@ -429,3 +429,30 @@ def test_the_builtin_card_is_the_one_the_app_ships(
     assert raw["agent"] and raw["lore"] == [{"term": "測試用語", "meaning": "測試意思"}]
     with pytest.raises(SystemExit):
         machine_spirit.builtin(tmp_path / "data", 3)
+
+
+def test_skeleton_chats_play_out_as_the_app_would_by_construction() -> None:
+    """The program lays out who speaks and what kind of line (agent_skeleton);
+    whatever words the teacher fills in, the chat keeps the app's rules: every
+    call answered next, one piece of work at a time, reported before the next."""
+    raw = {"id": MACHINE_SPIRIT.id, "name": NAME, "agent": True, "lore": []}
+    rng = random.Random(3)
+    chats = [s for s in (character_data.script_request(raw, rng, set()) for _ in range(120)) if s["kind"] == "chat"]
+    assert chats
+    for spec in chats:
+        words = [f"測試第{n}句" for n in range(len(spec["skeleton"]))]
+        data = {"lines": words, "work": [{"task": "測試指示", "result": "測試結果"}] * 3}
+        assembled = character_data.assemble_agent_chat(data, spec, NAME, ["機魂", "馬基納"])
+        lines, reason = character_data.check_script(assembled, NAME, spec, ["機魂", "馬基納"])
+        assert reason == "" and lines
+
+
+def test_a_chat_line_that_names_the_character_in_passing_loses_the_name() -> None:
+    raw = {"id": MACHINE_SPIRIT.id, "name": NAME, "agent": True, "lore": []}
+    rng = random.Random(4)
+    spec = next(s for s in (character_data.script_request(raw, rng, set()) for _ in range(50)) if s["kind"] == "chat")
+    chat_at = next(i for i, slot in enumerate(spec["skeleton"]) if slot["kind"] == "chat")
+    words = [f"測試第{n}句" for n in range(len(spec["skeleton"]))]
+    words[chat_at] = "機魂剛剛那句好好笑"
+    assembled = character_data.assemble_agent_chat({"lines": words, "work": []}, spec, NAME, ["機魂", "馬基納"])
+    assert "機魂" not in assembled["lines"][chat_at]["t"]
