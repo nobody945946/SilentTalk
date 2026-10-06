@@ -1,112 +1,62 @@
 #!/bin/bash
-# Character-mode LoRA, end to end: teacher data (character_data.py) -> hard
-# quality check -> LoRA training on the rows that pass -> GGUF adapter ->
-# turn-taking eval, paired against the current best. Every stage is
-# resumable and leaves a marker in $DIR/state/, so running this again
-# continues where it stopped (network drop, crash, reboot, closed session).
+# The machine spirit's character data, from the laptop agent's chats to the
+# rows that pass the hard check (character_data.py has the steps):
 #
-#   scripts/dev/character_pipeline.sh            # run / resume (safe to call often)
-#   scripts/dev/character_pipeline.sh --status   # show progress
+#   personas  the built-in card (machine_spirit.py builtin)
+#   import    the writer's answers (TASKS: persona and skeletons .json,
+#             ANSWERS: its JSONL), checked like external-check, stamped
+#   render    the app's own requests as rows
+#   student   Gemma 4 E4B answers them (its own server)
+#   check     the checker, Gemma 4 31B (another family than the writers),
+#             answers every gate question and compares lines blind, both
+#             orders
+#   filter    the whole set or nothing (character_data.HARD_CHECK)
 #
-# Round 3 (the first round's data stays in .runtime/dev/chardata/):
-#   teacher  Qwen3.6-27B, dense: best of the teacher comparison
-#            (.runtime/dev/m3/report-pick.json)
-#   student  Gemma 4 E4B (QLoRA), which writes its own line for every line
-#            row: the teacher's line is kept only if it beats that
-#   checker  Gemma 4 31B, another family than the teacher, so it does not
-#            share the teacher's blind spots; answers every gate question
-#            and compares teacher and student lines blind, both orders
-# Teacher and checker are 3-bit quants that fit whole in the ~16 GB the
-# shared GPU has free: the first round's 17 GB MoE spilled to the CPU and
-# the whole 3090 ran at 20-60 tokens/s. They are served by a CUDA build of
-# llama-server (LLAMA_SERVER): the Vulkan build the laptop uses read prompts
-# at ~120 tokens/s here.
+# The rows train together with the Agent's, one adapter for both (the
+# product loads one); this script stops at the checked rows.
 #
-# The filter stage refuses the whole set (stage *filter.blocked) when any
-# number in character_data.HARD_CHECK is missed; nothing is trained then.
-# Order, so that a set that would be refused costs as little as possible:
-#   calibrate  the checker on every gate row of 60 random first-round
-#              scripts: how far it agrees with labels made the same way.
-#              Whole scripts, in order, so the server reads each chat once
-#              (random single rows re-read ~1.4k tokens each: 10 s a row)
-#   pilot_*    the whole data path on 30 personas, through the hard check
-#   the rest   as many personas as the pilot's yield needs for ~2000 kept
-#              lines (at most 300; resumes on top of the pilot), training,
-#              eval paired against the current candidates
+#   CHARDATA=.runtime/dev/chardata-ms8 TASKS=... ANSWERS=... scripts/dev/character_pipeline.sh
+#   CHARDATA=... scripts/dev/character_pipeline.sh --status
 #
-# Same unattended rules as the first pipeline (archived with its data in
-# archive/distill-v1): flock keeps one copy running, a dead teacher is
-# restarted at once and a hung one within ~45 s, "not now" (no network, GPU
-# busy) exits 75 and is retried, a stage failing 3 times in a row is marked
-# .blocked until someone looks at it.
+# Every stage is resumable and leaves a marker in $DIR/state/. flock keeps one
+# copy running; a dead server is restarted at once and a hung one within
+# ~45 s; "not now" (GPU busy) exits 75 and is retried; a stage failing 3
+# times in a row is marked .blocked until someone looks at it.
 set -u
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$REPO" || exit 1
 export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
-# Nothing up to the judge needs the internet.
 export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 HF_DATASETS_OFFLINE=1
 export PYTHONUNBUFFERED=1
 
-# CHARDATA picks the round's folder. FIXED_PERSONA=1: the folder already holds
-# the one persona to train (the machine spirit: personas.jsonl written by
-# machine_spirit.py builtin, the app's own card); calibrate (the first round's
-# "is this for you" labels, a question the machine spirit is never asked) and
-# the persona steps are skipped, and the script count scales to ~2000 kept
-# lines instead. Its scripts are the app's Discord design: voice-room chats
-# and the owner's Agent-thread scripts (character_data.agent_script_request),
-# rendered as the chat-work and change-or-read questions, the Agent's
-# instructions and the character's lines; the hard check holds each kind.
-DIR=${CHARDATA:-.runtime/dev/chardata-v3}
-FIXED_PERSONA=${FIXED_PERSONA:-0}
+DIR=${CHARDATA:?set CHARDATA to the round's data folder}
 export CHARDATA_DIR="$REPO/$DIR"
-V1=.runtime/dev/chardata
 STATE=$DIR/state
 LOGS=$DIR/logs
 mkdir -p "$STATE" "$LOGS"
 LOG=$LOGS/pipeline.log
 
-PER_PERSONA=${PER_PERSONA:-2}
-GENERATOR=${GENERATOR:-.runtime/models/teacher/Qwen3.6-27B-UD-IQ3_XXS.gguf}
 CHECKER=${CHECKER:-.runtime/models/teacher/gemma-4-31B-it-UD-IQ3_XXS.gguf}
-PILOT_PERSONAS=30
-PILOT_SCRIPTS=${PILOT_SCRIPTS:-30}  # FIXED_PERSONA: scripts in the pilot
-HARD_LINES=1500  # character_data.HARD_CHECK["lines_kept"], scaled for the pilot
-TEACHER=$GENERATOR  # whichever model the data step needs; one at a time
-TEACHER_PORT=18200
-STUDENT_HF=${STUDENT_HF:-.runtime/hf/gemma-4-E4B-it-qat}
 STUDENT_GGUF=${STUDENT_GGUF:-gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf}
-TAG=${TAG:-v3-e4b}
-LORA_DIR=.runtime/dev/lora/character-$TAG
 E4B_MODELS=${EDGE_AGENT_MODEL_DIR:-$HOME/EdgeAgent/models}
-LORA_GGUF=$E4B_MODELS/character-$TAG.q8_0.gguf
-LLAMA_SRC=.runtime/tools/llama.cpp-b11179
+TEACHER=$CHECKER  # the model the current stage's server runs; one at a time
+TEACHER_PORT=18200
 LLAMA_SERVER=${LLAMA_SERVER:-.runtime/tools/llama.cpp-b11179-src/build-cuda/bin/llama-server}
 [ -x "$LLAMA_SERVER" ] || LLAMA_SERVER=llama-server
-# Parallel requests per server, measured on the shared 3090 (CUDA build):
-# the 27B teacher writes 43 tokens/s alone, 112 with 8, 151 with 16 (12
-# keeps its cache well inside the free memory). Gemma 4 31B reads prompts
-# slower the more sequences it holds (414 tokens/s with 1, 386 with 2, 112
-# with 8), so the checker gets 2.
+# Parallel requests per server on the shared 3090: Gemma 4 31B reads prompts
+# slower the more sequences it holds (414 tokens/s with 1, 112 with 8), so the
+# checker gets 2; the student 8 slots of 8192 (a machine-spirit chat fits).
 CHECKER_SLOTS=${CHECKER_SLOTS:-2}
-# Context per slot: the machine spirit's script prompt (agent rules, lore)
-# plus a 4000-token script does not fit in 4096; 8 slots of 8192 is what its
-# pilots ran with.
-if [ "$FIXED_PERSONA" = 1 ]; then
-    SLOTS=${SLOTS:-8}
-    SLOT_CTX=${SLOT_CTX:-8192}
-else
-    SLOTS=${SLOTS:-12}
-    SLOT_CTX=${SLOT_CTX:-4096}
-fi
+SLOTS=${SLOTS:-8}
+SLOT_CTX=${SLOT_CTX:-8192}
 SERVER_SLOTS=$SLOTS
 
 log() { echo "$(date '+%F %T') $*" | tee -a "$LOG"; }
 
 if [ "${1:-}" = "--status" ]; then
-    for f in personas scripts refined train student check train-checked; do
+    for f in scripts train student check train-checked; do
         printf '%-14s %s\n' "$f" "$(wc -l 2>/dev/null < "$DIR/$f.jsonl" || echo 0)"
     done
-    [ "$FIXED_PERSONA" != 1 ] && [ -f "$V1/filter.json" ] && echo "calibrate (first round's gate rows): $(tr -d '\n ' < "$V1/filter.json")"
     [ -f "$DIR/filter.json" ] && echo "filter: $(tr -d '\n ' < "$DIR/filter.json")"
     echo "done:    $(cd "$STATE" && ls | grep -v '\.' | tr '\n' ' ')"
     blocked=$(cd "$STATE" && ls *.blocked 2>/dev/null | tr '\n' ' ')
@@ -125,6 +75,7 @@ trap cleanup EXIT
 
 # shellcheck disable=SC1091
 source .runtime/tools/env.sh
+
 
 teacher_pid() {
     local pid
@@ -276,133 +227,19 @@ stage() {
     exit 1
 }
 
-online() { curl -s -m 10 -o /dev/null https://api.anthropic.com; }
-need_vram() {
-    local free; free=$(nvidia-smi --query-gpu=memory.free --format=csv,noheader,nounits | head -1)
-    [ "${free:-0}" -ge "$1" ] || { echo "only ${free} MiB free, need $1"; return 75; }
-}
-train() { need_vram 12500 || return 75; .runtime/train-venv/bin/python scripts/dev/train_lora.py "$@"; }
-eval_run() { .venv/bin/python scripts/dev/turn_eval.py --policy new --model "$STUDENT_GGUF" "$@"; }
-# Paired, both orders: plain E4B against the adapter on every decision and
-# line, and against the adapter on decisions only (lines from plain E4B:
-# the first round's gate adapter made lines worse when it wrote them).
-eval_pair() {
-    online || return 75
-    local a b
-    for pair in "now-e4b $TAG" "now-e4b $TAG-gate" "$TAG-gate $TAG"; do
-        read -r a b <<< "$pair"
-        [ -f ".runtime/dev/turn_eval/pair-$a-vs-$b.json" ] && continue
-        .venv/bin/python scripts/dev/turn_eval.py --judge-pair "$a" "$b" || return 1
-    done
-}
-generator() { TEACHER=$GENERATOR SERVER_SLOTS=$SLOTS; data "$@"; }
 checker() { TEACHER=$CHECKER SERVER_SLOTS=$CHECKER_SLOTS; data "$@"; }
 student() {
     TEACHER=$E4B_MODELS/$STUDENT_GGUF SERVER_SLOTS=$SLOTS
     data student --student-url "http://127.0.0.1:$TEACHER_PORT"
 }
-# The checker against the first round's gate labels. Informational: its
-# number decides whether the first round's gate adapter may ship, and shows
-# early whether the checker and the labels can meet HARD_CHECK at all.
-# In a directory of its own: the first round's files are not stamped with
-# today's rules (scripts/dev/provenance.py) and must not be extended.
-calibrate() {
-    local cal=$DIR/calibration
-    mkdir -p "$cal"
-    cp "$V1/personas.jsonl" "$cal/personas.jsonl"
-    python3 - "$V1" "$cal" <<'PY'
-import json, random, sys
-rows = [json.loads(line) for line in open(f"{sys.argv[1]}/train-gate-compact.jsonl")]
-pick = set(random.Random(7).sample(sorted({r["script"] for r in rows}), 60))
-with open(f"{sys.argv[2]}/gate-sample.jsonl", "w") as out:
-    for row in rows:
-        if row["script"] in pick:
-            out.write(json.dumps(row, ensure_ascii=False) + "\n")
-PY
-    CHARDATA_DIR="$REPO/$cal" checker check --rows gate-sample.jsonl || return
-    CHARDATA_DIR="$REPO/$cal" .venv/bin/python scripts/dev/character_data.py filter \
-        --rows gate-sample.jsonl --min-lines 0
-    local rc=$?
-    [ "$rc" -eq 0 ] || [ "$rc" -eq 3 ]
-}
-personas() { head -n "$1" "$V1/personas.jsonl" > "$DIR/personas.jsonl"; }
-# Personas for ~2000 kept lines at the pilot's yield.
-full_count() {
-    python3 - "$DIR/filter.json" "$PILOT_PERSONAS" <<'PY'
-import json, math, sys
-kept = json.load(open(sys.argv[1]))["lines_kept"]
-pilot = int(sys.argv[2])
-print(max(pilot, min(300, math.ceil(2000 * pilot / max(kept, 1)))))
-PY
-}
-# FIXED_PERSONA: scripts for ~2000 kept lines at the pilot's yield.
-full_scripts() {
-    python3 - "$DIR/filter.json" "$PILOT_SCRIPTS" <<'PY'
-import json, math, sys
-kept = json.load(open(sys.argv[1]))["lines_kept"]
-pilot = int(sys.argv[2])
-print(max(pilot, min(1000, math.ceil(2000 * pilot / max(kept, 1)))))
-PY
-}
-render() { .venv/bin/python scripts/dev/character_data.py render; }
-filter() { .venv/bin/python scripts/dev/character_data.py filter "$@"; }
+step() { .venv/bin/python scripts/dev/character_data.py "$@"; }
 
-if [ "$FIXED_PERSONA" = 1 ]; then
-    [ -s "$DIR/personas.jsonl" ] || {
-        log "FIXED_PERSONA needs $DIR/personas.jsonl (scripts/dev/machine_spirit.py builtin --chardata $DIR)"
-        exit 1
-    }
-    stage pilot_scripts generator scripts --per-persona "$PILOT_SCRIPTS"
-else
-    stage calibrate calibrate
-    # Exit 3 from a filter = refused by HARD_CHECK: marked blocked at once.
-    stage pilot_personas personas "$PILOT_PERSONAS"
-    stage pilot_scripts generator scripts --per-persona "$PER_PERSONA"
-fi
-stage pilot_refine generator refine
-stage pilot_render render
-stage pilot_student student
-stage pilot_check checker check
-if [ "$FIXED_PERSONA" = 1 ]; then
-    stage pilot_filter filter --min-lines $((HARD_LINES * PILOT_SCRIPTS / 600))
-    stage scripts generator scripts --per-persona "$(full_scripts)"
-else
-    stage pilot_filter filter --min-lines $((HARD_LINES * PILOT_PERSONAS / 300))
-    stage personas personas "$(full_count)"
-    stage scripts generator scripts --per-persona "$PER_PERSONA"
-fi
-stage refine generator refine
-stage render render
+stage personas .venv/bin/python scripts/dev/machine_spirit.py builtin --chardata "$DIR"
+stage import step external-import --tasks "${TASKS:?set TASKS}" --file "${ANSWERS:?set ANSWERS}"
+stage render step render
 stage student student
 stage check checker check
 teacher_down
-stage filter filter
-if [ "$FIXED_PERSONA" = 1 ]; then
-    # The agent character's adapter trains on these rows together with the
-    # Agent trajectories (EdgeAgent bench/dataset.py), one adapter for both,
-    # and is judged on its own eval sets (chat_task_eval, task_scope_eval,
-    # machine_spirit_eval): not this round's training stages, which would
-    # train a character-only adapter that the joint one replaces.
-    log "character data ready: $DIR/train-checked.jsonl"
-    exit 0
-fi
-
-# CPU preflight (offline): the loss must cover exactly the answer tokens.
-stage train_check env CUDA_VISIBLE_DEVICES= .runtime/train-venv/bin/python \
-    scripts/dev/train_lora.py --base "$STUDENT_HF" --out "$LORA_DIR.check" \
-    --data "$DIR/train-checked.jsonl" --max-length 3072 --check
-# One epoch: rows carry the whole chat (~1.5k tokens) at ~1.3 s each.
-stage train train --base "$STUDENT_HF" --out "$LORA_DIR" --data "$DIR/train-checked.jsonl" \
-    --batch 1 --grad-accum 16 --max-length 3072 --4bit --epochs 1
-stage convert env PYTHONPATH="$LLAMA_SRC/gguf-py" .runtime/train-venv/bin/python \
-    "$LLAMA_SRC/convert_lora_to_gguf.py" --base "$STUDENT_HF" --outtype q8_0 \
-    --outfile "$LORA_GGUF" "$LORA_DIR"
-# Generate first (offline, saved), then judge: no network only delays judging.
-stage eval eval_run --lora "$(basename "$LORA_GGUF")" --lora-uses called,active,line \
-    --agenda --lull --tag "$TAG"
-stage eval_gate eval_run --lora "$(basename "$LORA_GGUF")" --lora-uses called,active \
-    --agenda --lull --tag "$TAG-gate"
-stage eval_pair eval_pair
-
+stage filter step filter
 touch "$STATE/done"
-log "pipeline finished; see .runtime/dev/turn_eval/pair-*-vs-$TAG.json"
+log "character rows ready: $DIR/train-checked.jsonl"

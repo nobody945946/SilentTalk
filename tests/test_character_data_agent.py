@@ -8,9 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
-import dataclasses
 import json
-import random
 import sys
 from pathlib import Path
 from typing import Any
@@ -306,29 +304,6 @@ def test_thread_scripts_need_both_labels(lines: list, reason: str) -> None:
     assert _check({"lines": lines}, "thread") == ([], reason)
 
 
-def test_agent_requests_mix_what_the_calls_ask_for() -> None:
-    raw = {"id": MACHINE_SPIRIT.id, "name": NAME, "agent": True,
-           "lore": [{"term": "測試用語", "meaning": "測試意思"}]}
-    rng = random.Random(1)
-    specs = [character_data.script_request(raw, rng, set()) for _ in range(200)]
-    chats = [s for s in specs if s["kind"] == "chat"]
-    threads = [s for s in specs if s["kind"] == "thread"]
-    assert chats and threads
-    assert all(s["engagement"] == "called" and s["honesty"] == "machine" for s in specs)
-    assert all(1 <= len(s["work"]) <= 2 for s in chats)
-    assert any(item["by"] != s["owner"] for s in chats for item in s["work"])
-    assert any(s["computer"] and s["computer"]["claim"] for s in chats)
-    assert any(s["joke"] for s in chats) and not all(s["joke"] for s in chats)
-    assert all(0 < s["changes"] < s["length"] for s in threads)
-    persona = MACHINE_SPIRIT
-    prompt = character_data.script_prompt(persona, chats[0])
-    # the product's question, pointed at the line that asks for the work
-    assert _CHAT_TASK_ASK.strip("（）").replace("最後這句", "叫它做事的那句") in prompt
-    assert "「機魂」" in prompt
-    assert "想要、害怕、在意" in prompt  # the owner's rule: wants, not jargon
-    assert "changes" in character_data.script_prompt(persona, threads[0])
-
-
 def _rows(kind: str, labels: list[str], start: int) -> list[dict[str, Any]]:
     return [{"script": start + n, "index": 1, "kind": kind, "persona_id": MACHINE_SPIRIT.id,
              "owner": OWNER,
@@ -434,26 +409,29 @@ def test_the_builtin_card_is_the_one_the_app_ships(
         machine_spirit.builtin(tmp_path / "data", 3)
 
 
+# The chats the laptop's agent wrote against (persona and skeletons).
+TASKS = Path(__file__).resolve().parents[1] / "handoff/tasks/machine-spirit-1.json"
+
+
+def _chats() -> list[dict]:
+    return json.loads(TASKS.read_text(encoding="utf-8"))["chats"]
+
+
 def test_skeleton_chats_play_out_as_the_app_would_by_construction() -> None:
-    """The program lays out who speaks and what kind of line (agent_skeleton);
-    whatever words the teacher fills in, the chat keeps the app's rules: every
-    call answered next, one piece of work at a time, reported before the next."""
-    raw = {"id": MACHINE_SPIRIT.id, "name": NAME, "agent": True, "lore": []}
-    rng = random.Random(3)
-    chats = [s for s in (character_data.script_request(raw, rng, set()) for _ in range(120)) if s["kind"] == "chat"]
-    assert chats
-    for spec in chats:
+    """A skeleton fixes who speaks and what kind of line; whatever words the
+    writer fills in, the chat keeps the app's rules: every call answered next,
+    one piece of work at a time, reported before the next."""
+    for item in _chats():
+        spec = item["spec"]
         words = [f"測試第{n}句" for n in range(len(spec["skeleton"]))]
         data = {"lines": words, "work": [{"task": "測試指示", "result": "測試結果"}] * 3}
         assembled = character_data.assemble_agent_chat(data, spec, NAME, ["機魂", "馬基納"])
         lines, reason = character_data.check_script(assembled, NAME, spec, ["機魂", "馬基納"])
-        assert reason == "" and lines
+        assert reason == "" and lines, item["id"]
 
 
 def test_a_chat_line_that_names_the_character_in_passing_loses_the_name() -> None:
-    raw = {"id": MACHINE_SPIRIT.id, "name": NAME, "agent": True, "lore": []}
-    rng = random.Random(4)
-    spec = next(s for s in (character_data.script_request(raw, rng, set()) for _ in range(50)) if s["kind"] == "chat")
+    spec = _chats()[0]["spec"]
     chat_at = next(i for i, slot in enumerate(spec["skeleton"]) if slot["kind"] == "chat")
     words = [f"測試第{n}句" for n in range(len(spec["skeleton"]))]
     words[chat_at] = "機魂剛剛那句好好笑"
@@ -461,17 +439,14 @@ def test_a_chat_line_that_names_the_character_in_passing_loses_the_name() -> Non
     assert "機魂" not in assembled["lines"][chat_at]["t"]
 
 
-def test_another_models_answers_are_checked_like_the_teachers(tmp_path: Path) -> None:
+def test_the_writers_answers_are_checked_like_the_apps_rules(tmp_path: Path) -> None:
     """external-check, run where the answers were written: every chat must be
     usable, and each answer names the model that wrote it."""
-    raw = {"id": MACHINE_SPIRIT.id, "name": NAME, "agent": True, "lore": []}
-    rng = random.Random(3)
-    specs = [s for s in (character_data.script_request(raw, rng, set()) for _ in range(40)) if s["kind"] == "chat"][:3]
+    job = json.loads(TASKS.read_text(encoding="utf-8"))
+    job["chats"] = job["chats"][:3]
     tasks = tmp_path / "tasks.json"
-    persona = dataclasses.asdict(MACHINE_SPIRIT) | {"agent": True, "lore": []}
-    tasks.write_text(json.dumps({"persona": persona, "chats": [
-        {"id": f"ms{n:03d}", "spec": spec} for n, spec in enumerate(specs, 1)]}, ensure_ascii=False),
-        encoding="utf-8")
+    tasks.write_text(json.dumps(job, ensure_ascii=False), encoding="utf-8")
+    specs = [item["spec"] for item in job["chats"]]
 
     def answer(n: int, spec: dict, **extra) -> str:
         words = [f"測試第{i}句" for i in range(len(spec["skeleton"]))]

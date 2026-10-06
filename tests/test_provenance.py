@@ -44,8 +44,8 @@ def test_the_pipeline_refuses_a_directory_made_under_other_rules(
     scripts = tmp_path / "scripts.jsonl"
     character_data._append(scripts, {"lines": []})
     assert json.loads(provenance.sidecar(scripts).read_text())["version"] == character_data.rules_version()
-    monkeypatch.setattr(sys, "argv", ["character_data.py", "refine"])
-    monkeypatch.setattr(character_data, "make_refine", lambda args: None)
+    monkeypatch.setattr(sys, "argv", ["character_data.py", "render"])
+    monkeypatch.setattr(character_data, "make_render", lambda args: None)
     assert character_data.main() == 0
     # The persona card changes: everything made before it is stale.
     (tmp_path / "personas.jsonl").write_text('{"changed": true}\n', encoding="utf-8")
