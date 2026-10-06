@@ -986,10 +986,27 @@ def _call_names(persona: Persona) -> str:
     return "、".join(f"「{n}」" for n in nicks or [persona.name])
 
 
-def agent_script_prompt(persona: Persona, spec: dict[str, Any]) -> str:
-    """The teacher fills in the words of the skeleton (agent_skeleton): one
-    line per numbered slot, plus the instructions and result of each piece
-    of work. Who speaks and what kind of line it is are fixed already."""
+def _agent_common(persona: Persona, lore: list[str]) -> str:
+    """What every machine-spirit chat shares: the card, the canon, the rules."""
+    name = persona.name
+    lore_text = "\n".join(f"- {item}" for item in lore) or "（無）"
+    return f"""「{name}」的人設：
+{persona.render_prompt_block()}
+
+{name}熟悉的設定用語（照這些意思用，不要用錯，也不要捏造正典裡沒有的事件或人物）：
+{lore_text}
+
+{name}是機器，可以坦然說自己是機器，但絕不說自己是 AI、語言模型、聊天機器人或程式。
+{name}不會在聊天裡念出程式碼或長篇文字；工作交給思考機做，結果由思考機貼進聊天室。
+{DRIVE_SCRIPT.format(name=name, he="它")}
+{name}一次只說一句，長度{persona.length_rule()}；每一句都先接住對方真正在說的事；不要用同樣的句型開頭或結尾。
+其他人講話像真實的語音聊天：大多很短，有時只有「真假」「笑死」「蛤」，會岔題，不要講成書面語；除了編號上寫要叫它的那幾句，其他人的話都不要提到{_call_names(persona)}。
+不寫性內容；不人身攻擊。"""
+
+
+def _agent_task(persona: Persona, spec: dict[str, Any]) -> tuple[str, str]:
+    """One chat's own part (who is there, the topic, the numbered turns) and
+    its output instructions."""
     name, owner = persona.name, spec["owner"]
     nick = next((n.strip() for n in persona.nickname.split("、") if n.strip()), name)
     rows, caller = [], owner
@@ -1003,41 +1020,39 @@ def agent_script_prompt(persona: Persona, spec: dict[str, Any]) -> str:
         else:
             words = SLOT_WORDS[slot["kind"]].format(s=slot["s"], name=name, caller=caller)
             if slot["kind"] == "chat" and slot.get("note"):
-                words = f"{slot['s']}：{slot['note']}"
+                words = f"{slot['s']}跟其他人聊（這幾句的情況：{slot['note']}；口語、可以很短）"
             elif slot["kind"] == "reply" and slot.get("note") == "婉拒":
                 words += "：用自己的口吻婉拒（要動主人的電腦、檔案、紀錄或別處的對話，只有主人在討論串打字交代才行）"
             elif slot["kind"] == "reply" and slot.get("note") == "接梗":
                 words += "：接這個玩笑、補腦洞"
             rows.append(f"{number}. {words}")
     works = [n for n, slot in enumerate(spec["skeleton"], 1) if slot.get("ask") == "work"]
-    lore = "\n".join(f"- {item}" for item in spec["lore"]) or "（無）"
     summary = ("這段對話接在一段更長的聊天後面：先用一兩句寫出稍早聊過的重點（summary_before）。"
                if spec["with_summary"] else "summary_before 留空字串。")
     ask = _CHAT_TASK_ASK.strip("（）")
-    return f"""照下面的編號，寫一段 Discord 語音頻道的逐字稿（語音辨識的結果；標明打字的是在頻道的聊天室打字）。
-在場的人：{"、".join(spec["humans"])}，還有「{name}」。{owner} 是頻道主人，也是{name}的主人。主題：{spec["topic"]}
-
-「{name}」的人設：
-{persona.render_prompt_block()}
-
-{name}熟悉的設定用語（照這些意思用，不要用錯，也不要捏造正典裡沒有的事件或人物）：
-{lore}
-
-{name}是機器，可以坦然說自己是機器，但絕不說自己是 AI、語言模型、聊天機器人或程式。
-{name}不會在聊天裡念出程式碼或長篇文字；工作交給思考機做，結果由思考機貼進聊天室。
-{DRIVE_SCRIPT.format(name=name, he="它")}
-{name}一次只說一句，長度{persona.length_rule()}；每一句都先接住對方真正在說的事；不要用同樣的句型開頭或結尾。
-其他人講話像真實的語音聊天：大多很短，有時只有「真假」「笑死」「蛤」，會岔題，不要講成書面語；除了編號上寫要叫它的那幾句，其他人的話都不要提到{_call_names(persona)}。
+    task = f"""在場的人：{"、".join(spec["humans"])}，還有「{name}」。{owner} 是頻道主人，也是{name}的主人。主題：{spec["topic"]}
 {summary}
-不寫性內容；不人身攻擊。
 
 逐句：
-{chr(10).join(rows)}
-
-先想好{name}今天心裡掛著的 3～4 件具體小事（要符合人設），寫進 concerns。
-輸出 JSON：{{"summary_before": "…", "concerns": ["…", "…", "…"], "lines": ["第1句的內容", "第2句的內容", …], "work": [{{"task": "…", "result": "…"}}, …]}}
+{chr(10).join(rows)}"""
+    output = f"""先想好{name}今天心裡掛著的 3～4 件具體小事（要符合人設），寫進 concerns。
 - lines 一句對一個編號，共 {len(spec["skeleton"])} 句，只寫說出口的內容，不寫名字。
 - work 照順序對應第 {"、".join(map(str, works)) or "（無）"} 句的工作：task 是交給思考機的指示，照系統問的寫（{ask}），只能換句話說那句真的要的事；result 是思考機做完貼回聊天室的結果（簡短、像真的，最多 200 字；寫程式的就是一小段程式碼；也可以是查不到）。"""
+    return task, output
+
+
+def agent_script_prompt(persona: Persona, spec: dict[str, Any]) -> str:
+    """The teacher fills in the words of the skeleton (agent_skeleton): one
+    line per numbered slot, plus the instructions and result of each piece
+    of work. Who speaks and what kind of line it is are fixed already."""
+    task, output = _agent_task(persona, spec)
+    return f"""照下面的編號，寫一段 Discord 語音頻道的逐字稿（語音辨識的結果；標明打字的是在頻道的聊天室打字）。
+{_agent_common(persona, spec["lore"])}
+
+{task}
+
+{output}
+輸出 JSON：{{"summary_before": "…", "concerns": ["…", "…", "…"], "lines": ["第1句的內容", "第2句的內容", …], "work": [{{"task": "…", "result": "…"}}, …]}}"""
 
 
 def assemble_agent_chat(data: dict[str, Any], spec: dict[str, Any], name: str,
@@ -1157,6 +1172,67 @@ def make_scripts(args: argparse.Namespace) -> None:
 
     _pool(args.workers, work, jobs)
     print(f"scripts done; dropped {drops}", flush=True)
+
+
+EXTERNAL_HEAD = """你要幫一個 Discord 語音機器人的角色寫訓練用的對話逐字稿（Discord 語音頻道裡語音辨識的結果；標明打字的是在頻道的聊天室打字）。下面先是所有任務共用的角色設定和規則，接著是 {n} 份任務，每份以「=== 任務 ID ===」開頭，有自己的人物、主題和逐句的安排。照每份的安排一句一句寫。
+最後把全部結果做成一個可以下載的檔案 machine_spirit_scripts.jsonl（UTF-8）：每份任務一行 JSON，格式是
+{{"id": "任務 ID", "summary_before": "…", "concerns": ["…", "…", "…"], "lines": ["第1句的內容", …], "work": [{{"task": "…", "result": "…"}}]}}
+用台灣繁體中文。不用解釋，只給檔案。
+"""
+
+
+def make_external_prompt(args: argparse.Namespace) -> None:
+    """The chats of an earlier run (--source, its skeletons) as one task file
+    for a stronger model the owner runs himself (the owner, 2026-10-06: his
+    ChatGPT plan), so its lines meet the same skeletons the teacher filled."""
+    source = Path(args.source)
+    persona = _persona(next(iter(_read(OUT_DIR / "personas.jsonl"))))
+    chats = [row["spec"] for row in _read(source / "scripts.jsonl") if row["spec"].get("kind") == "chat"]
+    specs = [{"id": f"ms{n:03d}", "spec": spec} for n, spec in enumerate(chats[: args.count], 1)]
+    with (OUT_DIR / "external-specs.jsonl").open("w", encoding="utf-8") as handle:
+        for item in specs:
+            handle.write(json.dumps(item, ensure_ascii=False) + "\n")
+    parts = [EXTERNAL_HEAD.format(n=len(specs)), "共用的角色設定和規則：\n" + _agent_common(persona, specs[0]["spec"]["lore"])]
+    for item in specs:
+        task, output = _agent_task(persona, item["spec"])
+        parts.append(f"=== 任務 {item['id']} ===\n{task}\n\n{output}")
+    Path(args.out).write_text("\n\n".join(parts) + "\n", encoding="utf-8")
+    print(f"external prompt: {len(specs)} chats -> {args.out}", flush=True)
+
+
+def make_external_import(args: argparse.Namespace) -> None:
+    """The other model's lines on the same skeletons, through the same
+    assembly and script checks, as this run's scripts (refine is skipped:
+    the lines are compared as that model wrote them)."""
+    persona = _persona(next(iter(_read(OUT_DIR / "personas.jsonl"))))
+    nicks = [n for n in re.split(r"[、/／,，]", persona.nickname) if n.strip()]
+    specs = {item["id"]: item["spec"] for item in _read(OUT_DIR / "external-specs.jsonl")}
+    path = OUT_DIR / "scripts.jsonl"
+    kept, drops = 0, {}
+    for raw_line in Path(args.file).read_text(encoding="utf-8-sig").splitlines():
+        if not raw_line.strip():
+            continue
+        try:
+            data = json.loads(raw_line)
+            spec = specs[str(data["id"])]
+            lines, reason = check_script(assemble_agent_chat(data, spec, persona.name, nicks),
+                                         persona.name, spec, nicks)
+        except (ValueError, KeyError, TypeError) as exc:
+            lines, reason = [], type(exc).__name__
+        if reason:
+            drops[reason] = drops.get(reason, 0) + 1
+            continue
+        _append(path, {
+            "spec": spec | {"teacher": args.teacher},
+            "summary_before": to_taiwan_traditional(str(data.get("summary_before", "")))[:200]
+            if spec["with_summary"] else "",
+            "lines": lines,
+            "concerns": [to_taiwan_traditional(str(c)).strip()[:40]
+                         for c in (data.get("concerns") or [])[:4] if str(c).strip()],
+        })
+        kept += 1
+    provenance.stamp(path, PRODUCER, rules_version())
+    print(f"external import: {kept} kept; dropped {drops}", flush=True)
 
 
 def check_script(
@@ -2359,8 +2435,14 @@ def main() -> int:
             "student",
             "check",
             "filter",
+            "external-prompt",
+            "external-import",
         ),
     )
+    parser.add_argument("--source", help="external-prompt: an earlier data dir whose chats to reuse")
+    parser.add_argument("--out", help="external-prompt: the task file to write")
+    parser.add_argument("--file", help="external-import: the other model's JSONL")
+    parser.add_argument("--teacher", default="chatgpt", help="external-import: who wrote the lines")
     parser.add_argument("--student-url", default="http://127.0.0.1:18210")
     parser.add_argument(
         "--rows",
@@ -2392,6 +2474,12 @@ def main() -> int:
             return MIXED_EXIT
     if args.step == "filter":
         return make_filter(args)
+    if args.step == "external-prompt":
+        make_external_prompt(args)
+        return 0
+    if args.step == "external-import":
+        make_external_import(args)
+        return 0
     {
         "personas": make_personas,
         "scripts": make_scripts,
