@@ -1,8 +1,19 @@
-# Windows 工作檔：第 6 回合（部署機魂的新框架，重載，實測）
+# Windows 工作檔：第 6 回合（先寫機魂劇本，再部署新框架、重載、實測）
 
-更新：2026-10-06 清晨｜開發分支 `copilot-story-mode`｜回報分支 `laptop-report`
+更新：2026-10-06 上午｜開發分支 `copilot-story-mode`｜回報分支 `laptop-report`
 
-你從 AGENTS.md 被分到這裡，只照這份做。開始先在兩個 repo `git pull --ff-only`；失敗就停止並告訴使用者。回報用既有 worktree `C:\Users\A8fm0\Downloads\SilentTalk-laptop-report` 的 `handoff/reports/laptop.md`：**整份換成第 6 回合**（第 5 回合在 git 歷史），同一回合的檢查點改寫同一節。版面照第 5 回合（時間與額度、目標完成度統計、測試執行結果、修改檔案與 commit、記憶體與速度、Discord 數字表、紀錄目錄、使用者回饋、給接手模型的交接指示）。
+你從 AGENTS.md 被分到這裡，只照這份做。開始先在兩個 repo `git pull --ff-only`；失敗就停止並告訴使用者。回報用既有 worktree `C:\Users\A8fm0\Downloads\SilentTalk-laptop-report` 的 `handoff/reports/laptop.md`：**整份換成第 6 回合**（第 5 回合在 git 歷史），同一回合的檢查點改寫同一節。版面照第 5 回合（時間與額度、目標完成度統計、測試執行結果、修改檔案與 commit、記憶體與速度、Discord 數字表、紀錄目錄、使用者回饋、給接手模型的交接指示），最前面加一節「機魂劇本」。
+
+## 先做：機魂劇本（不需要使用者，不計入驗收分母）
+
+使用者 2026-10-06 決定：機魂聊天的訓練台詞，由筆電上這次的 agent 用它自己的模型寫（使用者的 ChatGPT 會員額度；開發機的老師模型寫得不夠好）。開發機收到後，用同一套品質關卡和舊老師比。
+
+1. 讀 SilentTalk repo 的 `handoff/tasks/machine-spirit-1.txt`，照它開頭的說明，**你自己**把 12 份對話一句一句寫完。不要寫程式或套範本產生台詞，不要呼叫別的模型，不要請使用者寫；每行的 `by` 照實填你自己的模型名稱和版本。
+2. 存成回報 worktree 的 `handoff/reports/machine-spirit-1.jsonl`（UTF-8，每份任務一行）。
+3. 在 SilentTalk repo 檢查：
+   `$env:PYTHONUTF8=1; .venv\Scripts\python.exe scripts\dev\character_data.py external-check --tasks handoff\tasks\machine-spirit-1.json --file C:\Users\A8fm0\Downloads\SilentTalk-laptop-report\handoff\reports\machine-spirit-1.jsonl`
+   預期最後一行 `ok 12/12`、exit 0。不是的話，照它列出的任務 ID 和原因重寫那幾份（例如 `lines 22, needs 23` 是少寫一句；`no answer` 是漏了那份），再檢查，直到 12/12。
+4. 和回報一起 commit、推 `laptop-report`，然後才開始下面的驗收清單。回報這節只寫：檢查結果（ok 幾/12、檢查了幾次）、`by` 填的名稱、花了多久；不貼台詞。
 
 ## 已拍板的現況（不要再問）
 

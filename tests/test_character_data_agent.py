@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import dataclasses
 import json
 import random
 import sys
@@ -458,3 +459,33 @@ def test_a_chat_line_that_names_the_character_in_passing_loses_the_name() -> Non
     words[chat_at] = "機魂剛剛那句好好笑"
     assembled = character_data.assemble_agent_chat({"lines": words, "work": []}, spec, NAME, ["機魂", "馬基納"])
     assert "機魂" not in assembled["lines"][chat_at]["t"]
+
+
+def test_another_models_answers_are_checked_like_the_teachers(tmp_path: Path) -> None:
+    """external-check, run where the answers were written: every chat must be
+    usable, and each answer names the model that wrote it."""
+    raw = {"id": MACHINE_SPIRIT.id, "name": NAME, "agent": True, "lore": []}
+    rng = random.Random(3)
+    specs = [s for s in (character_data.script_request(raw, rng, set()) for _ in range(40)) if s["kind"] == "chat"][:3]
+    tasks = tmp_path / "tasks.json"
+    persona = dataclasses.asdict(MACHINE_SPIRIT) | {"agent": True, "lore": []}
+    tasks.write_text(json.dumps({"persona": persona, "chats": [
+        {"id": f"ms{n:03d}", "spec": spec} for n, spec in enumerate(specs, 1)]}, ensure_ascii=False),
+        encoding="utf-8")
+
+    def answer(n: int, spec: dict, **extra) -> str:
+        words = [f"測試第{i}句" for i in range(len(spec["skeleton"]))]
+        return json.dumps({"id": f"ms{n:03d}", "by": "測試模型", "lines": words,
+                           "work": [{"task": "測試指示", "result": "測試結果"}] * 3} | extra,
+                          ensure_ascii=False)
+
+    answers = tmp_path / "answers.jsonl"
+    answers.write_text("\n".join([answer(1, specs[0]), answer(2, specs[1], lines=["太短"]),
+                                  answer(3, specs[2], by="")]), encoding="utf-8")
+    scripts, problems = character_data.external_answers(tasks, answers)
+    assert [s["spec"]["teacher"] for s in scripts] == ["測試模型"]
+    assert len(problems) == 2 and "needs" in problems[0] and '"by"' in problems[1]
+    answers.write_text("\n".join(answer(n, spec) for n, spec in enumerate(specs, 1)), encoding="utf-8")
+    assert len(character_data.external_answers(tasks, answers)[0]) == 3
+    answers.write_text(answer(1, specs[0]), encoding="utf-8")
+    assert character_data.external_answers(tasks, answers)[1] == ["ms002: no answer", "ms003: no answer"]

@@ -1064,7 +1064,7 @@ def assemble_agent_chat(data: dict[str, Any], spec: dict[str, Any], name: str,
     mention it in passing; the app would take that as a call)."""
     lines = [str(t) for t in (data.get("lines") or [])]
     if len(lines) != len(spec["skeleton"]):
-        raise ValueError("line count")
+        raise ValueError(f"lines {len(lines)}, needs {len(spec['skeleton'])}")
     works = list(data.get("work") or [])
     raw, caller, pending = [], spec["owner"], None
     for slot, text in zip(spec["skeleton"], lines, strict=True):
@@ -1177,64 +1177,104 @@ def make_scripts(args: argparse.Namespace) -> None:
 
 
 EXTERNAL_HEAD = """你要幫一個 Discord 語音機器人的角色寫訓練用的對話逐字稿（Discord 語音頻道裡語音辨識的結果；標明打字的是在頻道的聊天室打字）。下面先是所有任務共用的角色設定和規則，接著是 {n} 份任務，每份以「=== 任務 ID ===」開頭，有自己的人物、主題和逐句的安排。照每份的安排一句一句寫。
-最後把全部結果做成一個可以下載的檔案 machine_spirit_scripts.jsonl（UTF-8）：每份任務一行 JSON，格式是
-{{"id": "任務 ID", "summary_before": "…", "concerns": ["…", "…", "…"], "lines": ["第1句的內容", …], "work": [{{"task": "…", "result": "…"}}]}}
-用台灣繁體中文。不用解釋，只給檔案。
+每一句都由你自己想、自己寫：不要寫程式或套範本產生台詞，也不要交給別的模型或別人寫。
+結果存成一個 UTF-8 的 JSONL 檔，每份任務一行 JSON，格式是
+{{"id": "任務 ID", "by": "寫這些台詞的模型（照實寫你自己的名稱和版本）", "summary_before": "…", "concerns": ["…", "…", "…"], "lines": ["第1句的內容", …], "work": [{{"task": "…", "result": "…"}}]}}
+用台灣繁體中文。
 """
 
 
 def make_external_prompt(args: argparse.Namespace) -> None:
-    """The chats of an earlier run (--source, its skeletons) as one task file
-    for a stronger model the owner runs himself (the owner, 2026-10-06: his
-    ChatGPT plan), so its lines meet the same skeletons the teacher filled."""
-    source = Path(args.source)
-    persona = _persona(next(iter(_read(OUT_DIR / "personas.jsonl"))))
-    chats = [row["spec"] for row in _read(source / "scripts.jsonl") if row["spec"].get("kind") == "chat"]
+    """The chats of an earlier run (--source, its skeletons) as tasks for
+    another model the owner runs himself (the owner, 2026-10-06: the laptop's
+    agent on his ChatGPT plan), so its lines meet the same skeletons the
+    teacher filled. Writes <out>.txt (what that model reads) and <out>.json
+    (the persona and skeletons the answers are checked against)."""
+    persona_raw = next(iter(_read(OUT_DIR / "personas.jsonl")))
+    persona = _persona(persona_raw)
+    chats = [row["spec"] for row in _read(Path(args.source) / "scripts.jsonl")
+             if row["spec"].get("kind") == "chat"]
     specs = [{"id": f"ms{n:03d}", "spec": spec} for n, spec in enumerate(chats[: args.count], 1)]
-    with (OUT_DIR / "external-specs.jsonl").open("w", encoding="utf-8") as handle:
-        for item in specs:
-            handle.write(json.dumps(item, ensure_ascii=False) + "\n")
-    parts = [EXTERNAL_HEAD.format(n=len(specs)), "共用的角色設定和規則：\n" + _agent_common(persona, specs[0]["spec"]["lore"])]
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.with_suffix(".json").write_text(
+        json.dumps({"persona": persona_raw, "chats": specs}, ensure_ascii=False, indent=1) + "\n",
+        encoding="utf-8")
+    parts = [EXTERNAL_HEAD.format(n=len(specs)),
+             "共用的角色設定和規則：\n" + _agent_common(persona, specs[0]["spec"]["lore"])]
     for item in specs:
         task, output = _agent_task(persona, item["spec"])
         parts.append(f"=== 任務 {item['id']} ===\n{task}\n\n{output}")
-    Path(args.out).write_text("\n\n".join(parts) + "\n", encoding="utf-8")
-    print(f"external prompt: {len(specs)} chats -> {args.out}", flush=True)
+    out.with_suffix(".txt").write_text("\n\n".join(parts) + "\n", encoding="utf-8")
+    print(f"external prompt: {len(specs)} chats -> {out.with_suffix('.txt')}", flush=True)
 
 
-def make_external_import(args: argparse.Namespace) -> None:
-    """The other model's lines on the same skeletons, through the same
-    assembly and script checks, as this run's scripts (refine is skipped:
-    the lines are compared as that model wrote them)."""
-    persona = _persona(next(iter(_read(OUT_DIR / "personas.jsonl"))))
+def external_answers(tasks: Path, answers: Path) -> tuple[list[dict[str, Any]], list[str]]:
+    """The other model's answers (--file) to the tasks (--tasks, the .json of
+    external-prompt), assembled and checked like the teacher's scripts.
+    Returns the usable scripts and one problem line per unusable or missing
+    chat."""
+    job = json.loads(tasks.read_text(encoding="utf-8"))
+    persona = _persona(job["persona"])
     nicks = [n for n in re.split(r"[、/／,，]", persona.nickname) if n.strip()]
-    specs = {item["id"]: item["spec"] for item in _read(OUT_DIR / "external-specs.jsonl")}
-    path = OUT_DIR / "scripts.jsonl"
-    kept, drops = 0, {}
-    for raw_line in Path(args.file).read_text(encoding="utf-8-sig").splitlines():
+    specs = {item["id"]: item["spec"] for item in job["chats"]}
+    scripts, problems, seen = [], [], set()
+    for raw_line in answers.read_text(encoding="utf-8-sig").splitlines():
         if not raw_line.strip():
             continue
         try:
             data = json.loads(raw_line)
-            spec = specs[str(data["id"])]
+            key = str(data["id"])
+            spec = specs[key]
+            by = str(data.get("by") or "").strip()
+            if key in seen:
+                raise ValueError("answered twice")
+            seen.add(key)
+            if not by:
+                raise ValueError('no "by"')
             lines, reason = check_script(assemble_agent_chat(data, spec, persona.name, nicks),
                                          persona.name, spec, nicks)
         except (ValueError, KeyError, TypeError) as exc:
-            lines, reason = [], type(exc).__name__
-        if reason:
-            drops[reason] = drops.get(reason, 0) + 1
+            problems.append(f"{raw_line[:20]}…: {type(exc).__name__} {exc}")
             continue
-        _append(path, {
-            "spec": spec | {"teacher": args.teacher},
+        if reason:
+            problems.append(f"{key}: {reason}")
+            continue
+        scripts.append({
+            "spec": spec | {"teacher": by},
             "summary_before": to_taiwan_traditional(str(data.get("summary_before", "")))[:200]
             if spec["with_summary"] else "",
             "lines": lines,
             "concerns": [to_taiwan_traditional(str(c)).strip()[:40]
                          for c in (data.get("concerns") or [])[:4] if str(c).strip()],
         })
-        kept += 1
+    problems += [f"{key}: no answer" for key in specs if key not in seen]
+    return scripts, problems
+
+
+def make_external_check(args: argparse.Namespace) -> int:
+    """For the machine that writes the answers: exit 0 only when every chat
+    is usable."""
+    scripts, problems = external_answers(Path(args.tasks), Path(args.file))
+    for problem in problems:
+        print(problem, flush=True)
+    total = len(json.loads(Path(args.tasks).read_text(encoding="utf-8"))["chats"])
+    print(f"ok {len(scripts)}/{total}", flush=True)
+    return 0 if len(scripts) == total else 1
+
+
+def make_external_import(args: argparse.Namespace) -> None:
+    """The usable answers join this run's scripts (refine is skipped: the
+    lines are compared as that model wrote them), each stamped with its
+    writer."""
+    scripts, problems = external_answers(Path(args.tasks), Path(args.file))
+    path = OUT_DIR / "scripts.jsonl"
+    for script in scripts:
+        _append(path, script)
     provenance.stamp(path, PRODUCER, rules_version())
-    print(f"external import: {kept} kept; dropped {drops}", flush=True)
+    print(f"external import: {len(scripts)} kept; dropped {len(problems)}", flush=True)
+    for problem in problems:
+        print(problem, flush=True)
 
 
 def check_script(
@@ -2439,12 +2479,13 @@ def main() -> int:
             "filter",
             "external-prompt",
             "external-import",
+            "external-check",
         ),
     )
     parser.add_argument("--source", help="external-prompt: an earlier data dir whose chats to reuse")
-    parser.add_argument("--out", help="external-prompt: the task file to write")
-    parser.add_argument("--file", help="external-import: the other model's JSONL")
-    parser.add_argument("--teacher", default="chatgpt", help="external-import: who wrote the lines")
+    parser.add_argument("--out", help="external-prompt: the tasks to write (<out>.txt and <out>.json)")
+    parser.add_argument("--tasks", help="external-check/import: the .json external-prompt wrote")
+    parser.add_argument("--file", help="external-check/import: the other model's JSONL")
     parser.add_argument("--student-url", default="http://127.0.0.1:18210")
     parser.add_argument(
         "--rows",
@@ -2465,6 +2506,9 @@ def main() -> int:
     parser.add_argument("--max-chars", type=int, default=72)
     parser.add_argument("--max-prompt-chars", type=int, default=3400)
     args = parser.parse_args()
+    if args.step == "external-check":
+        # Runs on the machine that wrote the answers: no data directory.
+        return make_external_check(args)
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     if args.step != "personas":
         # Every file this step reads or extends must come from these rules.

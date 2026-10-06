@@ -18,6 +18,7 @@
 - **Agent 架構**：EdgeAgent 的身分就是機魂、自己的系統提示；只在開發機設計的工具框架裡做事；工具是大目錄（tool_search 後面），訓練教「查目錄→選工具→填參數」，評測放訓練沒見過的工具；27B 老師在同一框架解題、程式驗收過才當資料、訓練 E4B LoRA、配對比較贏才上線；框架先定再錄；簡轉繁在輸出最後一關、次數進 log；不用雲端模型。
 - **工具目錄四類全做**（2026-10-06：「照你建議地做，just do your best man」）：資訊與翻譯、電腦雜事現成工具、開發日常、MCP（瀏覽器、LibreOffice、無人機只模擬）。**改程式放進框架，由程式驗收**：改完跑檢查，沒過就說沒做到。
 - **上網研究**：依來源分級挑 3–5 頁、只給相關段落；論壇／內容農場／轉貼站預設不用（明說要網友意見才查並標明）；程式核對數字；數字要一個一級來源或兩個獨立二級來源；說法不一列出分歧；時效看發布日期；達不到就說找不到。
+- **機魂台詞換老師**（2026-10-06：「我不用金鑰，我用他會員額度」「為何不能推上REPO，反正筆電端剛好是CODEX」）：開發機出任務（`handoff/tasks/`），筆電這次的 agent 用自己的模型（使用者的 ChatGPT 會員）親手寫、`external-check` 驗過後推 `laptop-report`；開發機 `external-import` 進新資料夾，用同一套關卡和 27B 比。只用在角色台詞；用它訓的 adapter 只留在使用者自己的機器，不進公開下載（OpenAI 條款限制拿輸出訓練競品）。Agent 解題資料仍用開源老師。不用 Google 雲端硬碟（連接器連的不是使用者的帳號）。
 - 使用者：「我希望醒來時，一切通通都完滿了，只差讓筆電Agent部署」。
 
 ## 2. 現況
@@ -28,7 +29,7 @@
 | SilentTalk | ✅ 批准私訊用 EdgeAgent 給的說明標題；log 記主機核對次數（`agent_task_checks`）；`train_lora.py` 支援 `train_from` |
 | 考場 | ✅ 題目可設 scope、檢查讀回答（`/result/answer.json`）；新題：工具 11（`date_calc`、`zip_files`、`unzip_file` 不進訓練）、範圍與話術 6、MCP 13（替身伺服器，`mcp_eval.py` 退役）、上網研究陷阱 7（`bench/web_fixture.py` 替身網路）；求知儀式的擷取改在沙盒 |
 | Agent 訓練 | ✅ 第一個 adapter `agent-fw1`（工具／範圍題 285 列）加了搜尋保險後配對贏（§6），**已出貨**（使用者決定放進 repo）：EdgeAgent `edge_agent/adapters/`，部署驗雜湊後複製進 `models`（`c8f93c3`）；SilentTalk 租借 E4B 時預設帶上，`character_lora_uses` 預設空（`78fa91b`）。佇列（`EdgeAgent/.runtime/fw/queue*.sh`，同名 .log；每步留 `<步>.done`，失敗 10 分鐘後重試）：`queue5.sh` 老師解 60 題 repo → `agent-rows-fw2.jsonl` |
-| 角色資料（機魂） | ❌ v6 照新介面改寫完（`74ce488`、`a882aba`），兩次試跑都被硬關卡擋（門檻沒降）。第二次（`.runtime/dev/chardata-ms3/filter.json`）：判斷題已過——整體一致 96.2%、要不要改動 94.9%（唯讀那邊 86.7%）、聊天級工作 100%；**沒過的是台詞**：只剩 5 句、老師兩種順序都贏 33%（要 50%）、檢查員一致 66.7%（要 70%）。老師和學生（E4B＋人設）的台詞一樣平，看不出想要什麼；劇本也丟很多（少 ask 標籤、提到名字卻不是對它說、沒被叫就說話）。下一步是改老師寫台詞的方式（照「慾望不是用語」），不是降門檻 |
+| 角色資料（機魂） | ❌ 判斷題過關卡，台詞沒過（門檻沒降）。最新試跑 `.runtime/dev/chardata-ms5`（劇本骨架由程式排、老師只填詞，`3d0370f`）：台詞 66 列留 28、27B 的台詞只贏學生 42.4%（要 50%）、檢查員一致 74.2%、工作指示一致 80%（要 85%）；14 份劇本因老師寫的句數和骨架不符被丟。瓶頸是老師的台詞，不是關卡 → 換老師（§1、§3 第 4 項） |
 | 筆電 | 第 5 回合 14/34 完成（重載與 Discord 實測等使用者），評分 15/18（§4 規則 13）。第 6 回合寫在 `handoff/laptop.md` |
 | 公開下載 | `windows-2026.10.02`；下一版等筆電驗過，用 `scripts/release_windows.py` |
 
@@ -37,7 +38,12 @@
 1. **筆電第 6 回合**（`handoff/laptop.md`，28 項：部署新框架和 adapter、重載、Windows 工具實測、介面兩件、Discord 實測）：等使用者在筆電開工，回來後照 §4 規則 13 評分。
 2. 佇列還在跑的：`queue6.sh` 接著 `queue5.sh` 老師解 60 題 repo → `agent-rows-fw2.jsonl`。跑完可刪 `/home/clawd/EdgeAgent-toolbox` 工作樹（佇列用它）。
 3. **下一個 adapter（雙用途）**：在最終框架重錄工具題（`tool_search` 的回覆變了）＋ repo 題（`queue5.sh`）＋ MCP 訓練題（替身伺服器要另一套資料，不能和考題重疊；`bench/mcp_eval/servers.mjs` 加資料變體）＋ 角色 v6 通過硬關卡的列，一起訓一個；Agent 用考場配對、角色用 `chat_task_eval`／`task_scope_eval`／`machine_spirit_eval`／`turn_eval` 比。
-4. **角色 v6 的台詞**：讓老師先想「此刻機魂想要／怕什麼」再寫台詞（refine 的提示），或比較別的老師（35B-A3B 曾和 27B 接近）；劇本丟棄可再修（少 ask 標籤預設 talk、提到名字且下一句是它回的就算對它說）。每次試跑約 10 分鐘：`.venv/bin/python scripts/dev/machine_spirit.py builtin --chardata <新資料夾>`，再 `CHARDATA=<新資料夾> FIXED_PERSONA=1 scripts/dev/character_pipeline.sh`，被擋後要按 PID 關掉 18200 埠的伺服器。
+4. **機魂台詞換老師**：筆電照 `handoff/laptop.md` 先寫 `handoff/tasks/machine-spirit-1.txt` 的 12 份（ms5 的骨架），推到 `laptop-report` 的 `handoff/reports/machine-spirit-1.jsonl`。收到後照抄：
+   `git fetch -q origin laptop-report && git show origin/laptop-report:handoff/reports/machine-spirit-1.jsonl > .runtime/dev/ext1.jsonl`
+   `D=.runtime/dev/chardata-ms7; .venv/bin/python scripts/dev/machine_spirit.py builtin --chardata $D`
+   `CHARDATA_DIR=$PWD/$D .venv/bin/python scripts/dev/character_data.py external-import --tasks handoff/tasks/machine-spirit-1.json --file .runtime/dev/ext1.jsonl`（預期 12 kept）
+   `mkdir -p $D/state && touch $D/state/pilot_scripts $D/state/pilot_refine`（不重寫、不改寫，比它原本的台詞）
+   `CHARDATA=$D FIXED_PERSONA=1 PILOT_SCRIPTS=12 scripts/dev/character_pipeline.sh`，看 `$D/filter.json` 的 `line_win_rate` 和 ms5 的 42.4% 比；被擋後按 PID 關掉 18200 埠的伺服器。贏了就出更大一批新骨架的任務（`external-prompt` 目前從舊資料夾的劇本取骨架，要量就改成直接產骨架）。
 
 ## 4. 開發機規則（通用規則在 AGENTS.md）
 
@@ -45,7 +51,7 @@
 2. **Agent 只在沙盒裡跑**：不准在主機上直接啟動 EdgeAgent、Pi 或 `agent_bridge.mjs`。改了 `sandbox()` 先跑 `--containment`。
 3. 題目先過 `--selftest`（不做事要判不過、套標準答案要判過）；訓練題至少要「不做事判不過」，並用真工具解過一輪。
 4. 比較一律同一批題目配對（`bench/report.py A B`）。
-5. **Claude 的輸出不能拿來訓練，也不能拿來挑訓練資料**。人設卡、劇本、台詞、請求文字、解題紀錄由開源權重模型產生；評估資料不給老師看。
+5. **Claude 的輸出不能拿來訓練，也不能拿來挑訓練資料**。人設卡、劇本、台詞、請求文字、解題紀錄由開源權重模型產生（例外：機魂台詞由筆電 agent 的模型寫，§1）；評估資料不給老師看。
 6. 只有通過硬關卡的資料才能訓練；資料檔帶規則版本戳記，不混版本（`dataset.py` 每個 scope 只容一個產品版本，且系統提示必須是現在的 `prompt.py`）。
 7. GPU 和別的專案共用（ComfyUI、whisper-api），不動它們的程序。
 8. 關程序先列出 PID 再 kill。
