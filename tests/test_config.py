@@ -144,7 +144,7 @@ def test_rejects_unknown_stt_engine(
 @pytest.mark.parametrize(
     ("model", "adapter", "uses"),
     [
-        ("gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf", "machine-spirit-v1.q8_0.gguf", ("line", "task")),
+        ("gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf", "machine-spirit-char-v1.q8_0.gguf", ("line", "task")),
         ("gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf", "", ()),
         ("Qwen3.5-4B-Q4_K_M.gguf", "", ()),
     ],

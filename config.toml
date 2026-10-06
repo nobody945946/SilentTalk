@@ -42,8 +42,9 @@ auto_popup = true
 # must match the exact base model used for training.
 llm_model = "gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf"
 # The adapter the lease loads, a filename in EdgeAgent's models directory.
-# Left unset: the machine-spirit adapter EdgeAgent installs for the default
-# E4B (none for other models). Set it to use your own adapter, or to "" for none.
+# Left unset: the machine spirit's adapter EdgeAgent installs for the default
+# E4B (none for other models; the Agent keeps its own). Set it to use your own
+# adapter, or to "" for none.
 # character_lora = ""
 # Which of the character's own requests apply that adapter ("called",
 # "active", "line", "options", "task", "scope"). Left unset: what the bundled adapter

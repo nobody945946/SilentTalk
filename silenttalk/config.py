@@ -20,14 +20,14 @@ MEMORY_LEVEL_CHOICES: tuple[tuple[str, str], ...] = (
 from silenttalk.settings_store import SETTINGS_FILE, SettingsStore, merge
 
 DEFAULT_LLM_MODEL = "gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf"
-# The adapter EdgeAgent installs next to the base it was trained on
-# (EdgeAgent adapters/; the owner, 2026-10-06: ship it in the repo), and the
-# character's requests it was trained for. One adapter for both clients: the
-# machine spirit's lines and work questions, and the Agent's tool work. An
-# adapter only fits its own base, so it follows the model: another model gets
-# none unless copilot.character_lora names one, applied to the parts
-# copilot.character_lora_uses names (none by default).
-BUNDLED_ADAPTERS = {DEFAULT_LLM_MODEL: ("machine-spirit-v1.q8_0.gguf", ("line", "task"))}
+# The machine spirit's adapter EdgeAgent installs next to the base it was
+# trained on (EdgeAgent adapters/; the owner, 2026-10-06: ship it in the
+# repo), and the character's requests it was trained for. The lease brings it
+# for the character; the Agent keeps its own (EdgeAgent loads both, each
+# request names its own). An adapter only fits its own base, so it follows the
+# model: another model gets none unless copilot.character_lora names one,
+# applied to the parts copilot.character_lora_uses names (none by default).
+BUNDLED_ADAPTERS = {DEFAULT_LLM_MODEL: ("machine-spirit-char-v1.q8_0.gguf", ("line", "task"))}
 STT_ENGINES = ("paraformer", "sensevoice")
 
 
