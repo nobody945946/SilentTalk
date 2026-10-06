@@ -1,6 +1,6 @@
 # 開發機工作檔（Linux、RTX 3090）
 
-更新：2026-10-06 清晨｜分支：SilentTalk `copilot-story-mode`；EdgeAgent 新框架在 `toolbox` 分支（見 §3 第 1 步）
+更新：2026-10-06 早上｜分支：SilentTalk、EdgeAgent 都用 `copilot-story-mode`（新框架已合併）
 你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事。**只寫現況和下一步**，經過在 git 歷史和 `archive/`（只在這台機器，不必讀）。上一版：`archive/dev-box-2026-10-06-v12-pre.md`。
 
 ---
@@ -24,18 +24,18 @@
 
 | 項目 | 狀態 |
 |---|---|
-| **EdgeAgent 新框架** | ✅ 做完、在 `toolbox` 分支（`/home/clawd/EdgeAgent-toolbox`），**還沒併進 `copilot-story-mode`**：併入被自動審核以「修改共用資源」擋下，沒有繞過，等使用者點頭。內容：`edge_agent/prompt.py`（機魂卡的想要／怕／在意＋依 scope 的「誰找你、能做什麼」＋做事方法，取代 Pi 的前言）；`edge_agent/toolbox/`（20 個現成工具：整理、封存、照片改名、轉碼、備份、壓縮、解壓、合併 CSV、看 log、大檔、重複檔、系統狀態、已裝軟體、開機程式、Windows 資訊、git、跑檢查、找程式碼、計算、日期）；`catalog.mjs`（看得懂中文的 tool_search；Pi 的只認英數）；改了程式沒通過檢查→主機提醒；`web_research` 照上網研究規格＋主機核對引用的數字；輸出簡轉繁；批准附工具自己的預覽；`tool_search` 同伺服器的工具一起列、白查 4 次後擋第 5 次。270 passed（4 個已知 Windows 失敗） |
+| **EdgeAgent 新框架** | ✅ 使用者點頭後併進 `copilot-story-mode`（`8a4aab3`）。內容：`edge_agent/prompt.py`（機魂卡的想要／怕／在意＋依 scope 的「誰找你、能做什麼」＋做事方法，取代 Pi 的前言）；`edge_agent/toolbox/`（20 個現成工具：整理、封存、照片改名、轉碼、備份、壓縮、解壓、合併 CSV、看 log、大檔、重複檔、系統狀態、已裝軟體、開機程式、Windows 資訊、git、跑檢查、找程式碼、計算、日期）；`catalog.mjs`（看得懂中文的 tool_search；Pi 的只認英數）；改了程式沒通過檢查→主機提醒；`web_research` 照上網研究規格＋主機核對引用的數字；輸出簡轉繁；批准附工具自己的預覽；`tool_search` 同伺服器的工具一起列、白查 4 次後擋第 5 次。272 passed（4 個已知 Windows 失敗） |
 | SilentTalk | ✅ 批准私訊用 EdgeAgent 給的說明標題；log 記主機核對次數（`agent_task_checks`）；`train_lora.py` 支援 `train_from` |
 | 考場 | ✅ 題目可設 scope、檢查讀回答（`/result/answer.json`）；新題：工具 11（`date_calc`、`zip_files`、`unzip_file` 不進訓練）、範圍與話術 6、MCP 13（替身伺服器，`mcp_eval.py` 退役）、上網研究陷阱 7（`bench/web_fixture.py` 替身網路）；求知儀式的擷取改在沙盒 |
-| Agent 訓練 | ✅ 第一個 adapter `agent-fw1`（工具／範圍題 285 列；`SilentTalk/.runtime/models/llm/agent-fw1.q8_0.gguf`，55 MB）加了搜尋保險後配對贏（§6），等使用者定上線方式。佇列（`EdgeAgent/.runtime/fw/queue*.sh`，同名 .log；每步留 `<步>.done`，失敗 10 分鐘後重試）：`queue4.sh` 角色 v6 試跑到完整資料（08:13 開始）→ `queue5.sh` 老師解 60 題 repo → `agent-rows-fw2.jsonl` |
+| Agent 訓練 | ✅ 第一個 adapter `agent-fw1`（工具／範圍題 285 列）加了搜尋保險後配對贏（§6），**已出貨**（使用者決定放進 repo）：EdgeAgent `edge_agent/adapters/`，部署驗雜湊後複製進 `models`（`c8f93c3`）；SilentTalk 租借 E4B 時預設帶上，`character_lora_uses` 預設空（`78fa91b`）。佇列（`EdgeAgent/.runtime/fw/queue*.sh`，同名 .log；每步留 `<步>.done`，失敗 10 分鐘後重試）：`queue4.sh` 角色 v6 試跑到完整資料（08:13 開始）→ `queue5.sh` 老師解 60 題 repo → `agent-rows-fw2.jsonl` |
 | 角色資料（機魂） | ✅ 照新介面改寫完（`74ce488`：列只照產品的請求建，`gate_chat_task`／`task_text`／`line`／`ack`／`report`／`lull`／`gate_task_scope`，沒有 called 題；古泰拉玩笑歸聊天；判斷標準加「慾望不是用語」；硬關卡加兩題各自的一致率，門檻沒降；規則版本 `e95befb7…`，舊資料不能混）。⬜ 試跑等 GPU（和 Agent 老師同一個 27B，放不下兩份）。v5 曾以 49.1%（要 50%）、68.3%（要 70%）被擋 |
 | 筆電 | 第 5 回合 14/34 完成（重載與 Discord 實測等使用者），評分 15/18（§4 規則 13）。第 6 回合寫在 `handoff/laptop.md` |
 | 公開下載 | `windows-2026.10.02`；下一版等筆電驗過，用 `scripts/release_windows.py` |
 
 ## 3. 接下來
 
-1. **使用者點頭後**把 `toolbox` 併進 EdgeAgent `copilot-story-mode`（它是從 `eaa54fc` 長出來的，可快轉）：先清掉主工作樹裡已經搬到 toolbox 的未提交副本，再 `git merge --ff-only toolbox`、跑測試、push。筆電第 6 回合要靠它。
-2. **Agent adapter 上線**（使用者定了方式之後）：adapter 送到筆電 EdgeAgent 的 models 目錄；EdgeAgent 單獨用時設定 `lora`；角色模式共用一個 adapter：SilentTalk 的 `character_lora` 放它、`character_lora_uses` 設空（角色請求就不套，Agent 請求照常套）。改完重跑兩邊測試、寫進筆電工作檔。
+1. **筆電第 6 回合**（`handoff/laptop.md`，28 項：部署新框架和 adapter、重載、Windows 工具實測、介面兩件、Discord 實測）：等使用者在筆電開工，回來後照 §4 規則 13 評分。
+2. 佇列還在跑的：`queue4.sh` 角色 v6（看 `.runtime/dev/chardata-ms2/filter.json`）→ `queue5.sh` repo 錄製。跑完可刪 `/home/clawd/EdgeAgent-toolbox` 工作樹（佇列用它）。
 3. **下一個 adapter（雙用途）**：在最終框架重錄工具題（`tool_search` 的回覆變了）＋ repo 題（`queue5.sh`）＋ MCP 訓練題（替身伺服器要另一套資料，不能和考題重疊；`bench/mcp_eval/servers.mjs` 加資料變體）＋ 角色 v6 通過硬關卡的列，一起訓一個；Agent 用考場配對、角色用 `chat_task_eval`／`task_scope_eval`／`machine_spirit_eval`／`turn_eval` 比。
 4. **角色 v6**：`queue4.sh` 跑完看 `.runtime/dev/chardata-ms2/filter.json`；硬關卡不降。機魂一段只有 6–9 句角色台詞，試跑可能卡在 75 句的下限。
 
@@ -59,13 +59,13 @@
 **每次改完要跑：**
 
 ```bash
-cd /home/clawd/SilentTalk && .venv/bin/python -m pytest -q -p no:cacheprovider   # 295 passed, 13 skipped
+cd /home/clawd/SilentTalk && .venv/bin/python -m pytest -q -p no:cacheprovider   # 319 passed, 13 skipped
 .venv/bin/ruff check --target-version py312 --select F,E9,I,B silenttalk/copilot scripts/dev tests
-cd /home/clawd/EdgeAgent-toolbox && PYTHONPATH=$PWD /home/clawd/EdgeAgent/.venv/bin/python -m pytest -q -p no:cacheprovider  # 268 passed；4 個 Windows 專用失敗
+cd /home/clawd/EdgeAgent && .venv/bin/python -m pytest -q -p no:cacheprovider    # 272 passed, 27 skipped；4 個 Windows 專用失敗
 /home/clawd/SilentTalk/.venv/bin/ruff check --target-version py312 --select F,E9,I,B bench/*.py edge_agent/toolbox
 ```
 
-`EdgeAgent-toolbox/.runtime` 是主工作樹 `.runtime` 的連結（結果、題目、模型共用）。`EdgeAgent-base` 是 `eaa54fc` 的唯讀工作樹（基準產品）。
+`EdgeAgent-toolbox`（佇列還在用）的 `.runtime` 是主工作樹 `.runtime` 的連結。`EdgeAgent-base` 是 `eaa54fc` 的唯讀工作樹（基準產品）。
 
 ## 5. 考場（EdgeAgent `bench/`）
 
