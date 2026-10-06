@@ -20,7 +20,7 @@
 |---|---|---|
 | **寫程式的 Agent**（主線） | mini-swe-agent 框架：一個 `bash` 工具，提示照開源軌跡逐字（EdgeAgent `bench/mini_runner.py`、`bench/mini_templates.json`）。考：SWE-bench Verified 固定 60 題，官方映像檔、無網路、官方評分（`bench/swebench_run.py`，題目 `.runtime/swebench/verified-60.jsonl`，repo 清單 `verified-repos.json`）。資料：`bench/trace_rows.py`（nvidia/Open-SWE-Traces 的 minisweagent，只收開源老師、已解出、已提交、非 SWE-bench repo）。訓練：SilentTalk `scripts/dev/train_lora.py`（長度和能否訓練只由它判斷）。 | 選它的理由：唯一有大量同格式的開源訓練資料（Qwen3.6-27B 已解出 Python 20,154 列；qwen38 也下載了）、不限語言和題型；研究顯示 4B 在這類框架 SFT 後約 40%。CPU 冒煙：工具呼叫正常。尚未在 GPU 上量。上線（Windows 要 Git Bash）等它贏了再做 |
 | **產品 Agent**（筆電上的對話、雜事、工具、MCP、上網研究） | EdgeAgent 的 Pi 迴圈＋工具箱（20 個）。考：`bench/run.py`＋`agent_runner.py`，題目 `bench/tasks/`（78）。資料：`bench/make_tool_tasks.py` 出工具題，27B 在框架裡錄、`bench/dataset.py` 轉列。 | `agent-fw1` 已出貨。`agent-fw2` 的列 304（只有工具題，`.runtime/agentdata/agent-rows-fw2.jsonl`）待訓 |
-| **機魂資料** | 筆電寫（任務在 `handoff/tasks/`，答案推 `laptop-report`）→ `character_data.py external-check`（筆電）→ `scripts/dev/character_pipeline.sh`：內建人設→匯入→render→E4B 學生→Gemma 31B 檢查→硬關卡。 | 收到並核對：ms1 12、ms2 訓練 100／保留 20（`.runtime/dev/ext/`，保留 20 永不訓練）。還沒跑管線 |
+| **機魂資料** | 筆電寫（任務在 `handoff/tasks/`，答案推 `laptop-report`）→ `character_data.py external-check`（筆電）→ `scripts/dev/character_pipeline.sh`：內建人設→匯入→render→E4B 學生→Gemma 31B 檢查→硬關卡。 | ms2 訓練 100 份跑完管線（`.runtime/dev/chardata-ms8/filter.json`）：**被硬關卡擋下**。判斷題一致 89.3%、工作指示 98% 都過；台詞贏 E4B 學生 41.9%（要 50%，舊 27B 42.4%）、檢查員兩種順序一致 68.7%（要 70%）、設定用語 77.6%（要 80%）、留下 152 句（要 1,500）。換寫手比例幾乎不變、檢查員又不穩 → 先查檢查員（§3） |
 | **筆電上的 adapter** | 一個 adapter 給 E4B：Agent 列＋寫程式的列＋機魂列，`train_lora.py` 一起訓，各自的考場配對比較贏才出貨 | 現在出貨的是 `agent-fw1` |
 | **佇列** | `EdgeAgent/.runtime/fw/queue.sh`，同時只有這一支；每步留 `<步>.done`，失敗 10 分鐘重試；GPU 步驟等到夠空才跑 | 要寫（§3） |
 
@@ -31,7 +31,8 @@
 1. **寫 `queue.sh` 並啟動**（GPU 和別的專案共用，下午 ace-step 佔 17 GB 數小時，每步先等 GPU 夠空）：
    - 機魂：`CHARDATA=.runtime/dev/chardata-ms8 TASKS=.runtime/dev/ext/machine-spirit-2.train.tasks.json ANSWERS=.runtime/dev/ext/machine-spirit-2.train.jsonl scripts/dev/character_pipeline.sh`，看 `filter.json`（台詞贏 E4B 的比例要 ≥50%，舊 27B 是 42.4%）。
    - 寫程式：E4B 在 SWE-bench 60 的基準（`bench/swebench_run.py --config e4b-mini --tag swe60-e4b`）→ 訓 `trace-v1`（`trace-rows-v1.jsonl`，`--max-length 32768`）→ 同 60 題再考。贏了才往下（加 E4B 自己在 SWE 類題目的過關軌跡、合併 adapter、上線）。
-2. 筆電第 6 回合回來後照 §4 規則 12 評分（劇本那段不計分母）。
+2. **機魂的檢查員**：Qwen3.6-27B（現在寫手是 GPT-6，27B 不再是寫手）在 ms8 同一批列上當檢查員，比 Gemma 31B 的兩種順序一致率；明顯較穩就換掉 31B（只留一個檢查員），再看台詞勝率和要請筆電寫多少。排在寫程式的 GPU 工作之後。
+3. 筆電第 6 回合回來後照 §4 規則 12 評分（劇本那段不計分母）。
 
 ## 4. 開發機規則（通用規則在 AGENTS.md）
 
