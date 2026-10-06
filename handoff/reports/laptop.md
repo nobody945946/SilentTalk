@@ -2,12 +2,14 @@
 
 ## 機魂劇本
 
-- external-check：新版ok 12/12、Python exit 0。累計檢查2次（初版1次、整批重寫1次）。by＝GPT-6。
-- 第一筆直接時鐘至完成檢查：12:10:56～12:15:09 +08:00，共 4 分 13 秒；這是初版觀測區間，包含準備，不是純撰寫時間。重寫觀測區間：13:53:13～13:58:09 +08:00，共4分56秒，包含同步、撰寫與檢查。
+- 原固定任務12份：ok 12/12、Python exit 0，external-check累計2次；by＝GPT-6。保留原比較批次，不算入新批100/20。
+- 新批：訓練100組、保留測試20組，角色台詞406／80句（合計486句），by＝GPT-6。
+- 最後external-check：ok 100/100、ok 20/20，各Python exit 0；本批共6次external-check（內容更新後分別重驗兩個分割）。
+- 新批觀測時間：2026-10-06 14:04:37～14:47:46 +08:00，共43分9秒，含同步、編寫、重寫及資料驗收，不是純撰寫時間或整回合總耗時。
 
 ## 時間與額度
 
-- 檢查點：2026-10-06 13:58:09 +08:00。完整回合起始時間、Token、額度與推理等級看不到，不估算。
+- 檢查點：2026-10-06 14:47:46 +08:00。完整回合起始時間、Token、額度與推理等級看不到，不估算。
 - SilentTalk pull：82b4402 → a621d33，exit 0；EdgeAgent pull：eaa54fc → 90c5876，exit 0；report worktree pull：exit 0。
 - A1 指定的 git log --oneline -15 查不到框架標題。補充一次只讀定位：提交 893171f 已在 HEAD 中，git merge-base --is-ancestor 893171f HEAD exit 0；git rev-list --count 893171f..HEAD＝16，所以框架是最近第 17 筆，並非證明尚未併入。
 - 工作檔仍要求查不到就停止。已提出一次 async 問題，待使用者決定是否以實際祖先證據繼續；尚未部署或重載。不能把時間經過當成批准。
@@ -49,16 +51,27 @@
 
 ## 測試執行結果
 
-- pytest 0 次，沒有測試失敗／通過成績可報。
-- 劇本指定命令：PYTHONUTF8=1；.venv/Scripts/python.exe scripts/dev/character_data.py external-check --tasks handoff/tasks/machine-spirit-1.json --file C:/Users/A8fm0/Downloads/SilentTalk-laptop-report/handoff/reports/machine-spirit-1.jsonl。第1次輸出ok 12/12。所在shell exit 0，但後接時鐘，未單獨擷取該Python exit code，不把shell exit冒稱獨立exit證據。
-- 初版JSON結構核對exit 0：12列／12個唯一ID、by一致、每份3～4件concerns、無空句、無超過200字的work result；此核對沒有產生台詞。
-- 新版external-check直接保留Python exit，ok 12/12、exit 0；新版字數核對exit 0：12列／12個唯一ID、66句角色台詞均8～30字、所有work result不超過200字。這些是結構證據，不是開發機品質比較或模型人格實測通過。
-- 首次apply_patch回報更新使用同路徑delete/add遭拒，未寫入；改用整份Set-Content保存回報。沒有遺留替代檔或第二份回報。
+pytest 0次；兩repo未改正式程式，沒有以資料檢查冒稱完整pytest通過。
+
+| 資料驗收 | 次數／結果 | 證據 |
+|---|---|---|
+| 原12份external-check | 2次、ok 12/12 | 新版Python exit 0；初版shell後接時鐘，未獨立擷取Python exit |
+| 新批prepare | 5次，1次exit 1、4次exit 0 | 首輪固定評測語句碰撞1、7字角色台詞1；明確重寫後通過。後續各輪對應23句內容重寫、人名排除、5組資訊不足覆蓋更新 |
+| 新批external-check | 6次均exit 0 | 3輪各train 100/100、eval 20/20；每輪都因資產內容有變才重驗 |
+| 專案固定評測人名核對 | 初次exit 1 | 碰撞1名；替換1組配角，最終prepare沿用owner.held_out()通過 |
+| 腳本ruff F,E9,I,B | 2次exit 0 | prepare.py；第二次包含新增人名與正規化檢查 |
+| 角色句式／字數 | 最後exit 0 | 486/486句單句、每句8～30字 |
+| 分割與來源核對 | 最後exit 0 | 跨train/eval角色逐字重複0、人名交集0；來源至匯出turn文字兩邊均True；6個產物SHA256匹配 |
+| 既有agent_points相容 | 最後exit 0 | train：ack 100、gate_chat_task 300、line 200、report 100、task_text 100；eval：20、60、40、20、20 |
+| 主觀內容覆核 | 作者覆核120組 | GPT-6自行覆核；明確重寫23句，另修4句及5組資訊不足工作。不是獨立模型評審成績 |
+| 模型／老師品質比較 | 未跑 | 筆電本次只完成合成資料；沒有呼叫別的模型寫台詞、沒有訓練或生成學生回覆 |
+
+資料範圍：全為新寫的虛構情境，沒有真人紀錄。Python範例只經AST解析，未執行。原12份和新批用途分開，不偷偷重複算組數。現有完整訓練池至少1500句保留角色台詞的hard gate未改；本批train只有406句，不能單獨宣稱已滿足。正式訓練與獨立checker仍須合併既有資料池後執行；不因本地格式與作者覆核通過而豁免。
 
 ## 修改檔案與 commit
 
-- 只有report worktree的handoff/reports/laptop.md與handoff/reports/machine-spirit-1.jsonl。
-- 兩個開發repo均未改程式、未commit。初版fea56a3及回報86688ee已推送；12份整批重寫提交8e28536，git push origin laptop-report exit 0。本報仍是同一回合改寫。
+- 本批新增7個machine-spirit-2檔案並改寫laptop.md；原machine-spirit-1.jsonl本次未改。
+- 兩個開發repo均未改程式、未commit。初版fea56a3及回報86688ee已推送；12份整批重寫提交8e28536，git push origin laptop-report exit 0。本報仍是同一回合改寫；新批提交待實際Git提交與push後核對。
 
 ## 記憶體與速度
 
@@ -74,11 +87,13 @@
 
 ## 使用者回饋
 
-使用者後續指出看不懂劇本與部署狀況；已說明劇本完成、部署暫停。使用者要求人格品質自評，表示「我不要應付而已，我要有趣的靈魂」。已執行人格品質覆核及12份整批重寫；尚未經開發機與舊老師的品質比較，不聲稱訓練後人格已驗收。
+使用者要求「我不要應付而已，我要有趣的靈魂」，並決定本次組數由筆電agent決定、親寫、自行驗收、不合格重寫、過關推送。這項直接授權擴充了原工作檔只寫12份的範圍，優先於原資料分工限制；沒有延伸為修改訓練器或操作開發機。正式小模型訓練後驗收尚未執行。
 
 ## 給接手模型的交接指示
 
-1. 第一段12份劇本已依使用者人格品質要求整批親寫重寫，新版external-check ok 12/12、exit 0，資產提交8e28536。開發機請取新版做既有品質比較；不要把初版fea56a3當最後版本。使用GPT-6署名，沒有其他模型參與。
-2. A1檢查有具體落差：框架已併入，但排第17筆。已問一次是否以HEAD祖先證據繼續，目前等回覆；收到「繼續」後才執行第二段。若停止，保留上表未完成狀態，不宣稱部署完成。
-3. 重載本身已由第6回合工作檔授權；待釐清的是A1停止條件，不是重問清RAM授權。
-4. 後續依handoff/laptop.md進行。保留Discord、普通Edge、EdgeAgentTest；不讀對話、角色狀態或紀錄內容；回報同一節改寫，不附加歷史。
+1. 這次資料入口是machine-spirit-2.delivery.json，記錄來源、分割、雜湊與實跑結果。可修改的唯一台詞來源是machine-spirit-2.manuscript.jsonl；prepare.py只把手寫標記序列化成既有task/answer格式，不生成台詞。修改後從新版SilentTalk repo執行 `.venv/Scripts/python.exe C:/Users/A8fm0/Downloads/SilentTalk-laptop-report/handoff/reports/machine-spirit-2.prepare.py --repo C:/Users/A8fm0/Downloads/SilentTalk`。預期train 100、eval 20、exit 0；失敗只改列出的來源組，不改owner檢查門檻。
+2. 開發機取origin/laptop-report這一整組7個檔案，先在新版SilentTalk repo核對：`python scripts/dev/character_data.py external-check --tasks handoff/reports/machine-spirit-2.train.tasks.json --file handoff/reports/machine-spirit-2.train.jsonl`；eval換成eval.tasks.json／eval.jsonl。預期100/100、20/20與exit 0。JSON manifest的6項SHA256必須匹配，否則不要匯入。
+3. 只將train task/answer匯入已初始化的機魂資料run：沿用開發機工作檔指定的run作為CHARDATA_DIR，執行 `python scripts/dev/character_data.py external-import --tasks handoff/reports/machine-spirit-2.train.tasks.json --file handoff/reports/machine-spirit-2.train.jsonl`。預期100 kept、0 dropped。每個run只匯入一次，保留teacher=GPT-6；不要指向新空目錄，也不要再refine此批台詞後冒稱原作者比較。
+4. eval 20組永遠不匯入訓練run；分開做保留情境的學生評測。原machine-spirit-1的12份仍作原固定任務比較，不自動加入本次100/20。
+5. 合併既有資料池後續接既有render/student/check/filter。至少1500句保留角色台詞等hard gate照舊，不能為這406句下修。模型品質關卡若失敗，回報被拒ID與實際理由，再由作者重寫；不能拿本批資料格式通過冒稱LoRA或小模型人格通過。
+6. 部署的A1條件問題仍未由使用者確認繼續；本次資料已授權完成，不把部署停點拿來阻擋資料。重載本身已有授權，不重問。其餘正式部署／真人驗收按handoff/laptop.md續接，不讀對話或角色狀態。
