@@ -49,7 +49,7 @@ def main() -> int:
     parser.add_argument("--holdout", type=float, default=0.03)
     parser.add_argument("--max-steps", type=int, default=-1, help="dry runs only")
     parser.add_argument(
-        "--max-length", type=int, default=2048, help="tokens; longer rows are truncated"
+        "--max-length", type=int, default=2048, help="tokens; longer rows are dropped, never cut"
     )
     parser.add_argument(
         "--4bit",
@@ -88,22 +88,18 @@ def main() -> int:
         for line in Path(args.data).read_text(encoding="utf-8").splitlines()
     ]
     random.Random(0).shuffle(rows)
-    tokenized, broken, quiet = [], 0, 0
-    for row in rows:
-        try:
-            item = tokenize_row(tokenizer, row)
-        except ValueError:
-            broken += 1
-            continue
-        quiet += item.pop("narration_dropped", 0)
-        tokenized.append(item)
+    results = tokenize_rows(args.base, rows, args.max_length)
+    broken = sum(r == "broken" for r in results)
+    tokenized = [r for r in results if isinstance(r, dict)]
+    quiet = sum(item.pop("narration_dropped", 0) for item in tokenized)
     # The trainer cuts long rows from the right, which would train on half an
     # answer with no end marker: drop them instead, and say how many.
     lengths = [len(r["input_ids"]) for r in tokenized]
     kept = [r for r in tokenized if len(r["input_ids"]) <= args.max_length]
+    long = sum(r == "long" for r in results) + len(tokenized) - len(kept)
     print(
         f"longest row {max(lengths)} tokens; "
-        f"{len(tokenized) - len(kept)} rows over --max-length {args.max_length} dropped; "
+        f"{long} rows over --max-length {args.max_length} dropped; "
         f"{broken} rows whose template does not extend its prompts dropped; "
         f"{quiet} rows trained without narration on tool-call turns"
     )
@@ -185,6 +181,48 @@ def main() -> int:
     trainer.save_model(args.out)
     print(f"saved adapter to {args.out}")
     return 0
+
+
+# Characters per token is about 3-4 for code and 1-2 for Chinese: a row with
+# more than this many characters per allowed token is over the limit for sure.
+CHARS_PER_TOKEN_CEILING = 6
+_TOKENIZER = None
+
+
+def _row_chars(row: dict) -> int:
+    return sum(len(str(m.get("content") or "")) + sum(len(str(c.get("function", {}).get("arguments") or ""))
+                                                       for c in m.get("tool_calls") or [])
+               for m in row["messages"])
+
+
+def _start_worker(base: str) -> None:
+    global _TOKENIZER
+    from transformers import AutoTokenizer
+
+    _TOKENIZER = AutoTokenizer.from_pretrained(base)
+
+
+def _tokenize_job(job: tuple[dict, int]) -> dict | str:
+    row, max_length = job
+    if _row_chars(row) > max_length * CHARS_PER_TOKEN_CEILING:
+        return "long"
+    try:
+        return tokenize_row(_TOKENIZER, row)
+    except ValueError:
+        return "broken"
+
+
+def tokenize_rows(base: str, rows: list[dict], max_length: int) -> list[dict | str]:
+    """Every row tokenized (tokenize_row) in worker processes, or "long" /
+    "broken". Rendering each turn's prefix makes a long agent row take about
+    a second; tens of thousands of them need all the cores."""
+    import multiprocessing
+    import os
+
+    workers = max(1, min(16, (os.cpu_count() or 2) - 2))
+    jobs = [(row, max_length) for row in rows]
+    with multiprocessing.get_context("spawn").Pool(workers, _start_worker, (base,)) as pool:
+        return pool.map(_tokenize_job, jobs, chunksize=4)
 
 
 def wire_to_template(messages: list[dict]) -> list[dict]:
