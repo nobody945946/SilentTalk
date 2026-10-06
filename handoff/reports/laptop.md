@@ -93,7 +93,7 @@ B3資產：C:\Users\A8fm0\EdgeAgentTest\round6-files-20261006-201943、同名.zi
 - EdgeAgent：edge_agent/web.py、tests/browser_check.mjs；304fcd0，push copilot-story-mode exit0。
 - SilentTalk：scripts/dev/ui_preview.py；原005759d經整合成87754c3，push copilot-story-mode exit0。
 - 前段劇本提交fea56a3、86688ee、8e28536、c862861、1cee143保留於laptop-report歷史；已由開發機核對，這次未改產物或雜湊。
-- 本報改寫同一第6回合；提交與推送待實際執行後核對。
+- 本報改寫同一第6回合；首版886da6e已push origin laptop-report，exit0；本檢查點補記實際推送結果。
 
 ## 記憶體與速度
 
