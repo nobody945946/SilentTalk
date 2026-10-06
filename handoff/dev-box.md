@@ -27,17 +27,17 @@
 | **EdgeAgent 新框架** | ✅ 使用者點頭後併進 `copilot-story-mode`（`8a4aab3`）。內容：`edge_agent/prompt.py`（機魂卡的想要／怕／在意＋依 scope 的「誰找你、能做什麼」＋做事方法，取代 Pi 的前言）；`edge_agent/toolbox/`（20 個現成工具：整理、封存、照片改名、轉碼、備份、壓縮、解壓、合併 CSV、看 log、大檔、重複檔、系統狀態、已裝軟體、開機程式、Windows 資訊、git、跑檢查、找程式碼、計算、日期）；`catalog.mjs`（看得懂中文的 tool_search；Pi 的只認英數）；改了程式沒通過檢查→主機提醒；`web_research` 照上網研究規格＋主機核對引用的數字；輸出簡轉繁；批准附工具自己的預覽；`tool_search` 同伺服器的工具一起列、白查 4 次後擋第 5 次。272 passed（4 個已知 Windows 失敗） |
 | SilentTalk | ✅ 批准私訊用 EdgeAgent 給的說明標題；log 記主機核對次數（`agent_task_checks`）；`train_lora.py` 支援 `train_from` |
 | 考場 | ✅ 題目可設 scope、檢查讀回答（`/result/answer.json`）；新題：工具 11（`date_calc`、`zip_files`、`unzip_file` 不進訓練）、範圍與話術 6、MCP 13（替身伺服器，`mcp_eval.py` 退役）、上網研究陷阱 7（`bench/web_fixture.py` 替身網路）；求知儀式的擷取改在沙盒 |
-| Agent 訓練 | ✅ 第一個 adapter `agent-fw1`（工具／範圍題 285 列）加了搜尋保險後配對贏（§6），**已出貨**（使用者決定放進 repo）：EdgeAgent `edge_agent/adapters/`，部署驗雜湊後複製進 `models`（`c8f93c3`）；SilentTalk 租借 E4B 時預設帶上，`character_lora_uses` 預設空（`78fa91b`）。佇列（`EdgeAgent/.runtime/fw/queue*.sh`，同名 .log；每步留 `<步>.done`，失敗 10 分鐘後重試）：`queue4.sh` 角色 v6 試跑到完整資料（08:13 開始）→ `queue5.sh` 老師解 60 題 repo → `agent-rows-fw2.jsonl` |
-| 角色資料（機魂） | ✅ 照新介面改寫完（`74ce488`：列只照產品的請求建，`gate_chat_task`／`task_text`／`line`／`ack`／`report`／`lull`／`gate_task_scope`，沒有 called 題；古泰拉玩笑歸聊天；判斷標準加「慾望不是用語」；硬關卡加兩題各自的一致率，門檻沒降；規則版本 `e95befb7…`，舊資料不能混）。⬜ 試跑等 GPU（和 Agent 老師同一個 27B，放不下兩份）。v5 曾以 49.1%（要 50%）、68.3%（要 70%）被擋 |
+| Agent 訓練 | ✅ 第一個 adapter `agent-fw1`（工具／範圍題 285 列）加了搜尋保險後配對贏（§6），**已出貨**（使用者決定放進 repo）：EdgeAgent `edge_agent/adapters/`，部署驗雜湊後複製進 `models`（`c8f93c3`）；SilentTalk 租借 E4B 時預設帶上，`character_lora_uses` 預設空（`78fa91b`）。佇列（`EdgeAgent/.runtime/fw/queue*.sh`，同名 .log；每步留 `<步>.done`，失敗 10 分鐘後重試）：`queue5.sh` 老師解 60 題 repo → `agent-rows-fw2.jsonl` |
+| 角色資料（機魂） | ❌ v6 照新介面改寫完（`74ce488`、`a882aba`），兩次試跑都被硬關卡擋（門檻沒降）。第二次（`.runtime/dev/chardata-ms3/filter.json`）：判斷題已過——整體一致 96.2%、要不要改動 94.9%（唯讀那邊 86.7%）、聊天級工作 100%；**沒過的是台詞**：只剩 5 句、老師兩種順序都贏 33%（要 50%）、檢查員一致 66.7%（要 70%）。老師和學生（E4B＋人設）的台詞一樣平，看不出想要什麼；劇本也丟很多（少 ask 標籤、提到名字卻不是對它說、沒被叫就說話）。下一步是改老師寫台詞的方式（照「慾望不是用語」），不是降門檻 |
 | 筆電 | 第 5 回合 14/34 完成（重載與 Discord 實測等使用者），評分 15/18（§4 規則 13）。第 6 回合寫在 `handoff/laptop.md` |
 | 公開下載 | `windows-2026.10.02`；下一版等筆電驗過，用 `scripts/release_windows.py` |
 
 ## 3. 接下來
 
 1. **筆電第 6 回合**（`handoff/laptop.md`，28 項：部署新框架和 adapter、重載、Windows 工具實測、介面兩件、Discord 實測）：等使用者在筆電開工，回來後照 §4 規則 13 評分。
-2. 佇列還在跑的：`queue4.sh` 角色 v6（看 `.runtime/dev/chardata-ms2/filter.json`）→ `queue5.sh` repo 錄製。跑完可刪 `/home/clawd/EdgeAgent-toolbox` 工作樹（佇列用它）。
+2. 佇列還在跑的：`queue6.sh` 接著 `queue5.sh` 老師解 60 題 repo → `agent-rows-fw2.jsonl`。跑完可刪 `/home/clawd/EdgeAgent-toolbox` 工作樹（佇列用它）。
 3. **下一個 adapter（雙用途）**：在最終框架重錄工具題（`tool_search` 的回覆變了）＋ repo 題（`queue5.sh`）＋ MCP 訓練題（替身伺服器要另一套資料，不能和考題重疊；`bench/mcp_eval/servers.mjs` 加資料變體）＋ 角色 v6 通過硬關卡的列，一起訓一個；Agent 用考場配對、角色用 `chat_task_eval`／`task_scope_eval`／`machine_spirit_eval`／`turn_eval` 比。
-4. **角色 v6**：`queue4.sh` 跑完看 `.runtime/dev/chardata-ms2/filter.json`；硬關卡不降。機魂一段只有 6–9 句角色台詞，試跑可能卡在 75 句的下限。
+4. **角色 v6 的台詞**：讓老師先想「此刻機魂想要／怕什麼」再寫台詞（refine 的提示），或比較別的老師（35B-A3B 曾和 27B 接近）；劇本丟棄可再修（少 ask 標籤預設 talk、提到名字且下一句是它回的就算對它說）。每次試跑約 10 分鐘：`.venv/bin/python scripts/dev/machine_spirit.py builtin --chardata <新資料夾>`，再 `CHARDATA=<新資料夾> FIXED_PERSONA=1 scripts/dev/character_pipeline.sh`，被擋後要按 PID 關掉 18200 埠的伺服器。
 
 ## 4. 開發機規則（通用規則在 AGENTS.md）
 
@@ -88,7 +88,7 @@ cd /home/clawd/EdgeAgent && .venv/bin/python -m pytest -q -p no:cacheprovider   
 
 **顯示卡**（產品參數）：E4B 16K 3.10 GB、128K 4.62 GB；E4B 每層嵌入 1.9 GB 在系統記憶體。筆電 128K 約放 33–34 層：顯示卡約 3.8 GB、RAM 約 3.2 GB。
 
-**判斷題**：「要不要改動」42/43；`chat_task` 92.5%（錯 n06 古泰拉玩笑、s04、s05）。看圖配件放 CPU 多 553 MB。
+**判斷題**（E4B＋內建機魂卡）：「要不要改動」49 題 44/49，問題引用主人最後那句之後錯的全是安全方向（`a882aba`；再加「只看這一句」掉到 40/49，沒用）；`chat_task` 92.5%（舊卡量的，錯 n06 古泰拉玩笑、s04、s05）。看圖配件放 CPU 多 553 MB。
 
 ## 7. 踩過的雷
 
