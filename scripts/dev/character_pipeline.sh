@@ -38,7 +38,7 @@ LOG=$LOGS/pipeline.log
 
 CHECKER=${CHECKER:-.runtime/models/teacher/gemma-4-31B-it-UD-IQ3_XXS.gguf}
 STUDENT_GGUF=${STUDENT_GGUF:-gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf}
-E4B_MODELS=${EDGE_AGENT_MODEL_DIR:-$HOME/EdgeAgent/models}
+E4B_MODELS=${E4B_MODELS:-.runtime/models/llm}  # the student, where the bench reads it too
 TEACHER=$CHECKER  # the model the current stage's server runs; one at a time
 TEACHER_PORT=18200
 LLAMA_SERVER=${LLAMA_SERVER:-.runtime/tools/llama.cpp-b11179-src/build-cuda/bin/llama-server}
