@@ -10,19 +10,20 @@
 - **使用者已同意重載**：重載 EdgeAgent 和 SilentTalk（清掉 RAM 裡的對話），套用 E4B、context 131072、working 131072、GPU 自動、省 VRAM 開、mlock、提示快取每模式 256 MiB。載入失敗如實報告，不擅自降設定。
 - 紀錄只寫 `C:\Users\A8fm0\AgentRecords`（一般 SSD 目錄，不加密；兩個 app 已設好）。不讀紀錄內容。
 - 日常 EdgeAgent 不開 VS Code、Discord 保留；測試暫存和 `C:\Users\A8fm0\EdgeAgentTest` 保留。
+- Agent adapter `agent-fw1.q8_0.gguf`（配對比較贏，使用者 2026-10-06 決定放進 repo）：EdgeAgent 部署時從 `edge_agent/adapters` 複製到 `models`；SilentTalk 租借 E4B 時自動帶上，角色自己的請求不套（`character_lora_uses` 空）。
 - 新框架（開發機做的）：Agent 有自己的系統提示（機魂）、工具目錄（`tool_search` 找得到 20 個現成工具：整理資料夾、封存、照片改名、轉碼、備份、壓縮、解壓、合併 CSV、看 log、大檔、重複檔、系統狀態、已裝軟體、開機程式、Windows 資訊、git、跑檢查、找程式碼、計算、日期）、改了程式沒通過檢查時主機會附提醒、上網研究依來源分級並由主機核對引用的數字、輸出最後一關簡轉繁。新增相依套件 `opencc-python-reimplemented`（部署會裝）。
 
-## 驗收清單（分母 27）
+## 驗收清單（分母 28）
 
 每項回報：完成（附證據）／未完成（原因）／沒測（條件不存在）。需要使用者的操作一次只請他做一件事。
 
 **A. 部署、重載、量測**
 
 - A1 EdgeAgent 的 `git log --oneline -15` 裡有「The machine spirit's own framework」這筆 commit。**沒有就停**：告訴使用者「開發機的新框架還沒併進 copilot-story-mode，請在開發機確認」，其他項目標沒測。
-- A2 EdgeAgent 部署：`powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap.ps1 -SetupOnly`，exit 0；`.venv\Scripts\python.exe -c "import opencc"` exit 0。
+- A2 EdgeAgent 部署：`powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap.ps1 -SetupOnly`，exit 0；`.venv\Scripts\python.exe -c "import opencc"` exit 0；`models\agent-fw1.q8_0.gguf` 存在（約 55 MB）。
 - A3 EdgeAgent 完整 pytest（含真 Edge 回歸）0 failed、exit 0（PYTHONIOENCODING=utf-8、取消 PYTHONUTF8、EDGE_AGENT_UI_REGRESSION=1、`--basetemp`）。
 - A4 SilentTalk 完整 pytest 0 failed、exit 0（PYTHONUTF8=1、`--basetemp`）。
-- A5 用既有 EdgeAgent CLI 按 PID 重載，模型頁套用上面的設定（不手改 config.json）；開 SilentTalk。核對 /status：mode=character、agent_slot 有值、Agent context＝131072−角色的份。
+- A5 用既有 EdgeAgent CLI 按 PID 重載，模型頁套用上面的設定，「LoRA（選用）」選 `agent-fw1.q8_0.gguf`（不手改 config.json）；開 SilentTalk。核對 /status：mode=character、agent_slot 有值、Agent context＝131072−角色的份、`lora` 是 `agent-fw1.q8_0.gguf`。
 - A6 實量：VRAM、模型 RAM、mlock 成敗（沒有可讀的證據就寫未測）、角色回覆延遲、Agent 每秒字數。
 - A7 實跑 `tests/browser_check.mjs --audit-live`（專用 Edge，先查 9223），24 項全過含 TXT 真下載。
 
@@ -33,6 +34,7 @@
   `'{}' | .venv\Scripts\python.exe -m edge_agent.toolbox run system_status`
   `'{"name_filter":"Edge"}' | ... run installed_apps`、`'{}' | ... run startup_apps`、`windows_info` 的 topic 各一次：power、network、time、display、defender、path。每個 exit 0、輸出是中文且有數字或清單、沒有 Traceback。回報只寫 exit code、行數、有沒有「沒辦法」字樣，不貼內容。
 - B3 檔案工具在 Windows 上：在 EdgeAgentTest 建一個測試資料夾，放 3 個 Big5 的 txt（`Set-Content -Encoding` 做不出 Big5，用 `[IO.File]::WriteAllText(path, 文字, [Text.Encoding]::GetEncoding(950))`）和 1 個 UTF-8 的 txt；跑 `convert_text_encoding` 的 preview 再 run；核對 4 個檔案都能用 UTF-8 讀出原文。再用 `Compress-Archive` 做一個含中文檔名的 zip，跑 `unzip_file`，核對檔名和內容。
+- B5 EdgeAgent 網頁模型頁的 LoRA 說明（`edge_agent/web.py`「LoRA 是個人資產；框架不附帶或自動下載…」）改成現況：附帶給 E4B 的 Agent adapter，也可以放自己的；以 EdgeAgent README 的「LoRA」段為準。
 - B4 `scripts/dev/ui_preview.py` 的 ruff I001（import 排序，來自 `82b4402`）修好：`.venv\Scripts\python.exe -m ruff check --select F,E9,I,B scripts/dev/ui_preview.py` exit 0。
 
 **C. Discord 真人測試（需要使用者）**

@@ -23,7 +23,7 @@ SilentTalk 是 Discord 語音角色與回覆建議玩具。下載後啟動同一
 |---|---|
 | SilentTalk 程式、自己的 venv、FFmpeg、STT | 解壓的 SilentTalk 資料夾 |
 | EdgeAgent 程式、自己的 venv 與 runtime | `%USERPROFILE%\EdgeAgent` |
-| 編程／角色 GGUF 與個人 LoRA | EdgeAgent 的 `models` 目錄 |
+| 編程／角色 GGUF 與 adapter（附帶的和自己的） | EdgeAgent 的 `models` 目錄 |
 
 可用環境變數 `EDGE_AGENT_HOME` 指定其他 Agent 安裝位置，必須在 SilentTalk 目錄之外。已存在但版本過舊的 Agent 目錄會保留，另行安裝符合版本的來源。
 
@@ -83,12 +83,12 @@ Agent 預設為 `gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf`（和角色同一個模型�
 
 「設定 → 本機模型」設定下次租借的角色基底，改完需重開。模型先放進 EdgeAgent 的 `models`，可透過 Agent 介面下載。首次部署只準備預設編程 4B 與公開 Gemma 4 E4B，不會下載下拉選單內所有替代模型。自訂角色模型可在 `config.toml` 的 `[copilot]` 以 `llm_model` 指定已安裝檔名，仍受使用者設定覆蓋。
 
-LoRA 是個人資產。產品只提供載入框架，不附帶、下載或自動配對；不用 LoRA 也能安裝和使用。
+租借時 EdgeAgent 把一個 adapter 同時載給角色和 Agent：Agent 的請求一律套用，角色的請求只在 `character_lora_uses` 列出的部分套用。
 
-- **Agent adapter：**放入 EdgeAgent 的 `models`，在「模型模組」重新掃描，選訓練基底與「LoRA（選用）」後套用。選「不使用」後套用即可移除；換基底會清除舊 adapter 選擇。
-- **角色 adapter：**放入同一 `models`，在 SilentTalk `config.toml` 的 `[copilot]` 設定 `character_lora` 為檔名，確認 `llm_model` 是訓練基底，重開後生效。設為空字串停用；`settings.json` 的同名項目仍優先。
+- **預設（附帶）：**基底是預設的 E4B 時，帶上 EdgeAgent 附帶的 Agent adapter `agent-fw1.q8_0.gguf`（EdgeAgent 部署時放進 `models`；在考場和不套的 E4B 配對比較贏，2026-10-06）。`character_lora_uses` 預設是空的：角色自己的判斷和台詞不套。換別的基底就不帶（adapter 只配得上它訓練的基底）。
+- **自己的 adapter：**放入 EdgeAgent 的 `models`，在 SilentTalk `config.toml` 的 `[copilot]` 設定 `character_lora` 為檔名，確認 `llm_model` 是訓練基底，重開後生效；設為空字串就不用任何 adapter。`settings.json` 的同名項目仍優先。
 
-`character_lora_uses` 指定套用請求：`called`（被叫到判斷）、`active`（主動插話判斷）、`line`（角色回覆）、`options`（回覆選項）。Agent 的 adapter 選擇與角色配置分開，彼此不會直接沿用。
+`character_lora_uses` 指定角色的哪些請求套用：`called`（被叫到判斷）、`active`（主動插話判斷）、`line`（角色回覆）、`options`（回覆選項）、`task`（聊天級工作和要不要改動的判斷）。單獨用 EdgeAgent 時，adapter 在它的「模型模組」選。
 
 架構篩選只是最低檢查；同架構不同基底也可能不相容。E4B 的 adapter 不能任意套在 Qwen 或其他模型。
 

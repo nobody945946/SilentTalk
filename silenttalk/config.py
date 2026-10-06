@@ -20,6 +20,13 @@ MEMORY_LEVEL_CHOICES: tuple[tuple[str, str], ...] = (
 from silenttalk.settings_store import SETTINGS_FILE, SettingsStore, merge
 
 DEFAULT_LLM_MODEL = "gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf"
+# The Agent adapter EdgeAgent installs next to the base it was trained on
+# (EdgeAgent adapters/; the owner, 2026-10-06: ship it in the repo). An
+# adapter only fits its own base, so it follows the model: another model gets
+# none unless copilot.character_lora names one. The lease loads it for both
+# clients; the Agent's requests apply it, the character's apply it only for
+# the parts copilot.character_lora_uses names (none by default).
+BUNDLED_ADAPTERS = {DEFAULT_LLM_MODEL: "agent-fw1.q8_0.gguf"}
 STT_ENGINES = ("paraformer", "sensevoice")
 
 
@@ -79,7 +86,7 @@ class CopilotConfig:
     # Character-mode LoRA adapter owned by EdgeAgent ("" = none), and
     # which requests use it (copilot.llm.LORA_PARTS); summaries never do.
     character_lora: str = ""
-    character_lora_uses: tuple[str, ...] = ("called",)
+    character_lora_uses: tuple[str, ...] = ()
     # "called": answer only when the model judges a line is for the
     # character. "active": also join in by itself after a quiet stretch.
     # Auto-compaction: older turns are folded into a short summary by the
@@ -158,7 +165,7 @@ def _lora_uses(value: object) -> tuple[str, ...]:
     from silenttalk.copilot.llm import LORA_PARTS
 
     if value is None:
-        return ("called",)
+        return ()
     parts = value if isinstance(value, list) else str(value).split(",")
     chosen = tuple(str(part).strip() for part in parts if str(part).strip())
     unknown = [part for part in chosen if part not in LORA_PARTS]
@@ -235,7 +242,9 @@ def load_settings(project_dir: Path) -> Settings:
     audio = _section(raw, "audio")
     copilot = _section(raw, "copilot")
     llm_model = _model_filename(copilot.get("llm_model", DEFAULT_LLM_MODEL))
-    character_lora = _optional_model_filename(copilot.get("character_lora", ""))
+    character_lora = _optional_model_filename(
+        copilot.get("character_lora", BUNDLED_ADAPTERS.get(llm_model, ""))
+    )
     character_lora_uses = _lora_uses(copilot.get("character_lora_uses"))
     engine = str(tts.get("engine", "edge")).lower()
     if engine != "edge":

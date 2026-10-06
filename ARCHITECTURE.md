@@ -20,7 +20,7 @@ SilentTalk copilot/llm.py
 EdgeAgent UI → Pi SDK → 批准後執行工具 → 同一推論 API
 ```
 
-router 最多載入一個完整模型。租借角色與 Agent 設定使用相同基底及相同 LoRA 時，可共用同一推論服務；不同時拒絕 Agent 工作。Agent 工作或角色租借中禁止切換模型。個人 LoRA 不屬於部署資產；只能引用使用者安裝在 EdgeAgent `models` 的相容 adapter。
+router 最多載入一個完整模型。租借角色與 Agent 設定使用相同基底及相同 LoRA 時，可共用同一推論服務；不同時拒絕 Agent 工作。Agent 工作或角色租借中禁止切換模型。附帶的 Agent adapter（`agent-fw1`，給預設 E4B）由 EdgeAgent 部署放進 `models`；租借預設帶上它，角色的請求依 `character_lora_uses`（預設空）決定套不套。自己的 adapter 也放同一個 `models`。
 
 ## 責任地圖
 
@@ -120,7 +120,7 @@ Bot Token 與 Owner ID 優先沿用既有 `.env`，缺少時讀 Windows 認證�
 | 資料／服務 | 邊界 |
 |---|---|
 | STT 資產 | SilentTalk `.runtime/models/`；本機 CPU |
-| Agent／角色 GGUF、個人 LoRA | EdgeAgent `models/` |
+| Agent／角色 GGUF、adapter | EdgeAgent `models/` |
 | 推論引擎、Node／Pi | EdgeAgent `.runtime/` |
 | 對話、轉錄、候選、摘要 | RAM；不寫 session JSONL／歷史檔。例外：開啟「記錄對話」時，轉錄文字（不含錄音）由 `records.py` 只寫進使用者設定、含標記檔 `.agent-records` 的加密外接硬碟資料夾，硬碟不在就不寫 |
 | 合成音訊 | 暫存播放檔；結束清除 |
