@@ -20,13 +20,14 @@ MEMORY_LEVEL_CHOICES: tuple[tuple[str, str], ...] = (
 from silenttalk.settings_store import SETTINGS_FILE, SettingsStore, merge
 
 DEFAULT_LLM_MODEL = "gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf"
-# The Agent adapter EdgeAgent installs next to the base it was trained on
-# (EdgeAgent adapters/; the owner, 2026-10-06: ship it in the repo). An
+# The adapter EdgeAgent installs next to the base it was trained on
+# (EdgeAgent adapters/; the owner, 2026-10-06: ship it in the repo), and the
+# character's requests it was trained for. One adapter for both clients: the
+# machine spirit's lines and work questions, and the Agent's tool work. An
 # adapter only fits its own base, so it follows the model: another model gets
-# none unless copilot.character_lora names one. The lease loads it for both
-# clients; the Agent's requests apply it, the character's apply it only for
-# the parts copilot.character_lora_uses names (none by default).
-BUNDLED_ADAPTERS = {DEFAULT_LLM_MODEL: "agent-fw1.q8_0.gguf"}
+# none unless copilot.character_lora names one, applied to the parts
+# copilot.character_lora_uses names (none by default).
+BUNDLED_ADAPTERS = {DEFAULT_LLM_MODEL: ("machine-spirit-v1.q8_0.gguf", ("line", "task"))}
 STT_ENGINES = ("paraformer", "sensevoice")
 
 
@@ -242,10 +243,11 @@ def load_settings(project_dir: Path) -> Settings:
     audio = _section(raw, "audio")
     copilot = _section(raw, "copilot")
     llm_model = _model_filename(copilot.get("llm_model", DEFAULT_LLM_MODEL))
-    character_lora = _optional_model_filename(
-        copilot.get("character_lora", BUNDLED_ADAPTERS.get(llm_model, ""))
-    )
-    character_lora_uses = _lora_uses(copilot.get("character_lora_uses"))
+    bundled, bundled_uses = BUNDLED_ADAPTERS.get(llm_model, ("", ()))
+    character_lora = _optional_model_filename(copilot.get("character_lora", bundled))
+    uses = copilot.get("character_lora_uses")
+    character_lora_uses = (_lora_uses(uses) if uses is not None
+                           else bundled_uses if character_lora and character_lora == bundled else ())
     engine = str(tts.get("engine", "edge")).lower()
     if engine != "edge":
         raise ConfigError('MVP 目前只支援 tts.engine = "edge"。')

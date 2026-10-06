@@ -203,8 +203,10 @@ _OPTIONS_TRIES = 7
 # Two lines this alike count as one option.
 _OPTIONS_ALIKE = 0.6
 # Requests the character adapter can be applied to: the two gate questions,
-# the character's line, and the options.
-LORA_PARTS = ("called", "active", "line", "options", "task")
+# the character's line, the options, chat work ("task": whether a call asks
+# for work, and its instructions) and the owner's thread ("scope": whether
+# his work may change anything). An adapter applies only where it was trained.
+LORA_PARTS = ("called", "active", "line", "options", "task", "scope")
 
 # Asked on the same chat (same prompt cache) before writing a line, answered
 # with one grammar-constrained token. A small model told to "answer or SKIP"
@@ -541,7 +543,7 @@ class LocalReplyModel:
         if scope is None:
             return None
         changes = await asyncio.to_thread(
-            self._request_gate, scope, "task" in self._lora_uses) == "是"
+            self._request_gate, scope, "scope" in self._lora_uses) == "是"
         return AgentTask(turns[-1].text, scope="change" if changes else "read")
 
     async def chat_task(

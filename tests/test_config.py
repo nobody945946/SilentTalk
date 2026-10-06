@@ -142,18 +142,18 @@ def test_rejects_unknown_stt_engine(
 
 
 @pytest.mark.parametrize(
-    ("model", "adapter"),
+    ("model", "adapter", "uses"),
     [
-        ("gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf", "agent-fw1.q8_0.gguf"),
-        ("gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf", ""),
-        ("Qwen3.5-4B-Q4_K_M.gguf", ""),
+        ("gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf", "machine-spirit-v1.q8_0.gguf", ("line", "task")),
+        ("gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf", "", ()),
+        ("Qwen3.5-4B-Q4_K_M.gguf", "", ()),
     ],
 )
-def test_the_bundled_agent_adapter_follows_its_base_model(
-    tmp_path, monkeypatch, model, adapter
+def test_the_bundled_adapter_follows_its_base_model(
+    tmp_path, monkeypatch, model, adapter, uses
 ):
-    """The Agent adapter fits only the E4B it was trained on; the character's
-    own requests apply none of it unless named."""
+    """The bundled adapter fits only the E4B it was trained on and applies to
+    the character's requests it was trained for."""
     _write_config(tmp_path)
     with (tmp_path / "config.toml").open("a", encoding="utf-8") as handle:
         handle.write(f'[copilot]\nllm_model = "{model}"\n')
@@ -161,7 +161,19 @@ def test_the_bundled_agent_adapter_follows_its_base_model(
     monkeypatch.setenv("OWNER_USER_ID", "123456789")
     copilot = load_settings(tmp_path).copilot
     assert copilot.character_lora == adapter
-    assert copilot.character_lora_uses == ()
+    assert copilot.character_lora_uses == uses
+
+
+def test_an_adapter_of_ones_own_applies_only_where_named(tmp_path, monkeypatch):
+    _write_config(tmp_path)
+    with (tmp_path / "config.toml").open("a", encoding="utf-8") as handle:
+        handle.write('[copilot]\ncharacter_lora = "mine.gguf"\n')
+    monkeypatch.setenv("DISCORD_BOT_TOKEN", "test-token")
+    monkeypatch.setenv("OWNER_USER_ID", "123456789")
+    assert load_settings(tmp_path).copilot.character_lora_uses == ()
+    with (tmp_path / "config.toml").open("a", encoding="utf-8") as handle:
+        handle.write('character_lora_uses = "line"\n')
+    assert load_settings(tmp_path).copilot.character_lora_uses == ("line",)
 
 
 def test_no_adapter_when_set_to_empty(tmp_path, monkeypatch):

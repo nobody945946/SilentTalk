@@ -427,6 +427,26 @@ async def test_each_part_uses_the_lora_only_if_chosen() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(("uses", "applied"), [(("task",), False), (("scope",), True)])
+async def test_the_owners_thread_question_has_its_own_part(uses, applied) -> None:
+    """Chat work ("task") and the owner's change-or-read question ("scope") are
+    separate parts: an adapter trained on one is not applied to the other."""
+    model = LocalReplyModel(Path("unused.gguf"), lora_path=Path("adapter.gguf"), lora_uses=uses,
+                            agent_dispatch=True)
+    model._lora_loaded = True
+    seen: list[bool] = []
+    model.task_scope_messages = lambda **_: [{"role": "user", "content": "測試"}]  # type: ignore[method-assign]
+
+    def gate(messages, character=True):
+        seen.append(character)
+        return "否"
+
+    model._request_gate = gate  # type: ignore[method-assign]
+    task = await model.task_from_owner(turns=_chat(CHAT))
+    assert seen == [applied] and task is not None and task.scope == "read"
+
+
+@pytest.mark.asyncio
 async def test_joining_in_is_not_told_it_was_called() -> None:
     quiet = _chat(CHAT[:4] + [("Ken", "昨天那把有夠雷"), ("阿傑", "對啊"), ("Ken", "笑死"), ("阿傑", "好啦")])
     model = _Scripted(gate=["否", "是"])

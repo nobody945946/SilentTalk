@@ -88,7 +88,7 @@ Agent 預設為 `gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf`（和角色同一個模型�
 - **預設（附帶）：**基底是預設的 E4B 時，帶上 EdgeAgent 附帶的 Agent adapter `agent-fw1.q8_0.gguf`（EdgeAgent 部署時放進 `models`；在考場和不套的 E4B 配對比較贏，2026-10-06）。`character_lora_uses` 預設是空的：角色自己的判斷和台詞不套。換別的基底就不帶（adapter 只配得上它訓練的基底）。
 - **自己的 adapter：**放入 EdgeAgent 的 `models`，在 SilentTalk `config.toml` 的 `[copilot]` 設定 `character_lora` 為檔名，確認 `llm_model` 是訓練基底，重開後生效；設為空字串就不用任何 adapter。`settings.json` 的同名項目仍優先。
 
-`character_lora_uses` 指定角色的哪些請求套用：`called`（被叫到判斷）、`active`（主動插話判斷）、`line`（角色回覆）、`options`（回覆選項）、`task`（聊天級工作和要不要改動的判斷）。單獨用 EdgeAgent 時，adapter 在它的「模型模組」選。
+`character_lora_uses` 指定角色的哪些請求套用：`called`（被叫到判斷）、`active`（主動插話判斷）、`line`（角色回覆）、`options`（回覆選項）、`task`（聊天級工作：要不要交給思考機、交辦的指示）、`scope`（主人串裡的工作要不要改動）。單獨用 EdgeAgent 時，adapter 在它的「模型模組」選。
 
 架構篩選只是最低檢查；同架構不同基底也可能不相容。E4B 的 adapter 不能任意套在 Qwen 或其他模型。
 
