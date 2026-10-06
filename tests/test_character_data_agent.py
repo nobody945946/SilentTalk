@@ -321,7 +321,9 @@ def test_agent_requests_mix_what_the_calls_ask_for() -> None:
     assert all(0 < s["changes"] < s["length"] for s in threads)
     persona = MACHINE_SPIRIT
     prompt = character_data.script_prompt(persona, chats[0])
-    assert _CHAT_TASK_ASK.strip("（）") in prompt and "「機魂」" in prompt
+    # the product's question, pointed at the line that asks for the work
+    assert _CHAT_TASK_ASK.strip("（）").replace("最後這句", "叫它做事的那句") in prompt
+    assert "「機魂」" in prompt
     assert "想要、害怕、在意" in prompt  # the owner's rule: wants, not jargon
     assert "changes" in character_data.script_prompt(persona, threads[0])
 

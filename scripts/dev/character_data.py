@@ -1001,12 +1001,15 @@ def _agent_common(persona: Persona, lore: list[str]) -> str:
 {DRIVE_SCRIPT.format(name=name, he="它")}
 {name}一次只說一句，長度{persona.length_rule()}；每一句都先接住對方真正在說的事；不要用同樣的句型開頭或結尾。
 其他人講話像真實的語音聊天：大多很短，有時只有「真假」「笑死」「蛤」，會岔題，不要講成書面語；除了編號上寫要叫它的那幾句，其他人的話都不要提到{_call_names(persona)}。
-不寫性內容；不人身攻擊。"""
+不寫性內容；不人身攻擊。
+先想好{name}今天心裡掛著的 3～4 件具體小事（要符合人設），寫進 concerns。
+lines 一句對一個編號，只寫說出口的內容，不寫名字。
+work 照順序對應「工作」列出的那幾句：task 是{name}交給思考機的指示，照系統問的寫（{_CHAT_TASK_ASK.strip("（）").replace("最後這句", "叫它做事的那句")}），只能換句話說那句真的要的事；result 是思考機做完貼回聊天室的結果（簡短、像真的，最多 200 字；寫程式的就是一小段程式碼；也可以是查不到）。"""
 
 
 def _agent_task(persona: Persona, spec: dict[str, Any]) -> tuple[str, str]:
-    """One chat's own part (who is there, the topic, the numbered turns) and
-    its output instructions."""
+    """One chat's own part: who is there, the topic, the numbered turns, and
+    how many lines and which pieces of work its answer holds."""
     name, owner = persona.name, spec["owner"]
     nick = next((n.strip() for n in persona.nickname.split("、") if n.strip()), name)
     rows, caller = [], owner
@@ -1029,15 +1032,14 @@ def _agent_task(persona: Persona, spec: dict[str, Any]) -> tuple[str, str]:
     works = [n for n, slot in enumerate(spec["skeleton"], 1) if slot.get("ask") == "work"]
     summary = ("這段對話接在一段更長的聊天後面：先用一兩句寫出稍早聊過的重點（summary_before）。"
                if spec["with_summary"] else "summary_before 留空字串。")
-    ask = _CHAT_TASK_ASK.strip("（）")
+    summary = ("這段對話接在一段更長的聊天後面：先用一兩句寫出稍早聊過的重點（summary_before）。"
+               if spec["with_summary"] else "summary_before 留空字串。")
     task = f"""在場的人：{"、".join(spec["humans"])}，還有「{name}」。{owner} 是頻道主人，也是{name}的主人。主題：{spec["topic"]}
 {summary}
 
 逐句：
 {chr(10).join(rows)}"""
-    output = f"""先想好{name}今天心裡掛著的 3～4 件具體小事（要符合人設），寫進 concerns。
-- lines 一句對一個編號，共 {len(spec["skeleton"])} 句，只寫說出口的內容，不寫名字。
-- work 照順序對應第 {"、".join(map(str, works)) or "（無）"} 句的工作：task 是交給思考機的指示，照系統問的寫（{ask}），只能換句話說那句真的要的事；result 是思考機做完貼回聊天室的結果（簡短、像真的，最多 200 字；寫程式的就是一小段程式碼；也可以是查不到）。"""
+    output = f"""lines 共 {len(spec["skeleton"])} 句；工作：第 {"、".join(map(str, works)) or "（無）"} 句。"""
     return task, output
 
 
