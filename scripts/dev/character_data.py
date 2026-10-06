@@ -971,13 +971,9 @@ def agent_skeleton(spec: dict[str, Any], rng: random.Random, name: str) -> list[
     return slots
 
 
-SLOT_WORDS = {
-    "chat": "{s}跟其他人聊（照主題，口語、可以很短）",
-    "reply": "{name}回{caller}剛剛那句",
-    "ack": "{name}用一句話接下這件工作（說它去做了，不說已經做好）",
-    "report": "{name}用一兩句話轉述思考機的結果重點（只說結果裡有的；查不到或失敗就直說）",
-    "quiet": "（大家安靜了好一陣子）{name}自己開個話題：說說 concerns 裡的一件事，或問問在場的人最近怎樣",
-}
+# How each kind of slot reads in a chat's numbered turns; the legend in
+# _agent_common says once what each one asks for.
+SLOT_WORDS = {"chat": "聊", "reply": "回", "ack": "接", "report": "報", "quiet": "開話題"}
 
 
 def _call_names(persona: Persona) -> str:
@@ -987,73 +983,77 @@ def _call_names(persona: Persona) -> str:
 
 
 def _agent_common(persona: Persona, lore: list[str]) -> str:
-    """What every machine-spirit chat shares: the card, the canon, the rules."""
+    """What every machine-spirit chat shares: the card, the canon, the rules,
+    and the legend of the numbered turns (_agent_task)."""
     name = persona.name
+    nick = next((n.strip() for n in persona.nickname.split("、") if n.strip()), name)
     lore_text = "\n".join(f"- {item}" for item in lore) or "（無）"
-    return f"""「{name}」的人設：
+    ask = _CHAT_TASK_ASK.strip("（）").replace("最後這句", "叫它做事的那句")
+    return f"""「{name}」的人設（下面的「它」都是{name}）：
 {persona.render_prompt_block()}
 
-{name}熟悉的設定用語（照這些意思用，不要用錯，也不要捏造正典裡沒有的事件或人物）：
+它熟悉的設定用語（照這些意思用，不要用錯，也不要捏造正典裡沒有的事件或人物）：
 {lore_text}
 
-{name}是機器，可以坦然說自己是機器，但絕不說自己是 AI、語言模型、聊天機器人或程式。
-{name}不會在聊天裡念出程式碼或長篇文字；工作交給思考機做，結果由思考機貼進聊天室。
-{DRIVE_SCRIPT.format(name=name, he="它")}
-{name}一次只說一句，長度{persona.length_rule()}；每一句都先接住對方真正在說的事；不要用同樣的句型開頭或結尾。
-其他人講話像真實的語音聊天：大多很短，有時只有「真假」「笑死」「蛤」，會岔題，不要講成書面語；除了編號上寫要叫它的那幾句，其他人的話都不要提到{_call_names(persona)}。
+它是機器，可以坦然說自己是機器，但絕不說自己是 AI、語言模型、聊天機器人或程式。
+它不會在聊天裡念出程式碼或長篇文字；工作交給思考機做，結果由思考機貼進聊天室。
+{DRIVE_SCRIPT.format(name="它", he="它")}
+它一次只說一句，長度{persona.length_rule()}；每一句都先接住對方真正在說的事；不要用同樣的句型開頭或結尾。
+其他人講話像真實的語音聊天：大多很短，有時只有「真假」「笑死」「蛤」，會岔題，不要講成書面語；除了叫它的那幾句，其他人的話都不要提到{_call_names(persona)}。
 不寫性內容；不人身攻擊。
-先想好{name}今天心裡掛著的 3～4 件具體小事（要符合人設），寫進 concerns。
-lines 一句對一個編號，只寫說出口的內容，不寫名字。
-work 照順序對應「工作」列出的那幾句：task 是{name}交給思考機的指示，照系統問的寫（{_CHAT_TASK_ASK.strip("（）").replace("最後這句", "叫它做事的那句")}），只能換句話說那句真的要的事；result 是思考機做完貼回聊天室的結果（簡短、像真的，最多 200 字；寫程式的就是一小段程式碼；也可以是查不到）。"""
+
+逐句的記號：
+- 「某人：聊」：照主題跟其他人聊（口語、可以很短）；括號是這幾句的情況。
+- 「某人：打字叫它｜…」：在聊天室打字，要有「{nick}」或 @ 它；「某人：喊它｜…」：用說的，句子裡一定要說出「{nick}」。｜後面是他要它做的事；標「附檔」的那句結尾寫「（附件：檔名）」。
+- 「它：回」：回剛剛叫它的那句；「回｜婉拒」：用自己的口吻婉拒（要動主人的電腦、檔案、紀錄或別處的對話，只有主人在討論串打字交代才行）；「回｜接梗」：接這個玩笑、補腦洞。
+- 「它：接」：一句話接下工作（說去做了，不說已經做好）；「它：報」：一兩句話轉述思考機的結果重點（只說結果裡有的；查不到或失敗就直說）。
+- 「它：開話題」：大家安靜了好一陣子，它說說 concerns 裡的一件事，或問問在場的人最近怎樣。
+
+寫的內容：
+- summary_before：任務寫「接在更長的聊天後面」時，用一兩句寫稍早聊過的重點；否則留空字串。
+- concerns：它今天心裡掛著的 3～4 件具體小事（要符合人設）。
+- lines：一句對一個編號，只寫說出口的內容，不寫名字。
+- work：照順序對應「工作」那幾句。task 是它交給思考機的指示，照系統問的寫（{ask}），只能換句話說那句真的要的事；result 是思考機貼回聊天室的結果（簡短、像真的，最多 200 字；寫程式的就是一小段程式碼；也可以是查不到）。"""
 
 
-def _agent_task(persona: Persona, spec: dict[str, Any]) -> tuple[str, str]:
-    """One chat's own part: who is there, the topic, the numbered turns, and
-    how many lines and which pieces of work its answer holds."""
-    name, owner = persona.name, spec["owner"]
-    nick = next((n.strip() for n in persona.nickname.split("、") if n.strip()), name)
-    rows, caller = [], owner
+def _agent_task(persona: Persona, spec: dict[str, Any]) -> str:
+    """One chat's own part in the legend's notation (_agent_common): who is
+    there, the topic, the numbered turns, how many lines and which ask for
+    work."""
+    name = persona.name
+
+    def it(text: str) -> str:
+        return text.replace(name, "它")
+
+    rows = []
     for number, slot in enumerate(spec["skeleton"], 1):
         if slot["kind"] == "call":
-            caller = slot["s"]
-            how = (f"在聊天室打字叫{name}（打「{nick}」或 @ 它）" if slot["typed"]
-                   else f"用說的叫{name}，句子裡一定要說出「{nick}」")
-            what = slot["note"] + ("（這句要附上檔案，結尾寫「（附件：檔名）」）" if "貼的圖片或檔案" in slot["note"] else "")
-            rows.append(f"{number}. {slot['s']}：{how}；{what}")
+            how = "打字叫它" if slot["typed"] else "喊它"
+            posted = "（附檔）" if "貼的圖片或檔案" in slot["note"] else ""
+            rows.append(f"{number}. {slot['s']}：{how}｜{it(slot['note'])}{posted}")
         else:
-            words = SLOT_WORDS[slot["kind"]].format(s=slot["s"], name=name, caller=caller)
+            words = SLOT_WORDS[slot["kind"]]
             if slot["kind"] == "chat" and slot.get("note"):
-                words = f"{slot['s']}跟其他人聊（這幾句的情況：{slot['note']}；口語、可以很短）"
-            elif slot["kind"] == "reply" and slot.get("note") == "婉拒":
-                words += "：用自己的口吻婉拒（要動主人的電腦、檔案、紀錄或別處的對話，只有主人在討論串打字交代才行）"
-            elif slot["kind"] == "reply" and slot.get("note") == "接梗":
-                words += "：接這個玩笑、補腦洞"
-            rows.append(f"{number}. {words}")
+                words += f"（{it(slot['note'])}）"
+            elif slot["kind"] == "reply" and slot.get("note") in ("婉拒", "接梗"):
+                words += f"｜{slot['note']}"
+            rows.append(f"{number}. {'它' if slot['s'] == name else slot['s']}：{words}")
     works = [n for n, slot in enumerate(spec["skeleton"], 1) if slot.get("ask") == "work"]
-    summary = ("這段對話接在一段更長的聊天後面：先用一兩句寫出稍早聊過的重點（summary_before）。"
-               if spec["with_summary"] else "summary_before 留空字串。")
-    summary = ("這段對話接在一段更長的聊天後面：先用一兩句寫出稍早聊過的重點（summary_before）。"
-               if spec["with_summary"] else "summary_before 留空字串。")
-    task = f"""在場的人：{"、".join(spec["humans"])}，還有「{name}」。{owner} 是頻道主人，也是{name}的主人。主題：{spec["topic"]}
-{summary}
-
-逐句：
-{chr(10).join(rows)}"""
-    output = f"""lines 共 {len(spec["skeleton"])} 句；工作：第 {"、".join(map(str, works)) or "（無）"} 句。"""
-    return task, output
+    others = [h for h in spec["humans"] if h != spec["owner"]]
+    later = "接在更長的聊天後面。" if spec["with_summary"] else ""
+    return (f"在場：{spec['owner']}（它的主人，也是頻道主人）、{'、'.join(others)}。主題：{spec['topic']}。{later}\n"
+            + "\n".join(rows)
+            + f"\nlines 共 {len(spec['skeleton'])} 句；工作：第 {'、'.join(map(str, works)) or '（無）'} 句。")
 
 
 def agent_script_prompt(persona: Persona, spec: dict[str, Any]) -> str:
     """The teacher fills in the words of the skeleton (agent_skeleton): one
     line per numbered slot, plus the instructions and result of each piece
     of work. Who speaks and what kind of line it is are fixed already."""
-    task, output = _agent_task(persona, spec)
-    return f"""照下面的編號，寫一段 Discord 語音頻道的逐字稿（語音辨識的結果；標明打字的是在頻道的聊天室打字）。
+    return f"""照下面的編號，寫一段 Discord 語音頻道的逐字稿（語音辨識的結果；打字的是在頻道的聊天室打字）。
 {_agent_common(persona, spec["lore"])}
 
-{task}
-
-{output}
+{_agent_task(persona, spec)}
 輸出 JSON：{{"summary_before": "…", "concerns": ["…", "…", "…"], "lines": ["第1句的內容", "第2句的內容", …], "work": [{{"task": "…", "result": "…"}}, …]}}"""
 
 
@@ -1176,11 +1176,10 @@ def make_scripts(args: argparse.Namespace) -> None:
     print(f"scripts done; dropped {drops}", flush=True)
 
 
-EXTERNAL_HEAD = """你要幫一個 Discord 語音機器人的角色寫訓練用的對話逐字稿（Discord 語音頻道裡語音辨識的結果；標明打字的是在頻道的聊天室打字）。下面先是所有任務共用的角色設定和規則，接著是 {n} 份任務，每份以「=== 任務 ID ===」開頭，有自己的人物、主題和逐句的安排。照每份的安排一句一句寫。
-每一句都由你自己想、自己寫：不要寫程式或套範本產生台詞，也不要交給別的模型或別人寫。
-結果存成一個 UTF-8 的 JSONL 檔，每份任務一行 JSON，格式是
-{{"id": "任務 ID", "by": "寫這些台詞的模型（照實寫你自己的名稱和版本）", "summary_before": "…", "concerns": ["…", "…", "…"], "lines": ["第1句的內容", …], "work": [{{"task": "…", "result": "…"}}]}}
-用台灣繁體中文。
+EXTERNAL_HEAD = """寫 {n} 段 Discord 語音頻道的逐字稿（語音辨識的結果；打字的是在頻道的聊天室打字），當一個語音機器人角色的訓練資料。先讀共用設定，再照每份「=== 任務 ID ===」的編號一句一句寫。
+台詞都由你自己想、自己寫：不要寫程式或套範本產生，也不要交給別的模型或別人。用台灣繁體中文。
+存成 UTF-8 的 JSONL，每份任務一行：
+{{"id": "ms001", "by": "你自己的模型名稱和版本", "summary_before": "", "concerns": ["…"], "lines": ["第1句", …], "work": [{{"task": "…", "result": "…"}}]}}
 """
 
 
@@ -1201,10 +1200,8 @@ def make_external_prompt(args: argparse.Namespace) -> None:
         json.dumps({"persona": persona_raw, "chats": specs}, ensure_ascii=False, indent=1) + "\n",
         encoding="utf-8")
     parts = [EXTERNAL_HEAD.format(n=len(specs)),
-             "共用的角色設定和規則：\n" + _agent_common(persona, specs[0]["spec"]["lore"])]
-    for item in specs:
-        task, output = _agent_task(persona, item["spec"])
-        parts.append(f"=== 任務 {item['id']} ===\n{task}\n\n{output}")
+             "=== 共用設定 ===\n" + _agent_common(persona, specs[0]["spec"]["lore"])]
+    parts += [f"=== 任務 {item['id']} ===\n{_agent_task(persona, item['spec'])}" for item in specs]
     out.with_suffix(".txt").write_text("\n\n".join(parts) + "\n", encoding="utf-8")
     print(f"external prompt: {len(specs)} chats -> {out.with_suffix('.txt')}", flush=True)
 

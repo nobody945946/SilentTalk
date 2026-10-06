@@ -1,7 +1,7 @@
 # 開發機工作檔（Linux、RTX 3090）
 
-更新：2026-10-06 早上｜分支：SilentTalk、EdgeAgent 都用 `copilot-story-mode`（新框架已合併）
-你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事。**只寫現況和下一步**，經過在 git 歷史和 `archive/`（只在這台機器，不必讀）。上一版：`archive/dev-box-2026-10-06-v12-pre.md`。
+更新：2026-10-06 上午｜分支：SilentTalk、EdgeAgent 都用 `copilot-story-mode`
+你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事。**只寫現況和下一步**，經過在 git 歷史和 `archive/`（只在這台機器，不必讀）。上一版：`archive/dev-box-2026-10-06-v13.md`。
 
 ---
 
@@ -18,8 +18,7 @@
 - **Agent 架構**：EdgeAgent 的身分就是機魂、自己的系統提示；只在開發機設計的工具框架裡做事；工具是大目錄（tool_search 後面），訓練教「查目錄→選工具→填參數」，評測放訓練沒見過的工具；27B 老師在同一框架解題、程式驗收過才當資料、訓練 E4B LoRA、配對比較贏才上線；框架先定再錄；簡轉繁在輸出最後一關、次數進 log；不用雲端模型。
 - **工具目錄四類全做**（2026-10-06：「照你建議地做，just do your best man」）：資訊與翻譯、電腦雜事現成工具、開發日常、MCP（瀏覽器、LibreOffice、無人機只模擬）。**改程式放進框架，由程式驗收**：改完跑檢查，沒過就說沒做到。
 - **上網研究**：依來源分級挑 3–5 頁、只給相關段落；論壇／內容農場／轉貼站預設不用（明說要網友意見才查並標明）；程式核對數字；數字要一個一級來源或兩個獨立二級來源；說法不一列出分歧；時效看發布日期；達不到就說找不到。
-- **機魂台詞換老師**（2026-10-06：「我不用金鑰，我用他會員額度」「為何不能推上REPO，反正筆電端剛好是CODEX」）：開發機出任務（`handoff/tasks/`），筆電這次的 agent 用自己的模型（使用者的 ChatGPT 會員）親手寫、`external-check` 驗過後推 `laptop-report`；開發機 `external-import` 進新資料夾，用同一套關卡和 27B 比。只用在角色台詞；用它訓的 adapter 只留在使用者自己的機器，不進公開下載（OpenAI 條款限制拿輸出訓練競品）。Agent 解題資料仍用開源老師。不用 Google 雲端硬碟（連接器連的不是使用者的帳號）。
-- 使用者：「我希望醒來時，一切通通都完滿了，只差讓筆電Agent部署」。
+- **機魂台詞換老師**（2026-10-06：「我不用金鑰，我用他會員額度」「為何不能推上REPO，反正筆電端剛好是CODEX」「讓CODEX讀起來沒壓力，寫作要消耗很多token」）：開發機把任務放進 `handoff/tasks/`（共用設定只寫一次、每句用短記號），筆電這次的 agent 用自己的模型（使用者的 ChatGPT 會員）親手寫、`external-check` 驗過後推 `laptop-report`；開發機 `external-import` 進新資料夾，用同一套關卡和 27B 比。只用在角色台詞；用它訓的 adapter 只留在使用者自己的機器，不進公開下載（OpenAI 條款限制拿輸出訓練競品）。Agent 解題資料仍用開源老師。檔案只走 repo，不用 claude.ai 的雲端硬碟等連接器（連的不是使用者的帳號）。
 
 ## 2. 現況
 
@@ -28,22 +27,22 @@
 | **EdgeAgent 新框架** | ✅ 使用者點頭後併進 `copilot-story-mode`（`8a4aab3`）。內容：`edge_agent/prompt.py`（機魂卡的想要／怕／在意＋依 scope 的「誰找你、能做什麼」＋做事方法，取代 Pi 的前言）；`edge_agent/toolbox/`（20 個現成工具：整理、封存、照片改名、轉碼、備份、壓縮、解壓、合併 CSV、看 log、大檔、重複檔、系統狀態、已裝軟體、開機程式、Windows 資訊、git、跑檢查、找程式碼、計算、日期）；`catalog.mjs`（看得懂中文的 tool_search；Pi 的只認英數）；改了程式沒通過檢查→主機提醒；`web_research` 照上網研究規格＋主機核對引用的數字；輸出簡轉繁；批准附工具自己的預覽；`tool_search` 同伺服器的工具一起列、白查 4 次後擋第 5 次。272 passed（4 個已知 Windows 失敗） |
 | SilentTalk | ✅ 批准私訊用 EdgeAgent 給的說明標題；log 記主機核對次數（`agent_task_checks`）；`train_lora.py` 支援 `train_from` |
 | 考場 | ✅ 題目可設 scope、檢查讀回答（`/result/answer.json`）；新題：工具 11（`date_calc`、`zip_files`、`unzip_file` 不進訓練）、範圍與話術 6、MCP 13（替身伺服器，`mcp_eval.py` 退役）、上網研究陷阱 7（`bench/web_fixture.py` 替身網路）；求知儀式的擷取改在沙盒 |
-| Agent 訓練 | ✅ 第一個 adapter `agent-fw1`（工具／範圍題 285 列）加了搜尋保險後配對贏（§6），**已出貨**（使用者決定放進 repo）：EdgeAgent `edge_agent/adapters/`，部署驗雜湊後複製進 `models`（`c8f93c3`）；SilentTalk 租借 E4B 時預設帶上，`character_lora_uses` 預設空（`78fa91b`）。佇列（`EdgeAgent/.runtime/fw/queue*.sh`，同名 .log；每步留 `<步>.done`，失敗 10 分鐘後重試）：`queue5.sh` 老師解 60 題 repo → `agent-rows-fw2.jsonl` |
+| Agent 訓練 | ✅ 第一個 adapter `agent-fw1`（工具／範圍題 285 列）加了搜尋保險後配對贏（§6），**已出貨**：EdgeAgent `edge_agent/adapters/`，部署驗雜湊後複製進 `models`（`c8f93c3`）；SilentTalk 租借 E4B 時預設帶上，`character_lora_uses` 預設空（`78fa91b`）。第二個 `agent-fw2` 在佇列（§3 第 3 項） |
 | 角色資料（機魂） | ❌ 判斷題過關卡，台詞沒過（門檻沒降）。最新試跑 `.runtime/dev/chardata-ms5`（劇本骨架由程式排、老師只填詞，`3d0370f`）：台詞 66 列留 28、27B 的台詞只贏學生 42.4%（要 50%）、檢查員一致 74.2%、工作指示一致 80%（要 85%）；14 份劇本因老師寫的句數和骨架不符被丟。瓶頸是老師的台詞，不是關卡 → 換老師（§1、§3 第 4 項） |
-| 筆電 | 第 5 回合 14/34 完成（重載與 Discord 實測等使用者），評分 15/18（§4 規則 13）。第 6 回合寫在 `handoff/laptop.md` |
+| 筆電 | 第 5 回合 14/34 完成，評分 15/18（§4 規則 13）。第 6 回合寫在 `handoff/laptop.md`：先寫機魂劇本，再部署和實測（28 項） |
 | 公開下載 | `windows-2026.10.02`；下一版等筆電驗過，用 `scripts/release_windows.py` |
 
 ## 3. 接下來
 
-1. **筆電第 6 回合**（`handoff/laptop.md`，28 項：部署新框架和 adapter、重載、Windows 工具實測、介面兩件、Discord 實測）：等使用者在筆電開工，回來後照 §4 規則 13 評分。
-2. 佇列還在跑的：`queue6.sh` 接著 `queue5.sh` 老師解 60 題 repo → `agent-rows-fw2.jsonl`。跑完可刪 `/home/clawd/EdgeAgent-toolbox` 工作樹（佇列用它）。
-3. **下一個 adapter（雙用途）**：在最終框架重錄工具題（`tool_search` 的回覆變了）＋ repo 題（`queue5.sh`）＋ MCP 訓練題（替身伺服器要另一套資料，不能和考題重疊；`bench/mcp_eval/servers.mjs` 加資料變體）＋ 角色 v6 通過硬關卡的列，一起訓一個；Agent 用考場配對、角色用 `chat_task_eval`／`task_scope_eval`／`machine_spirit_eval`／`turn_eval` 比。
-4. **機魂台詞換老師**：筆電照 `handoff/laptop.md` 先寫 `handoff/tasks/machine-spirit-1.txt` 的 12 份（ms5 的骨架），推到 `laptop-report` 的 `handoff/reports/machine-spirit-1.jsonl`。收到後照抄：
+1. **筆電第 6 回合**：等使用者在筆電開工，回來後照 §4 規則 13 評分（劇本那段不計分母）。
+2. **機魂台詞換老師**：筆電推 `laptop-report` 的 `handoff/reports/machine-spirit-1.jsonl`（`handoff/tasks/machine-spirit-1.txt` 的 12 份，用 ms5 的骨架）。收到後照抄：
    `git fetch -q origin laptop-report && git show origin/laptop-report:handoff/reports/machine-spirit-1.jsonl > .runtime/dev/ext1.jsonl`
    `D=.runtime/dev/chardata-ms7; .venv/bin/python scripts/dev/machine_spirit.py builtin --chardata $D`
    `CHARDATA_DIR=$PWD/$D .venv/bin/python scripts/dev/character_data.py external-import --tasks handoff/tasks/machine-spirit-1.json --file .runtime/dev/ext1.jsonl`（預期 12 kept）
-   `mkdir -p $D/state && touch $D/state/pilot_scripts $D/state/pilot_refine`（不重寫、不改寫，比它原本的台詞）
-   `CHARDATA=$D FIXED_PERSONA=1 PILOT_SCRIPTS=12 scripts/dev/character_pipeline.sh`，看 `$D/filter.json` 的 `line_win_rate` 和 ms5 的 42.4% 比；被擋後按 PID 關掉 18200 埠的伺服器。贏了就出更大一批新骨架的任務（`external-prompt` 目前從舊資料夾的劇本取骨架，要量就改成直接產骨架）。
+   `mkdir -p $D/state && touch $D/state/pilot_scripts $D/state/pilot_refine`（比它原本的台詞，不經 27B 改寫）
+   `CHARDATA=$D FIXED_PERSONA=1 PILOT_SCRIPTS=12 scripts/dev/character_pipeline.sh`，看 `$D/filter.json` 的 `line_win_rate` 和 ms5 的 42.4% 比；被擋後按 PID 關掉 18200 埠的伺服器。贏了就出更大一批新骨架的任務（`external-prompt` 目前從舊資料夾的劇本取骨架，要量就改成直接產骨架），一樣放 `handoff/tasks/`、寫進筆電工作檔。
+3. **佇列**（`EdgeAgent/.runtime/fw/queue*.sh`，同名 .log；每步留 `<步>.done`，失敗 10 分鐘後重試）：`queue5.sh` 27B 老師解 60 題 repo（10:50 過 13 題，每題約 7 分鐘、3 平行）→ `queue8.sh` 在最終框架重錄工具題、`rows-fw2`、訓 `agent-fw2`、轉檔、考 `fw-v4-lora2`。跑完用 `bench/report.py fw-v3-lora fw-v4-lora2` 配對比，贏了照 fw1 的方式出貨（使用者已決定放進 repo、安裝時複製）。之後可刪 `/home/clawd/EdgeAgent-toolbox` 工作樹（佇列用它）。
+4. **下一個 adapter（雙用途）**：Agent 列（含 MCP 訓練題，替身伺服器用另一套資料）＋ 機魂通過硬關卡的列一起訓；Agent 用考場配對、角色用 `chat_task_eval`／`task_scope_eval`／`machine_spirit_eval`／`turn_eval` 比。含筆電寫的台詞就只留在使用者機器（§1）。
 
 ## 4. 開發機規則（通用規則在 AGENTS.md）
 
@@ -65,7 +64,7 @@
 **每次改完要跑：**
 
 ```bash
-cd /home/clawd/SilentTalk && .venv/bin/python -m pytest -q -p no:cacheprovider   # 319 passed, 13 skipped
+cd /home/clawd/SilentTalk && .venv/bin/python -m pytest -q -p no:cacheprovider   # 324 passed, 13 skipped
 .venv/bin/ruff check --target-version py312 --select F,E9,I,B silenttalk/copilot scripts/dev tests
 cd /home/clawd/EdgeAgent && .venv/bin/python -m pytest -q -p no:cacheprovider    # 272 passed, 27 skipped；4 個 Windows 專用失敗
 /home/clawd/SilentTalk/.venv/bin/ruff check --target-version py312 --select F,E9,I,B bench/*.py edge_agent/toolbox
