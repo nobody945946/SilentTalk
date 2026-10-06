@@ -374,6 +374,13 @@ DRIVE_SCRIPT = (
     "{name}的角色味來自{he}想要、害怕、在意的事：讓這些決定{he}怎麼判斷、選擇怎麼回，"
     "不是每句硬加設定用語、祈禱文或口頭禪。"
 )
+# Asked of the teacher only while it writes a line's other versions; the row
+# keeps the app's own request. Given exactly the app's request, the teacher
+# wrote lines as flat as the student's (v6 pilot: wins in both orders 33%).
+DRIVE_WRITE = (
+    "（說出口之前先在心裡想：此刻你最想要什麼、最怕什麼、在意什麼，這句話怎麼替你爭取它或避開它；"
+    "讓這個想法決定你怎麼回，不要說出你的想法，也不要硬加設定用語。只說出口的那一句）"
+)
 DRIVE_JUDGE = (
     "看得出角色想要、害怕或在意的事在左右他的判斷和反應"
     "（只多了設定用語或口頭禪、看不出他想要什麼的那句輸）"
@@ -1149,7 +1156,8 @@ def check_agent_script(
     calls = NameMatcher(persona_names(Persona(id="check", name=name, nickname="、".join(nicks))))
     lines: list[dict[str, Any]] = []
     pending: dict[str, Any] | None = None  # work waiting for its report
-    for raw in data.get("lines", []):
+    raw_lines = list(data.get("lines", []))
+    for position, raw in enumerate(raw_lines):
         speaker = alias.get(str(raw.get("s", "")).strip(), str(raw.get("s", "")).strip())
         if speaker == AGENT_NAME:
             continue  # the app types the Agent's result itself
@@ -1187,7 +1195,12 @@ def check_agent_script(
             if called:
                 return [], "call not answered"
             if calls(text) and target != name:
-                return [], "names it but not aimed"  # the app would call it
+                # The app calls it on its name: when the character answers
+                # next, the teacher only mislabelled the line; otherwise drop.
+                upcoming = raw_lines[position + 1] if position + 1 < len(raw_lines) else {}
+                if alias.get(str(upcoming.get("s", "")).strip(), str(upcoming.get("s", "")).strip()) != name:
+                    return [], "names it but not aimed"
+                target = line["to"] = name
             if target == name and not typed and not calls(text):
                 # Spoken, it would not reach the character without its name
                 # (the app needs the name in every spoken line); people say
@@ -1195,7 +1208,9 @@ def check_agent_script(
                 # the whole chat (half the pilot's chats, 2026-10-06).
                 line["t"] = text = f"{nicks[0] if nicks else name}，{text}"
             if target == name:
-                ask = str(raw.get("ask", "")).strip().lower()
+                # An unlabelled call is conversation: work and computer
+                # requests carry their own fields, which talk does not need.
+                ask = str(raw.get("ask") or "talk").strip().lower()
                 if ask not in ASKS:
                     return [], "no ask label"
                 line["ask"] = ask
@@ -1506,8 +1521,10 @@ def make_refine(args: argparse.Namespace) -> None:
         model = reply_model(persona, script["spec"])
         messages = line_request(model, script, turns, index=index, kind=kind,
                                 aimed=aimed, detail=detail)
+        driven = messages[:-1] + [{**messages[-1],
+                                   "content": messages[-1]["content"] + "\n" + DRIVE_WRITE}]
         outs = chat(
-            args.teacher_url, messages, temperature=0.9, max_tokens=90, n=SAMPLES
+            args.teacher_url, driven, temperature=0.9, max_tokens=90, n=SAMPLES
         )
         # The app checks a task line against nothing (character_turn).
         newest = "" if kind in TASK_HINTS else turns[index].text

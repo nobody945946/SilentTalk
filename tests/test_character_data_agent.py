@@ -253,7 +253,7 @@ def _insert(index: int, *lines: dict[str, Any]) -> dict[str, Any]:
     (_edit(0, t="機魂 測試閒聊甲"), "names it but not aimed"),
     (_drop(3), "call not answered"),
     (_edit(4, result=None), "work without task or result"),
-    (_edit(2, ask=None), "no ask label"),
+    (_edit(2, ask="sing"), "no ask label"),
     (_edit(12, report=True), "report without work"),
     (_drop(8), "work without report"),
     (_insert(6, {"s": "阿驗", "t": "機魂 測試工作二", "to": NAME, "ask": "work",
@@ -273,6 +273,21 @@ def test_a_spoken_call_without_the_name_gets_it_in_front() -> None:
     assert reason == "" or lines, reason
     called = next(line for line in lines if line["t"].endswith("測試聊天一"))
     assert called["t"].startswith(("機魂，", "馬基納，")) and called["ask"]
+
+
+def test_an_unlabelled_call_is_conversation() -> None:
+    lines, reason = _check(_edit(2, ask=None))
+    assert reason == "" and lines[2]["ask"] == "talk"
+
+
+def test_a_line_that_names_it_and_gets_its_answer_is_a_call() -> None:
+    """The app calls the character on its name; when the character answers
+    next, only the label was wrong."""
+    data = copy.deepcopy(TEACHER_CHAT)
+    called = next(i for i, line in enumerate(data["lines"]) if line.get("to") == NAME and line.get("ask") == "talk")
+    data["lines"][called]["to"] = data["lines"][called]["s"]
+    lines, reason = _check(data)
+    assert reason == "" and lines[called]["to"] == NAME and lines[called]["ask"] == "talk"
 
 
 def test_a_script_that_copies_an_eval_line_is_refused() -> None:
