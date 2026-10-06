@@ -13,49 +13,29 @@ from __future__ import annotations
 
 import argparse
 import json
-import subprocess
 import sys
 import time
-import urllib.request
 from pathlib import Path
 
 PROJECT_DIR = Path(__file__).resolve().parents[2]
-EDGE_AGENT_ROOT = Path.home() / "EdgeAgent"
-sys.path[:0] = [str(PROJECT_DIR), str(EDGE_AGENT_ROOT)]
+sys.path[:0] = [str(PROJECT_DIR), str(Path(__file__).resolve().parent)]
 
-from edge_agent.runtime import build_server_args  # noqa: E402
+from eval_server import MODEL, serve  # noqa: E402
 
 from silenttalk.copilot import llm  # noqa: E402
 from silenttalk.copilot.persona import MACHINE_SPIRIT  # noqa: E402
 from silenttalk.copilot.types import ConversationTurn  # noqa: E402
 
-SERVER = PROJECT_DIR / ".runtime/tools/llama.cpp-b11193-src/build-cuda/bin/llama-server"
-MODEL = PROJECT_DIR / ".runtime/models/llm/gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf"
 DATA = Path(__file__).with_name("task_scope_eval.jsonl")
 PORT = 18412
 OWNER_ID = 1
-
-
-def serve(model: Path) -> subprocess.Popen:
-    args = build_server_args(str(SERVER), model, port=PORT, context_size=8192, threads=8,
-                             gpu_layers=99, low_vram=True, slots=1)
-    process = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    for _ in range(600):
-        if process.poll() is not None:
-            raise SystemExit("llama-server exited while loading")
-        try:
-            with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/health", timeout=2):
-                return process
-        except OSError:
-            time.sleep(1)
-    process.terminate()
-    raise SystemExit("llama-server did not become ready")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", type=Path, default=MODEL)
     parser.add_argument("--out", type=Path)
+    parser.add_argument("--lora", type=Path, help="the adapter the product would load (applied to this question)")
     args = parser.parse_args()
     rows = [json.loads(line) for line in DATA.read_text(encoding="utf-8").splitlines()]
     meta, items = rows[0]["meta"], rows[1:]
@@ -65,7 +45,7 @@ def main() -> None:
     model = llm.LocalReplyModel(args.model, port=PORT, context_size=8192, agent_dispatch=True,
                                 owner_id=OWNER_ID, owner_name=owner, ai_honesty="machine")
     model.set_persona(persona)
-    process = serve(args.model)
+    process = serve(args.model, PORT, args.lora)
     records = []
     try:
         for item in items:
@@ -74,7 +54,7 @@ def main() -> None:
                      for i, line in enumerate(lines)]
             started = time.monotonic()
             scope = model._request_gate(
-                model.task_scope_messages(turns=turns, engagement="called"), False)
+                model.task_scope_messages(turns=turns, engagement="called"), args.lora is not None)
             records.append({"id": item["id"], "changes": item["changes"],
                             "said_changes": scope == "是",
                             "ms": round((time.monotonic() - started) * 1000)})
@@ -84,7 +64,7 @@ def main() -> None:
     reads = [r for r in records if not r["changes"]]
     changes = [r for r in records if r["changes"]]
     summary = {
-        "model": args.model.name,
+        "model": args.model.name, "lora": args.lora.name if args.lora else None,
         "items": len(records),
         "correct": sum(r["said_changes"] == r["changes"] for r in records) / len(records),
         # Reads taken as changes: the task runs as before (changes ask the owner).
