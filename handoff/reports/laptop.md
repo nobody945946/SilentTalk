@@ -2,12 +2,12 @@
 
 ## 機魂劇本
 
-- external-check：ok 12/12，檢查 1 次。by＝GPT-6。
-- 第一筆直接時鐘至完成檢查：12:10:56～12:15:09 +08:00，共 4 分 13 秒；這是觀測區間，包含準備，不是純撰寫時間。
+- external-check：新版ok 12/12、Python exit 0。累計檢查2次（初版1次、整批重寫1次）。by＝GPT-6。
+- 第一筆直接時鐘至完成檢查：12:10:56～12:15:09 +08:00，共 4 分 13 秒；這是初版觀測區間，包含準備，不是純撰寫時間。重寫觀測區間：13:53:13～13:58:09 +08:00，共4分56秒，包含同步、撰寫與檢查。
 
 ## 時間與額度
 
-- 檢查點：2026-10-06 12:16:01 +08:00。完整回合起始時間、Token、額度與推理等級看不到，不估算。
+- 檢查點：2026-10-06 13:58:09 +08:00。完整回合起始時間、Token、額度與推理等級看不到，不估算。
 - SilentTalk pull：82b4402 → a621d33，exit 0；EdgeAgent pull：eaa54fc → 90c5876，exit 0；report worktree pull：exit 0。
 - A1 指定的 git log --oneline -15 查不到框架標題。補充一次只讀定位：提交 893171f 已在 HEAD 中，git merge-base --is-ancestor 893171f HEAD exit 0；git rev-list --count 893171f..HEAD＝16，所以框架是最近第 17 筆，並非證明尚未併入。
 - 工作檔仍要求查不到就停止。已提出一次 async 問題，待使用者決定是否以實際祖先證據繼續；尚未部署或重載。不能把時間經過當成批准。
@@ -51,13 +51,14 @@
 
 - pytest 0 次，沒有測試失敗／通過成績可報。
 - 劇本指定命令：PYTHONUTF8=1；.venv/Scripts/python.exe scripts/dev/character_data.py external-check --tasks handoff/tasks/machine-spirit-1.json --file C:/Users/A8fm0/Downloads/SilentTalk-laptop-report/handoff/reports/machine-spirit-1.jsonl。第1次輸出ok 12/12。所在shell exit 0，但後接時鐘，未單獨擷取該Python exit code，不把shell exit冒稱獨立exit證據。
-- 另一次JSON結構核對exit 0：12列／12個唯一ID、by一致、每份3～4件concerns、無空句、無超過200字的work result；此核對沒有產生台詞。
+- 初版JSON結構核對exit 0：12列／12個唯一ID、by一致、每份3～4件concerns、無空句、無超過200字的work result；此核對沒有產生台詞。
+- 新版external-check直接保留Python exit，ok 12/12、exit 0；新版字數核對exit 0：12列／12個唯一ID、66句角色台詞均8～30字、所有work result不超過200字。這些是結構證據，不是開發機品質比較或模型人格實測通過。
 - 首次apply_patch回報更新使用同路徑delete/add遭拒，未寫入；改用整份Set-Content保存回報。沒有遺留替代檔或第二份回報。
 
 ## 修改檔案與 commit
 
 - 只有report worktree的handoff/reports/laptop.md與handoff/reports/machine-spirit-1.jsonl。
-- 兩個開發repo均未改程式、未commit。劇本與此回合初版回報已提交fea56a3，git push origin laptop-report exit 0；本節的提交核對隨後更新於同一回報。
+- 兩個開發repo均未改程式、未commit。初版fea56a3及回報86688ee已推送；12份整批重寫提交8e28536，git push origin laptop-report exit 0。本報仍是同一回合改寫。
 
 ## 記憶體與速度
 
@@ -73,11 +74,11 @@
 
 ## 使用者回饋
 
-使用者指示「開工」；本回合尚無其他新決定。
+使用者後續指出看不懂劇本與部署狀況；已說明劇本完成、部署暫停。使用者要求人格品質自評，表示「我不要應付而已，我要有趣的靈魂」。已執行人格品質覆核及12份整批重寫；尚未經開發機與舊老師的品質比較，不聲稱訓練後人格已驗收。
 
 ## 給接手模型的交接指示
 
-1. 第一段12份劇本已親寫並通過external-check，不必再產生一批或重跑未改資產。使用GPT-6署名，沒有其他模型參與。
+1. 第一段12份劇本已依使用者人格品質要求整批親寫重寫，新版external-check ok 12/12、exit 0，資產提交8e28536。開發機請取新版做既有品質比較；不要把初版fea56a3當最後版本。使用GPT-6署名，沒有其他模型參與。
 2. A1檢查有具體落差：框架已併入，但排第17筆。已問一次是否以HEAD祖先證據繼續，目前等回覆；收到「繼續」後才執行第二段。若停止，保留上表未完成狀態，不宣稱部署完成。
 3. 重載本身已由第6回合工作檔授權；待釐清的是A1停止條件，不是重問清RAM授權。
 4. 後續依handoff/laptop.md進行。保留Discord、普通Edge、EdgeAgentTest；不讀對話、角色狀態或紀錄內容；回報同一節改寫，不附加歷史。
