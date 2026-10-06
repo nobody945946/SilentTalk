@@ -29,7 +29,7 @@ export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 HF_DATASETS_OFFLINE=1
 export PYTHONUNBUFFERED=1
 
-DIR=${CHARDATA:?set CHARDATA to the round's data folder}
+DIR=${CHARDATA:?set CHARDATA to the data folder of this round}
 export CHARDATA_DIR="$REPO/$DIR"
 STATE=$DIR/state
 LOGS=$DIR/logs
