@@ -365,7 +365,7 @@ class LeaseStandIn:
             str(EVAL_SERVER), model_path, port=EVAL_PORT,
             context_size=int(config["llm_context_size"]), threads=8,
             gpu_layers=0 if CPU_ONLY else 99, low_vram=True,
-            lora_path=lora, slots=2 if lora is not None else 1)
+            lora_paths=[lora] if lora is not None else (), slots=2 if lora is not None else 1)
         self.process = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         for _ in range(600):
             if self.process.poll() is not None:

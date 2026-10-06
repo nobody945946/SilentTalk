@@ -3,7 +3,7 @@ comparison on chats no training ever saw.
 
 For every line row of a data folder (render's train.jsonl: the app's own
 line requests), both models answer the request as the student step does
-(temperature 0.65, 90 tokens): first the base E4B, then the same server
+(temperature 0.65, top_p 0.85, 90 tokens, as LocalReplyModel): first the base E4B, then the same server
 started with the adapter. The pairs are written in random order to
 <out>.pairs.json (what the judge reads: the chat and A/B) and the key to
 <out>.key.json; `score` joins the judge's verdicts to the key.
@@ -19,6 +19,7 @@ import argparse
 import json
 import random
 import sys
+import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -28,12 +29,23 @@ from eval_server import MODEL, serve  # noqa: E402
 PORT = 18414
 
 
+def ask(row: dict, lora: bool) -> str:
+    """The app's line request, as LocalReplyModel sends it: the server applies
+    an adapter only to a request that names it."""
+    body = {"messages": row["messages"][:-1], "temperature": 0.65, "top_p": 0.85, "max_tokens": 90,
+            "cache_prompt": True, "chat_template_kwargs": {"enable_thinking": False},
+            **({"lora": [{"id": 0, "scale": 1.0}]} if lora else {})}
+    request = urllib.request.Request(f"http://127.0.0.1:{PORT}/v1/chat/completions",
+                                     json.dumps(body, ensure_ascii=False).encode("utf-8"),
+                                     {"Content-Type": "application/json"})
+    with urllib.request.urlopen(request, timeout=300) as response:
+        return character_data._clean_line(json.loads(response.read())["choices"][0]["message"]["content"] or "")
+
+
 def answers(rows: list[dict], lora: Path | None) -> dict[str, str]:
     process = serve(MODEL, PORT, lora)
     try:
-        url = f"http://127.0.0.1:{PORT}"
-        return {character_data.row_key(row): character_data._clean_line(character_data.chat(
-            url, row["messages"][:-1], temperature=0.65, max_tokens=90)[0]) for row in rows}
+        return {character_data.row_key(row): ask(row, lora is not None) for row in rows}
     finally:
         process.terminate()
         process.wait(timeout=60)

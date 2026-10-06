@@ -21,7 +21,7 @@ MODEL = PROJECT_DIR / ".runtime/models/llm/gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf"
 
 def serve(model: Path, port: int, lora: Path | None = None) -> subprocess.Popen:
     args = build_server_args(str(SERVER), model, port=port, context_size=8192, threads=8,
-                             gpu_layers=99, low_vram=True, lora_path=lora, slots=1)
+                             gpu_layers=99, low_vram=True, lora_paths=[lora] if lora else (), slots=1)
     process = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     for _ in range(600):
         if process.poll() is not None:
