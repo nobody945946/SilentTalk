@@ -1,50 +1,47 @@
-# Windows 工作檔：第 6 回合
+# Windows 工作檔：第 6 回合（續）
 
-更新：2026-10-06 晚上｜開發分支 `copilot-story-mode`｜回報分支 `laptop-report`
+更新：2026-10-07 凌晨｜開發分支 `copilot-story-mode`｜回報分支 `laptop-report`
 
-劇本已完成；B1、B4、B5 已完成（回報 6dd520a）。**先做下面「128K 載入」，再從 A5 接著做。**
+已完成、不要重做：劇本、A1、A2、A4、B1–B5、E1、E2（回報 b2588c0）。**從下面「1. 128K 載入」開始。**
 
-開始：兩個 repo 都 `git pull --ff-only`，失敗就停下告訴使用者。回報寫在既有 worktree `C:\Users\A8fm0\Downloads\SilentTalk-laptop-report` 的 `handoff/reports/laptop.md`：整份換成第 6 回合，同一回合的檢查點改寫同一節。版面照第 5 回合（時間與額度、目標完成度統計、測試執行結果、修改檔案與 commit、記憶體與速度、Discord 數字表、紀錄目錄、使用者回饋、給接手模型的交接指示），最前面加一節「機魂劇本」。
+開始：兩個 repo 都 `git pull --ff-only`，失敗就停下告訴使用者。在 EdgeAgent 跑 `git merge-base --is-ancestor ecf9884 HEAD`，要 exit 0（不是就停，告訴使用者「開發機的 128K 修正還沒拉到」）。回報寫在既有 worktree `C:\Users\A8fm0\Downloads\SilentTalk-laptop-report` 的 `handoff/reports/laptop.md`：沿用第 6 回合那份，同一節改寫，不要附加新的一節。版面不變（機魂劇本、時間與額度、目標完成度統計、測試執行結果、修改檔案與 commit、記憶體與速度、Discord 數字表、紀錄目錄、使用者回饋、給接手模型的交接指示）。
 
-## 先做：128K 載入（只在筆電發生，由你修）
+## 開發機這次改了什麼（照用，不要再調）
 
-現況：A5 用產品設定載入 E4B 128K，CUDA out of memory（0xC0000409）3 次。開發機的判斷：`--fit` 留給其他程式的空間（`edge_agent/runtime.py` 的 `--fit-target 512`）在 4 GB 卡上不夠（載入時只剩 3.3 GB 可用，adapter 和運算緩衝可能沒算進估計）；128K 本身做得到（以前量過約 33–34 層上 GPU）。依 AGENTS.md，只在 Windows 出現的錯誤由你修，不管程式是誰寫的。
+- **128K 載入**（EdgeAgent `ecf9884`）：你上回量到的才是主因，是系統 RAM，不是顯示卡。舊的 `--load-mode mlock` 不用 mmap，CPU 那 19 層和每層嵌入（合計 2,857 MiB）全部複製進要鎖住的 pinned 記憶體；8 GB 筆電鎖不住，就載入失敗。現在改成 `--load-mode mmap --lazy-mode on`：權重直接對應模型檔（記憶體不夠時系統丟掉、需要時再讀回，不寫分頁檔），E4B 的每層嵌入（1,512 MiB）用到哪一列才讀哪一列。開發機用你的同一套配置量（24/43 層在 GPU、128K、兩個 adapter、2 個 slot）：伺服器 RAM 4,503→2,994 MiB，其中 1,515 MiB 是可回收的模型檔頁；鎖住的記憶體 2,857→0；顯存不變（約 3.1 GB）；速度和舊方式在同一範圍（開發機量的時候 CPU 有別的工作，數字有雜訊，以你量的為準）。`--fit-target` 維持 512，不要改。
+- **兩個附帶的 adapter**（EdgeAgent `57c12ab`、SilentTalk `1607472`）：Agent 用 `agent-fw1.q8_0.gguf`（`runtime.AGENT_ADAPTER`，模型頁選它）；機魂用 `machine-spirit-char-v1.q8_0.gguf`（`runtime.CHARACTER_ADAPTER`，SilentTalk 租借時自動帶上，套用在台詞和聊天工作）。伺服器兩個都載入、預設不套用，每個請求只點名自己的；沒點名的不進計算，所以不會比一個 adapter 慢，只多約 55 MB。
 
-1. 照平常開著 Discord 和 Edge；EdgeAgent 服務按 PID 停掉。用 A5 診斷時抓到的同一條 llama-server 指令（含 adapter、slots），每次只改一個地方，依序試：`--fit-target 1024`、`--fit-target 1536`、`--fit-target 2048`。
-2. 每一組記：能不能載入、`nvidia-smi` 顯存、模型 RAM、速度（POST `/completion`，約 1,000 字的提示、`n_predict` 128，讀回應 `timings` 的 `prompt_per_second` 和 `predicted_per_second`）。每組最多試一次；能載入的那組再連試 2 次。
-3. 選「連續 3 次都載入成功」裡最小的 fit-target，改 `edge_agent/runtime.py`（`build_server_args` 的 `--fit-target`），補或改對應測試（搜 `fit-target`），EdgeAgent 完整 pytest 過，推 `copilot-story-mode`。三組都失敗：停下，把三組的數字和 stderr 最後 20 行寫進回報交開發機，不要改別的設定。
-4. 回 A5，用原設定（128K、GPU 自動）重載。
+## 1. 128K 載入（A5 前半）
 
-附帶的 adapter 現在是兩個（EdgeAgent `57c12ab`、SilentTalk `1607472`）：Agent 用 `agent-fw1.q8_0.gguf`（`runtime.AGENT_ADAPTER`，模型頁選它），機魂用 `machine-spirit-char-v1.q8_0.gguf`（`runtime.CHARACTER_ADAPTER`，SilentTalk 租借時自動帶上，套用在台詞和聊天工作）。伺服器兩個都載入、預設不套用，每個請求只點名自己的。介面一件：`edge_agent/web.py` 模型頁那段說明寫死了舊檔名，改成從 `runtime` 取（兩個都列），補回歸測試。
+1. `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap.ps1 -SetupOnly` exit 0，`models\` 裡有 `agent-fw1.q8_0.gguf` 和 `machine-spirit-char-v1.q8_0.gguf`（各約 55 MB）。
+2. 載入前記：`(Get-Counter '\Memory\Available MBytes').CounterSamples.CookedValue`，以及開著的大程式名稱和 MB 數（Code、Discord、Edge），只寫數字。
+3. 用 EdgeAgent CLI 按 PID 重載，模型頁套用：E4B、context 131072、working 131072、GPU 自動、省 VRAM 開、「LoRA（選用）」選 `AGENT_ADAPTER`（不手改 config.json）。
+4. 記：能不能就緒、就緒秒數、llama-server 的 `WorkingSet64` 和 `PrivateMemorySize64`（`Get-Process -Id <PID>`）、`nvidia-smi` 顯存、載入中可用 RAM 的最低值（每秒取樣）、速度（POST `http://127.0.0.1:18089/completion`，body 帶 `"model": "local"`、約 1,000 字的提示、`n_predict` 128，讀 `timings` 的 `prompt_per_second`、`predicted_per_second`）。
+5. 按 PID 停掉再重載，共 3 次都要成功。
+6. 失敗時：寫下上面的數字和 stderr 最後 20 行（用 A5 診斷時那種手動指令，加上 `--load-mode mmap --lazy-mode on`），停下並寫進回報，交給開發機。不要改 runtime.py、context、GPU 設定，也不要移除 adapter。
 
-## 第二段：已拍板的現況（不要再問）
+## 2. 接著（A5 後半到 E）
+
+- A5 後半：開 SilentTalk。/status：mode=character、agent_slot 有值、Agent context＝131072−角色的份、`lora`＝`agent-fw1.q8_0.gguf`、`character_lora`＝`machine-spirit-char-v1.q8_0.gguf`。SilentTalk 角色的套用部分是 `line,task`；不是的話多半是設定頁存過舊值：用 SilentTalk 設定頁改回預設（不手改 settings.json），並寫進回報。
+- A6 實量（SilentTalk 開著）：VRAM、llama-server RAM（工作集、私有）、可用 RAM、角色回覆延遲、Agent 每秒字數。
+- A7 `tests/browser_check.mjs --audit-live`（專用 Edge，先查 9223）24 項全過，含 TXT 真下載。
+- B6（介面）：`edge_agent/web.py` 模型頁的 LoRA 說明從 `runtime` 取兩個 adapter 的名稱（`AGENT_ADAPTER`、`CHARACTER_ADAPTER`），不寫死檔名；補回歸測試，先紅後綠。
+- A3 的 MCP 7 項：開發機在 Linux 上這 7 項都通過，0–500 ms 的啟動延遲也都通過，所以只在 Windows 失敗；Windows 上唯一通過的，是有 750 ms 啟動延遲的那一項。請蒐集證據，不要修：在 EdgeAgent 分別跑一次 `tests/test_mcp.py::test_read_only_tools_run_and_destructive_ones_ask_once` 和 `tests/test_mcp.py::test_first_search_waits_for_a_connecting_deferred_server`，每次跑前設 `$env:MCP_FIXTURE_TRACE` 為 EdgeAgentTest 裡一個新的 txt 檔（跑完 `Remove-Item Env:MCP_FIXTURE_TRACE`）。回報每次的 exit code、trace 裡 `started` 的行數，以及依序出現的 JSON-RPC `method` 值（只寫方法名稱）。
+- 之後照舊做 C1–C11、D1（清單在下面）。
+
+## 已拍板的現況（不要再問）
 
 - 機魂是內建預設角色、啟動即角色模式、AI 誠實度「機器」。
-- **使用者已同意重載**：重載 EdgeAgent 和 SilentTalk（清掉 RAM 裡的對話），套用 E4B、context 131072、working 131072、GPU 自動、省 VRAM 開、mlock、提示快取每模式 256 MiB。載入失敗如實報告，不擅自降設定。
+- **使用者已同意重載**：重載 EdgeAgent 和 SilentTalk（清掉 RAM 裡的對話），套用上面 1.3 的設定、提示快取每模式 256 MiB。模型怎麼載入由程式決定（現在是 mmap＋按需讀取；mlock 拿掉了，因為 8 GB 鎖不住）。載入失敗如實報告，不擅自降設定。使用者要正常運作下的最好效能、Discord 保留，不接受沒有證據的調整。
 - 紀錄只寫 `C:\Users\A8fm0\AgentRecords`（一般 SSD 目錄，已設好），不讀內容。
-- 日常 EdgeAgent 不開 VS Code、Discord 保留；`C:\Users\A8fm0\EdgeAgentTest` 保留。
-- 附帶的 adapter：部署時從 `edge_agent/adapters` 複製到 `models`（兩個都驗 SHA256）。Agent 用 `AGENT_ADAPTER`，機魂用 `CHARACTER_ADAPTER`（`character_lora_uses` 預設 `line,task`）。
-- 新框架：機魂的系統提示、工具目錄（`tool_search` 找 20 個現成工具）、改程式沒過檢查主機會提醒、上網研究依來源分級並核對數字、輸出簡轉繁（新相依 `opencc-python-reimplemented`，部署會裝）。
+- 日常 EdgeAgent 不開 VS Code，Discord 保留；`C:\Users\A8fm0\EdgeAgentTest` 保留。服務的還原用既有的 maintenance RestoreServices。
 
-## 驗收清單（分母 28）
+## 驗收清單（分母 29）
 
-每項回報：完成（附證據）／未完成（原因）／沒測（條件不存在）。需要使用者時一次只請他做一件事。
+每項回報：完成（附證據）／未完成（原因）／沒測（條件不存在）。需要使用者時一次只請他做一件事。已完成的照上回的證據列，不重跑。
 
-**A. 部署、重載、量測**
-- A1 在 EdgeAgent：`git merge-base --is-ancestor 893171f HEAD` exit 0（新框架那筆 commit 在 HEAD 裡）。不是 0 就停，告訴使用者「新框架還沒併進 copilot-story-mode，請在開發機確認」，其他標沒測。（上一版只看最近 15 筆，框架排第 17 筆而誤擋，是開發機工作檔的錯。）
-- A2 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap.ps1 -SetupOnly` exit 0；`.venv\Scripts\python.exe -c "import opencc"` exit 0；`models\` 裡有 `AGENT_ADAPTER` 和 `CHARACTER_ADAPTER` 兩個檔（各約 55 MB）。
-- A3 EdgeAgent 完整 pytest（含真 Edge）0 failed、exit 0（PYTHONIOENCODING=utf-8、取消 PYTHONUTF8、EDGE_AGENT_UI_REGRESSION=1、`--basetemp`）。
-- A4 SilentTalk 完整 pytest 0 failed、exit 0（PYTHONUTF8=1、`--basetemp`）。
-- A5 用 EdgeAgent CLI 按 PID 重載，模型頁套用上面設定，「LoRA（選用）」選 `AGENT_ADAPTER`（不手改 config.json）；開 SilentTalk。/status：mode=character、agent_slot 有值、Agent context＝131072−角色的份、`lora`＝`agent-fw1.q8_0.gguf`、`character_lora`＝`machine-spirit-char-v1.q8_0.gguf`。SilentTalk 角色的套用部分是 `line,task`；不是的話，多半是設定頁存過舊值：用 SilentTalk 設定頁改回預設（不手改 settings.json），並寫進回報。
-- A6 實量：VRAM、模型 RAM、mlock 成敗（沒證據寫未測）、角色回覆延遲、Agent 每秒字數。
-- A7 `tests/browser_check.mjs --audit-live`（專用 Edge，先查 9223）24 項全過含 TXT 真下載。
-
-**B. 介面與 Windows 工具**
-- B1 EdgeAgent 網頁批准卡的說明標題改用 payload 的 `explain_title`（沒有才用「這個操作在做什麼（EdgeAgent 自己算出的，不是模型猜的）」），不再寫死「PowerShell 自己解析」（`edge_agent/web.py` 批准卡）。補回歸測試，先紅後綠。
-- B2 在 EdgeAgentTest 各跑一次：`'{}' | .venv\Scripts\python.exe -m edge_agent.toolbox run system_status`、`'{"name_filter":"Edge"}' | ... run installed_apps`、`'{}' | ... run startup_apps`、`windows_info` 的 topic：power、network、time、display、defender、path。每個 exit 0、中文且有數字或清單、沒有 Traceback。回報只寫 exit code、行數、有沒有「沒辦法」，不貼內容。
-- B3 EdgeAgentTest 裡建測試資料夾：3 個 Big5 txt（用 `[IO.File]::WriteAllText(path, 文字, [Text.Encoding]::GetEncoding(950))`）＋1 個 UTF-8 txt；`convert_text_encoding` 先 preview 再 run，4 個都能用 UTF-8 讀出原文。再用 `Compress-Archive` 做含中文檔名的 zip，`unzip_file` 後核對檔名和內容。
-- B4 `scripts/dev/ui_preview.py` 的 ruff I001 修好：`.venv\Scripts\python.exe -m ruff check --select F,E9,I,B scripts/dev/ui_preview.py` exit 0。
-- B5 EdgeAgent 模型頁的 LoRA 說明（`edge_agent/web.py`「LoRA 是個人資產；框架不附帶或自動下載…」）改成：附帶 E4B 的 Agent adapter，也可以放自己的；以 EdgeAgent README 的「LoRA」段為準。
+**A. 部署、重載、量測**：A1–A4 同上回（A2 加兩個 adapter 檔、A3 加 MCP trace）；A5＝上面 1 和 2 的 A5 後半；A6、A7 見上。
+**B. 介面與 Windows 工具**：B1–B5 上回完成；B6 見上。
 
 **C. Discord 真人測試（需要使用者）**
 
@@ -69,7 +66,6 @@
 **E. 收尾**
 - E1 自建測試程序結束、9223 不殘留。
 - E2 log 錯誤事件只列名稱和次數；Windows／網路問題在筆電查，角色或工具的問題寫進回報交開發機。
-- 上次 EdgeAgent 完整 pytest 的 12 個失敗裡，開發機修了 5 個（`335f1f0`：mini 框架 3 個在 Windows 跳過、`run_checks` 路徑、`git_overview` 測試）。MCP 那 7 個請在回報裡每個附 `pytest -x --tb=line` 的那一行錯誤（開發機才能修）。
 
 ## 回報
 

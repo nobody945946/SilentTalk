@@ -33,7 +33,8 @@
 1. **`swe60-trace1` 出來後**：用 `resolved_ids` 和基準配對比。贏了：加資料（qwen38 軌跡、E4B 自己在 SWE 類題目的過關軌跡），再考。沒贏：先看失敗分類（沒提交、格式錯、打轉、改錯檔）在 `.runtime/bench/swe60-trace1/`，修資料或框架再訓；不改考題。
 2. **機魂下一批**：不套的贏的那 4 組共同點是：被問設定時直接回答、被要求選時真的選一個、回報細節照實。寫成 `handoff/tasks/machine-spirit-3`（只針對這三種，加 `scope` 判斷題；現在不套是 44/49），交給筆電的下一回合；回來後走同一條管線、訓 `machine-spirit-char-v2`，在同一份盲評和關卡贏 char-v1 才換。
 3. **`agent-fw2`**：寫程式的 GPU 工作之後訓（fw2 列＋fw1 用過的列），產品考場 78 題×2 配對比 fw1，贏才換 `AGENT_ADAPTER`。
-4. 筆電第 6 回合回來後照 §4 規則 12 評分（劇本那段不計分母），把要筆電做的寫進 `handoff/laptop.md`（照 AGENTS.md §3 封存重寫）。
+4. 筆電驗 128K 載入（`ecf9884`）：還是失敗的話，看回報的可用 RAM 和 stderr，下一步的槓桿是 CPU 上的 KV（816 MiB）和看圖配件（0.55 GB）。
+5. 筆電第 6 回合回來後照 §4 規則 12 評分（劇本那段不計分母），把要筆電做的寫進 `handoff/laptop.md`（照 AGENTS.md §3 封存重寫）。
 
 ## 4. 開發機規則（通用規則在 AGENTS.md）
 
@@ -75,10 +76,11 @@ cd /home/clawd/EdgeAgent && .venv/bin/python -m pytest -q -p no:cacheprovider   
 - **機魂**：27B 寫的台詞只贏 E4B 學生 42.4% → 改由筆電 agent 寫。char-v1 台詞盲評 76/80、`chat_task` 39/40（不套 34/40）；`scope` 判斷不套 44/49。
 - **研究摘要**（數字依各自 harness，不可直接比）：未訓練 4B 在 agent 迴圈 SWE-V 約 5–8%；4B 用約 9k 軌跡 SFT 41.6%、再 RL 43.4%（2606.28434）；Qwen3.5-4B 換成 5 個型別工具 8.3%→37.2%（2609.07925）；best-of-16＋驗證器 +7～+17；遇難題問大模型 +10 分只用 11% 大模型 token（2602.22124）。老師 Qwen3.6-27B：SWE-V 77.2%。
 - **開源軌跡長度**（Gemma token）：已解出的 Python 中位數約 32K、93 則訊息；32K 內約一半。
-- **顯示卡**：E4B 128K 4.62 GB；每層嵌入 1.9 GB 在系統記憶體；筆電 128K 約 33–34 層上 GPU。每個 q8_0 adapter 約 55 MB。
+- **顯示卡／RAM**：筆電 128K 的 fit 選 24/43 層上 GPU（顯存約 3.1 GB，其中運算緩衝 965 MiB；`-ub 256` 反而變大）。主機 RAM（同配置、兩個 adapter）：`--load-mode mlock` 4,503 MiB（2,857 鎖住，筆電鎖不住而載入失敗）；`--load-mode mmap --lazy-mode on` 2,994 MiB，其中 1,515 是可回收的模型檔頁，其餘主要是 CPU 上 3 個全域層的 KV 816 MiB。看圖配件再加約 0.55 GB。每個 q8_0 adapter 約 55 MB。
 
 ## 7. 踩過的雷
 
+- `--load-mode mlock` 等於不用 mmap：CPU 的權重全部複製進 pinned 記憶體；`mmap+mlock` 會連按需讀取的每層嵌入一起鎖住。產品用 `mmap`＋`--lazy-mode on`（EdgeAgent `ecf9884`）。
 - llama-server 開 `--lora-init-without-apply` 時，請求沒點名的 adapter 不套：評測和 app 都要在請求裡點名 id（`line_ab.py`、`eval_server.py` 已經這樣做）。
 - Pi：`settings.applyOverrides` 在 `resourceLoader.reload()` 後消失（預設工具在 `SettingsManager.inMemory` 給）；tool_search 只認 `[a-z0-9]`（用 `catalog.mjs`）；有 tool_search 時用 `excludeTools`。
 - Gemma 4 的對話範本會把「呼叫工具那一輪」的說明文字移到工具結果後面：那一輪只訓練呼叫本身（`train_lora.py` 自動處理）。
