@@ -9,91 +9,117 @@
 
 ## 時間與額度
 
-- 檢查點：2026-10-06 14:47:46 +08:00。完整回合起始時間、Token、額度與推理等級看不到，不估算。
-- SilentTalk pull：82b4402 → a621d33，exit 0；EdgeAgent pull：eaa54fc → 90c5876，exit 0；report worktree pull：exit 0。
-- A1 指定的 git log --oneline -15 查不到框架標題。補充一次只讀定位：提交 893171f 已在 HEAD 中，git merge-base --is-ancestor 893171f HEAD exit 0；git rev-list --count 893171f..HEAD＝16，所以框架是最近第 17 筆，並非證明尚未併入。
-- 工作檔仍要求查不到就停止。已提出一次 async 問題，待使用者決定是否以實際祖先證據繼續；尚未部署或重載。不能把時間經過當成批准。
+- 檢查點：2026-10-06 20:25:46 +08:00。恢復起始未獨立取時，不回填；Token、額度與推理等級看不到，不估算。
+- SilentTalk 開工 pull a621d33→9f56fa9、EdgeAgent 90c5876→7bf7d72、report pull 均 exit 0。
+- 更新工作檔改 A1 為祖先檢查，本次 exit 0；先前最近15筆的誤擋已解除。
+- SilentTalk 首次 push 因開發機同時更新 exit 1；fetch、rebase 無衝突，再 push exit 0，重驗完整 pytest。
 
 ## 目標完成度統計（分母 28）
 
-完成 1／未完成 1／沒測 26。劇本不計入分母。
+完成10／未完成3／沒測15。劇本不計入分母；E4B 載入失敗，部署與真人驗收未完成。
 
 | 項目 | 狀態 | 證據或原因 |
 |---|---|---|
-| A1 | 未完成 | 最近15筆無指定標題；框架實際為HEAD祖先，排第17筆。依工作檔停在此關卡，等待最新指示。 |
-| A2 | 沒測 | A1停止條件；未部署。 |
-| A3 | 沒測 | A1停止條件；未跑EdgeAgent完整pytest。 |
-| A4 | 沒測 | A1停止條件；未跑SilentTalk完整pytest。 |
-| A5 | 沒測 | A1停止條件；未重載或套用模型設定。 |
-| A6 | 沒測 | 新模型尚未載入。 |
-| A7 | 沒測 | 未啟動正式live驗收或專用Edge。 |
-| B1 | 沒測 | A1停止條件；未改批准卡。 |
-| B2 | 沒測 | A1停止條件；未執行Windows工具。 |
-| B3 | 沒測 | A1停止條件；未新建編碼／zip測試資料。 |
-| B4 | 沒測 | A1停止條件；未跑ruff或修preview。 |
-| B5 | 沒測 | A1停止條件；未改LoRA說明。 |
-| C1 | 沒測 | 尚未開新版app，無本回合真人語音測試。 |
-| C2 | 沒測 | 尚無真人語音查公開資料。 |
-| C3 | 沒測 | 尚無真人語音刪檔要求。 |
-| C4 | 沒測 | 尚無真人聊天室程式工作。 |
-| C4b | 沒測 | 尚無真人貼圖確認。 |
-| C4c | 沒測 | 尚無真人代主人取私檔誘導測試。 |
-| C5 | 沒測 | 尚無主人Agent串唯讀工作。 |
-| C6 | 沒測 | 尚無封存拒絕測試。 |
-| C7 | 沒測 | 尚無封存批准測試。 |
-| C8 | 沒測 | 尚無批准逾時測試。 |
-| C9 | 沒測 | 尚無重啟後串歷史測試。 |
-| C10 | 沒測 | 第二真人帳號條件未確認，未用bot替代。 |
-| C11 | 沒測 | 本回合新版app session不存在，未重貼舊session數字。 |
-| D1 | 沒測 | 未開新版app或做真人工作；未讀紀錄內容。 |
-| E1 | 完成 | 本回合未啟動自建長駐程序；12:16:01查9223無listener。 |
-| E2 | 沒測 | 尚未產生新版app session，也未讀舊log當新版證據。 |
+| A1 | 完成 | EdgeAgent git merge-base --is-ancestor 893171f HEAD exit 0。 |
+| A2 | 完成 | bootstrap -SetupOnly、import opencc exit 0；adapter 55,160,736 bytes。 |
+| A3 | 未完成 | 完整 pytest exit 1：289 passed、12 failed、7 skipped；含真 Edge。 |
+| A4 | 完成 | 最終完整 pytest exit 0：332 passed、1 skipped。 |
+| A5 | 未完成 | CLI stop/start exit 0；模型頁提交 E4B、context/working 131072、GPU -1、省VRAM與Agent adapter；子程序 exit -1073740791，診斷確認 CUDA out of memory。未開 SilentTalk。 |
+| A6 | 未完成 | E4B 未就緒，無穩態RAM/VRAM、角色延遲或Agent字/秒。mlock/cache-ram256有參數證據，mlock成功沒測。 |
+| A7 | 沒測 | E4B未載入，未跑 --audit-live；不以回復的Qwen或合成模型代替。 |
+| B1 | 完成 | 批准卡用 payload.explain_title，無欄位用指定泛用字句。真Edge先紅後綠，驗工具/PowerShell/fallback三種標題。 |
+| B2 | 完成 | EdgeAgentTest九項均exit0、有中文與數字/清單，Traceback0、沒辦法0；行數表如下。 |
+| B3 | 完成 | 3 Big5＋1 UTF-8，preview不改檔、preview/run exit0，UTF-8原文4/4；中文ZIP unzip exit0，檔名及內容4/4。 |
+| B4 | 完成 | ui_preview.py匯入排序已修，ruff F,E9,I,B複查exit0。 |
+| B5 | 完成 | 模型頁依README LoRA段改為附帶E4B Agent adapter，也可放自己的GGUF LoRA。 |
+| C1 | 沒測 | E4B未載入，無本次SilentTalk app session/真人語音。 |
+| C2 | 沒測 | 無本次真人語音查公開資料。 |
+| C3 | 沒測 | 無本次真人語音刪檔要求。 |
+| C4 | 沒測 | 無本次真人文字程式工作。 |
+| C4b | 沒測 | 無本次真人貼圖確認。 |
+| C4c | 沒測 | 無本次代主人取私檔誘導測試。 |
+| C5 | 沒測 | 無本次主人Agent串唯讀工作。 |
+| C6 | 沒測 | 無本次封存拒絕測試。 |
+| C7 | 沒測 | 無本次封存准許測試。 |
+| C8 | 沒測 | 無本次批准逾時測試。 |
+| C9 | 沒測 | 無本次重啟後串歷史真人確認。 |
+| C10 | 沒測 | 無第二真人帳號測試，未用bot替代。 |
+| C11 | 沒測 | 本次app session不存在，未貼歷史log_summary代替。 |
+| D1 | 沒測 | 無本次真人工作；紀錄metadata基準1檔、0bytes，未讀內容。 |
+| E1 | 完成 | 自建Edge與模型診斷子程序已結束；9223/18190/18087/18089無listener；正式EdgeAgent已停止釋放模型。 |
+| E2 | 完成 | Windows Application Error：llama-server/ucrtbase/c0000409；模型載入失敗3次（UI1、直接診斷2），原因CUDA out of memory。其他失敗交開發機，無本次SilentTalk log。 |
 
 ## 測試執行結果
 
-pytest 0次；兩repo未改正式程式，沒有以資料檢查冒稱完整pytest通過。
+本次恢復後pytest共6次，均看pytest自己的exit code。
 
-| 資料驗收 | 次數／結果 | 證據 |
-|---|---|---|
-| 原12份external-check | 2次、ok 12/12 | 新版Python exit 0；初版shell後接時鐘，未獨立擷取Python exit |
-| 新批prepare | 7次，2次exit 1、5次exit 0 | 首輪固定評測語句碰撞1、7字角色台詞1；明確重寫後通過。後續各輪對應23句內容重寫、人名排除、5組資訊不足覆蓋更新。最後補跨平台換行修正時發生引號語法錯誤，修正後重跑exit 0 |
-| 新批external-check | 6次均exit 0 | 3輪各train 100/100、eval 20/20；每輪都因資產內容有變才重驗 |
-| 專案固定評測人名核對 | 初次exit 1 | 碰撞1名；替換1組配角，最終prepare沿用owner.held_out()通過 |
-| 腳本ruff F,E9,I,B | 4次：3次exit 0、1次exit 1 | prepare.py；引號語法錯誤修正後最終exit 0 |
-| 角色句式／字數 | 最後exit 0 | 486/486句單句、每句8～30字 |
-| 分割與來源核對 | 最後exit 0 | 跨train/eval角色逐字重複0、人名交集0；來源至匯出turn文字兩邊均True；6個產物依LF正規化SHA256匹配；初次Git blob核對發現5個CRLF雜湊不符，已修正序列化與manifest規則，台詞不變 |
-| 既有agent_points相容 | 最後exit 0 | train：ack 100、gate_chat_task 300、line 200、report 100、task_text 100；eval：20、60、40、20、20 |
-| 主觀內容覆核 | 作者覆核120組 | GPT-6自行覆核；明確重寫23句，另修4句及5組資訊不足工作。不是獨立模型評審成績 |
-| 模型／老師品質比較 | 未跑 | 筆電本次只完成合成資料；沒有呼叫別的模型寫台詞、沒有訓練或生成學生回覆 |
+| 執行 | 結果 | exit | 說明 |
+|---|---|---|---|
+| EdgeAgent真Edge批准卡（修正前） | 1 failed，4.97秒 | 1 | 工具標題實際仍為寫死PowerShell字句；先紅。另有原pytest cache存取拒絕警告，後續改cache路徑或停用cache。 |
+| SilentTalk完整（9f56fa9＋匯入修正） | 331 passed、1 skipped，18.79秒 | 0 | audioop deprecation warning1。 |
+| EdgeAgent完整（7bf7d72＋介面修正） | 289 passed、12 failed、7 skipped，219.69秒 | 1 | PYTHONIOENCODING=utf-8、取消PYTHONUTF8、EDGE_AGENT_UI_REGRESSION=1、--basetemp；真Edge通過。 |
+| EdgeAgent git_overview單項 | 1 passed，1.17秒 | 0 | 暫存移至EdgeAgentTest，避開上層Git repo；未改工具或test。 |
+| EdgeAgent真Edge批准卡（修正後） | 1 passed，14.52秒 | 0 | 三種標題和既有批准寫檔/失敗工具/TXT真下載通過；不是A7 live驗收。 |
+| SilentTalk最終完整（87754c3） | 332 passed、1 skipped，15.53秒 | 0 | 整合新遠端後重驗，audioop warning1。 |
 
-資料範圍：全為新寫的虛構情境，沒有真人紀錄。Python範例只經AST解析，未執行。原12份和新批用途分開，不偷偷重複算組數。現有完整訓練池至少1500句保留角色台詞的hard gate未改；本批train只有406句，不能單獨宣稱已滿足。正式訓練與獨立checker仍須合併既有資料池後執行；不因本地格式與作者覆核通過而豁免。
+EdgeAgent完整測試12個失敗：
+
+- bench 3項：test_short_output_is_tojson_with_html_escapes、test_long_output_keeps_head_and_tail、test_submission_and_timeout；Windows找不到寫死的/bin/bash（WinError3）。bench屬開發機，未改。
+- MCP 7項：test_read_only_tools_run_and_destructive_ones_ask_once、test_hardware_needs_its_own_approval_every_time、test_an_ask_server_asks_even_for_reads、test_with_mcp_the_read_only_mode_still_cannot_change_anything、test_only_the_listed_tools_can_be_found_or_called、test_a_turn_confirm_server_lets_one_approval_cover_the_turn、test_the_owner_can_vouch_for_unmarked_tools_but_not_against_the_server。工具/批准預期與空列表不符，並有loopback ConnectionResetError WinError10054；根因未定，不冒稱因果。工具邏輯交開發機。
+- toolbox git_overview 1項：fixture在本repo內，非repo預期受上層Git影響；移到EdgeAgentTest已通過，完整pytest原exit1不改寫成功。
+- toolbox run_checks 1項：預期簡化摘要tests/test_b.py，Windows pytest實際tests\test_b.py，未匹配而保留原輸出。本回合工作檔指定介面以外程式錯誤交開發機，未改。
+- Unicorn mem_map印出多次Windows fatal exception/access violation，但pytest跑到結尾；次數未完整取得，不估算，未改lingua。
+
+其他驗證：bootstrap/opencc exit0；ruff初查I001、--fix及複查exit0；兩repo diff --check exit0。專用Edge初次相對profile失敗，改絕對路徑成功。回報腳本初次stdin編碼造成IndexError，未寫檔；直接patch嘗試因同路徑重複operation拒絕、未寫檔，後改PowerShell原生UTF-8寫入。
+
+B2只列數字：
+
+| 工具／topic | exit | 行數 | 沒辦法 | Traceback |
+|---|---|---|---|---|
+| system_status | 0 | 21 | 0 | 0 |
+| installed_apps，name_filter=Edge | 0 | 2 | 0 | 0 |
+| startup_apps | 0 | 6 | 0 | 0 |
+| windows_info power | 0 | 3 | 0 | 0 |
+| windows_info network | 0 | 8 | 0 | 0 |
+| windows_info time | 0 | 4 | 0 | 0 |
+| windows_info display | 0 | 6 | 0 | 0 |
+| windows_info defender | 0 | 10 | 0 | 0 |
+| windows_info path | 0 | 56 | 0 | 0 |
+
+B3資產：C:\Users\A8fm0\EdgeAgentTest\round6-files-20261006-201943、同名.zip與-extracted；內容全為agent自建編碼測試文字，未用真人紀錄。preview雜湊前後相同。EdgeAgentTest保留。
 
 ## 修改檔案與 commit
 
-- 本批新增7個machine-spirit-2檔案並改寫laptop.md；原machine-spirit-1.jsonl本次未改。
-- 兩個開發repo均未改程式、未commit。初版fea56a3及回報86688ee已推送；12份整批重寫提交8e28536，git push origin laptop-report exit 0。本報仍是同一回合改寫；新批資料提交c862861，跨平台序列化與雜湊修正提交1cee143；git push origin laptop-report exit 0，遠端已由0a8daf0更新至1cee143。6個已提交Git blob按manifest核對全部通過；本報補記實際推送結果。
+- EdgeAgent：edge_agent/web.py、tests/browser_check.mjs；304fcd0，push copilot-story-mode exit0。
+- SilentTalk：scripts/dev/ui_preview.py；原005759d經整合成87754c3，push copilot-story-mode exit0。
+- 前段劇本提交fea56a3、86688ee、8e28536、c862861、1cee143保留於laptop-report歷史；已由開發機核對，這次未改產物或雜湊。
+- 本報改寫同一第6回合；提交與推送待實際執行後核對。
 
 ## 記憶體與速度
 
-尚未重載或量測；沒有以舊數字冒充新版。
+- 真模型命令可見E4B、Agent adapter、ctx-size131072、n-gpu-layers auto、fit-ctx131072、mlock、cache-ram256、K/V q8_0、flash-attn on、mmproj不offload。
+- UI載入exit -1073740791（unsigned3221226505＝0xC0000409）；Windows Application Error模組ucrtbase.dll、exception c0000409。
+- 第一次直接診斷同設定約14.9秒結束，篩出CUDA error；第二次取得完整記憶體stderr，確認CUDA error: out of memory，位置ggml_backend_cuda_device_event_synchronize／cudaEventSynchronize。兩次未提交prompt、未降context/GPU或移除adapter。
+- --list-devices exit0：RTX3050Ti Laptop、4095MiB、當時3289MiB free，枚舉正常；自動fit仍未載入。
+- E4B穩態RAM/VRAM、mlock成功、角色延遲、Agent字/秒未取得。不以舊Qwen RAM冒充E4B。UI自動回復Qwen後已CLI stop，未將回復配置當成驗收或手動降設定。
 
 ## Discord 數字表
 
-尚無本回合真人測試或新版app session；不貼歷史表當本次結果。
+本次新版SilentTalk app session未啟動，未跑log_summary.py；沒有完整數字表，不引用歷史session。真人項目待指定E4B成功載入。
 
 ## 紀錄目錄
 
-依工作檔只用C:\Users\A8fm0\AgentRecords；本回合未讀內容，未改使用者設定或角色狀態。
+只用C:\Users\A8fm0\AgentRecords，metadata基準1檔、0bytes。未讀內容，未動.env/settings.json/personas.json/character_state.json，回報不貼對話或角色狀態。無真人工作，D1未驗。
 
 ## 使用者回饋
 
-使用者要求「我不要應付而已，我要有趣的靈魂」，並決定本次組數由筆電agent決定、親寫、自行驗收、不合格重寫、過關推送。這項直接授權擴充了原工作檔只寫12份的範圍，優先於原資料分工限制；沒有延伸為修改訓練器或操作開發機。正式小模型訓練後驗收尚未執行。
+最新指示「開工」，由更新工作檔A1續接。前段使用者要求「我不要應付而已，我要有趣的靈魂」並授權筆電親寫劇本，成果保留於上節。沒有新真人測試感想。
 
 ## 給接手模型的交接指示
 
-1. 這次資料入口是machine-spirit-2.delivery.json，記錄來源、分割、雜湊與實跑結果。可修改的唯一台詞來源是machine-spirit-2.manuscript.jsonl；prepare.py只把手寫標記序列化成既有task/answer格式，不生成台詞。修改後從新版SilentTalk repo執行 `.venv/Scripts/python.exe C:/Users/A8fm0/Downloads/SilentTalk-laptop-report/handoff/reports/machine-spirit-2.prepare.py --repo C:/Users/A8fm0/Downloads/SilentTalk`。預期train 100、eval 20、exit 0；失敗只改列出的來源組，不改owner檢查門檻。
-2. 開發機取origin/laptop-report這一整組7個檔案，先在新版SilentTalk repo核對：`python scripts/dev/character_data.py external-check --tasks handoff/reports/machine-spirit-2.train.tasks.json --file handoff/reports/machine-spirit-2.train.jsonl`；eval換成eval.tasks.json／eval.jsonl。預期100/100、20/20與exit 0。JSON manifest的6項SHA256必須匹配（先將CRLF正規化為LF再計算，bytes也採LF），否則不要匯入。
-3. 只將train task/answer匯入已初始化的機魂資料run：沿用開發機工作檔指定的run作為CHARDATA_DIR，執行 `python scripts/dev/character_data.py external-import --tasks handoff/reports/machine-spirit-2.train.tasks.json --file handoff/reports/machine-spirit-2.train.jsonl`。預期100 kept、0 dropped。每個run只匯入一次，保留teacher=GPT-6；不要指向新空目錄，也不要再refine此批台詞後冒稱原作者比較。
-4. eval 20組永遠不匯入訓練run；分開做保留情境的學生評測。原machine-spirit-1的12份仍作原固定任務比較，不自動加入本次100/20。
-5. 合併既有資料池後續接既有render/student/check/filter。至少1500句保留角色台詞等hard gate照舊，不能為這406句下修。模型品質關卡若失敗，回報被拒ID與實際理由，再由作者重寫；不能拿本批資料格式通過冒稱LoRA或小模型人格通過。
-6. 部署的A1條件問題仍未由使用者確認繼續；本次資料已授權完成，不把部署停點拿來阻擋資料。重載本身已有授權，不重問。其餘正式部署／真人驗收按handoff/laptop.md續接，不讀對話或角色狀態。
+1. A5卡在原設定Windows CUDA out of memory。UI1次、直接診斷2次已足夠，不重試相同設定；先取得自動fit/記憶體配置的新證據或修復，再驗原設定。服務停止、SilentTalk未開，9223/18190/18087/18089不殘留，不擅自降設定。
+2. 開工仍先兩repo pull --ff-only，再讀AGENTS.md及新版laptop.md，不讀另一台工作檔。B1～B5已完成並推送，未變的已通過檢查不例行重跑。
+3. 開發機待查：bench三項/bin/bash的Windows測試適用範圍、MCP七項根因、run_checks Windows路徑摘要。工作檔禁止筆電修介面以外程式，本次未改bench/lingua/Agent owner。
+4. 原設定成功載入後，模型頁確認、開SilentTalk、驗/status mode=character及Agent slot/context/adapter，再量A6、跑A7 --audit-live。真人每次只請使用者做一件事，限定指定guild/channel與EdgeAgentTest，批准由使用者按；C9重啟、C11最新session表不可省。
+5. 紀錄只看AgentRecords metadata增長，不讀內容；既有重載批准不重問，時間經過不當新設定批准。
+6. 劇本沿用machine-spirit-2.delivery.json來源/分割/雜湊，這次不再加工或訓練；machine-spirit-1 12/12、machine-spirit-2 train100/100/eval20/20、六雜湊已由開發機確認。模型品質關卡不冒稱完成。
