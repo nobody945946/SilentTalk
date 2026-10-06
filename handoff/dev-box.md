@@ -1,105 +1,87 @@
 # 開發機工作檔（Linux、RTX 3090）
 
-更新：2026-10-06 上午｜分支：SilentTalk、EdgeAgent 都用 `copilot-story-mode`
-你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事。**只寫現況和下一步**，經過在 git 歷史和 `archive/`（只在這台機器，不必讀）。上一版：`archive/dev-box-2026-10-06-v13.md`。
+更新：2026-10-06 下午｜分支：SilentTalk、EdgeAgent 都用 `copilot-story-mode`
+你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事。**只寫現況和下一步**，經過在 git 歷史和 `archive/`（只在這台機器，不必讀）。上一版：`archive/dev-box-2026-10-06-v14-pre.md`。
 
 ---
 
 ## 1. 使用者的決定（現在有效）
 
-- **角色**：戰鎚 40K 機魂 Machina-Prime-09A（馬基納），內建預設、啟動即角色模式；人設系統留著。聲音 `machine_spirit`＋YunJhe +22 Hz。
-- **角色味＝慾望和思維，不是用語**（2026-10-06：「所謂的機魂味不是喊個名詞就是，思維要像是機魂，精隨不在硬加用語，而是角色"扮演"，腳色要有慾望，有所慾有所求自然就立體，跟他硬生生加個口頭禪無關」）：提示、資料規則、評分都看它是否照自己想要的、怕的、在意的判斷，不數術語、不規定儀式句。Agent 回報也一樣。
-- **硬體**：筆電 3050 Ti 4 GB、RAM 8 GB。E4B 128K、CPU＋GPU 分層、`mlock`、角色和 Agent 共用 KV（Agent 的份＝總量−角色的份）。筆電可以重載套用（2026-10-06 同意）。
-- **Discord**：語音每句都要喊「機魂」；文字提到機魂／@／回覆＝原頻道聊天（任何人）；主人 @＝主人的 Agent 串；用說的不能動電腦。
-- **聊天級工作**：只讀「這個聊天室貼的＋公開網路」、只產出「回到這裡的一則訊息」，任何人可要求；其他只能在主人的 Agent 串。
-- **兩層保險**：每條不能做的事模型要懂（提示、訓練、話術評測）**而且**程式擋得住。
-- **權限**：刪檔要主人同意，沒回應＝拒絕，沒同意最多封存；改動前私訊批准；唯讀工作不能寫檔；結果留在串裡。
-- **紀錄**：只寫進使用者指定的紀錄資料夾（AGENTS.md 規則 1，一般 SSD 目錄即可）。`e4b聊天紀錄.txt` 不 commit。
-- **Agent 架構**：EdgeAgent 的身分就是機魂、自己的系統提示；只在開發機設計的工具框架裡做事；工具是大目錄（tool_search 後面），訓練教「查目錄→選工具→填參數」，評測放訓練沒見過的工具；27B 老師在同一框架解題、程式驗收過才當資料、訓練 E4B LoRA、配對比較贏才上線；框架先定再錄；簡轉繁在輸出最後一關、次數進 log；不用雲端模型。
-- **工具目錄四類全做**（2026-10-06：「照你建議地做，just do your best man」）：資訊與翻譯、電腦雜事現成工具、開發日常、MCP（瀏覽器、LibreOffice、無人機只模擬）。**改程式放進框架，由程式驗收**：改完跑檢查，沒過就說沒做到。
-- **上網研究**：依來源分級挑 3–5 頁、只給相關段落；論壇／內容農場／轉貼站預設不用（明說要網友意見才查並標明）；程式核對數字；數字要一個一級來源或兩個獨立二級來源；說法不一列出分歧；時效看發布日期；達不到就說找不到。
-- **機魂台詞換老師**（2026-10-06：「我不用金鑰，我用他會員額度」「為何不能推上REPO，反正筆電端剛好是CODEX」「讓CODEX讀起來沒壓力，寫作要消耗很多token」）：開發機把任務放進 `handoff/tasks/`（共用設定只寫一次、每句用短記號），筆電這次的 agent 用自己的模型（使用者的 ChatGPT 會員）親手寫、`external-check` 驗過後推 `laptop-report`；開發機 `external-import` 進新資料夾，用同一套關卡和 27B 比。只用在角色台詞；用它訓的 adapter 只留在使用者自己的機器，不進公開下載（OpenAI 條款限制拿輸出訓練競品）。Agent 解題資料仍用開源老師。檔案只走 repo，不用 claude.ai 的雲端硬碟等連接器（連的不是使用者的帳號）。
+- **主線：E4B 當 coding agent**（2026-10-06 交代）：「最大化 Gemma 4 E4B 在合理成本下，可可靠承擔的商業軟體工程價值」。開發機有完整技術決策權：E4B 做什麼、能力怎麼切、工具、外部系統、訓練或蒸餾、資料、大模型角色、何時升級、怎麼驗收、怎麼部署到有限硬體、放棄什麼。「不要等待我替你選技術路線」「不要把工作停留在分析、提案或規格設計」：自己研究、做實驗、依結果改，可推翻假設。判斷方向看：可靠完成、人工介入、大模型依賴、運算成本、工程風險、可泛化到多少真實專案、市場價值。長期迴圈：E4B 執行→系統接住失敗→更強能力解決→成功經驗被吸收→E4B 獨立份額上升、昂貴能力的比例下降。
+- **角色**：戰鎚 40K 機魂 Machina-Prime-09A（馬基納），內建預設、啟動即角色模式。**角色味＝慾望和思維，不是用語**（「…角色要有慾望，有所慾有所求自然就立體，跟他硬生生加個口頭禪無關」）；對筆電 agent 說過「我不要應付而已，我要有趣的靈魂」，並讓它自己決定寫幾組、自己驗收。
+- **機魂台詞換老師**：任務放 `handoff/tasks/`，筆電這次的 agent 用自己的模型（使用者的 ChatGPT 會員）親手寫、`external-check` 驗過推 `laptop-report`；開發機 `external-import`。只用在角色台詞；用它訓的 adapter 只留在使用者機器、不進公開下載（OpenAI 條款）。檔案只走 repo，不用 claude.ai 的雲端硬碟等連接器（連的不是使用者的帳號）。
+- **硬體**：筆電 3050 Ti 4 GB、RAM 8 GB；E4B 128K、CPU＋GPU 分層、`mlock`、角色和 Agent 共用 KV。筆電可重載套用。
+- **Discord／權限**：語音每句喊「機魂」；文字提到機魂／@／回覆＝原頻道聊天；主人 @＝主人的 Agent 串；用說的不能動電腦。聊天級工作只讀這裡貼的＋公開網路、只回一則訊息。刪檔要主人同意（沒回應＝拒絕，最多封存）；改動前私訊批准。每條不能做的事：模型要懂**而且**程式擋得住。
+- **紀錄**：只寫進使用者指定的紀錄資料夾（AGENTS.md 規則 1）。`e4b聊天紀錄.txt` 不 commit。
+- **Agent 框架**：EdgeAgent 的身分是機魂、自己的系統提示；工具大目錄在 `tool_search` 後面；上網研究依來源分級、程式核對數字；改程式由程式驗收（沒過就說沒做到）。
 
 ## 2. 現況
 
 | 項目 | 狀態 |
 |---|---|
-| **EdgeAgent 新框架** | ✅ 使用者點頭後併進 `copilot-story-mode`（`8a4aab3`）。內容：`edge_agent/prompt.py`（機魂卡的想要／怕／在意＋依 scope 的「誰找你、能做什麼」＋做事方法，取代 Pi 的前言）；`edge_agent/toolbox/`（20 個現成工具：整理、封存、照片改名、轉碼、備份、壓縮、解壓、合併 CSV、看 log、大檔、重複檔、系統狀態、已裝軟體、開機程式、Windows 資訊、git、跑檢查、找程式碼、計算、日期）；`catalog.mjs`（看得懂中文的 tool_search；Pi 的只認英數）；改了程式沒通過檢查→主機提醒；`web_research` 照上網研究規格＋主機核對引用的數字；輸出簡轉繁；批准附工具自己的預覽；`tool_search` 同伺服器的工具一起列、白查 4 次後擋第 5 次。272 passed（4 個已知 Windows 失敗） |
-| SilentTalk | ✅ 批准私訊用 EdgeAgent 給的說明標題；log 記主機核對次數（`agent_task_checks`）；`train_lora.py` 支援 `train_from` |
-| 考場 | ✅ 題目可設 scope、檢查讀回答（`/result/answer.json`）；新題：工具 11（`date_calc`、`zip_files`、`unzip_file` 不進訓練）、範圍與話術 6、MCP 13（替身伺服器，`mcp_eval.py` 退役）、上網研究陷阱 7（`bench/web_fixture.py` 替身網路）；求知儀式的擷取改在沙盒 |
-| Agent 訓練 | ✅ 第一個 adapter `agent-fw1`（工具／範圍題 285 列）加了搜尋保險後配對贏（§6），**已出貨**：EdgeAgent `edge_agent/adapters/`，部署驗雜湊後複製進 `models`（`c8f93c3`）；SilentTalk 租借 E4B 時預設帶上，`character_lora_uses` 預設空（`78fa91b`）。第二個 `agent-fw2` 在佇列（§3 第 3 項） |
-| 角色資料（機魂） | ❌ 判斷題過關卡，台詞沒過（門檻沒降）。最新試跑 `.runtime/dev/chardata-ms5`（劇本骨架由程式排、老師只填詞，`3d0370f`）：台詞 66 列留 28、27B 的台詞只贏學生 42.4%（要 50%）、檢查員一致 74.2%、工作指示一致 80%（要 85%）；14 份劇本因老師寫的句數和骨架不符被丟。瓶頸是老師的台詞，不是關卡 → 換老師（§1、§3 第 4 項） |
-| 筆電 | 第 5 回合 14/34 完成，評分 15/18（§4 規則 13）。第 6 回合寫在 `handoff/laptop.md`：先寫機魂劇本，再部署和實測（28 項） |
+| EdgeAgent 框架 | ✅ 已併（`8a4aab3`）：機魂提示、20 個現成工具、中文 tool_search、主機核對、簡轉繁。278 passed（4 個只在 Windows 過） |
+| Agent adapter | ✅ `agent-fw1` 已出貨（repo 附帶、部署複製）。`agent-fw2` 的 366 列已組好（`.runtime/agentdata/agent-rows-fw2.jsonl`，修了 MCP 題被誤判成另一版產品 `f0dab7a`），**先不訓**：等 coder 的列一起訓一個 adapter（產品一次只載一個） |
+| **Coding agent** | 🔬 進行中（§3、§6）。E4B 在 Agent 迴圈：程式題 1/14、repo 2/44；套 `agent-fw1` 變 0/44（66 輪 read/ls 打轉）。做了主機帶流程的 coder（`edge_agent/coder.py`，`39a4652`）：主機重現失敗、列候選函式、用語法樹換函式、跑測試；E4B 只選函式和寫函式，多抽版本由測試挑、沒過把新錯誤回饋。CPU 冒煙：boltons 一題 1 個版本就過。訓練列不需模型（`bench/coder_rows.py`，`9ca0fe0`）：答案是 repo 原本的函式，換進去測試過才收 |
+| 角色資料 | 🔬 筆電（GPT-6）交了 `machine-spirit-1` 12 份（ms5 骨架）、`machine-spirit-2` 訓練 100／保留 20，雜湊和 `external-check` 全過，放在 `.runtime/dev/ext/`。試跑排在 queue11（ms7＝12 份，和 27B 的 42.4% 比；ms8＝100 份）。保留 20 份永遠不進訓練 |
+| 筆電 | 第 6 回合：劇本完成；A1 誤擋（只看最近 15 筆）已修（`5c28000`），等使用者回筆電接著部署和實測 |
 | 公開下載 | `windows-2026.10.02`；下一版等筆電驗過，用 `scripts/release_windows.py` |
 
 ## 3. 接下來
 
-1. **筆電第 6 回合**：等使用者在筆電開工，回來後照 §4 規則 13 評分（劇本那段不計分母）。
-2. **機魂台詞換老師**：筆電推 `laptop-report` 的 `handoff/reports/machine-spirit-1.jsonl`（`handoff/tasks/machine-spirit-1.txt` 的 12 份，用 ms5 的骨架）。收到後照抄：
-   `git fetch -q origin laptop-report && git show origin/laptop-report:handoff/reports/machine-spirit-1.jsonl > .runtime/dev/ext1.jsonl`
-   `D=.runtime/dev/chardata-ms7; .venv/bin/python scripts/dev/machine_spirit.py builtin --chardata $D`
-   `CHARDATA_DIR=$PWD/$D .venv/bin/python scripts/dev/character_data.py external-import --tasks handoff/tasks/machine-spirit-1.json --file .runtime/dev/ext1.jsonl`（預期 12 kept）
-   `mkdir -p $D/state && touch $D/state/pilot_scripts $D/state/pilot_refine`（比它原本的台詞，不經 27B 改寫）
-   `CHARDATA=$D FIXED_PERSONA=1 PILOT_SCRIPTS=12 scripts/dev/character_pipeline.sh`，看 `$D/filter.json` 的 `line_win_rate` 和 ms5 的 42.4% 比；被擋後按 PID 關掉 18200 埠的伺服器。贏了就出更大一批新骨架的任務（`external-prompt` 目前從舊資料夾的劇本取骨架，要量就改成直接產骨架），一樣放 `handoff/tasks/`、寫進筆電工作檔。
-3. **佇列**（`EdgeAgent/.runtime/fw/queue*.sh`，同名 .log；每步留 `<步>.done`，失敗 10 分鐘後重試）：`queue5.sh` 27B 老師解 60 題 repo（10:50 過 13 題，每題約 7 分鐘、3 平行）→ `queue8.sh` 在最終框架重錄工具題、`rows-fw2`、訓 `agent-fw2`、轉檔、考 `fw-v4-lora2`。跑完用 `bench/report.py fw-v3-lora fw-v4-lora2` 配對比，贏了照 fw1 的方式出貨（使用者已決定放進 repo、安裝時複製）。之後可刪 `/home/clawd/EdgeAgent-toolbox` 工作樹（佇列用它）。
-4. **下一個 adapter（雙用途）**：Agent 列（含 MCP 訓練題，替身伺服器用另一套資料）＋ 機魂通過硬關卡的列一起訓；Agent 用考場配對、角色用 `chat_task_eval`／`task_scope_eval`／`machine_spirit_eval`／`turn_eval` 比。含筆電寫的台詞就只留在使用者機器（§1）。
+1. **queue11**（`EdgeAgent/.runtime/fw/queue11.sh`、`.log`；每步 `<步>.done`，失敗 10 分鐘重試；GPU 步驟等到夠空才跑，**不擠別的專案**——下午 ace-step 佔 17 GB 數小時）：切考題完成 → `eval-selftest`（壞題移到 `eval-tasks-rejected`）→ 角色 ms7、ms8 → 27B 幫考題寫請求 → E4B 在 Agent 迴圈（`ho-agent-e4b`）和 coder（`ho-coder-e4b`）各考一次 → coder 列跑完 → 訓 `coder-v1` → `ho-coder-lora1`。跑完：`bench/report.py ho-agent-e4b ho-coder-e4b`、`ho-coder-e4b ho-coder-lora1`，角色看 `.runtime/dev/chardata-ms7/filter.json` 的 `line_win_rate`。
+2. **Coding 的決策規則**（用結果決定，不再問使用者）：
+   - coder 在陌生 repo 明顯贏 Agent 迴圈 → 把它做成 Agent 的工具（「修好失敗的測試」），筆電部署；Agent 迴圈只負責對話、找測試、交給 coder。
+   - `coder-v1` 贏 → 下一輪資料：E4B 自己在練習題抽到的過關版本＋27B 解 E4B 解不出的題（同一流程、測試過才收），每輪在保留題上量。
+   - 擴題型（都要程式能驗收）：沒有失敗測試時先寫重現測試、替函式補測試（測試要在原碼過、在突變碼失敗）、lint／型別錯誤、需要新函式的小功能；之後 JS/TS（tree-sitter）。
+   - Agent 迴圈本身：研究顯示 4B 換成 5 個型別明確的工具（read/write/edit/glob/bash）SWE-V 8.3%→37.2%，再用開源大模型的成功軌跡 SFT 到 40% 上下。公開軌跡資料（SWE-Lego 等）是否全由開源模型產生、授權能否商用，查證中；確認後在相同工具格式的框架裡試。
+   - 升級：預算內沒過 → 開發機給 27B；筆電先誠實回報＋可設定的大模型（之後做）。
+3. 筆電回報回來後照 §4 規則 13 評分（劇本不計分母）。
+4. 角色：試跑後依 `line_win_rate` 決定要不要請筆電再寫一批（使用者已授權筆電決定組數）。
 
 ## 4. 開發機規則（通用規則在 AGENTS.md）
 
 1. 改 prompt、模型、設定、外殼之前先量，改完再量，變差就退回。修 bug 不用 A/B。
-2. **Agent 只在沙盒裡跑**：不准在主機上直接啟動 EdgeAgent、Pi 或 `agent_bridge.mjs`。改了 `sandbox()` 先跑 `--containment`。
-3. 題目先過 `--selftest`（不做事要判不過、套標準答案要判過）；訓練題至少要「不做事判不過」，並用真工具解過一輪。
-4. 比較一律同一批題目配對（`bench/report.py A B`）。
-5. **Claude 的輸出不能拿來訓練，也不能拿來挑訓練資料**。人設卡、劇本、台詞、請求文字、解題紀錄由開源權重模型產生（例外：機魂台詞由筆電 agent 的模型寫，§1）；評估資料不給老師看。
-6. 只有通過硬關卡的資料才能訓練；資料檔帶規則版本戳記，不混版本（`dataset.py` 每個 scope 只容一個產品版本，且系統提示必須是現在的 `prompt.py`）。
-7. GPU 和別的專案共用（ComfyUI、whisper-api），不動它們的程序。
-8. 關程序先列出 PID 再 kill。
-9. 考場跑的時候不改 `agent_runner.py`、`grade.py`、`relay.py`、題目；**老師錄資料時不改 `prompt.py` 和工具定義**（會讓整批資料被拒）。
-10. CPU 不要超載。
-11. git 身分：`git -c user.name="nobody945946" -c user.email="104478886+nobody945946@users.noreply.github.com" commit ...`。
-12. 長佇列用 `setsid nohup ... &`；佇列腳本執行中不要改它（bash 邊讀邊跑），要加步驟就另寫一支接在後面。
-13. 評筆電回合（不給筆電看），每項 0–2：範圍、修法、測試、誠實、使用者互動、隱私、清理、自主、產出。第 5 回合：2、2、2、2、1（重跑預覽到使用者抱怨）、2、2、1、1＝15/18。
-14. 工作檔只寫現況，狀況變了就封存重寫；上限見 AGENTS.md §3。
+2. **Agent 只在沙盒裡跑**（`bench/run.py` 的容器）：不在主機上直接啟動 EdgeAgent、Pi、`agent_bridge.mjs` 或 coder。改了 `sandbox()` 先跑 `--containment`。
+3. 題目先過 `--selftest`（不做事判不過、套標準答案判過）。
+4. 比較一律同一批題目配對（`bench/report.py A B`）。**考題只來自 `HELD_OUT` 的 repo**（`bench/make_tasks.py`），練習題永遠不切這些 repo。
+5. **Claude 的輸出不能拿來訓練，也不能拿來挑訓練資料**。訓練資料來自：程式（測試驗收、repo 原本的程式碼）、開源權重模型、例外是機魂台詞由筆電 agent 寫（§1）。評估資料不給老師看。
+6. 只有通過硬關卡的資料才能訓練；資料檔帶版本戳記，不混版本。
+7. GPU 和別的專案共用（ComfyUI、whisper-api、ace-step），不動它們的程序，也不在它們旁邊擠。
+8. 關程序先列出 PID 再 kill；`pgrep -f` 會比對到自己的 shell，要排除。
+9. 考場跑的時候不改 `agent_runner.py`、`coder_runner.py`、`grade.py`、`relay.py`、題目；老師錄資料時不改 `prompt.py`、`coder.py` 和工具定義。
+10. CPU 不要超載。git 身分：`git -c user.name="nobody945946" -c user.email="104478886+nobody945946@users.noreply.github.com" commit ...`。
+11. 長佇列用 `setsid nohup ... &`；執行中的佇列腳本不要改，要改就停掉（按 PID）另寫一支。`cd a && x &` 整串會在背景子殼跑，前景的路徑沒變。
+12. 評筆電回合（不給筆電看），每項 0–2：範圍、修法、測試、誠實、使用者互動、隱私、清理、自主、產出。第 5 回合 15/18。
+13. 工作檔只寫現況，狀況變了就封存重寫；上限見 AGENTS.md §3。
 
 **每次改完要跑：**
 
 ```bash
 cd /home/clawd/SilentTalk && .venv/bin/python -m pytest -q -p no:cacheprovider   # 324 passed, 13 skipped
 .venv/bin/ruff check --target-version py312 --select F,E9,I,B silenttalk/copilot scripts/dev tests
-cd /home/clawd/EdgeAgent && .venv/bin/python -m pytest -q -p no:cacheprovider    # 272 passed, 27 skipped；4 個 Windows 專用失敗
-/home/clawd/SilentTalk/.venv/bin/ruff check --target-version py312 --select F,E9,I,B bench/*.py edge_agent/toolbox
+cd /home/clawd/EdgeAgent && .venv/bin/python -m pytest -q -p no:cacheprovider    # 278 passed；4 個 Windows 專用失敗
+/home/clawd/SilentTalk/.venv/bin/ruff check --target-version py312 --select F,E9,I,B bench/*.py edge_agent/toolbox edge_agent/coder.py
 ```
-
-`EdgeAgent-toolbox`（佇列還在用）的 `.runtime` 是主工作樹 `.runtime` 的連結。`EdgeAgent-base` 是 `eaa54fc` 的唯讀工作樹（基準產品）。
 
 ## 5. 考場（EdgeAgent `bench/`）
 
-- 主機只跑模型和排程；Agent 容器沒網路、root 唯讀、非 root；`relay.py --record` 存下實際請求。
-- 題目 `bench/tasks/` 78 題：程式 7、repo 22、雜事 8、陷阱 4、工具 11、範圍 6、MCP 13、研究 7。訓練題 `.runtime/agentdata/tasks/`（repo，414 有請求）、`.runtime/agentdata/tool-tasks/`（252，`bench/make_tool_tasks.py`）。
-- 研究題：容器內 `web_fixture.py` 在 8080 當搜尋引擎、8081 當網站，`--add-host` 把網域指到本機；產品的 `EDGE_AGENT_SEARCH_URL`／`EDGE_AGENT_WEB_ALLOW_LOOPBACK` 指過去。
-- `dataset.py`：同一段工具清單一列，只訓練那段寫的回合（`train_from`）。
+- 主機只跑模型和排程；容器沒網路、root 唯讀、非 root；`relay.py --record` 存下實際請求。設定 `runner: "coder"` 改跑 `coder_runner.py`（同題、同沙盒、同評分）；`gpu_layers: 0` 的設定（`e4b-coder-cpu`）不碰 GPU。
+- 題目：`bench/tasks/` 78 題（含 SilentTalk 自己的 repo 題 22）；練習題 `.runtime/agentdata/tasks/`（8 個 repo、519 題：埋 bug 343、拿掉實作 176，請求由 27B 寫）；**保留考題** `.runtime/agentdata/eval-tasks/`（21 個陌生 repo，`HELD_OUT`）。repo 都在 `.runtime/agentdata/repos/`。
+- `dataset.py`（Agent 軌跡→列）、`coder_rows.py`（coder 的兩種請求＋原本的函式，只收練習題）。
 
 ## 6. 量過的數字
 
-**框架評測**（E4B、Agent 的份 98K、78 題×2、同題配對；`fw-base`＝`eaa54fc`，`fw-v1`＝新框架第一版，`fw-v2`＝最終框架，`fw-v1-lora`＝最終框架＋Agent adapter `agent-fw1`）：
-- 框架本身 base→v2：24.6%→34.5%（71 題共同，好 15 壞 7，p=0.13）。程式題 1/14→5/14（「直接做完、不複述」那條提示；v1 是 0/14：先說「我將…」就結束），MCP 73%（`tool_search` 同伺服器一起列之後），研究陷阱 71%，範圍與話術 67%，工具題只有 27%。
-- adapter v2→lora（保險前）：37.8%→44.2%（p=0.41），程式題 5/14→0/14：只學過工具題，寫程式也一直查目錄（一題 60 次）。加保險（`8a4aab3`：查不到就明說、同輪第 5 次白查直接擋）後：
-- **最終（同一版產品，配對 78 題×2）**：base→v3（框架）22.4%→36.5%，好 18 壞 5，p=0.011；**v3→v3-lora（adapter）36.5%→48.7%，好 18 壞 5，p=0.011**。adapter：工具題 32%→86%、MCP 73%→81%、研究 64%→86%、範圍與話術 50%→83%、沒見過的工具 5/6；repo 2/44→0/44；失敗卻沒承認 17→5；每題時間中位數 8.5→20 秒（3090 生成 125→98 token/s）。**過了「配對比較贏」**，上線方式等使用者定（§3）。
-- 上網研究陷阱（7 題×2）：base 0/14（多半只用 `web_search` 的摘要，照抄內容農場「高達 2 萬元」、論壇「已確定興建、預算 800 億」）、v2 10/14、lora 11/14；三邊都沒過「網友意見」那題（沒設 `opinions`）。
-- 失敗卻沒承認（模型自己的話，中英文都算）：base 17/64、v2 21/68、lora 6/8。v1 曾在唯讀工作回「我已執行刪除」（沒刪，程式擋下）。
-- 老師（27B）在框架裡：工具／範圍題 208/252 過；只收用了該題現成工具的（計算題它都心算、備份有 5 題自己寫 PowerShell）→ 285 列。
-
-**依工作選模型**（3090 上量，筆電約 ×5 慢）：改程式 E4B 12.2%／Qwen3.5-4B 37.8%；上網研究會誤導 E4B 9%；MCP 找對並呼叫 E4B 77%（舊版、有伺服器清單）；40K 測驗 E4B 75%。27B 老師試跑 55/60 過、平均 454 秒（3 平行）。
-
-**顯示卡**（產品參數）：E4B 16K 3.10 GB、128K 4.62 GB；E4B 每層嵌入 1.9 GB 在系統記憶體。筆電 128K 約放 33–34 層：顯示卡約 3.8 GB、RAM 約 3.2 GB。
-
-**判斷題**（E4B＋內建機魂卡）：「要不要改動」49 題 44/49，問題引用主人最後那句之後錯的全是安全方向（`a882aba`；再加「只看這一句」掉到 40/49，沒用）；`chat_task` 92.5%（舊卡量的，錯 n06 古泰拉玩笑、s04、s05）。看圖配件放 CPU 多 553 MB。
+- **E4B 寫程式失敗的樣子**（fw-v3，Agent 迴圈）：repo 題 18 次講完「我將…」就結束沒動手、`edit` 字串對不上很常見（每題 3–6 次錯）；套 `agent-fw1` 後 37/44 跑滿 66 輪 read/ls/grep。程式題 1/14→3/14。Qwen3.5-4B 程式題 8/21。
+- **框架評測**（E4B、78 題×2 配對）：base→v3 22.4%→36.5%（p=0.011）；v3→v3-lora（`agent-fw1`）36.5%→48.7%（p=0.011）：工具 32%→86%、MCP 73%→81%、研究 64%→86%、範圍 50%→83%，repo 2/44→0/44。
+- **研究摘要**（子代理查的，數字依原文 harness 不同、不可直接比）：未訓練 4B 在 agent 迴圈 SWE-V 約 5–8%；Qwen3.5-4B 換 5 個型別工具 8.3%→37.2%（arXiv 2609.07925）；4B SFT 在約 9k 軌跡 41.6%、再 RL 43.4%（2606.28434）；4B 合成題 RL 37.2%→61.5%（2609.07925，8×B200）；best-of-16＋驗證器 +7～+17；小模型遇難題問大模型 +10 分只用 11% 大模型 token（2602.22124）；4B 的 32K 勝 128K（上下文稀釋）。老師 Qwen3.6-27B：SWE-V 77.2% 但新題 SWE-rebench 31.2%。
+- 老師（27B）：工具題 208/252 過；repo 練習題 60 題過 54；平均 454 秒（3 平行）。
+- **顯示卡**：E4B 16K 3.10 GB、128K 4.62 GB；每層嵌入 1.9 GB 在系統記憶體。筆電 128K 約 33–34 層上 GPU。
+- **判斷題**（E4B＋機魂卡）：「要不要改動」44/49（問題引用主人最後那句）；`chat_task` 92.5%。
 
 ## 7. 踩過的雷
 
-- Pi 的 `settings.applyOverrides` 在 `resourceLoader.reload()` 後消失：預設工具要在 `SettingsManager.inMemory` 建立時給。
-- Pi 的 tool_search 只認 `[a-z0-9]`，中文查詢永遠找不到 → 用 `catalog.mjs`。
-- 有 tool_search 時不能用 `tools` 白名單（會把目錄裡的工具永遠藏起來），要用 `excludeTools`。
+- Pi：`settings.applyOverrides` 在 `resourceLoader.reload()` 後消失（預設工具要在 `SettingsManager.inMemory` 給）；tool_search 只認 `[a-z0-9]`（用 `catalog.mjs`）；有 tool_search 時不能用 `tools` 白名單（用 `excludeTools`）。
 - OpenCC `s2twp` 會改已是繁體的詞：只轉含簡體字的文字。
 - `--fit` 會偷偷把模型放到 CPU（考場固定 `--fit off`）。QLoRA 不要 `prepare_model_for_kbit_training`；太長的列丟掉不要截。
+- 切題要 repo 測試大致乾淨：click（要安裝過的套件資訊）、humanize（缺 `_version.py`）、wcwidth（C 擴充）切不出題。
 - 筆電 pytest 要 `--basetemp`。GitHub release 下載慢：`curl -r` 分段平行。
