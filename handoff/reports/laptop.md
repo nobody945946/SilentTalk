@@ -9,30 +9,32 @@
 
 ## 時間與額度
 
-- 檢查點：2026-10-06 21:32:42 +08:00。恢復起始未獨立取時，不回填；Token、額度與推理等級看不到，不估算。
+- 檢查點：2026-10-07 01:16:15 +08:00。Token、額度與推理等級看不到，不估算。
 - SilentTalk 開工 pull a621d33→9f56fa9、EdgeAgent 90c5876→7bf7d72、report pull 均 exit 0。
 - 更新工作檔改 A1 為祖先檢查，本次 exit 0；先前最近15筆的誤擋已解除。
 - SilentTalk 首次 push 因開發機同時更新 exit 1；fetch、rebase 無衝突，再 push exit 0，重驗完整 pytest。
 - 本次再開工 pull：SilentTalk 87754c3→6ffb9a9、EdgeAgent 304fcd0→335f1f0、report pull 均 exit0。使用者要求保留 Discord、正常運作下極致效能，不接受無證據直接提高 fit-target 至1024；因此覆蓋工作檔先試1024/1536/2048的順序，先量512/256/0與RAM瓶頸。
+- 使用者之後明確要求筆電修好MCP、試96K，覆蓋工作檔的MCP開發機分工及128K限定；使用unattended-self-iteration完成定位/修復/重驗，無sub-agent。96K是新授權診斷，不回填原128K驗收成功。
 
-## 目標完成度統計（分母 28）
+## 目標完成度統計（分母 29）
 
-完成10／未完成3／沒測15。劇本不計入分母；E4B 載入失敗，部署與真人驗收未完成。
+完成12／未完成2／沒測15。最新工作檔新增B6；劇本不計入分母。A3已修復並完成指定trace；A5新版128K仍未就緒，不宣稱正式部署或真人驗收完成。
 
 | 項目 | 狀態 | 證據或原因 |
 |---|---|---|
-| A1 | 完成 | EdgeAgent git merge-base --is-ancestor 893171f HEAD exit 0。 |
-| A2 | 完成 | bootstrap -SetupOnly、import opencc exit 0；adapter 55,160,736 bytes。 |
-| A3 | 未完成 | 新版完整pytest exit1：290 passed、8 failed、10 skipped；7個MCP仍失敗，另1個真Edge因本機runner重複占9223。修runner後真Edge1passed/14.26秒/exit0，未把完整失敗改寫成全綠。 |
-| A4 | 完成 | 最終完整 pytest exit 0：332 passed、1 skipped。 |
-| A5 | 未完成 | CLI stop/start exit 0；模型頁提交 E4B、context/working 131072、GPU -1、省VRAM與Agent adapter；子程序 exit -1073740791，診斷確認 CUDA out of memory。未開 SilentTalk。 |
-| A6 | 未完成 | E4B 未就緒，無穩態RAM/VRAM、角色延遲或Agent字/秒；512診斷已取得VirtualLock失敗證據，完整鎖頁未達成。 |
+| A1 | 完成 | 原框架893171f及最新loader修正ecf9884兩次祖先檢查均exit0。 |
+| A2 | 完成 | 最新bootstrap -SetupOnly exit0；已部署Agent與機魂兩個adapter，檔案長度/SHA另列。早期單adapter結果屬舊配置。 |
+| A3 | 完成 | 最新完整307 passed、10 skipped、182.98秒、pytest exit0；指定兩項MCP trace各1 passed、exit0、started各1，方法次序均initialize→notifications/initialized→tools/list→tools/call。歷史失敗保留。 |
+| A4 | 完成 | SilentTalk最新9674f49完整335 passed、1 skipped、1 warning，13.19秒，pytest exit0。 |
+| A5 | 未完成 | 清場後可用RAM1335.2MiB。正式啟動在套用E4B前低RAM中止；工作檔指定手動E4B 128K/mmap/lazy/auto512診斷在fit估算時亦低RAM中止。未就緒，未做三次成功重載或開SilentTalk。 |
+| A6 | 未完成 | 已有合成E4B短/長提示速度與RAM/VRAM；64K完整長測通過一次，未穩定重現。雙adapter／共享slots的角色延遲與實際Agent速度未測。 |
 | A7 | 沒測 | E4B未載入，未跑 --audit-live；不以回復的Qwen或合成模型代替。 |
 | B1 | 完成 | 批准卡用 payload.explain_title，無欄位用指定泛用字句。真Edge先紅後綠，驗工具/PowerShell/fallback三種標題。 |
 | B2 | 完成 | EdgeAgentTest九項均exit0、有中文與數字/清單，Traceback0、沒辦法0；行數表如下。 |
 | B3 | 完成 | 3 Big5＋1 UTF-8，preview不改檔、preview/run exit0，UTF-8原文4/4；中文ZIP unzip exit0，檔名及內容4/4。 |
 | B4 | 完成 | ui_preview.py匯入排序已修，ruff F,E9,I,B複查exit0。 |
-| B5 | 完成 | 模型頁依README LoRA段改為附帶E4B Agent adapter，也可放自己的GGUF LoRA。 |
+| B5 | 完成 | 介面改由runtime取得Agent及機魂兩個adapter名稱，並說明選擇位置；最新真Edge回歸另列。 |
+| B6 | 完成 | 9ee593d由runtime列兩adapter；對舊ecf9884真HTML先AssertionError/exit1，再對当前owner單項1 passed/0.06秒/exit0。完整core50 passed及真Edge完整307 passed均exit0。 |
 | C1 | 沒測 | E4B未載入，無本次SilentTalk app session/真人語音。 |
 | C2 | 沒測 | 無本次真人語音查公開資料。 |
 | C3 | 沒測 | 無本次真人語音刪檔要求。 |
@@ -47,8 +49,8 @@
 | C10 | 沒測 | 無第二真人帳號測試，未用bot替代。 |
 | C11 | 沒測 | 本次app session不存在，未貼歷史log_summary代替。 |
 | D1 | 沒測 | 無本次真人工作；紀錄metadata基準1檔、0bytes，未讀內容。 |
-| E1 | 完成 | 自建Edge與模型診斷子程序已結束；9223/18190/18087/18089無listener；正式EdgeAgent已停止釋放模型。 |
-| E2 | 完成 | 最初3次及新增512/256共5次CUDA OOM；另2次低RAM保護中止不算CUDA OOM。其他失敗交開發機，無本次SilentTalk log。 |
+| E1 | 完成 | 收尾llama-server0、9223/18190/18087/18089 listener0；自建service/模型程序已按PID清掉，Discord6程序保留。 |
+| E2 | 完成 | 原UI三次＋512/256共5次自然CUDA OOM；36份容量receipt有29次低RAM保護中止，另正式startup低RAM中止1次，合計30次保護中止，與CUDA OOM分开計。所有source SHA核對，無本次SilentTalk對話log。 |
 
 ## 測試執行結果
 
@@ -74,13 +76,39 @@
 | EdgeAgent完整（2a64fea） | 290 passed、8 failed、10 skipped，183.69秒 | 1 | MCP7項仍失敗；runner預開Edge，而新版canonical測試自己開Edge，產生9223衝突的額外1敗。 |
 | EdgeAgent真Edge單項（診斷runner） | 1 failed，1.41秒 | 1 | RuntimeError: CDP port 9223 is occupied；證實測試runner重複占用，修本機runner，不改產品或測試。 |
 | EdgeAgent真Edge單項（canonical測試自己啟動Edge） | 1 passed，14.26秒 | 0 | 不預開第二份Edge；工具/PowerShell/fallback批准標題等真DOM檢查通過。 |
+| MCP單項（事件定位） | 1 failed，2.88秒 | 1 | 第一search空、quote not found、第二search找到工具；證實連線與搜尋競態。 |
+| MCP整檔（修復後） | 11 passed，14.59秒 | 0 | 含原本七個失敗案例，批准/硬體/唯讀/列名/turn/owner等全部通過。 |
+| 延遲MCP連線＋中文搜尋＋無結果搜尋 | 3 passed，6.07秒 | 0 | 新fixture延遲initialize 750ms，首搜仍找到並真的執行quote；中文工具箱與四次無結果限制通過。 |
 
-EdgeAgent完整測試12個失敗：
+| MCP修復後完整（6562880） | 299 passed、10 skipped，177.34秒 | 0 | 七項歷史MCP失敗已消除。 |
+| 手動GPU層數回歸（修前） | 3 failed，0.21秒 | 1 | 明確層數仍被預設自動fit改寫；先紅。 |
+| 手動GPU層數core（修後） | 45 passed，1.09秒 | 0 | 手動0/33/99層均fit off；自動模式仍保留512。 |
+| 手動分層後完整 | 302 passed、10 skipped，181.83秒 | 0 | pytest自己的exit0。 |
+| 整合65328b6後完整 | 302 passed、10 skipped，178.02秒 | 0 | 當時machine-spirit-v1單adapter。 |
+| 單adapter介面修改後完整 | 302 passed、10 skipped，213.85秒 | 0 | 真Edge DOM包含adapter說明回歸。 |
+| SilentTalk 0f5f0e4完整 | 335 passed、1 skipped、1 warning，18.12秒 | 0 | 另ruff及diff --check均0。 |
+| SilentTalk 9674f49完整 | 335 passed、1 skipped、1 warning，13.19秒 | 0 | 最新双adapter配置整合後。 |
+| MCP連線壓測 | 100/100呼叫完成、0工具錯誤，0.906秒 | 0 | 既有mcp_probe，單連線，唯讀合成fixture，無模型。 |
+| Pi SDK＋MCP壓測 | 同一會話5輪×20＝100/100呼叫完成、5次搜尋、0工具錯誤 | 0 | 真Pi／真MCP、模擬HTTP模型。第一輪2.937秒（含750ms延遲初始化），後四輪0.109/0.125/0.157/0.140秒；結束時HTTP fixture兩個已完成連線印WinError10054，不算工具失敗也不隱瞞。 |
+| 最新Edge回歸runner初次啟動 | ModuleNotFoundError: edge_agent；未啟動pytest | 1 | 本機wrapper漏PYTHONPATH；設定後重跑，不算產品失敗。 |
 
-以上12項是先前7bf7d72結果。開發機335f1f0已修5項：bench三項在Windows跳過、run_checks路徑、git_overview fixture。七項MCP逐項仍失敗，錯誤行於表內；未附request序列化文字，避免回報寫入對話內容。完整新版結果另列同一表，不改寫歷史失敗。
+| 最新雙adapter整合完整（路徑斷言修前） | 299 passed、8 failed、10 skipped，178.70秒 | 1 | 新preset測試在Windows期待反斜線，實際canonical owner序列化為正斜線；不是MCP失敗。 |
+| Windows preset路徑及介面core（修後） | 50 passed，1.45秒 | 0 | 同一parametrized owner的8例全部修正，不動產品路徑序列化。 |
+| 最新Edge完整（9ee593d內容） | 307 passed、10 skipped，182.98秒 | 0 | 包含真Edge兩adapter模型說明。ruff及diff --check均0，產品push0。 |
+| B6回歸對舊ecf9884 HTML | AssertionError | 1 | git show取真舊HTML於RAM執行新回歸，不回退或改動使用者的產品檔；修後結果見上。 |
+| B6對目前owner（紅後重驗） | 1 passed，0.06秒 | 0 | 當前模型說明從runtime取得兩個名稱。 |
+| 最新交接文件1829f85 | 4 passed，0.05秒 | 0 | 只驗新工作檔的文件約束，沒有重跑已完成的A4完整測試。 |
+| 指定MCP read_only trace | 1 passed，2.49秒 | 0 | started1；initialize→notifications/initialized→tools/list→tools/call。 |
+| 指定MCP deferred連線trace | 1 passed，2.53秒 | 0 | started1；同上方法次序。fixture trace已抽出方法/數字並刪除，不把RPC參數寫回報。 |
+| 最新正式128K啟動前置 | Windows low-memory保護中止 | 1 | 尚未套用E4B；不是E4B正式載入成功或自然CUDA OOM。 |
+| 工作檔手動E4B 128K診斷 | load_exit1，ready=false，8.59秒 | probe wrapper0 | wrapper0只代表產出receipt；Windows low-memory中止、模型未就緒，不能當測試通過。 |
+
+修復前EdgeAgent完整測試12個失敗（歷史結果）：
+
+以上12項是先前7bf7d72結果。開發機335f1f0已修5項：bench三項在Windows跳過、run_checks路徑、git_overview fixture。當時七項MCP逐項失敗，現已修復，錯誤行於表內；未附request序列化文字，避免回報寫入對話內容。完整新版結果另列同一表，不改寫歷史失敗。
 
 - bench 3項：test_short_output_is_tojson_with_html_escapes、test_long_output_keeps_head_and_tail、test_submission_and_timeout；Windows找不到寫死的/bin/bash（WinError3）。bench屬開發機，未改。
-- MCP 7項：test_read_only_tools_run_and_destructive_ones_ask_once、test_hardware_needs_its_own_approval_every_time、test_an_ask_server_asks_even_for_reads、test_with_mcp_the_read_only_mode_still_cannot_change_anything、test_only_the_listed_tools_can_be_found_or_called、test_a_turn_confirm_server_lets_one_approval_cover_the_turn、test_the_owner_can_vouch_for_unmarked_tools_but_not_against_the_server。工具/批准預期與空列表不符，並有loopback ConnectionResetError WinError10054；根因未定，不冒稱因果。工具邏輯交開發機。
+- MCP 7項：test_read_only_tools_run_and_destructive_ones_ask_once、test_hardware_needs_its_own_approval_every_time、test_an_ask_server_asks_even_for_reads、test_with_mcp_the_read_only_mode_still_cannot_change_anything、test_only_the_listed_tools_can_be_found_or_called、test_a_turn_confirm_server_lets_one_approval_cover_the_turn、test_the_owner_can_vouch_for_unmarked_tools_but_not_against_the_server。工具/批准預期與空列表不符，並有loopback ConnectionResetError WinError10054；當時根因未定；之後使用者指定筆電修復，schema identity／SDK等待連線根因已定位並修正，見目前診斷。
 - toolbox git_overview 1項：fixture在本repo內，非repo預期受上層Git影響；移到EdgeAgentTest已通過，完整pytest原exit1不改寫成功。
 - toolbox run_checks 1項：預期簡化摘要tests/test_b.py，Windows pytest實際tests\test_b.py，未匹配而保留原輸出。本回合工作檔指定介面以外程式錯誤交開發機，未改。
 - Unicorn mem_map印出多次Windows fatal exception/access violation，但pytest跑到結尾；次數未完整取得，不估算，未改lingua。
@@ -105,45 +133,83 @@ B3資產：C:\Users\A8fm0\EdgeAgentTest\round6-files-20261006-201943、同名.zi
 
 ## 修改檔案與 commit
 
-- EdgeAgent：edge_agent/web.py、tests/browser_check.mjs；304fcd0，push copilot-story-mode exit0。
+- EdgeAgent舊介面304fcd0已推；MCP修復6562880、手動fit off修復65328b6已推。最新雙adapter介面與Windows preset測試9ee593d，push copilot-story-mode exit0；307 passed對應此commit內容。
 - SilentTalk：scripts/dev/ui_preview.py；原005759d經整合成87754c3，push copilot-story-mode exit0。
 - 前段劇本提交fea56a3、86688ee、8e28536、c862861、1cee143保留於laptop-report歷史；已由開發機核對，這次未改產物或雜湊。
 - 本報改寫同一第6回合；首版886da6e及診斷f1d93b3均已push origin laptop-report，exit0；同節記錄實際檢查結果。
 - EdgeAgent Windows服務維護：scripts/windows-ai-maintenance/{maintain.ps1,deploy.cmd,verify.ps1,README.md}，2a64fea，push origin copilot-story-mode exit0；本機薄入口移除重複ValidateSet，由canonical owner驗證。保留既有original-state.json還原基準，不另造部署流程。
+- EdgeAgent視效：同一維護owner擴至16項原生控制、Explorer最佳效能與視效registry，5bab454，push copilot-story-mode exit0。verify.ps1新版本55/60 checks均exit0；真API關閉/完整還原、舊快照升級、不為重複套用改原值、非零target還原均通過。ApplyLight實際exit0，套用前原值已保存，API/registry重新查核成功。
 
 ## 記憶體與速度
 
-- 真模型命令可見E4B、Agent adapter、ctx-size131072、n-gpu-layers auto、fit-ctx131072、mlock、cache-ram256、K/V q8_0、flash-attn on、mmproj不offload。
-- UI載入exit -1073740791（unsigned3221226505＝0xC0000409）；Windows Application Error模組ucrtbase.dll、exception c0000409。
-- 第一次直接診斷同設定約14.9秒結束，篩出CUDA error；第二次取得完整記憶體stderr，確認CUDA error: out of memory，位置ggml_backend_cuda_device_event_synchronize／cudaEventSynchronize。兩次未提交prompt、未降context/GPU或移除adapter。
-- --list-devices exit0：RTX3050Ti Laptop、4095MiB、當時3289MiB free，枚舉正常；自動fit仍未載入。
-- 分層核對：runtime.py確實設定n-gpu-layers auto、fit on、fit-ctx131072、fit-target512（GPU保留目標512MiB）；不是全GPU設定。這是載入時選擇GPU/CPU分配，不能當成CUDA錯誤後動態轉CPU的保證。service.py載入例外只恢復原配置，沒有OOM後改CPU重載；CPU在同一模型子程序中，程序abort時也一起結束。最初三次stderr未提供成功的最終層數或完整記憶體分配；後續新診斷的分層及Host數字另列於下；本次GPU OOM只證明這組auto配置失敗，不證明CPU或更少GPU層的128K一定不能跑。CPU-only/手動層數未測，未改使用者設定。上游CUDA錯誤處理見[ggml_cuda_error](https://github.com/ggml-org/llama.cpp/blob/b11193/ggml/src/ggml-cuda/ggml-cuda.cu)，會呼叫GGML_ABORT。
-- E4B穩態RAM/VRAM、mlock成功、角色延遲、Agent字/秒未取得。不以舊Qwen RAM冒充E4B。UI自動回復Qwen後已CLI stop，未將回復配置當成驗收或手動降設定。
-- 2026-10-06 20:49:37 +08:00 使用者要求查log確認128K與SSD；只讀Windows事件及效能/儲存metadata，不讀對話。Application Error在20:22:14、20:24:10、20:25:25各1次，均llama-server.exe/ucrtbase.dll/c0000409，與UI及兩次診斷相符。SilentTalk log最後修改2026-10-05 21:12:46，不是本次啟動證據，未讀內容。正式模型stdout/stderr送DEVNULL，沒有可補查的持久載入log；先前原生診斷stderr僅在記憶體。
-- 查核時可用實體RAM約1.02GiB、總可見RAM約7.70GiB；C:\pagefile.sys配置24538MiB、目前使用1799MiB、系統回報峰值10987MiB。這些是全系統資料，不能歸因E4B或當累計SSD寫入量。當下Pages Output/sec及Page Writes/sec均0，但模型已停止，不能反推載入期間沒有分頁寫入。
-- SSD NVMe SAMSUNG MZVLQ512HBLU-00B00回報Healthy；StorageReliabilityCounter未回傳可用磨耗數字，沒有E4B時段SSD寫入量或磨耗變化證據。新診斷512已確認一次VirtualLock失敗；不能承諾128K能跑或完全不寫SSD。即使模型鎖頁成功，其他程序仍可能分頁。[VirtualLock](https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtuallock)。
+最新工作檔1829f85已拉到；EdgeAgent pull --ff-only成功，ecf9884祖先檢查exit0，沿用mmap/lazy/auto fit512，不再調runtime/context/GPU。使用者再關Code分頁與其他程序後，空載Available1335.2MiB，Code16程序1559MiB、Discord6程序576MiB、svchost92程序770MiB、MsMpEng285MiB、webview2六程序184MiB；獨立GPU仍used0/free3962MiB。較前次空載881.5MiB多453.7MiB，非隔離A/B，只按當次環境評估。
 
-新診斷保留原E4B/adapter/131072/slots1/mlock/KV設定，沿用build_server_args；每组最多一次，stderr只在RAM，產出只保存數字與模型載入事件。512→256只改fit-target；512/no-pinned只另設子程序GGML_CUDA_NO_PINNED=1（已核對上游CUDA host allocator）；0在服务精簡後執行。最後兩组可用RAM低於128MiB連續兩次取樣即終止該模型PID，exit1是保護中止，不寫成自然CUDA OOM。過低取樣證明已到影響正常運作的風險範圍，沒有穩定勝出組，不改產品runtime512或降低context。
+- 正式service入口9ee593d、guard每20ms：開始Available1250.9MiB，尚未在模型頁套用E4B時收到Windows low-memory，最低442.9MiB；已終止自建service與模型子程序，未啟動專用Edge，因此沒有UI套用成功或三次重載證據。未手改config.json或使用者settings。
+- 依工作檔1.6改用手動診斷同一canonical builder：E4B／agent-fw1、131072、GPU auto、fit512、mmap、lazy on、Q8 K/V、ubatch512、slots1、CPU mmproj。8.59秒仍未ready；模型exit1由低RAMguard造成。快速RAM最低403.2MiB、sampled VRAM峰79MiB／working391.7MiB／private445.8MiB；停在fit估算，選24/43層、估2749MiB並留540MiB，沒有進入完整權重載入、短提示或MCP。取樣不能捕捉全部瞬間配置，也不能据此證明顯存滿或新mmap權重策略無效。依失敗步驟停止後續模型試跑，不改runtime、context、GPU或移除adapter。
+- 開發機所需兩項MCP trace都各started1／exit0／方法次序相同，当前6562880修復已生效；不能沿用舊「只有750ms案例通過」結論。方法與數字來源為round6-mcp-trace-results-20261006T170934Z.json，其SHA在JSON。
+- 最新部署兩adapter：agent-fw1 55,160,736 bytes／SHA256 85b224ecec76572e2fb153b10d4b7d16f015bf69f0e6a63731a774c54e21566e；machine-spirit-char-v1 55,160,832 bytes／SHA256 99ea1581f8f1f0e0f46d6da9b04d444b941c6395b93343b173073e6ade6d29d9。models副本與repo source雜湊各相同，bootstrap exit0。
+- 收尾Available1210.4MiB、Discord6、llama-server0，四個測試／服務port listener0。WSearch目前Disabled/Stopped，非本輪maintenance變更，不推定誰改或歸因其省RAM量。
 
-完整四組載入事件及stderr最後20行見旁邊 [laptop-fit-diagnostics.json](laptop-fit-diagnostics.json)。四份原始診斷metadata檔SHA256已逐一核對，沒有prompt、completion或使用者紀錄。
+最新直接診斷最後20行（載入metadata；沒有prompt或completion）：
 
-| 診斷 | fit估計GPU層 | 結果/秒 | CUDA模型/Host模型MiB | 採樣VRAM峰值MiB | RAM最低MiB |
-|---|---|---|---|---|---|
-| 512（先關Edge） | 24；實際offload24/43 | CUDA OOM，18.52，3221226505 | 1507.97 / 2857.35 | 未採樣 | 未採樣 |
-| 256 | 25；實際offload25/43 | CUDA OOM，19.31，3221226505 | 1557.94 / 2807.38 | 1637 | 5.9 |
-| 512 / no-pinned | 24（載入未完成） | 低RAM保護中止，13.62，1 | 未完成配置 | 1587 | 9.3 |
-| 0（服務精簡後） | 29（載入未完成） | 低RAM保護中止，9.69，1 | 未完成配置 | 1845 | 4.1 |
+```text
+0.07.787.967 I print_info: model type            = E4B
+0.07.787.968 I print_info: model params          = 7.46 B
+0.07.787.968 I print_info: general.name          = Gemma-4 E4B IT (smart Q4_0, QAT-lossless)
+0.07.787.969 I print_info: vocab type            = BPE
+0.07.787.969 I print_info: n_vocab               = 262144
+0.07.787.970 I print_info: n_merges              = 514906
+0.07.787.970 I print_info: BOS token             = 2 '<bos>'
+0.07.787.971 I print_info: EOS token             = 1 '<eos>'
+0.07.787.971 I print_info: EOT token             = 106 '<turn|>'
+0.07.787.972 I print_info: UNK token             = 3 '<unk>'
+0.07.787.972 I print_info: PAD token             = 0 '<pad>'
+0.07.787.972 I print_info: MASK token            = 4 '<mask>'
+0.07.787.973 I print_info: LF token              = 107 '
+'
+0.07.787.973 I print_info: EOG token             = 1 '<eos>'
+0.07.787.974 I print_info: EOG token             = 50 '<|tool_response>'
+0.07.787.975 I print_info: EOG token             = 106 '<turn|>'
+0.07.787.975 I print_info: max token length      = 93
+0.07.787.977 I load_tensors: loading model tensors, this can take a while... (load_mode = mmap)
+0.07.788.133 I add: tensor per_layer_token_embd.weight (size = 1512 MiB) lazy read enabled
+```
 
-- 512：Host 2,996,150,272 bytes的VirtualLock在鎖定0 bytes後失敗，系統資源不足。程序peak working3042.3MiB；256採樣working峰值2957.3MiB/private4816.2MiB。CUDA OOM發生於event sync，但採樣可能漏瞬間峰值；RAM嚴重不足已有直接證據，不能只憑CUDA字樣推斷VRAM已滿。
-- fit啟動估計GPU可用3289MiB，全43層需4313MiB；512選24層2749MiB、預留540；256選25層2800MiB、剩489（下一候選層數超標）；0選29層3282MiB、剩7。fit-target是保留目標，不是直接先配置相同大小buffer。CPU/GPU同程序，CUDA abort仍會一起結束，沒有動態CPU接手。
-- 無模型時nvidia-smi：總4096、used0、free3962MiB；沒有測到桌面程式占用這張獨立GPU大量顯存，不能憑一般傳聞當本機原因。
-- Edge主PID13976正常CloseMainWindow成功，後查無msedge殘留；StartupBoostEnabled/BackgroundModeEnabled已0。當時Edge約600–800MiB工作集；Windows可用RAM有上升，但模型試跑也修剪其他程序工作集/可能造成分頁，沒有隔離淨增量。之前「關視窗一定自動清空」說法已向使用者更正；產品目前沒有啟動時自動關閉別的app。Standby已包括在Available，不能另加。
-- 21:24服務精簡後、不開模型：可用RAM1771MiB；Code17程序1393MiB、Discord6程序537.8MiB。Code承載目前Codex工作，關閉會中斷本次維護，未關；日常部署可不開Code，工作集數字不能當保證釋放量。pagefile配置24538、目前1766、峰值10987MiB仍是全系統資料。
-- 服務稽核：svchost約94程序合計332MiB。已用既有maintenance ApplyServices經Windows管理員部署，exit0；DiagTrack、ASUSSystemAnalysis、ASUSSystemDiagnosis、RetailDemo四項均Disabled/Stopped。只有DiagTrack原本正在跑，部署前working27.4/private43MiB，另外三項原本Stopped，沒有GB級釋放量或隔離RAM淨增量證據。
-- 四項服務原值保存至既有ServiceProfile；Plan/Apply/Restore、重複套用、執行中依賴拒絕、部分變更後注入Stop失敗回復、無關WSearch保留、隱藏launcher/實際exit及原生動畫還原均測到。verify.ps1三次exit0：43、45、45 checks；原生設定均已恢復。真正服務Apply之後重新查四項確認，WlanSvc/Audiosrv/WinDefend Running、Wi-Fi Up、GitHub HTTPS200、Discord未關。
-- WLANExt廠商延伸仍未啟動；WlanSvc核心仍開。先前WLANExt是私有提交6865MiB、working約23MiB，不能說釋放6865MiB實體RAM。現有Quest/Bluetooth/虛擬音訊與Maps功能有安裝證據，保留其服務；Xbox/Fax等Manual/Stopped沒有目前程序工作集。核心/安全/更新/驅動/電源/Discord均保留。[Microsoft服務功能說明](https://learn.microsoft.com/en-us/windows/iot/iot-enterprise/optimize/services)用來核對DiagTrack/RetailDemo用途，不把IoT停用列表直接套到個人Windows。
-- 使用者續問Defender是否真的擋過：只取防護狀態與事件metadata，不讀私人路徑。MsMpEng取樣working239.5/private416.7MiB（目前跑過完整測試，不能當靜態基準）；防毒、即時/IOAV/NIS均啟用。保留Operational 6728事件，自2026-02-04 11:59:44；1116偵測2、1117動作2、1121 ASR阻擋0。2026-08-11 13:24:45/13:25:18各偵測Trojan:Win32/ClickFix.IIN!MTB，13:25:03/13:25:32分別移除，Error Code 0x00000000。Get-MpThreatDetection當前列表0不代表從未偵測；歷史事件有直接證據。無法只靠事件驗證是否誤報、感染來源或是否曾執行。[Microsoft事件定義](https://learn.microsoft.com/en-us/defender-endpoint/troubleshoot-microsoft-defender-antivirus)。未停用Defender或加廣泛排除，兩百多MiB不足以證明解決E4B載入；目前失敗不能斷言Windows必定跑不了，也沒有同機Linux A/B。
-- 收尾重查：四項服務仍Disabled/Stopped，Discord6程序；Edge/模型程序0、9223/18190/18087/18089 listener0。可用RAM1113MiB，顯示應用工作集會回升，不能把較早1771MiB當永久保證。模型啟動的自動app清場尚未實作，沒有可保證的主動釋放數字；也未為了維護關掉承載本次工作的Code。
+目前結論：64K是已完成近滿窗輸入＋生成的最高**實測值**，不是已證明的硬體上限，更不是日常穩定保證。96K、128K均有手動GPU／CPU分配短提示成功；長測觸發低RAM保護，不能算通過。使用者關掉應用後、完整回歸結束時實測可用RAM881.5MiB（總7883.3）；Code19程序工作集合計1821MiB、Discord6程序659MiB、svchost93程序759MiB。工作集相加不是唯一實體占用，也不是保證可釋放量。
+
+36份容量來源、正式啟動及MCP壓測數字見 [laptop-fit-diagnostics.json](laptop-fit-diagnostics.json)，全部來源SHA256已核對。合成prompt、completion及原生stderr全程只在RAM；持久檔只有數字與載入事件，不含真人對話。前35份容量試跑在最新雙adapter更新**以前**；新增current-handoff-auto128是9ee593d單Agent配置的失敗診斷。完整64K成績仍不得當新雙adapter產品驗證。
+
+| 配置（均E4B、單adapter、單slot） | 短提示生成token/s | 近滿窗測試 | VRAM峰值MiB／快速最低RAM MiB |
+|---|---|---|---|
+| 32K、GPU43、Q8 KV、含CPU mmproj、lazy、load none | 29.70 | 未跑 | 3209／774.8 |
+| 64K、GPU41＋CPU其餘、Q8、mmproj、ubatch256 | 23.90 | 未跑 | 3445／533.3 |
+| 96K、GPU40＋CPU其餘、Q8、mmproj、ubatch64 | 24.92 | 同配置長測低RAM中止 | 3751／568.5（短測） |
+| 128K、GPU38＋CPU其餘、Q8、mmproj、CPU op、ubatch64 | 21.44 | 長測低RAM中止 | 3929／526（短測） |
+| 96K、GPU43、Q8、mmproj、長測 | 29.33（短提示） | 曾觀測已处理88064 tokens，未完成 | 3951／510.2 |
+| 128K、GPU43、Q4 KV、純文字、input embedding GPU | 25.70 | Windows低RAM中止 | 3951／484.2 |
+| **64K、GPU43、Q4 KV、純文字、input embedding GPU、正常pinned、ubatch64** | **28.69** | **65280輸入＋128生成，無截斷，149.09秒，長提示生成13.96 token/s** | **3645／642.7** |
+| 使用者清場後64K，同上 | 無 | 載入8.83秒中止，未到MCP | 3571／480.5 |
+| 清場後64K＋no-warmup | 無 | 載入5.39秒中止，未到MCP | 2933／491.6 |
+| 清場後32K＋no-warmup | 無 | 載入ready5.84秒，短提示期間中止，未到MCP | 3337／490.6 |
+
+- 64K唯一完整成功：2026-10-07 00:24:18 +08:00開始，adapter為machine-spirit-v1.q8_0.gguf（55,160,832 bytes），load none、lazy on、fit off、GPU43、threads4、單slot、Q4 K/V、無mmproj；未降低基底權重量化。長提示處理466.39 token/s，長生成13.96045 token/s；模型工作集峰約682.1MiB、GPU model2853.32MiB＋adapter52.57＋KV296.44＋compute274；CPU mapped embedding1512MiB。輸入是合成code token向量、約192種token，非品質、廣詞彙、真人工具或Discord通話壓測。
+- GPU43表示43/43可offload層在GPU；1512MiB per-layer embedding仍在CPU／file mapping，因此不是所有權重純GPU，也不是CPU承接transformer層的完整64K證據。GPU40／38案例才把剩餘層放CPU，但只完成短提示。CPU需要實體RAM，CUDA abort會讓同一程序的CPU運算也結束；靜態分配沒有OOM後動態接手。
+- embedding搬到GPU使GPU model2493.32→2853.32MiB，CPU360MiB表消失；是搬移，**沒有實測去重成功**。no-pinned、取消warmup皆未證明消除本機低RAM，不能當勝出優化。最新快速guard每20ms查RAM和Windows LowMemoryResourceNotification，Windows實際在約480–492MiB通知；即使floor降到256也會中止，不是僅512任意門檻。[Windows低記憶體通知](https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-creatememoryresourcenotification)。
+- 現有正式設定沒有改成Q4 KV、text-only或上述tensor placement；沒有為探測修改使用者settings.json。單slot64K合成結果也不等於SilentTalk角色＋Agent共享多slot結果。角色與Agent都要占context，工具回傳也累積歷史；目前未驗真模型近滿64K＋大量MCP＋滿窗壓縮的完整流程。
+- MCP已完成的容量證據：transport單連線100次、真Pi SDK同會話100次唯讀quote（5輪）均0工具錯誤。SDK使用可控模型fixture，沒有E4B或64K token實際運算。真E4B測試都在載入／短提示被低RAM保護中止，**沒有進入MCP階段**。不能把兩組成功相乘成E4B＋64K＋大量MCP穩定。
+- 最新遠端ecf9884改canonical loader為mmap＋lazy on；57c12ab／01aaee6改Agent與機魂兩adapter預載而每請求點名索引。Windows已同步、bootstrap成功，兩adapter SHA核對另列；所有前段容量成績都按當時單adapter記錄。最新雙adapter尚無Windows長context實測，不採Linux數字作本機結果。
+
+原始128K失敗證據：UI及兩次直接诊断共3次exit -1073740791（0xC0000409）；Application Error/ucrtbase.dll事件20:22:14、20:24:10、20:25:25。後續auto fit-target512/256再自然CUDA OOM兩次，合計5。512選24/43層、GPU model1507.97／host2857.35MiB；256選25層、GPU1557.94／host2807.38MiB，RAM取樣最低5.9MiB。512的2,996,150,272-byte VirtualLock鎖定0bytes後失敗。其餘29次容量receipt低RAM保護中止及1次正式啟動中止獨立記錄，不改寫成自然CUDA OOM。fit-target是給其他配置保留的估計目標，不是先占相同大小buffer；產品auto仍512，明確gpu_layers改為fit off（65328b6），避免自動機制改寫手動分配。
+
+資源／Windows部署：
+
+- GPU無模型取樣total4096、used0、free3962MiB，CUDA初始化可用3289MiB；Discord關閉硬體加速前後nvidia-smi均相同，未證明本獨立GPU多釋放多少。i7-11370H、4核8緒，測試4緒。保留Discord，未測實際語音同時負載。
+- 四項服務DiagTrack、ASUSSystemAnalysis、ASUSSystemDiagnosis、RetailDemo已Disabled/Stopped；原來只有DiagTrack正在跑，working27.4MiB，沒有GB級釋放證據。WlanSvc核心、Wi-Fi、Audiosrv、WinDefend保留；WLANExt廠商延伸原6865MiB是private commit、working約23MiB，不能當6.7GB實體釋放。既有維護owner及original-state.json可RestoreServices，不殺共享svchost；服務驗證43/45/45 checks exit0。
+- 16項原生視效均0及Explorer最佳效能/透明與動畫關閉，保留DWM。verify55/60 checks和ApplyLight exit0；原值可RestoreLight。前後RAM1385→1274、DWM59.1→59.3、Explorer128.1→121.5MiB，非隔離A/B，不報省RAM百分比。
+- 早期Edge PID13976正常CloseMainWindow成功且無msedge殘留；StartupBoostEnabled/BackgroundModeEnabled0。之前「關視窗必自動清空」說法已更正。這輪Edge先已退出，關閉指令查0個主PID，不冒稱再次釋放。SearchHost PID19920樹暫時終止約多408MiB，隨即自動重啟，無永久清場收益。Gemini agy guard未符合閒置條件，實際沒有關。Code承載本次Codex，未關；產品沒有可保證的啟動自動清場RAM數字。standby已含於Available。
+- Defender防毒/即時/IOAV/NIS均保留。歷史1116偵測2、1117移除2；2026-08-11 Trojan:Win32/ClickFix.IIN!MTB兩次動作Error Code0。只看事件metadata，未讀私人路徑；Get-MpThreatDetection當前0不代表從未偵測，未證明誤報或来源，不因模型需求停用防毒。
+- SSD Samsung NVMe Healthy，無可用磨耗值或可歸因模型的累計寫入量。長prefill時幾次全系統Page Writes／Pages Output取樣0，不等於全程無SSD寫入；Page Inputs有非零取樣。pagefile配置24538MiB、當前約2GB、峰10987MiB均全系統值。mmap可丟乾淨file pages再讀，但不能承諾其他程序不分頁或整機不寫SSD。[pagefile／commit](https://learn.microsoft.com/en-us/troubleshoot/windows-client/performance/introduction-to-the-page-file)、[VirtualLock](https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtuallock)。降低虛擬記憶體上限不會清掉Code／Discord，可能縮小可用commit額度。
+- MCP修復owner為agent_bridge.mjs：自建tool_search schema讓SDK的isToolSearchTool identity檢查不認，首search未等待deferred server初始化。改為SDK原schema，保留中文排名、权限與query/limit驗證；延遲750ms首搜能執行quote。6562880已推送，沒有加sleep或放寬批准。Native ComputerUse pipe三次檔案不存在，未用它操作Code，不報UI清場成功。
 
 ## Discord 數字表
 
@@ -155,13 +221,13 @@ B3資產：C:\Users\A8fm0\EdgeAgentTest\round6-files-20261006-201943、同名.zi
 
 ## 使用者回饋
 
-最新要求：正常運作下極致效能、Discord保留；要量目前RAM可回收量、不接受關Edge必定清空的說法；授權評估不用的服務並直接預設關閉。已實際部署四項服務；未驗證效能提升就不報提升百分比。前段機魂劇本成果保留；沒有新真人測試感想。
+使用者要求Discord保留、正常運作下優先模型效能，明確授權筆電修MCP及手動CPU／GPU分配，之後關Discord硬體加速／視效與其他應用，要求重測context和大量MCP。覆蓋工作檔auto fit 1024/1536/2048的既定試法與MCP開發機分工；合成或短提示結果不替代正式128K、角色、多slot驗收。最新要求先查看開發機任務，已依1829f85用新loader原配置做失敗診斷與指定trace。不填未測效能提升百分比，前段劇本保留。
 
 ## 給接手模型的交接指示
 
-1. A5仍卡在128K Windows載入。現在有24/25/29層fit估計、一次VirtualLock失敗與RAM最低4–9MiB證據。沒有穩定組；不要再盲試相同設定或1024起跳，使用者要求先證明。先解CPU/pinned host/載入峰值的RAM配置或在不開維護Code的部署環境量測，再驗原設定；不要把低RAM保護中止算CUDA OOM。SilentTalk未开，不降context或移除adapter。
-2. 開工仍先兩repo pull --ff-only，再讀AGENTS.md及新版laptop.md，不讀另一台工作檔。B1～B5已完成並推送，未變的已通過檢查不例行重跑。
-3. 開發機335f1f0修的5項已拉到；MCP七項逐項仍失敗，表內有source:line和assertion（序列化fixture對話省略）。Agent工具邏輯未越界改；Windows128K由筆電繼續查。有服務恢復需要時由maintenance RestoreServices執行，勿殺共享svchost或停WlanSvc。
-4. 原設定成功載入後，模型頁確認、開SilentTalk、驗/status mode=character及Agent slot/context/adapter，再量A6、跑A7 --audit-live。真人每次只請使用者做一件事，限定指定guild/channel與EdgeAgentTest，批准由使用者按；C9重啟、C11最新session表不可省。
-5. 紀錄只看AgentRecords metadata增長，不讀內容；既有重載批准不重問，時間經過不當新設定批准。
-6. 劇本沿用machine-spirit-2.delivery.json來源/分割/雜湊，這次不再加工或訓練；machine-spirit-1 12/12、machine-spirit-2 train100/100/eval20/20、六雜湊已由開發機確認。模型品質關卡不冒稱完成。
+1. 開工仍先pull --ff-only，讀AGENTS及最新laptop；不用另一台工作檔。單agent，保留Discord、用PID清掉自己啟動的測試程序。
+2. 最高完整長測是單adapter、單slot、純文字、Q4 KV的64K一回，不是硬體上限，也沒有穩定重現。96K／128K短提示成功、長測中止；前一次空載RAM881.5MiB時連64K載入也遇Windows low-memory；本次使用者再清場到1335.2MiB，最新128K auto診斷仍中止。不要再盲重複相同配置、移除低RAM保護或聲稱32K/64K日常穩定。
+3. 最新產品已改mmap/lazy與兩adapter、按請求點名；本機探測script已跟進lora_paths、每請求lora索引並存product revision。9ee593d的128K auto仍在fit估算觸發低RAM，依1.6交開發機；不得把舊結果當新配置。所有探測設定都未寫入使用者settings。下一次實測前先量空載Available、部署兩adapter SHA；需要較多RAM且仍正常運作的條件，再驗正式shared slots、CPU剩餘層、長輸入及生成。
+4. MCP root-cause已修，SDK／transport各100次工具完成；真E4B＋64K＋大量MCP＋context滿窗壓縮仍未驗。不要引用模擬模型壓測作真模型工具能力或記憶體穩定證據。
+5. 正式原設定就緒後再開SilentTalk，核對/status mode=character與兩adapter/slots/context，量A6、跑A7 audit-live，真人每次只請使用者做一件事。C9重啟、C11最新session不可省；無本次session，不讀歷史紀錄代替。
+6. 紀錄只看AgentRecords metadata，未動.env/settings.json/personas.json/character_state.json。服務／視效如要還原用既有RestoreServices／RestoreLight；無啟動自動app清場承諾。劇本沿用既有100/20 delivery，未再改資料、模型品質關卡不冒稱完成。

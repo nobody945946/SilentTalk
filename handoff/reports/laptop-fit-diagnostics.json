@@ -331,6 +331,3024 @@
           ]
         }
       ]
+    },
+    {
+      "source": "round6-fit-ctx98304-512-1--1-pinnedTrue.json",
+      "sha256": "389a2e78d5048fe2b9e46d7d558c42d6bf41943072e6fc2dfdda6fcdc4cdd14a",
+      "source_modified_utc": "2026-10-06T13:40:47.788584+00:00",
+      "observed_results": [
+        {
+          "margin_mib": 512,
+          "slots": 1,
+          "gpu_layers_requested": -1,
+          "attempt": 1,
+          "no_pinned": false,
+          "context": 98304,
+          "adapter": "agent-fw1.q8_0.gguf",
+          "pid": 11696,
+          "ready": false,
+          "load_seconds": 10.44,
+          "load_exit": 1,
+          "memory": {
+            "working_mib": 0.0,
+            "private_mib": 0.1,
+            "peak_working_mib": 2410.5,
+            "free_ram_mib": 2576.5
+          },
+          "gpu_used_free_util": "0, 3962, 0",
+          "peak_sampled": {
+            "vram_mib": 1695,
+            "working_mib": 2346.2,
+            "private_mib": 4812.7,
+            "minimum_free_ram_mib": 15.0,
+            "samples": 14
+          },
+          "stopped_for_sustained_low_ram": true,
+          "allocation_events": [
+            "0.01.334.458 I common_params_fit_impl: getting device memory data for initial parameters:",
+            "0.02.095.640 I common_params_fit_impl: projected to use 3881 MiB of device memory vs. 3289 MiB of free device memory",
+            "0.02.095.646 I common_params_fit_impl: cannot meet free memory target of 512 MiB, need to reduce device memory by 1104 MiB",
+            "0.02.095.647 I common_params_fit_impl: context size set by user to 98304 -> no change",
+            "0.02.095.650 I common_params_fit_impl: id=0, target=2777 MiB",
+            "0.02.925.133 I common_params_fit_impl: memory for test allocation by device:",
+            "0.02.925.140 I common_params_fit_impl: id=0, n_layer= 0, n_part= 0, overflow_type=4, mem=   838 MiB",
+            "0.02.925.166 I common_params_fit_impl: filling dense layers back-to-front:",
+            "0.03.632.762 I common_params_fit_impl: memory for test allocation by device:",
+            "0.03.632.771 I common_params_fit_impl: id=0, n_layer=43, n_part= 0, overflow_type=4, mem=  3881 MiB",
+            "0.03.632.774 I common_params_fit_impl: start filling device 0, delta=43",
+            "0.04.362.686 I common_params_fit_impl: memory for test allocation by device:",
+            "0.04.362.693 I common_params_fit_impl: id=0, n_layer=27, n_part= 0, overflow_type=4, mem=  2816 MiB",
+            "0.04.362.704 I common_params_fit_impl: set ngl_per_device_high[0].n_layer=27",
+            "0.05.069.244 I common_params_fit_impl: memory for test allocation by device:",
+            "0.05.069.251 I common_params_fit_impl: id=0, n_layer=26, n_part= 0, overflow_type=4, mem=  2765 MiB",
+            "0.05.069.256 I common_params_fit_impl: set ngl_per_device[0].n_layer=26",
+            "0.05.069.258 I common_params_fit_impl:   - CUDA0 (NVIDIA GeForce RTX 3050 Ti Laptop GPU): 26 layers,   2765 MiB used,    524 MiB free",
+            "0.05.698.549 I load_tensors: loading model tensors, this can take a while... (load_mode = mlock)"
+          ],
+          "load_stderr_tail": [
+            "0.05.698.509 I print_info: rope_finetuned        = unknown",
+            "0.05.698.510 I print_info: model type            = E4B",
+            "0.05.698.511 I print_info: model params          = 7.46 B",
+            "0.05.698.511 I print_info: general.name          = Gemma-4 E4B IT (smart Q4_0, QAT-lossless)",
+            "0.05.698.512 I print_info: vocab type            = BPE",
+            "0.05.698.512 I print_info: n_vocab               = 262144",
+            "0.05.698.513 I print_info: n_merges              = 514906",
+            "0.05.698.513 I print_info: BOS token             = 2 '<bos>'",
+            "0.05.698.514 I print_info: EOS token             = 1 '<eos>'",
+            "0.05.698.514 I print_info: EOT token             = 106 '<turn|>'",
+            "0.05.698.514 I print_info: UNK token             = 3 '<unk>'",
+            "0.05.698.515 I print_info: PAD token             = 0 '<pad>'",
+            "0.05.698.515 I print_info: MASK token            = 4 '<mask>'",
+            "0.05.698.515 I print_info: LF token              = 107 '",
+            "'",
+            "0.05.698.516 I print_info: EOG token             = 1 '<eos>'",
+            "0.05.698.517 I print_info: EOG token             = 50 '<|tool_response>'",
+            "0.05.698.517 I print_info: EOG token             = 106 '<turn|>'",
+            "0.05.698.517 I print_info: max token length      = 93",
+            "0.05.698.549 I load_tensors: loading model tensors, this can take a while... (load_mode = mlock)"
+          ]
+        }
+      ],
+      "safety_guard_mib": 512
+    },
+    {
+      "source": "round6-fit-ctx98304-512-1-33-pinnedTrue.json",
+      "sha256": "bd39f16d340462fff51c9347a28e1bdd2c809683a79d35e114be2ce1d917a086",
+      "source_modified_utc": "2026-10-06T13:54:48.764656+00:00",
+      "observed_results": [
+        {
+          "margin_mib": 512,
+          "slots": 1,
+          "gpu_layers_requested": 33,
+          "attempt": 1,
+          "no_pinned": false,
+          "context": 98304,
+          "adapter": "agent-fw1.q8_0.gguf",
+          "pid": 17228,
+          "ready": false,
+          "load_seconds": 6.28,
+          "load_exit": 1,
+          "memory": {
+            "working_mib": 0.0,
+            "private_mib": 0.1,
+            "peak_working_mib": 2427.7,
+            "free_ram_mib": 2658.4
+          },
+          "gpu_used_free_util": "0, 3962, 0",
+          "peak_sampled": {
+            "vram_mib": 2051,
+            "working_mib": 2427.7,
+            "private_mib": 4809.7,
+            "minimum_free_ram_mib": 5.3,
+            "samples": 7
+          },
+          "stopped_for_sustained_low_ram": true,
+          "safety_guard_mib": 512,
+          "minimum_fast_guard_free_ram_mib": 447.7,
+          "allocation_events": [
+            "0.02.002.656 I load_tensors: loading model tensors, this can take a while... (load_mode = mlock)"
+          ],
+          "load_stderr_tail": [
+            "0.02.002.606 I print_info: rope_finetuned        = unknown",
+            "0.02.002.607 I print_info: model type            = E4B",
+            "0.02.002.608 I print_info: model params          = 7.46 B",
+            "0.02.002.608 I print_info: general.name          = Gemma-4 E4B IT (smart Q4_0, QAT-lossless)",
+            "0.02.002.609 I print_info: vocab type            = BPE",
+            "0.02.002.609 I print_info: n_vocab               = 262144",
+            "0.02.002.610 I print_info: n_merges              = 514906",
+            "0.02.002.610 I print_info: BOS token             = 2 '<bos>'",
+            "0.02.002.611 I print_info: EOS token             = 1 '<eos>'",
+            "0.02.002.611 I print_info: EOT token             = 106 '<turn|>'",
+            "0.02.002.611 I print_info: UNK token             = 3 '<unk>'",
+            "0.02.002.612 I print_info: PAD token             = 0 '<pad>'",
+            "0.02.002.612 I print_info: MASK token            = 4 '<mask>'",
+            "0.02.002.613 I print_info: LF token              = 107 '",
+            "'",
+            "0.02.002.614 I print_info: EOG token             = 1 '<eos>'",
+            "0.02.002.615 I print_info: EOG token             = 50 '<|tool_response>'",
+            "0.02.002.615 I print_info: EOG token             = 106 '<turn|>'",
+            "0.02.002.615 I print_info: max token length      = 93",
+            "0.02.002.656 I load_tensors: loading model tensors, this can take a while... (load_mode = mlock)"
+          ]
+        }
+      ],
+      "fit_enabled": false,
+      "safety_guard_mib": 512,
+      "guard_interval_ms": 20
+    },
+    {
+      "source": "round6-discord-off-ctx32768-512-1-33-mmap+mlock.json",
+      "sha256": "31ed187905d83acaddd302536f81d8f96471b2edfc07480f61e9cf5fe1fb2b96",
+      "source_modified_utc": "2026-10-06T15:35:36.209000+00:00",
+      "observed_results": [
+        {
+          "margin_mib": 512,
+          "slots": 1,
+          "gpu_layers_requested": 33,
+          "attempt": 1,
+          "no_pinned": false,
+          "load_mode": "mmap+mlock",
+          "tag": "discord-off",
+          "context": 32768,
+          "adapter": "machine-spirit-v1.q8_0.gguf",
+          "pid": 27480,
+          "ready": false,
+          "load_seconds": 2.52,
+          "load_exit": 1,
+          "memory": {
+            "working_mib": 0.0,
+            "private_mib": 0.1,
+            "peak_working_mib": 389.4,
+            "free_ram_mib": 1154.5
+          },
+          "gpu_used_free_util": "0, 3962, 0",
+          "peak_sampled": {
+            "vram_mib": 79,
+            "working_mib": 389.4,
+            "private_mib": 441.9,
+            "minimum_free_ram_mib": 712.0,
+            "samples": 3
+          },
+          "stopped_for_sustained_low_ram": true,
+          "safety_guard_mib": 512,
+          "minimum_fast_guard_free_ram_mib": 494.8,
+          "allocation_events": [
+            "0.01.682.544 I load_tensors: loading model tensors, this can take a while... (load_mode = mmap+mlock)"
+          ],
+          "load_stderr_tail": [
+            "0.01.682.480 I print_info: rope_finetuned        = unknown",
+            "0.01.682.481 I print_info: model type            = E4B",
+            "0.01.682.482 I print_info: model params          = 7.46 B",
+            "0.01.682.482 I print_info: general.name          = Gemma-4 E4B IT (smart Q4_0, QAT-lossless)",
+            "0.01.682.484 I print_info: vocab type            = BPE",
+            "0.01.682.485 I print_info: n_vocab               = 262144",
+            "0.01.682.485 I print_info: n_merges              = 514906",
+            "0.01.682.486 I print_info: BOS token             = 2 '<bos>'",
+            "0.01.682.486 I print_info: EOS token             = 1 '<eos>'",
+            "0.01.682.486 I print_info: EOT token             = 106 '<turn|>'",
+            "0.01.682.487 I print_info: UNK token             = 3 '<unk>'",
+            "0.01.682.487 I print_info: PAD token             = 0 '<pad>'",
+            "0.01.682.488 I print_info: MASK token            = 4 '<mask>'",
+            "0.01.682.488 I print_info: LF token              = 107 '",
+            "'",
+            "0.01.682.488 I print_info: EOG token             = 1 '<eos>'",
+            "0.01.682.489 I print_info: EOG token             = 50 '<|tool_response>'",
+            "0.01.682.490 I print_info: EOG token             = 106 '<turn|>'",
+            "0.01.682.490 I print_info: max token length      = 93",
+            "0.01.682.544 I load_tensors: loading model tensors, this can take a while... (load_mode = mmap+mlock)"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "round6-discord-off-edge-closed-ctx32768-512-1-33-mlock.json",
+      "sha256": "54a4e3736992679392a1041ef5969e2f304a64e2d0bbaabe3799413f3ace006a",
+      "source_modified_utc": "2026-10-06T15:39:30.675706+00:00",
+      "observed_results": [
+        {
+          "margin_mib": 512,
+          "slots": 1,
+          "gpu_layers_requested": 33,
+          "attempt": 1,
+          "no_pinned": false,
+          "load_mode": "mlock",
+          "tag": "discord-off-edge-closed",
+          "lazy_mode": "auto",
+          "context": 32768,
+          "adapter": "machine-spirit-v1.q8_0.gguf",
+          "pid": 25044,
+          "ready": false,
+          "load_seconds": 5.11,
+          "load_exit": 1,
+          "memory": {
+            "working_mib": 0.0,
+            "private_mib": 0.1,
+            "peak_working_mib": 2428.4,
+            "free_ram_mib": 2448.6
+          },
+          "gpu_used_free_util": "0, 3962, 0",
+          "peak_sampled": {
+            "vram_mib": 2051,
+            "working_mib": 1982.7,
+            "private_mib": 4807.8,
+            "minimum_free_ram_mib": 34.1,
+            "samples": 5
+          },
+          "stopped_for_sustained_low_ram": true,
+          "safety_guard_mib": 512,
+          "minimum_fast_guard_free_ram_mib": 469.1,
+          "allocation_events": [
+            "0.01.843.553 I load_tensors: loading model tensors, this can take a while... (load_mode = mlock)"
+          ],
+          "load_stderr_tail": [
+            "0.01.843.513 I print_info: rope_finetuned        = unknown",
+            "0.01.843.514 I print_info: model type            = E4B",
+            "0.01.843.515 I print_info: model params          = 7.46 B",
+            "0.01.843.516 I print_info: general.name          = Gemma-4 E4B IT (smart Q4_0, QAT-lossless)",
+            "0.01.843.516 I print_info: vocab type            = BPE",
+            "0.01.843.517 I print_info: n_vocab               = 262144",
+            "0.01.843.517 I print_info: n_merges              = 514906",
+            "0.01.843.517 I print_info: BOS token             = 2 '<bos>'",
+            "0.01.843.518 I print_info: EOS token             = 1 '<eos>'",
+            "0.01.843.518 I print_info: EOT token             = 106 '<turn|>'",
+            "0.01.843.519 I print_info: UNK token             = 3 '<unk>'",
+            "0.01.843.519 I print_info: PAD token             = 0 '<pad>'",
+            "0.01.843.519 I print_info: MASK token            = 4 '<mask>'",
+            "0.01.843.520 I print_info: LF token              = 107 '",
+            "'",
+            "0.01.843.520 I print_info: EOG token             = 1 '<eos>'",
+            "0.01.843.521 I print_info: EOG token             = 50 '<|tool_response>'",
+            "0.01.843.521 I print_info: EOG token             = 106 '<turn|>'",
+            "0.01.843.522 I print_info: max token length      = 93",
+            "0.01.843.553 I load_tensors: loading model tensors, this can take a while... (load_mode = mlock)"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "round6-discord-off-edge-closed-ctx32768-512-1-43-mlock.json",
+      "sha256": "54cd9a43017d54feb17b049f83713698aeaccf9215e565c96d6e0cf9db793734",
+      "source_modified_utc": "2026-10-06T15:39:49.422271+00:00",
+      "observed_results": [
+        {
+          "margin_mib": 512,
+          "slots": 1,
+          "gpu_layers_requested": 43,
+          "attempt": 1,
+          "no_pinned": false,
+          "load_mode": "mlock",
+          "tag": "discord-off-edge-closed",
+          "lazy_mode": "auto",
+          "context": 32768,
+          "adapter": "machine-spirit-v1.q8_0.gguf",
+          "pid": 20364,
+          "ready": false,
+          "load_seconds": 4.3,
+          "load_exit": 1,
+          "memory": {
+            "working_mib": 0.0,
+            "private_mib": 0.1,
+            "peak_working_mib": 2260.8,
+            "free_ram_mib": 2336.8
+          },
+          "gpu_used_free_util": "0, 3962, 0",
+          "peak_sampled": {
+            "vram_mib": 2573,
+            "working_mib": 1726.1,
+            "private_mib": 4809.3,
+            "minimum_free_ram_mib": 545.7,
+            "samples": 5
+          },
+          "stopped_for_sustained_low_ram": true,
+          "safety_guard_mib": 512,
+          "minimum_fast_guard_free_ram_mib": 401.4,
+          "allocation_events": [
+            "0.01.528.188 I load_tensors: loading model tensors, this can take a while... (load_mode = mlock)"
+          ],
+          "load_stderr_tail": [
+            "0.01.528.145 I print_info: rope_finetuned        = unknown",
+            "0.01.528.146 I print_info: model type            = E4B",
+            "0.01.528.146 I print_info: model params          = 7.46 B",
+            "0.01.528.147 I print_info: general.name          = Gemma-4 E4B IT (smart Q4_0, QAT-lossless)",
+            "0.01.528.148 I print_info: vocab type            = BPE",
+            "0.01.528.148 I print_info: n_vocab               = 262144",
+            "0.01.528.148 I print_info: n_merges              = 514906",
+            "0.01.528.149 I print_info: BOS token             = 2 '<bos>'",
+            "0.01.528.149 I print_info: EOS token             = 1 '<eos>'",
+            "0.01.528.150 I print_info: EOT token             = 106 '<turn|>'",
+            "0.01.528.150 I print_info: UNK token             = 3 '<unk>'",
+            "0.01.528.151 I print_info: PAD token             = 0 '<pad>'",
+            "0.01.528.151 I print_info: MASK token            = 4 '<mask>'",
+            "0.01.528.152 I print_info: LF token              = 107 '",
+            "'",
+            "0.01.528.152 I print_info: EOG token             = 1 '<eos>'",
+            "0.01.528.153 I print_info: EOG token             = 50 '<|tool_response>'",
+            "0.01.528.153 I print_info: EOG token             = 106 '<turn|>'",
+            "0.01.528.154 I print_info: max token length      = 93",
+            "0.01.528.188 I load_tensors: loading model tensors, this can take a while... (load_mode = mlock)"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "round6-discord-off-edge-closed-lazy-cpu-ops-ctx131072-512-1-38-none-ub64-longFalse.json",
+      "sha256": "df6ccf542d594e61fb93d611cd25ed17aef7b44214d77da7c6546c4fc76774cb",
+      "source_modified_utc": "2026-10-06T15:47:36.070638+00:00",
+      "observed_results": [
+        {
+          "margin_mib": 512,
+          "slots": 1,
+          "started_utc": "2026-10-06T15:47:20.622893+00:00",
+          "gpu_layers_requested": 38,
+          "attempt": 1,
+          "no_pinned": false,
+          "load_mode": "none",
+          "tag": "discord-off-edge-closed-lazy-cpu-ops",
+          "lazy_mode": "on",
+          "ubatch": 64,
+          "op_offload": false,
+          "context": 131072,
+          "adapter": "machine-spirit-v1.q8_0.gguf",
+          "pid": 816,
+          "ready": true,
+          "load_seconds": 7.67,
+          "load_exit": null,
+          "memory": {
+            "working_mib": 1908.0,
+            "private_mib": 6617.1,
+            "peak_working_mib": 1908.0,
+            "free_ram_mib": 551.3
+          },
+          "gpu_used_free_util": "3927, 36, 7",
+          "actual_context": 131072,
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 180,
+            "prompt_ms": 1394.514,
+            "prompt_per_token_ms": 7.747299999999999,
+            "prompt_per_second": 129.07722690485718,
+            "predicted_n": 128,
+            "predicted_ms": 5923.762,
+            "predicted_per_token_ms": 46.64379527559055,
+            "predicted_per_second": 21.43907874759317
+          },
+          "output_chars": 466,
+          "memory_after": {
+            "working_mib": 1945.3,
+            "private_mib": 6549.4,
+            "peak_working_mib": 1950.4,
+            "free_ram_mib": 606.2
+          },
+          "exit_before_cleanup": null,
+          "peak_sampled": {
+            "vram_mib": 3929,
+            "working_mib": 1950.1,
+            "private_mib": 6635.6,
+            "minimum_free_ram_mib": 595.0,
+            "samples": 24
+          },
+          "stopped_for_sustained_low_ram": false,
+          "safety_guard_mib": 512,
+          "minimum_fast_guard_free_ram_mib": 526.0,
+          "allocation_events": [
+            "0.02.122.736 I load_tensors: offloading output layer to GPU",
+            "0.02.122.746 I load_tensors: offloading 37 repeating layers to GPU",
+            "0.02.122.746 I load_tensors: offloaded 38/43 layers to GPU",
+            "0.02.122.753 I load_tensors:        CUDA0 model buffer size =  2228.69 MiB",
+            "0.02.122.754 I load_tensors:    CUDA_Host model buffer size =   624.63 MiB",
+            "0.02.122.755 I load_tensors:   CPU_Mapped model buffer size =  1512.00 MiB",
+            "0.05.160.926 I llama_adapter_lora_init_impl:  CUDA_Host LoRA buffer size =     6.41 MiB",
+            "0.05.161.116 I llama_adapter_lora_init_impl:      CUDA0 LoRA buffer size =    46.16 MiB",
+            "0.05.341.952 I llama_context:  CUDA_Host  output buffer size =     1.00 MiB",
+            "0.05.347.494 I llama_kv_cache:      CUDA0 KV buffer size =  1088.00 MiB",
+            "0.05.382.011 I llama_kv_cache:        CPU KV buffer size =     3.98 MiB",
+            "0.05.383.200 I llama_kv_cache:      CUDA0 KV buffer size =    11.95 MiB",
+            "0.05.407.960 I sched_reserve:      CUDA0 compute buffer size =   534.94 MiB",
+            "0.05.407.966 I sched_reserve:  CUDA_Host compute buffer size =    31.38 MiB",
+            "0.05.512.589 I sched_reserve:      CUDA0 compute buffer size =   534.94 MiB",
+            "0.05.512.598 I sched_reserve:  CUDA_Host compute buffer size =    31.38 MiB",
+            "0.06.591.755 I reserve_compute_meta:        CPU compute buffer size =   101.27 MiB",
+            "0.07.400.021 I reserve_compute_meta:        CPU compute buffer size =   101.19 MiB"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "round6-discord-off-edge-closed-lazy-cpu-ops-ctx131072-512-1-38-none-ub64-longTrue.json",
+      "sha256": "ca8cc526ef7f0b5e9d1b58e49c08ea5bb4528b505857c0ac42d6d60d19bf0e95",
+      "source_modified_utc": "2026-10-06T15:53:03.842525+00:00",
+      "observed_results": [
+        {
+          "margin_mib": 512,
+          "slots": 1,
+          "started_utc": "2026-10-06T15:48:48.876309+00:00",
+          "gpu_layers_requested": 38,
+          "attempt": 1,
+          "no_pinned": false,
+          "load_mode": "none",
+          "tag": "discord-off-edge-closed-lazy-cpu-ops",
+          "lazy_mode": "on",
+          "ubatch": 64,
+          "op_offload": false,
+          "context": 131072,
+          "adapter": "machine-spirit-v1.q8_0.gguf",
+          "pid": 6580,
+          "ready": true,
+          "load_seconds": 7.0,
+          "load_exit": null,
+          "memory": {
+            "working_mib": 1908.1,
+            "private_mib": 6618.7,
+            "peak_working_mib": 1908.1,
+            "free_ram_mib": 1032.3
+          },
+          "gpu_used_free_util": "3927, 36, 16",
+          "actual_context": 131072,
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 180,
+            "prompt_ms": 1262.514,
+            "prompt_per_token_ms": 7.013966666666666,
+            "prompt_per_second": 142.57267642180602,
+            "predicted_n": 128,
+            "predicted_ms": 6169.689,
+            "predicted_per_token_ms": 48.58022834645669,
+            "predicted_per_second": 20.58450596132155
+          },
+          "output_chars": 466,
+          "memory_after": {
+            "working_mib": 1944.4,
+            "private_mib": 6547.9,
+            "peak_working_mib": 1950.5,
+            "free_ram_mib": 1123.7
+          },
+          "error_type": "ConnectionResetError",
+          "exit_before_cleanup": null,
+          "peak_sampled": {
+            "vram_mib": 3933,
+            "working_mib": 1998.2,
+            "private_mib": 6637.5,
+            "minimum_free_ram_mib": 575.6,
+            "samples": 448
+          },
+          "stopped_for_sustained_low_ram": true,
+          "safety_guard_mib": 512,
+          "minimum_fast_guard_free_ram_mib": 508.6,
+          "allocation_events": [
+            "0.01.605.180 I load_tensors: offloading output layer to GPU",
+            "0.01.605.183 I load_tensors: offloading 37 repeating layers to GPU",
+            "0.01.605.183 I load_tensors: offloaded 38/43 layers to GPU",
+            "0.01.605.187 I load_tensors:        CUDA0 model buffer size =  2228.69 MiB",
+            "0.01.605.188 I load_tensors:    CUDA_Host model buffer size =   624.63 MiB",
+            "0.01.605.189 I load_tensors:   CPU_Mapped model buffer size =  1512.00 MiB",
+            "0.04.532.754 I llama_adapter_lora_init_impl:  CUDA_Host LoRA buffer size =     6.41 MiB",
+            "0.04.533.364 I llama_adapter_lora_init_impl:      CUDA0 LoRA buffer size =    46.16 MiB",
+            "0.04.719.214 I llama_context:  CUDA_Host  output buffer size =     1.00 MiB",
+            "0.04.723.742 I llama_kv_cache:      CUDA0 KV buffer size =  1088.00 MiB",
+            "0.04.758.210 I llama_kv_cache:        CPU KV buffer size =     3.98 MiB",
+            "0.04.759.297 I llama_kv_cache:      CUDA0 KV buffer size =    11.95 MiB",
+            "0.04.782.722 I sched_reserve:      CUDA0 compute buffer size =   534.94 MiB",
+            "0.04.782.730 I sched_reserve:  CUDA_Host compute buffer size =    31.38 MiB",
+            "0.04.847.782 I sched_reserve:      CUDA0 compute buffer size =   534.94 MiB",
+            "0.04.847.787 I sched_reserve:  CUDA_Host compute buffer size =    31.38 MiB",
+            "0.05.829.863 I reserve_compute_meta:        CPU compute buffer size =   101.27 MiB",
+            "0.06.603.222 I reserve_compute_meta:        CPU compute buffer size =   101.19 MiB"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "round6-discord-off-edge-closed-lazy-ctx131072-512-1-36-none-ub64-longFalse.json",
+      "sha256": "e979010c76701805af20a3545812c63f97f9c91c31f909c13fbbfdf75debd1a3",
+      "source_modified_utc": "2026-10-06T15:46:47.320601+00:00",
+      "observed_results": [
+        {
+          "margin_mib": 512,
+          "slots": 1,
+          "started_utc": "2026-10-06T15:46:39.792533+00:00",
+          "gpu_layers_requested": 36,
+          "attempt": 1,
+          "no_pinned": false,
+          "load_mode": "none",
+          "tag": "discord-off-edge-closed-lazy",
+          "lazy_mode": "on",
+          "ubatch": 64,
+          "context": 131072,
+          "adapter": "machine-spirit-v1.q8_0.gguf",
+          "pid": 15424,
+          "ready": false,
+          "load_seconds": 7.45,
+          "load_exit": 1,
+          "memory": {
+            "working_mib": 0.0,
+            "private_mib": 0.1,
+            "peak_working_mib": 2010.5,
+            "free_ram_mib": 2486.5
+          },
+          "gpu_used_free_util": "0, 3962, 1",
+          "exit_before_cleanup": 1,
+          "peak_sampled": {
+            "vram_mib": 3897,
+            "working_mib": 1833.2,
+            "private_mib": 6180.7,
+            "minimum_free_ram_mib": 658.0,
+            "samples": 11
+          },
+          "stopped_for_sustained_low_ram": true,
+          "safety_guard_mib": 512,
+          "minimum_fast_guard_free_ram_mib": 506.4,
+          "allocation_events": [
+            "0.02.012.190 I load_tensors: offloading output layer to GPU",
+            "0.02.012.198 I load_tensors: offloading 35 repeating layers to GPU",
+            "0.02.012.199 I load_tensors: offloaded 36/43 layers to GPU",
+            "0.02.012.204 I load_tensors:        CUDA0 model buffer size =  2121.71 MiB",
+            "0.02.012.206 I load_tensors:    CUDA_Host model buffer size =   731.61 MiB",
+            "0.02.012.208 I load_tensors:   CPU_Mapped model buffer size =  1512.00 MiB",
+            "0.04.998.627 I llama_adapter_lora_init_impl:  CUDA_Host LoRA buffer size =     9.10 MiB",
+            "0.04.999.867 I llama_adapter_lora_init_impl:      CUDA0 LoRA buffer size =    43.47 MiB",
+            "0.05.162.440 I llama_context:  CUDA_Host  output buffer size =     1.00 MiB",
+            "0.05.165.155 I llama_kv_cache:        CPU KV buffer size =   272.00 MiB",
+            "0.05.228.899 I llama_kv_cache:      CUDA0 KV buffer size =   816.00 MiB",
+            "0.05.255.162 I llama_kv_cache:        CPU KV buffer size =     4.78 MiB",
+            "0.05.256.402 I llama_kv_cache:      CUDA0 KV buffer size =    11.16 MiB",
+            "0.05.298.804 I sched_reserve:      CUDA0 compute buffer size =   822.81 MiB",
+            "0.05.298.811 I sched_reserve:  CUDA_Host compute buffer size =    21.25 MiB",
+            "0.05.331.532 I sched_reserve:      CUDA0 compute buffer size =   822.81 MiB",
+            "0.05.331.544 I sched_reserve:  CUDA_Host compute buffer size =    21.25 MiB",
+            "0.06.724.657 I reserve_compute_meta:        CPU compute buffer size =   101.27 MiB"
+          ],
+          "load_stderr_tail": [
+            "0.06.725.771 I clip_ctx: CLIP using CPU backend",
+            "0.06.725.953 I load_hparams: projector:          gemma4a",
+            "0.06.725.956 I load_hparams: n_embd:             1024",
+            "0.06.725.957 I load_hparams: n_head:             8",
+            "0.06.725.957 I load_hparams: n_ff:               4096",
+            "0.06.725.958 I load_hparams: n_layer:            12",
+            "0.06.725.958 I load_hparams: ffn_op:             gelu_quick",
+            "0.06.725.959 I load_hparams: projection_dim:     2560",
+            "0.06.725.961 I",
+            "--- audio hparams ---",
+            "0.06.725.962 I load_hparams: n_mel_bins:         128",
+            "0.06.725.962 I load_hparams: proj_stack_factor:  0",
+            "0.06.725.962 I load_hparams: audio_chunk_len:    0",
+            "0.06.725.963 I load_hparams: audio_sample_rate:  16000",
+            "0.06.725.963 I load_hparams: audio_n_fft:        512",
+            "0.06.725.963 I load_hparams: audio_window_len:   320",
+            "0.06.725.963 I load_hparams: audio_hop_len:      160",
+            "0.06.725.964 I",
+            "0.06.725.968 I load_hparams: model size:         533.83 MiB",
+            "0.06.725.969 I load_hparams: metadata size:      0.50 MiB"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "round6-discord-off-edge-closed-lazy-ctx32768-512-1-43-none.json",
+      "sha256": "36d9f0a7c43430d2313e86501ff568498142d43c6db8637d4078f3f42046d9c9",
+      "source_modified_utc": "2026-10-06T15:40:06.402694+00:00",
+      "observed_results": [
+        {
+          "margin_mib": 512,
+          "slots": 1,
+          "gpu_layers_requested": 43,
+          "attempt": 1,
+          "no_pinned": false,
+          "load_mode": "none",
+          "tag": "discord-off-edge-closed-lazy",
+          "lazy_mode": "on",
+          "context": 32768,
+          "adapter": "machine-spirit-v1.q8_0.gguf",
+          "pid": 28012,
+          "ready": true,
+          "load_seconds": 6.73,
+          "load_exit": null,
+          "memory": {
+            "working_mib": 1515.8,
+            "private_mib": 5530.6,
+            "peak_working_mib": 1515.8,
+            "free_ram_mib": 839.9
+          },
+          "gpu_used_free_util": "3207, 756, 11",
+          "actual_context": 32768,
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 180,
+            "prompt_ms": 402.786,
+            "prompt_per_token_ms": 2.2377,
+            "prompt_per_second": 446.88742905662065,
+            "predicted_n": 128,
+            "predicted_ms": 4276.377,
+            "predicted_per_token_ms": 33.672259842519686,
+            "predicted_per_second": 29.698036445336786
+          },
+          "output_chars": 466,
+          "memory_after": {
+            "working_mib": 1580.6,
+            "private_mib": 5463.4,
+            "peak_working_mib": 1580.6,
+            "free_ram_mib": 891.8
+          },
+          "peak_sampled": {
+            "vram_mib": 3209,
+            "working_mib": 1580.5,
+            "private_mib": 5588.7,
+            "minimum_free_ram_mib": 864.6,
+            "samples": 19
+          },
+          "stopped_for_sustained_low_ram": false,
+          "safety_guard_mib": 512,
+          "minimum_fast_guard_free_ram_mib": 774.8,
+          "allocation_events": [
+            "0.01.368.030 I load_tensors: offloading output layer to GPU",
+            "0.01.368.034 I load_tensors: offloading 41 repeating layers to GPU",
+            "0.01.368.035 I load_tensors: offloaded 43/43 layers to GPU",
+            "0.01.368.039 I load_tensors:        CUDA0 model buffer size =  2493.32 MiB",
+            "0.01.368.041 I load_tensors:    CUDA_Host model buffer size =   360.00 MiB",
+            "0.01.368.042 I load_tensors:   CPU_Mapped model buffer size =  1512.00 MiB",
+            "0.04.477.442 I llama_adapter_lora_init_impl:      CUDA0 LoRA buffer size =    52.57 MiB",
+            "0.04.616.160 I llama_context:  CUDA_Host  output buffer size =     1.00 MiB",
+            "0.04.618.279 I llama_kv_cache:      CUDA0 KV buffer size =   272.00 MiB",
+            "0.04.627.932 I llama_kv_cache:      CUDA0 KV buffer size =    21.25 MiB",
+            "0.04.665.213 I sched_reserve:      CUDA0 compute buffer size =   231.30 MiB",
+            "0.04.665.220 I sched_reserve:  CUDA_Host compute buffer size =    65.30 MiB",
+            "0.04.694.540 I sched_reserve:      CUDA0 compute buffer size =   231.30 MiB",
+            "0.04.694.547 I sched_reserve:  CUDA_Host compute buffer size =    65.30 MiB",
+            "0.05.727.330 I reserve_compute_meta:        CPU compute buffer size =   101.27 MiB",
+            "0.06.414.530 I reserve_compute_meta:        CPU compute buffer size =   101.19 MiB"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "round6-discord-off-edge-closed-lazy-ctx65536-512-1-39-none-longFalse.json",
+      "sha256": "18ad5c241bba2e363fa1b9844629ecb41e456ff93246c4e82e5c917697e88362",
+      "source_modified_utc": "2026-10-06T15:43:50.574986+00:00",
+      "observed_results": [
+        {
+          "margin_mib": 512,
+          "slots": 1,
+          "started_utc": "2026-10-06T15:43:37.798292+00:00",
+          "gpu_layers_requested": 39,
+          "attempt": 1,
+          "no_pinned": false,
+          "load_mode": "none",
+          "tag": "discord-off-edge-closed-lazy",
+          "lazy_mode": "on",
+          "context": 65536,
+          "adapter": "machine-spirit-v1.q8_0.gguf",
+          "pid": 27952,
+          "ready": true,
+          "load_seconds": 7.47,
+          "load_exit": null,
+          "memory": {
+            "working_mib": 1773.8,
+            "private_mib": 5982.0,
+            "peak_working_mib": 1773.8,
+            "free_ram_mib": 569.5
+          },
+          "gpu_used_free_util": "3395, 568, 0",
+          "actual_context": 65536,
+          "error_type": "ConnectionResetError",
+          "exit_before_cleanup": null,
+          "peak_sampled": {
+            "vram_mib": 3397,
+            "working_mib": 1837.1,
+            "private_mib": 6044.5,
+            "minimum_free_ram_mib": 548.7,
+            "samples": 20
+          },
+          "stopped_for_sustained_low_ram": true,
+          "safety_guard_mib": 512,
+          "minimum_fast_guard_free_ram_mib": 476.4,
+          "allocation_events": [
+            "0.02.127.171 I load_tensors: offloading output layer to GPU",
+            "0.02.127.177 I load_tensors: offloading 38 repeating layers to GPU",
+            "0.02.127.178 I load_tensors: offloaded 39/43 layers to GPU",
+            "0.02.127.185 I load_tensors:        CUDA0 model buffer size =  2278.67 MiB",
+            "0.02.127.187 I load_tensors:    CUDA_Host model buffer size =   574.66 MiB",
+            "0.02.127.189 I load_tensors:   CPU_Mapped model buffer size =  1512.00 MiB",
+            "0.05.161.434 I llama_adapter_lora_init_impl:  CUDA_Host LoRA buffer size =     5.13 MiB",
+            "0.05.161.863 I llama_adapter_lora_init_impl:      CUDA0 LoRA buffer size =    47.44 MiB",
+            "0.05.349.228 I llama_context:  CUDA_Host  output buffer size =     1.00 MiB",
+            "0.05.352.400 I llama_kv_cache:      CUDA0 KV buffer size =   544.00 MiB",
+            "0.05.371.729 I llama_kv_cache:        CPU KV buffer size =     4.25 MiB",
+            "0.05.373.511 I llama_kv_cache:      CUDA0 KV buffer size =    17.00 MiB",
+            "0.05.417.350 I sched_reserve:      CUDA0 compute buffer size =   372.97 MiB",
+            "0.05.417.355 I sched_reserve:  CUDA_Host compute buffer size =    97.30 MiB",
+            "0.05.465.920 I sched_reserve:      CUDA0 compute buffer size =   373.03 MiB",
+            "0.05.465.929 I sched_reserve:  CUDA_Host compute buffer size =    97.30 MiB",
+            "0.06.414.885 I reserve_compute_meta:        CPU compute buffer size =   101.27 MiB",
+            "0.07.236.057 I reserve_compute_meta:        CPU compute buffer size =   101.19 MiB"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "round6-discord-off-edge-closed-lazy-ctx65536-512-1-41-none-ub256-longFalse.json",
+      "sha256": "8fed990d24cd34a453f8d222b92f474c408a65c0e1b527c77518d71e7f22acf7",
+      "source_modified_utc": "2026-10-06T15:44:54.603073+00:00",
+      "observed_results": [
+        {
+          "margin_mib": 512,
+          "slots": 1,
+          "started_utc": "2026-10-06T15:44:41.487289+00:00",
+          "gpu_layers_requested": 41,
+          "attempt": 1,
+          "no_pinned": false,
+          "load_mode": "none",
+          "tag": "discord-off-edge-closed-lazy",
+          "lazy_mode": "on",
+          "ubatch": 256,
+          "context": 65536,
+          "adapter": "machine-spirit-v1.q8_0.gguf",
+          "pid": 1620,
+          "ready": true,
+          "load_seconds": 7.08,
+          "load_exit": null,
+          "memory": {
+            "working_mib": 1623.3,
+            "private_mib": 5877.8,
+            "peak_working_mib": 1623.3,
+            "free_ram_mib": 729.6
+          },
+          "gpu_used_free_util": "3443, 520, 3",
+          "actual_context": 65536,
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 180,
+            "prompt_ms": 395.536,
+            "prompt_per_token_ms": 2.1974222222222224,
+            "prompt_per_second": 455.07867804700453,
+            "predicted_n": 128,
+            "predicted_ms": 5313.543,
+            "predicted_per_token_ms": 41.838921259842515,
+            "predicted_per_second": 23.901189846398157
+          },
+          "output_chars": 487,
+          "memory_after": {
+            "working_mib": 1671.3,
+            "private_mib": 5808.2,
+            "peak_working_mib": 1687.2,
+            "free_ram_mib": 546.6
+          },
+          "exit_before_cleanup": null,
+          "peak_sampled": {
+            "vram_mib": 3445,
+            "working_mib": 1687.1,
+            "private_mib": 5940.6,
+            "minimum_free_ram_mib": 554.5,
+            "samples": 20
+          },
+          "stopped_for_sustained_low_ram": false,
+          "safety_guard_mib": 512,
+          "minimum_fast_guard_free_ram_mib": 533.3,
+          "allocation_events": [
+            "0.01.960.874 I load_tensors: offloading output layer to GPU",
+            "0.01.960.879 I load_tensors: offloading 40 repeating layers to GPU",
+            "0.01.960.880 I load_tensors: offloaded 41/43 layers to GPU",
+            "0.01.960.886 I load_tensors:        CUDA0 model buffer size =  2378.61 MiB",
+            "0.01.960.888 I load_tensors:    CUDA_Host model buffer size =   474.71 MiB",
+            "0.01.960.889 I load_tensors:   CPU_Mapped model buffer size =  1512.00 MiB",
+            "0.04.851.062 I llama_adapter_lora_init_impl:  CUDA_Host LoRA buffer size =     2.56 MiB",
+            "0.04.851.411 I llama_adapter_lora_init_impl:      CUDA0 LoRA buffer size =    50.01 MiB",
+            "0.05.032.236 I llama_context:  CUDA_Host  output buffer size =     1.00 MiB",
+            "0.05.034.720 I llama_kv_cache:      CUDA0 KV buffer size =   544.00 MiB",
+            "0.05.052.611 I llama_kv_cache:        CPU KV buffer size =     1.59 MiB",
+            "0.05.053.107 I llama_kv_cache:      CUDA0 KV buffer size =    14.34 MiB",
+            "0.05.077.650 I sched_reserve:      CUDA0 compute buffer size =   316.25 MiB",
+            "0.05.077.656 I sched_reserve:  CUDA_Host compute buffer size =    49.17 MiB",
+            "0.05.107.339 I sched_reserve:      CUDA0 compute buffer size =   316.25 MiB",
+            "0.05.107.350 I sched_reserve:  CUDA_Host compute buffer size =    49.17 MiB",
+            "0.06.059.015 I reserve_compute_meta:        CPU compute buffer size =   101.27 MiB",
+            "0.06.794.121 I reserve_compute_meta:        CPU compute buffer size =   101.19 MiB"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "round6-discord-off-edge-closed-lazy-ctx98304-512-1-40-none-ub64-longFalse.json",
+      "sha256": "d892e99c2cb54f79909faaf99f2c2c7a58fa3687a3601ca9e183ca56891be785",
+      "source_modified_utc": "2026-10-06T15:45:57.397574+00:00",
+      "observed_results": [
+        {
+          "margin_mib": 512,
+          "slots": 1,
+          "started_utc": "2026-10-06T15:45:45.277195+00:00",
+          "gpu_layers_requested": 40,
+          "attempt": 1,
+          "no_pinned": false,
+          "load_mode": "none",
+          "tag": "discord-off-edge-closed-lazy",
+          "lazy_mode": "on",
+          "ubatch": 64,
+          "context": 98304,
+          "adapter": "machine-spirit-v1.q8_0.gguf",
+          "pid": 26504,
+          "ready": true,
+          "load_seconds": 6.16,
+          "load_exit": null,
+          "memory": {
+            "working_mib": 1642.7,
+            "private_mib": 6203.7,
+            "peak_working_mib": 1642.7,
+            "free_ram_mib": 579.1
+          },
+          "gpu_used_free_util": "3749, 214, 0",
+          "actual_context": 98304,
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 180,
+            "prompt_ms": 578.077,
+            "prompt_per_token_ms": 3.2115388888888887,
+            "prompt_per_second": 311.3772040748897,
+            "predicted_n": 128,
+            "predicted_ms": 5097.162,
+            "predicted_per_token_ms": 40.13513385826772,
+            "predicted_per_second": 24.915825708502105
+          },
+          "output_chars": 480,
+          "memory_after": {
+            "working_mib": 1709.0,
+            "private_mib": 6137.3,
+            "peak_working_mib": 1709.0,
+            "free_ram_mib": 817.6
+          },
+          "exit_before_cleanup": null,
+          "peak_sampled": {
+            "vram_mib": 3751,
+            "working_mib": 1709.0,
+            "private_mib": 6268.7,
+            "minimum_free_ram_mib": 648.6,
+            "samples": 20
+          },
+          "stopped_for_sustained_low_ram": false,
+          "safety_guard_mib": 512,
+          "minimum_fast_guard_free_ram_mib": 568.5,
+          "allocation_events": [
+            "0.01.263.399 I load_tensors: offloading output layer to GPU",
+            "0.01.263.404 I load_tensors: offloading 39 repeating layers to GPU",
+            "0.01.263.404 I load_tensors: offloaded 40/43 layers to GPU",
+            "0.01.263.409 I load_tensors:        CUDA0 model buffer size =  2328.64 MiB",
+            "0.01.263.411 I load_tensors:    CUDA_Host model buffer size =   524.68 MiB",
+            "0.01.263.412 I load_tensors:   CPU_Mapped model buffer size =  1512.00 MiB",
+            "0.04.064.557 I llama_adapter_lora_init_impl:  CUDA_Host LoRA buffer size =     3.85 MiB",
+            "0.04.064.934 I llama_adapter_lora_init_impl:      CUDA0 LoRA buffer size =    48.73 MiB",
+            "0.04.251.485 I llama_context:  CUDA_Host  output buffer size =     1.00 MiB",
+            "0.04.256.120 I llama_kv_cache:      CUDA0 KV buffer size =   816.00 MiB",
+            "0.04.282.379 I llama_kv_cache:        CPU KV buffer size =     2.39 MiB",
+            "0.04.283.501 I llama_kv_cache:      CUDA0 KV buffer size =    13.55 MiB",
+            "0.04.344.816 I sched_reserve:      CUDA0 compute buffer size =   404.38 MiB",
+            "0.04.344.822 I sched_reserve:  CUDA_Host compute buffer size =    17.25 MiB",
+            "0.04.362.197 I sched_reserve:      CUDA0 compute buffer size =   404.38 MiB",
+            "0.04.362.203 I sched_reserve:  CUDA_Host compute buffer size =    17.25 MiB",
+            "0.05.274.422 I reserve_compute_meta:        CPU compute buffer size =   101.27 MiB",
+            "0.05.961.814 I reserve_compute_meta:        CPU compute buffer size =   101.19 MiB"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "round6-discord-off-lazy-ctx32768-512-1-33-mlock.json",
+      "sha256": "bf6f776ecd3b256c70fc58488e648b6e84385b729f7ad0dd91374400f135cfc5",
+      "source_modified_utc": "2026-10-06T15:36:56.286112+00:00",
+      "observed_results": [
+        {
+          "margin_mib": 512,
+          "slots": 1,
+          "gpu_layers_requested": 33,
+          "attempt": 1,
+          "no_pinned": false,
+          "load_mode": "mlock",
+          "tag": "discord-off-lazy",
+          "lazy_mode": "on",
+          "context": 32768,
+          "adapter": "machine-spirit-v1.q8_0.gguf",
+          "pid": 14288,
+          "ready": false,
+          "load_seconds": 2.75,
+          "load_exit": 1,
+          "memory": {
+            "working_mib": 0.0,
+            "private_mib": 0.1,
+            "peak_working_mib": 1270.7,
+            "free_ram_mib": 1457.4
+          },
+          "gpu_used_free_util": "0, 3962, 0",
+          "peak_sampled": {
+            "vram_mib": 79,
+            "working_mib": 1243.7,
+            "private_mib": 3303.0,
+            "minimum_free_ram_mib": 5.7,
+            "samples": 4
+          },
+          "stopped_for_sustained_low_ram": true,
+          "safety_guard_mib": 512,
+          "minimum_fast_guard_free_ram_mib": 426.9,
+          "allocation_events": [
+            "0.01.407.452 I load_tensors: loading model tensors, this can take a while... (load_mode = mlock)"
+          ],
+          "load_stderr_tail": [
+            "0.01.407.433 I print_info: model type            = E4B",
+            "0.01.407.435 I print_info: model params          = 7.46 B",
+            "0.01.407.436 I print_info: general.name          = Gemma-4 E4B IT (smart Q4_0, QAT-lossless)",
+            "0.01.407.439 I print_info: vocab type            = BPE",
+            "0.01.407.439 I print_info: n_vocab               = 262144",
+            "0.01.407.440 I print_info: n_merges              = 514906",
+            "0.01.407.441 I print_info: BOS token             = 2 '<bos>'",
+            "0.01.407.442 I print_info: EOS token             = 1 '<eos>'",
+            "0.01.407.443 I print_info: EOT token             = 106 '<turn|>'",
+            "0.01.407.444 I print_info: UNK token             = 3 '<unk>'",
+            "0.01.407.444 I print_info: PAD token             = 0 '<pad>'",
+            "0.01.407.445 I print_info: MASK token            = 4 '<mask>'",
+            "0.01.407.445 I print_info: LF token              = 107 '",
+            "'",
+            "0.01.407.447 I print_info: EOG token             = 1 '<eos>'",
+            "0.01.407.448 I print_info: EOG token             = 50 '<|tool_response>'",
+            "0.01.407.449 I print_info: EOG token             = 106 '<turn|>'",
+            "0.01.407.450 I print_info: max token length      = 93",
+            "0.01.407.452 I load_tensors: loading model tensors, this can take a while... (load_mode = mlock)",
+            "0.01.407.751 I add: tensor per_layer_token_embd.weight (size = 1512 MiB) lazy read enabled"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "round6-discord-off-lazy-ctx32768-512-1-33-mmap+mlock.json",
+      "sha256": "38f9d1b298d9ad793dc13bda051b4f481c919f3513af34e95070b3d83706559a",
+      "source_modified_utc": "2026-10-06T15:36:37.151727+00:00",
+      "observed_results": [
+        {
+          "margin_mib": 512,
+          "slots": 1,
+          "gpu_layers_requested": 33,
+          "attempt": 1,
+          "no_pinned": false,
+          "load_mode": "mmap+mlock",
+          "tag": "discord-off-lazy",
+          "lazy_mode": "on",
+          "context": 32768,
+          "adapter": "machine-spirit-v1.q8_0.gguf",
+          "pid": 26564,
+          "ready": false,
+          "load_seconds": 4.36,
+          "load_exit": 1,
+          "memory": {
+            "working_mib": 0.0,
+            "private_mib": 0.1,
+            "peak_working_mib": 389.7,
+            "free_ram_mib": 1170.9
+          },
+          "gpu_used_free_util": "0, 3962, 0",
+          "peak_sampled": {
+            "vram_mib": 79,
+            "working_mib": 339.9,
+            "private_mib": 383.9,
+            "minimum_free_ram_mib": 905.2,
+            "samples": 6
+          },
+          "stopped_for_sustained_low_ram": true,
+          "safety_guard_mib": 512,
+          "minimum_fast_guard_free_ram_mib": 498.9,
+          "allocation_events": [
+            "0.01.881.472 I load_tensors: loading model tensors, this can take a while... (load_mode = mmap+mlock)"
+          ],
+          "load_stderr_tail": [
+            "0.01.881.462 I print_info: model type            = E4B",
+            "0.01.881.463 I print_info: model params          = 7.46 B",
+            "0.01.881.463 I print_info: general.name          = Gemma-4 E4B IT (smart Q4_0, QAT-lossless)",
+            "0.01.881.464 I print_info: vocab type            = BPE",
+            "0.01.881.465 I print_info: n_vocab               = 262144",
+            "0.01.881.465 I print_info: n_merges              = 514906",
+            "0.01.881.465 I print_info: BOS token             = 2 '<bos>'",
+            "0.01.881.466 I print_info: EOS token             = 1 '<eos>'",
+            "0.01.881.467 I print_info: EOT token             = 106 '<turn|>'",
+            "0.01.881.467 I print_info: UNK token             = 3 '<unk>'",
+            "0.01.881.467 I print_info: PAD token             = 0 '<pad>'",
+            "0.01.881.468 I print_info: MASK token            = 4 '<mask>'",
+            "0.01.881.468 I print_info: LF token              = 107 '",
+            "'",
+            "0.01.881.469 I print_info: EOG token             = 1 '<eos>'",
+            "0.01.881.470 I print_info: EOG token             = 50 '<|tool_response>'",
+            "0.01.881.470 I print_info: EOG token             = 106 '<turn|>'",
+            "0.01.881.471 I print_info: max token length      = 93",
+            "0.01.881.472 I load_tensors: loading model tensors, this can take a while... (load_mode = mmap+mlock)",
+            "0.01.881.647 I add: tensor per_layer_token_embd.weight (size = 1512 MiB) lazy read enabled"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "round6-discord-off-lazy-ctx32768-512-1-33-none.json",
+      "sha256": "18542d57c41097cab0b94b9f44f65ab96ac885d37557f6463bca58b4e09c41eb",
+      "source_modified_utc": "2026-10-06T15:38:10.038310+00:00",
+      "observed_results": [
+        {
+          "margin_mib": 512,
+          "slots": 1,
+          "gpu_layers_requested": 33,
+          "attempt": 1,
+          "no_pinned": false,
+          "load_mode": "none",
+          "tag": "discord-off-lazy",
+          "lazy_mode": "on",
+          "context": 32768,
+          "adapter": "machine-spirit-v1.q8_0.gguf",
+          "pid": 26588,
+          "ready": false,
+          "load_seconds": 2.45,
+          "load_exit": 1,
+          "memory": {
+            "working_mib": 0.0,
+            "private_mib": 0.1,
+            "peak_working_mib": 1270.9,
+            "free_ram_mib": 1442.9
+          },
+          "gpu_used_free_util": "0, 3962, 0",
+          "peak_sampled": {
+            "vram_mib": 2051,
+            "working_mib": 831.9,
+            "private_mib": 3303.4,
+            "minimum_free_ram_mib": 212.1,
+            "samples": 4
+          },
+          "stopped_for_sustained_low_ram": true,
+          "safety_guard_mib": 512,
+          "minimum_fast_guard_free_ram_mib": 495.5,
+          "allocation_events": [],
+          "load_stderr_tail": [
+            "0.01.493.093 I print_info: model type            = E4B",
+            "0.01.493.094 I print_info: model params          = 7.46 B",
+            "0.01.493.095 I print_info: general.name          = Gemma-4 E4B IT (smart Q4_0, QAT-lossless)",
+            "0.01.493.095 I print_info: vocab type            = BPE",
+            "0.01.493.096 I print_info: n_vocab               = 262144",
+            "0.01.493.096 I print_info: n_merges              = 514906",
+            "0.01.493.096 I print_info: BOS token             = 2 '<bos>'",
+            "0.01.493.097 I print_info: EOS token             = 1 '<eos>'",
+            "0.01.493.097 I print_info: EOT token             = 106 '<turn|>'",
+            "0.01.493.097 I print_info: UNK token             = 3 '<unk>'",
+            "0.01.493.098 I print_info: PAD token             = 0 '<pad>'",
+            "0.01.493.098 I print_info: MASK token            = 4 '<mask>'",
+            "0.01.493.099 I print_info: LF token              = 107 '",
+            "'",
+            "0.01.493.099 I print_info: EOG token             = 1 '<eos>'",
+            "0.01.493.100 I print_info: EOG token             = 50 '<|tool_response>'",
+            "0.01.493.100 I print_info: EOG token             = 106 '<turn|>'",
+            "0.01.493.101 I print_info: max token length      = 93",
+            "0.01.493.102 I load_tensors: loading model tensors, this can take a while... (load_mode = none)",
+            "0.01.495.597 I add: tensor per_layer_token_embd.weight (size = 1512 MiB) lazy read enabled"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "round6-discord-off-lazy-ctx32768-512-1-43-none.json",
+      "sha256": "98a20bc510d8ef065417146c1b416aa65872d42145a5aba696e6f414aab9e540",
+      "source_modified_utc": "2026-10-06T15:38:32.280346+00:00",
+      "observed_results": [
+        {
+          "margin_mib": 512,
+          "slots": 1,
+          "gpu_layers_requested": 43,
+          "attempt": 1,
+          "no_pinned": false,
+          "load_mode": "none",
+          "tag": "discord-off-lazy",
+          "lazy_mode": "on",
+          "context": 32768,
+          "adapter": "machine-spirit-v1.q8_0.gguf",
+          "pid": 27480,
+          "ready": false,
+          "load_seconds": 1.66,
+          "load_exit": 1,
+          "memory": {
+            "working_mib": 0.0,
+            "private_mib": 0.1,
+            "peak_working_mib": 368.3,
+            "free_ram_mib": 858.4
+          },
+          "gpu_used_free_util": "0, 3962, 0",
+          "peak_sampled": {
+            "vram_mib": 79,
+            "working_mib": 296.7,
+            "private_mib": 341.6,
+            "minimum_free_ram_mib": 620.0,
+            "samples": 2
+          },
+          "stopped_for_sustained_low_ram": true,
+          "safety_guard_mib": 512,
+          "minimum_fast_guard_free_ram_mib": 502.0,
+          "allocation_events": [],
+          "load_stderr_tail": [
+            "0.01.233.532 I llama_model_loader: - kv  33:            tokenizer.ggml.unknown_token_id u32              = 3",
+            "0.01.233.533 I llama_model_loader: - kv  34:            tokenizer.ggml.padding_token_id u32              = 0",
+            "0.01.233.534 I llama_model_loader: - kv  35:               tokenizer.ggml.mask_token_id u32              = 4",
+            "0.01.233.537 I llama_model_loader: - kv  36:            tokenizer.ggml.add_space_prefix bool             = false",
+            "0.01.233.538 I llama_model_loader: - kv  37:               tokenizer.ggml.add_bos_token bool             = true",
+            "0.01.233.538 I llama_model_loader: - kv  38:                          general.file_type u32              = 2",
+            "0.01.233.540 I llama_model_loader: - kv  39:                tokenizer.ggml.eot_token_id u32              = 106",
+            "0.01.233.541 I llama_model_loader: - kv  40:                       general.quantized_by str              = unsloth",
+            "0.01.233.542 I llama_model_loader: - kv  41:                           general.basename str              = gemma-4-E4B-it",
+            "0.01.233.550 I llama_model_loader: - kv  42:                               general.name str              = Gemma-4 E4B IT (smart Q4_0, QAT-lossl...",
+            "0.01.233.550 I llama_model_loader: - kv  43:                           general.finetune str              = qat-it",
+            "0.01.233.552 I llama_model_loader: - kv  44:                            general.license str              = gemma",
+            "0.01.233.552 I llama_model_loader: - kv  45:               general.quantization_version u32              = 2",
+            "0.01.233.578 I llama_model_loader: - kv  46:                    tokenizer.chat_template str              = {%- macro format_parameters(propertie...",
+            "0.01.233.620 I llama_model_loader: - type  f32:  321 tensors",
+            "0.01.233.634 I llama_model_loader: - type q4_0:  345 tensors",
+            "0.01.233.664 I print_info: file format = GGUF V3 (latest)",
+            "0.01.233.674 I print_info: file type   = Q4_0",
+            "0.01.233.699 I print_info: file size   = 3.91 GiB (4.50 BPW)",
+            "0.01.233.976 I llama_prepare_model_devices: using device CUDA0 (NVIDIA GeForce RTX 3050 Ti Laptop GPU) (0000:01:00.0) - 3289 MiB free"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "round6-discord-off-edge-closed-lazy-all-layers-ctx98304-512-1-43-none-ub64-longTrue.json",
+      "sha256": "cad12f8c55c8b1a1e3d7e8fe63da5aaaad2749f938d455f902de04fb83e970a6",
+      "source_modified_utc": "2026-10-06T16:01:09.799731+00:00",
+      "observed_results": [
+        {
+          "margin_mib": 512,
+          "slots": 1,
+          "started_utc": "2026-10-06T15:57:25.421173+00:00",
+          "gpu_layers_requested": 43,
+          "attempt": 1,
+          "no_pinned": false,
+          "load_mode": "none",
+          "tag": "discord-off-edge-closed-lazy-all-layers",
+          "lazy_mode": "on",
+          "ubatch": 64,
+          "op_offload": true,
+          "context": 98304,
+          "adapter": "machine-spirit-v1.q8_0.gguf",
+          "pid": 27352,
+          "ready": true,
+          "load_seconds": 7.14,
+          "load_exit": null,
+          "memory": {
+            "working_mib": 1470.8,
+            "private_mib": 6202.0,
+            "peak_working_mib": 1470.8,
+            "free_ram_mib": 596.7
+          },
+          "gpu_used_free_util": "3921, 42, 0",
+          "actual_context": 98304,
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 180,
+            "prompt_ms": 443.216,
+            "prompt_per_token_ms": 2.462311111111111,
+            "prompt_per_second": 406.12252265261185,
+            "predicted_n": 128,
+            "predicted_ms": 4329.989,
+            "predicted_per_token_ms": 34.09440157480314,
+            "predicted_per_second": 29.330328552797713
+          },
+          "output_chars": 465,
+          "memory_after": {
+            "working_mib": 1538.0,
+            "private_mib": 6134.8,
+            "peak_working_mib": 1538.0,
+            "free_ram_mib": 733.2
+          },
+          "long_input_tokens_requested": 98048,
+          "long_distinct_input_tokens": 192,
+          "error_type": "ConnectionResetError",
+          "exit_before_cleanup": null,
+          "peak_sampled": {
+            "vram_mib": 3951,
+            "working_mib": 1577.3,
+            "private_mib": 6262.5,
+            "minimum_free_ram_mib": 538.1,
+            "samples": 397
+          },
+          "stopped_for_sustained_low_ram": true,
+          "safety_guard_mib": 512,
+          "minimum_fast_guard_free_ram_mib": 510.2,
+          "allocation_events": [
+            "0.01.930.677 I load_tensors: offloading output layer to GPU",
+            "0.01.930.684 I load_tensors: offloading 41 repeating layers to GPU",
+            "0.01.930.685 I load_tensors: offloaded 43/43 layers to GPU",
+            "0.01.930.692 I load_tensors:        CUDA0 model buffer size =  2493.32 MiB",
+            "0.01.930.694 I load_tensors:    CUDA_Host model buffer size =   360.00 MiB",
+            "0.01.930.695 I load_tensors:   CPU_Mapped model buffer size =  1512.00 MiB",
+            "0.04.930.596 I llama_adapter_lora_init_impl:      CUDA0 LoRA buffer size =    52.57 MiB",
+            "0.05.122.991 I llama_context:  CUDA_Host  output buffer size =     1.00 MiB",
+            "0.05.127.669 I llama_kv_cache:      CUDA0 KV buffer size =   816.00 MiB",
+            "0.05.154.213 I llama_kv_cache:      CUDA0 KV buffer size =    15.94 MiB",
+            "0.05.179.316 I sched_reserve:      CUDA0 compute buffer size =   406.00 MiB",
+            "0.05.179.321 I sched_reserve:  CUDA_Host compute buffer size =    17.25 MiB",
+            "0.05.234.249 I sched_reserve:      CUDA0 compute buffer size =   406.00 MiB",
+            "0.05.234.253 I sched_reserve:  CUDA_Host compute buffer size =    17.25 MiB",
+            "0.06.165.206 I reserve_compute_meta:        CPU compute buffer size =   101.27 MiB",
+            "0.06.839.259 I reserve_compute_meta:        CPU compute buffer size =   101.19 MiB"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "round6-discord-off-edge-closed-lazy-ctx98304-512-1-40-none-ub64-longTrue.json",
+      "sha256": "c8af3069c9d2816e70f98868857831aeaf8bfc7611dca0640a73191bd33672cc",
+      "source_modified_utc": "2026-10-06T15:54:49.771393+00:00",
+      "observed_results": [
+        {
+          "margin_mib": 512,
+          "slots": 1,
+          "started_utc": "2026-10-06T15:54:36.416359+00:00",
+          "gpu_layers_requested": 40,
+          "attempt": 1,
+          "no_pinned": false,
+          "load_mode": "none",
+          "tag": "discord-off-edge-closed-lazy",
+          "lazy_mode": "on",
+          "ubatch": 64,
+          "op_offload": true,
+          "context": 98304,
+          "adapter": "machine-spirit-v1.q8_0.gguf",
+          "pid": 25972,
+          "ready": true,
+          "load_seconds": 7.25,
+          "load_exit": null,
+          "memory": {
+            "working_mib": 1642.4,
+            "private_mib": 6202.8,
+            "peak_working_mib": 1642.4,
+            "free_ram_mib": 617.0
+          },
+          "gpu_used_free_util": "3749, 214, 18",
+          "actual_context": 98304,
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 180,
+            "prompt_ms": 549.745,
+            "prompt_per_token_ms": 3.0541388888888887,
+            "prompt_per_second": 327.424533192662,
+            "predicted_n": 128,
+            "predicted_ms": 5128.448,
+            "predicted_per_token_ms": 40.38148031496063,
+            "predicted_per_second": 24.76382718514451
+          },
+          "output_chars": 480,
+          "memory_after": {
+            "working_mib": 1708.8,
+            "private_mib": 6134.6,
+            "peak_working_mib": 1708.8,
+            "free_ram_mib": 541.8
+          },
+          "long_input_tokens_requested": 98048,
+          "long_distinct_input_tokens": 192,
+          "error_type": "ConnectionResetError",
+          "exit_before_cleanup": null,
+          "peak_sampled": {
+            "vram_mib": 3751,
+            "working_mib": 1721.9,
+            "private_mib": 6268.1,
+            "minimum_free_ram_mib": 520.7,
+            "samples": 21
+          },
+          "stopped_for_sustained_low_ram": true,
+          "safety_guard_mib": 512,
+          "minimum_fast_guard_free_ram_mib": 498.8,
+          "allocation_events": [
+            "0.01.914.315 I load_tensors: offloading output layer to GPU",
+            "0.01.914.319 I load_tensors: offloading 39 repeating layers to GPU",
+            "0.01.914.320 I load_tensors: offloaded 40/43 layers to GPU",
+            "0.01.914.325 I load_tensors:        CUDA0 model buffer size =  2328.64 MiB",
+            "0.01.914.326 I load_tensors:    CUDA_Host model buffer size =   524.68 MiB",
+            "0.01.914.327 I load_tensors:   CPU_Mapped model buffer size =  1512.00 MiB",
+            "0.04.950.539 I llama_adapter_lora_init_impl:  CUDA_Host LoRA buffer size =     3.85 MiB",
+            "0.04.951.494 I llama_adapter_lora_init_impl:      CUDA0 LoRA buffer size =    48.73 MiB",
+            "0.05.175.890 I llama_context:  CUDA_Host  output buffer size =     1.00 MiB",
+            "0.05.179.245 I llama_kv_cache:      CUDA0 KV buffer size =   816.00 MiB",
+            "0.05.205.348 I llama_kv_cache:        CPU KV buffer size =     2.39 MiB",
+            "0.05.206.028 I llama_kv_cache:      CUDA0 KV buffer size =    13.55 MiB",
+            "0.05.235.152 I sched_reserve:      CUDA0 compute buffer size =   404.38 MiB",
+            "0.05.235.159 I sched_reserve:  CUDA_Host compute buffer size =    17.25 MiB",
+            "0.05.268.353 I sched_reserve:      CUDA0 compute buffer size =   404.38 MiB",
+            "0.05.268.359 I sched_reserve:  CUDA_Host compute buffer size =    17.25 MiB",
+            "0.06.239.285 I reserve_compute_meta:        CPU compute buffer size =   101.27 MiB",
+            "0.06.941.885 I reserve_compute_meta:        CPU compute buffer size =   101.19 MiB"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "round6-discord-off-edge-closed-lazy-q4-ctx131072-512-1-43-none-ub64-kvq4_0-longTrue.json",
+      "sha256": "533606289f54ae2699ae421ca484cea91b6ca2ed7da7f83eb6a64365995f9e27",
+      "source_modified_utc": "2026-10-06T16:03:25.338784+00:00",
+      "observed_results": [
+        {
+          "margin_mib": 512,
+          "slots": 1,
+          "started_utc": "2026-10-06T16:03:17.906750+00:00",
+          "gpu_layers_requested": 43,
+          "attempt": 1,
+          "no_pinned": false,
+          "load_mode": "none",
+          "tag": "discord-off-edge-closed-lazy-q4",
+          "lazy_mode": "on",
+          "ubatch": 64,
+          "op_offload": true,
+          "kv_type": "q4_0",
+          "context": 131072,
+          "adapter": "machine-spirit-v1.q8_0.gguf",
+          "pid": 2340,
+          "ready": false,
+          "load_seconds": 7.36,
+          "load_exit": 1,
+          "memory": {
+            "working_mib": 0.0,
+            "private_mib": 0.1,
+            "peak_working_mib": 879.7,
+            "free_ram_mib": 1739.0
+          },
+          "gpu_used_free_util": "0, 3962, 1",
+          "exit_before_cleanup": 1,
+          "peak_sampled": {
+            "vram_mib": 3779,
+            "working_mib": 840.3,
+            "private_mib": 4915.7,
+            "minimum_free_ram_mib": 556.3,
+            "samples": 10
+          },
+          "stopped_for_sustained_low_ram": true,
+          "safety_guard_mib": 512,
+          "minimum_fast_guard_free_ram_mib": 500.8,
+          "allocation_events": [
+            "0.02.573.465 I load_tensors: offloading output layer to GPU",
+            "0.02.573.469 I load_tensors: offloading 41 repeating layers to GPU",
+            "0.02.573.469 I load_tensors: offloaded 43/43 layers to GPU",
+            "0.02.573.477 I load_tensors:        CUDA0 model buffer size =  2493.32 MiB",
+            "0.02.573.479 I load_tensors:    CUDA_Host model buffer size =   360.00 MiB",
+            "0.02.573.481 I load_tensors:   CPU_Mapped model buffer size =  1512.00 MiB",
+            "0.06.363.969 I llama_adapter_lora_init_impl:      CUDA0 LoRA buffer size =    52.57 MiB",
+            "0.06.617.962 I llama_context:  CUDA_Host  output buffer size =     1.00 MiB",
+            "0.06.625.975 I llama_kv_cache:      CUDA0 KV buffer size =   576.00 MiB",
+            "0.06.645.420 I llama_kv_cache:      CUDA0 KV buffer size =     8.44 MiB",
+            "0.06.693.603 I sched_reserve:      CUDA0 compute buffer size =   538.00 MiB",
+            "0.06.693.611 I sched_reserve:  CUDA_Host compute buffer size =    21.25 MiB",
+            "0.06.733.294 I sched_reserve:      CUDA0 compute buffer size =   538.00 MiB",
+            "0.06.733.306 I sched_reserve:  CUDA_Host compute buffer size =    21.25 MiB"
+          ],
+          "load_stderr_tail": [
+            "0.06.645.420 I llama_kv_cache:      CUDA0 KV buffer size =     8.44 MiB",
+            "0.06.646.603 I llama_kv_cache: size =    8.44 MiB (   768 cells,  20 layers,  1/1 seqs), K (q4_0):    4.22 MiB, V (q4_0):    4.22 MiB",
+            "0.06.646.611 I llama_kv_cache: attn_rot_k = 1, n_embd_head_k_all = 256",
+            "0.06.646.612 I llama_kv_cache: attn_rot_v = 1, n_embd_head_k_all = 256",
+            "0.06.646.722 I sched_reserve: reserving ...",
+            "0.06.649.183 I resolve_fused_ops: resolving fused DeepSeek V4 HC support:",
+            "0.06.653.101 I resolve_fused_ops: fused DeepSeek V4 HC pre enabled",
+            "0.06.655.288 I resolve_fused_ops: fused DeepSeek V4 HC comb enabled",
+            "0.06.656.723 I resolve_fused_ops: fused DeepSeek V4 HC post enabled",
+            "0.06.693.603 I sched_reserve:      CUDA0 compute buffer size =   538.00 MiB",
+            "0.06.693.611 I sched_reserve:  CUDA_Host compute buffer size =    21.25 MiB",
+            "0.06.693.616 I sched_reserve: graph: nodes = 2259, splits = 2, input objects = 5, input tensors = 14",
+            "0.06.693.618 I sched_reserve: reserve took 46.88 ms, sched copies = 1",
+            "0.06.694.172 I cmn          init: llama threadpool init, n_threads = 4",
+            "0.06.694.231 I cmn  common_init_: warming up the model with an empty run - please wait ... (--no-warmup to disable)",
+            "0.06.694.710 I sched_reserve: reserving ...",
+            "0.06.733.294 I sched_reserve:      CUDA0 compute buffer size =   538.00 MiB",
+            "0.06.733.306 I sched_reserve:  CUDA_Host compute buffer size =    21.25 MiB",
+            "0.06.733.312 I sched_reserve: graph: nodes = 3291, splits = 2, input objects = 5, input tensors = 14",
+            "0.06.733.314 I sched_reserve: reserve took 38.59 ms, sched copies = 1"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "round6-discord-off-edge-closed-lazy-q4-floor256-ctx131072-512-1-43-none-ub64-kvq4_0-longTrue.json",
+      "sha256": "a90b34fee127a9eace5e13b3254fe94a03dc29070eeed5594de08459e82ed75c",
+      "source_modified_utc": "2026-10-06T16:06:39.612812+00:00",
+      "observed_results": [
+        {
+          "margin_mib": 512,
+          "slots": 1,
+          "started_utc": "2026-10-06T16:06:26.783128+00:00",
+          "gpu_layers_requested": 43,
+          "attempt": 1,
+          "no_pinned": false,
+          "load_mode": "none",
+          "tag": "discord-off-edge-closed-lazy-q4-floor256",
+          "lazy_mode": "on",
+          "ubatch": 64,
+          "op_offload": true,
+          "kv_type": "q4_0",
+          "context": 131072,
+          "adapter": "machine-spirit-v1.q8_0.gguf",
+          "pid": 18764,
+          "ready": false,
+          "load_seconds": 12.3,
+          "load_exit": 1,
+          "memory": {
+            "working_mib": 0.0,
+            "private_mib": 0.1,
+            "peak_working_mib": 1373.1,
+            "free_ram_mib": 1699.6
+          },
+          "gpu_used_free_util": "0, 3962, 0",
+          "exit_before_cleanup": 1,
+          "peak_sampled": {
+            "vram_mib": 3779,
+            "working_mib": 1247.6,
+            "private_mib": 5798.2,
+            "minimum_free_ram_mib": 625.9,
+            "samples": 16
+          },
+          "stopped_for_sustained_low_ram": true,
+          "safety_guard_mib": 256,
+          "abort_reasons": [
+            "windows_low_memory"
+          ],
+          "windows_low_memory_notification_checked": true,
+          "minimum_fast_guard_free_ram_mib": 484.6,
+          "allocation_events": [
+            "0.01.981.331 I load_tensors: offloading output layer to GPU",
+            "0.01.981.337 I load_tensors: offloading 41 repeating layers to GPU",
+            "0.01.981.337 I load_tensors: offloaded 43/43 layers to GPU",
+            "0.01.981.342 I load_tensors:        CUDA0 model buffer size =  2493.32 MiB",
+            "0.01.981.345 I load_tensors:    CUDA_Host model buffer size =   360.00 MiB",
+            "0.01.981.346 I load_tensors:   CPU_Mapped model buffer size =  1512.00 MiB",
+            "0.05.598.545 I llama_adapter_lora_init_impl:      CUDA0 LoRA buffer size =    52.57 MiB",
+            "0.05.937.904 I llama_context:  CUDA_Host  output buffer size =     1.00 MiB",
+            "0.05.941.743 I llama_kv_cache:      CUDA0 KV buffer size =   576.00 MiB",
+            "0.05.966.267 I llama_kv_cache:      CUDA0 KV buffer size =     8.44 MiB",
+            "0.06.004.695 I sched_reserve:      CUDA0 compute buffer size =   538.00 MiB",
+            "0.06.004.701 I sched_reserve:  CUDA_Host compute buffer size =    21.25 MiB",
+            "0.06.031.621 I sched_reserve:      CUDA0 compute buffer size =   538.00 MiB",
+            "0.06.031.626 I sched_reserve:  CUDA_Host compute buffer size =    21.25 MiB",
+            "0.09.335.496 I reserve_compute_meta:        CPU compute buffer size =   101.27 MiB"
+          ],
+          "load_stderr_tail": [
+            "0.09.335.850 I clip_ctx: CLIP using CPU backend",
+            "0.09.335.938 I load_hparams: projector:          gemma4a",
+            "0.09.335.939 I load_hparams: n_embd:             1024",
+            "0.09.335.940 I load_hparams: n_head:             8",
+            "0.09.335.940 I load_hparams: n_ff:               4096",
+            "0.09.335.940 I load_hparams: n_layer:            12",
+            "0.09.335.940 I load_hparams: ffn_op:             gelu_quick",
+            "0.09.335.941 I load_hparams: projection_dim:     2560",
+            "0.09.335.941 I",
+            "--- audio hparams ---",
+            "0.09.335.942 I load_hparams: n_mel_bins:         128",
+            "0.09.335.942 I load_hparams: proj_stack_factor:  0",
+            "0.09.335.942 I load_hparams: audio_chunk_len:    0",
+            "0.09.335.943 I load_hparams: audio_sample_rate:  16000",
+            "0.09.335.943 I load_hparams: audio_n_fft:        512",
+            "0.09.335.943 I load_hparams: audio_window_len:   320",
+            "0.09.335.943 I load_hparams: audio_hop_len:      160",
+            "0.09.335.943 I",
+            "0.09.335.945 I load_hparams: model size:         533.83 MiB",
+            "0.09.335.946 I load_hparams: metadata size:      0.50 MiB"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "round6-discord-off-text-only-q4-embedgpu-ctx131072-512-1-43-none-ub64-kvq4_0-longTrue.json",
+      "sha256": "32f24ff6f0ad6d005f4fd567631578f9022a1a93321695cc2991fe895aa6f03e",
+      "source_modified_utc": "2026-10-06T16:14:36.990505+00:00",
+      "observed_results": [
+        {
+          "margin_mib": 512,
+          "slots": 1,
+          "started_utc": "2026-10-06T16:13:49.253368+00:00",
+          "gpu_layers_requested": 43,
+          "attempt": 1,
+          "no_pinned": false,
+          "load_mode": "none",
+          "tag": "discord-off-text-only-q4-embedgpu",
+          "lazy_mode": "on",
+          "ubatch": 64,
+          "op_offload": true,
+          "kv_type": "q4_0",
+          "projector_enabled": false,
+          "input_embedding_gpu": true,
+          "context": 131072,
+          "adapter": "machine-spirit-v1.q8_0.gguf",
+          "pid": 18280,
+          "ready": true,
+          "load_seconds": 7.95,
+          "load_exit": null,
+          "memory": {
+            "working_mib": 881.6,
+            "private_mib": 5011.0,
+            "peak_working_mib": 881.6,
+            "free_ram_mib": 600.8
+          },
+          "gpu_used_free_util": "3921, 42, 19",
+          "actual_context": 131072,
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 180,
+            "prompt_ms": 553.007,
+            "prompt_per_token_ms": 3.0722611111111107,
+            "prompt_per_second": 325.4931673559286,
+            "predicted_n": 128,
+            "predicted_ms": 4941.845,
+            "predicted_per_token_ms": 38.91216535433071,
+            "predicted_per_second": 25.698903951864132
+          },
+          "output_chars": 478,
+          "memory_after": {
+            "working_mib": 882.0,
+            "private_mib": 4940.5,
+            "peak_working_mib": 942.8,
+            "free_ram_mib": 627.9
+          },
+          "long_input_tokens_requested": 130816,
+          "long_distinct_input_tokens": 194,
+          "error_type": "ConnectionResetError",
+          "exit_before_cleanup": null,
+          "peak_sampled": {
+            "vram_mib": 3951,
+            "working_mib": 942.5,
+            "private_mib": 5074.2,
+            "minimum_free_ram_mib": 548.8,
+            "samples": 80
+          },
+          "stopped_for_sustained_low_ram": true,
+          "safety_guard_mib": 256,
+          "abort_reasons": [
+            "windows_low_memory"
+          ],
+          "windows_low_memory_notification_checked": true,
+          "minimum_fast_guard_free_ram_mib": 484.2,
+          "allocation_events": [
+            "0.02.097.598 I load_tensors: offloading output layer to GPU",
+            "0.02.097.604 I load_tensors: offloading 41 repeating layers to GPU",
+            "0.02.097.604 I load_tensors: offloaded 43/43 layers to GPU",
+            "0.02.097.610 I load_tensors:        CUDA0 model buffer size =  2853.32 MiB",
+            "0.02.097.611 I load_tensors:   CPU_Mapped model buffer size =  1512.00 MiB",
+            "0.06.284.900 I llama_adapter_lora_init_impl:      CUDA0 LoRA buffer size =    52.57 MiB",
+            "0.06.513.144 I llama_context:  CUDA_Host  output buffer size =     1.00 MiB",
+            "0.06.517.554 I llama_kv_cache:      CUDA0 KV buffer size =   576.00 MiB",
+            "0.06.537.383 I llama_kv_cache:      CUDA0 KV buffer size =     8.44 MiB",
+            "0.06.559.309 I sched_reserve:      CUDA0 compute buffer size =   538.00 MiB",
+            "0.06.559.313 I sched_reserve:  CUDA_Host compute buffer size =    20.63 MiB",
+            "0.06.626.375 I sched_reserve:      CUDA0 compute buffer size =   538.00 MiB",
+            "0.06.626.382 I sched_reserve:  CUDA_Host compute buffer size =    20.63 MiB"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "round6-discord-off-text-only-q4-embedgpu-nopinned-64k-ctx65536-512-1-43-none-ub64-kvq4_0-longTrue.json",
+      "sha256": "f596a82686d72dbc9c3b44e05ce583944122d500d91bd3629007f9eb0d71798e",
+      "source_modified_utc": "2026-10-06T16:22:53.087980+00:00",
+      "observed_results": [
+        {
+          "margin_mib": 512,
+          "slots": 1,
+          "started_utc": "2026-10-06T16:22:48.608803+00:00",
+          "gpu_layers_requested": 43,
+          "attempt": 1,
+          "no_pinned": true,
+          "load_mode": "none",
+          "tag": "discord-off-text-only-q4-embedgpu-nopinned-64k",
+          "lazy_mode": "on",
+          "ubatch": 64,
+          "op_offload": true,
+          "kv_type": "q4_0",
+          "projector_enabled": false,
+          "input_embedding_gpu": true,
+          "context": 65536,
+          "adapter": "machine-spirit-v1.q8_0.gguf",
+          "pid": 5048,
+          "ready": false,
+          "load_seconds": 4.38,
+          "load_exit": 1,
+          "memory": {
+            "working_mib": 0.0,
+            "private_mib": 0.1,
+            "peak_working_mib": 749.5,
+            "free_ram_mib": 1283.6
+          },
+          "gpu_used_free_util": "0, 3962, 0",
+          "exit_before_cleanup": 1,
+          "peak_sampled": {
+            "vram_mib": 79,
+            "working_mib": 347.0,
+            "private_mib": 391.0,
+            "minimum_free_ram_mib": 942.0,
+            "samples": 5
+          },
+          "stopped_for_sustained_low_ram": true,
+          "safety_guard_mib": 256,
+          "abort_reasons": [
+            "windows_low_memory"
+          ],
+          "windows_low_memory_notification_checked": true,
+          "minimum_fast_guard_free_ram_mib": 486.4,
+          "allocation_events": [
+            "0.01.865.230 I load_tensors: offloading output layer to GPU",
+            "0.01.865.233 I load_tensors: offloading 41 repeating layers to GPU",
+            "0.01.865.234 I load_tensors: offloaded 43/43 layers to GPU",
+            "0.01.865.236 I load_tensors:        CUDA0 model buffer size =  2853.32 MiB",
+            "0.01.865.237 I load_tensors:   CPU_Mapped model buffer size =  1512.00 MiB"
+          ],
+          "load_stderr_tail": [
+            "0.01.853.531 I print_info: n_merges              = 514906",
+            "0.01.853.531 I print_info: BOS token             = 2 '<bos>'",
+            "0.01.853.532 I print_info: EOS token             = 1 '<eos>'",
+            "0.01.853.532 I print_info: EOT token             = 106 '<turn|>'",
+            "0.01.853.533 I print_info: UNK token             = 3 '<unk>'",
+            "0.01.853.533 I print_info: PAD token             = 0 '<pad>'",
+            "0.01.853.533 I print_info: MASK token            = 4 '<mask>'",
+            "0.01.853.534 I print_info: LF token              = 107 '",
+            "'",
+            "0.01.853.534 I print_info: EOG token             = 1 '<eos>'",
+            "0.01.853.537 I print_info: EOG token             = 50 '<|tool_response>'",
+            "0.01.853.537 I print_info: EOG token             = 106 '<turn|>'",
+            "0.01.853.538 I print_info: max token length      = 93",
+            "0.01.853.539 I load_tensors: loading model tensors, this can take a while... (load_mode = none)",
+            "0.01.853.717 I add: tensor per_layer_token_embd.weight (size = 1512 MiB) lazy read enabled",
+            "0.01.865.230 I load_tensors: offloading output layer to GPU",
+            "0.01.865.233 I load_tensors: offloading 41 repeating layers to GPU",
+            "0.01.865.234 I load_tensors: offloaded 43/43 layers to GPU",
+            "0.01.865.236 I load_tensors:        CUDA0 model buffer size =  2853.32 MiB",
+            "0.01.865.237 I load_tensors:   CPU_Mapped model buffer size =  1512.00 MiB"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "round6-discord-off-text-only-q4-embedgpu-nopinned-ctx131072-512-1-40-none-ub64-kvq4_0-longTrue.json",
+      "sha256": "733df36c39404aa0de6e29c3c3bf23db21a957b0bb7529db89f66d3b6d1ec46d",
+      "source_modified_utc": "2026-10-06T16:21:02.123543+00:00",
+      "observed_results": [
+        {
+          "margin_mib": 512,
+          "slots": 1,
+          "started_utc": "2026-10-06T16:20:23.647625+00:00",
+          "gpu_layers_requested": 40,
+          "attempt": 1,
+          "no_pinned": true,
+          "load_mode": "none",
+          "tag": "discord-off-text-only-q4-embedgpu-nopinned",
+          "lazy_mode": "on",
+          "ubatch": 64,
+          "op_offload": true,
+          "kv_type": "q4_0",
+          "projector_enabled": false,
+          "input_embedding_gpu": true,
+          "context": 131072,
+          "adapter": "machine-spirit-v1.q8_0.gguf",
+          "pid": 25912,
+          "ready": true,
+          "load_seconds": 7.67,
+          "load_exit": null,
+          "memory": {
+            "working_mib": 814.1,
+            "private_mib": 5007.6,
+            "peak_working_mib": 814.1,
+            "free_ram_mib": 810.0
+          },
+          "gpu_used_free_util": "3915, 48, 34",
+          "actual_context": 131072,
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 180,
+            "prompt_ms": 583.119,
+            "prompt_per_token_ms": 3.2395500000000004,
+            "prompt_per_second": 308.6848482042259,
+            "predicted_n": 128,
+            "predicted_ms": 5205.224,
+            "predicted_per_token_ms": 40.9860157480315,
+            "predicted_per_second": 24.398565748563367
+          },
+          "output_chars": 554,
+          "memory_after": {
+            "working_mib": 880.9,
+            "private_mib": 4956.0,
+            "peak_working_mib": 880.9,
+            "free_ram_mib": 759.8
+          },
+          "long_input_tokens_requested": 130816,
+          "long_distinct_input_tokens": 194,
+          "error_type": "ConnectionResetError",
+          "exit_before_cleanup": null,
+          "peak_sampled": {
+            "vram_mib": 3951,
+            "working_mib": 919.1,
+            "private_mib": 5069.9,
+            "minimum_free_ram_mib": 577.3,
+            "samples": 66
+          },
+          "stopped_for_sustained_low_ram": true,
+          "safety_guard_mib": 256,
+          "abort_reasons": [
+            "windows_low_memory"
+          ],
+          "windows_low_memory_notification_checked": true,
+          "minimum_fast_guard_free_ram_mib": 487.1,
+          "allocation_events": [
+            "0.02.081.293 I load_tensors: offloading output layer to GPU",
+            "0.02.081.296 I load_tensors: offloading 39 repeating layers to GPU",
+            "0.02.081.297 I load_tensors: offloaded 40/43 layers to GPU",
+            "0.02.081.300 I load_tensors:        CUDA0 model buffer size =  2688.64 MiB",
+            "0.02.081.301 I load_tensors:          CPU model buffer size =   164.68 MiB",
+            "0.02.081.302 I load_tensors:   CPU_Mapped model buffer size =  1512.00 MiB",
+            "0.06.676.248 I llama_adapter_lora_init_impl:      CUDA0 LoRA buffer size =    48.73 MiB",
+            "0.06.676.260 I llama_adapter_lora_init_impl:        CPU LoRA buffer size =     3.85 MiB",
+            "0.06.828.901 I llama_context:        CPU  output buffer size =     1.00 MiB",
+            "0.06.833.131 I llama_kv_cache:      CUDA0 KV buffer size =   576.00 MiB",
+            "0.06.857.329 I llama_kv_cache:        CPU KV buffer size =     1.27 MiB",
+            "0.06.857.771 I llama_kv_cache:      CUDA0 KV buffer size =     7.17 MiB",
+            "0.06.883.064 I sched_reserve:      CUDA0 compute buffer size =   535.88 MiB",
+            "0.06.883.070 I sched_reserve:  CUDA_Host compute buffer size =    20.63 MiB",
+            "0.06.909.344 I sched_reserve:      CUDA0 compute buffer size =   550.81 MiB",
+            "0.06.909.349 I sched_reserve:  CUDA_Host compute buffer size =    20.63 MiB"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "round6-discord-off-text-only-q4-embedgpu-pinned-64k-ctx65536-512-1-43-none-ub64-kvq4_0-longTrue.json",
+      "sha256": "b16865536b2ff3b144d00b4c0b8be4f5207551560c1dc83faf4df1db47b9202e",
+      "source_modified_utc": "2026-10-06T16:26:58.759996+00:00",
+      "observed_results": [
+        {
+          "margin_mib": 512,
+          "slots": 1,
+          "started_utc": "2026-10-06T16:24:18.204691+00:00",
+          "gpu_layers_requested": 43,
+          "attempt": 1,
+          "no_pinned": false,
+          "load_mode": "none",
+          "tag": "discord-off-text-only-q4-embedgpu-pinned-64k",
+          "lazy_mode": "on",
+          "ubatch": 64,
+          "op_offload": true,
+          "kv_type": "q4_0",
+          "projector_enabled": false,
+          "input_embedding_gpu": true,
+          "context": 65536,
+          "adapter": "machine-spirit-v1.q8_0.gguf",
+          "pid": 23268,
+          "ready": true,
+          "load_seconds": 6.23,
+          "load_exit": null,
+          "memory": {
+            "working_mib": 560.4,
+            "private_mib": 4447.4,
+            "peak_working_mib": 560.4,
+            "free_ram_mib": 994.1
+          },
+          "gpu_used_free_util": "3615, 348, 31",
+          "actual_context": 65536,
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 180,
+            "prompt_ms": 454.565,
+            "prompt_per_token_ms": 2.525361111111111,
+            "prompt_per_second": 395.98297273217247,
+            "predicted_n": 128,
+            "predicted_ms": 4427.311,
+            "predicted_per_token_ms": 34.86071653543307,
+            "predicted_per_second": 28.685583642079813
+          },
+          "output_chars": 478,
+          "memory_after": {
+            "working_mib": 624.9,
+            "private_mib": 4382.0,
+            "peak_working_mib": 624.9,
+            "free_ram_mib": 985.0
+          },
+          "long_input_tokens_requested": 65280,
+          "long_distinct_input_tokens": 187,
+          "long_timings": {
+            "cache_n": 0,
+            "prompt_n": 65280,
+            "prompt_ms": 139967.599,
+            "prompt_per_token_ms": 2.1441115042892154,
+            "prompt_per_second": 466.39365443426664,
+            "predicted_n": 128,
+            "predicted_ms": 9097.13,
+            "predicted_per_token_ms": 71.63094488188976,
+            "predicted_per_second": 13.960446866209454
+          },
+          "long_seconds": 149.09,
+          "long_output_chars": 165,
+          "long_truncated": false,
+          "long_tokens_evaluated": 65280,
+          "memory_after_long": {
+            "working_mib": 680.1,
+            "private_mib": 4464.2,
+            "peak_working_mib": 682.1,
+            "free_ram_mib": 915.2
+          },
+          "exit_before_cleanup": null,
+          "peak_sampled": {
+            "vram_mib": 3645,
+            "working_mib": 679.1,
+            "private_mib": 4510.8,
+            "minimum_free_ram_mib": 708.8,
+            "samples": 282
+          },
+          "stopped_for_sustained_low_ram": false,
+          "safety_guard_mib": 256,
+          "abort_reasons": [],
+          "windows_low_memory_notification_checked": true,
+          "minimum_fast_guard_free_ram_mib": 642.7,
+          "allocation_events": [
+            "0.02.274.360 I load_tensors: offloading output layer to GPU",
+            "0.02.274.365 I load_tensors: offloading 41 repeating layers to GPU",
+            "0.02.274.365 I load_tensors: offloaded 43/43 layers to GPU",
+            "0.02.274.370 I load_tensors:        CUDA0 model buffer size =  2853.32 MiB",
+            "0.02.274.371 I load_tensors:   CPU_Mapped model buffer size =  1512.00 MiB",
+            "0.05.273.300 I llama_adapter_lora_init_impl:      CUDA0 LoRA buffer size =    52.57 MiB",
+            "0.05.558.175 I llama_context:  CUDA_Host  output buffer size =     1.00 MiB",
+            "0.05.561.292 I llama_kv_cache:      CUDA0 KV buffer size =   288.00 MiB",
+            "0.05.571.523 I llama_kv_cache:      CUDA0 KV buffer size =     8.44 MiB",
+            "0.05.588.548 I sched_reserve:      CUDA0 compute buffer size =   274.00 MiB",
+            "0.05.588.552 I sched_reserve:  CUDA_Host compute buffer size =    12.63 MiB",
+            "0.05.602.477 I sched_reserve:      CUDA0 compute buffer size =   274.00 MiB",
+            "0.05.602.481 I sched_reserve:  CUDA_Host compute buffer size =    12.63 MiB"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "round6-discord-off-text-only-q4-embedgpu-pinned-96k-ctx98304-512-1-43-none-ub64-kvq4_0-longTrue.json",
+      "sha256": "65a2f9fc6e36d6e6170062f703176e38afcd81514e7e064abbe187942f811abe",
+      "source_modified_utc": "2026-10-06T16:33:51.347867+00:00",
+      "observed_results": [
+        {
+          "margin_mib": 512,
+          "slots": 1,
+          "started_utc": "2026-10-06T16:33:48.956320+00:00",
+          "gpu_layers_requested": 43,
+          "attempt": 1,
+          "no_pinned": false,
+          "load_mode": "none",
+          "tag": "discord-off-text-only-q4-embedgpu-pinned-96k",
+          "lazy_mode": "on",
+          "ubatch": 64,
+          "op_offload": true,
+          "kv_type": "q4_0",
+          "projector_enabled": false,
+          "input_embedding_gpu": true,
+          "context": 98304,
+          "adapter": "machine-spirit-v1.q8_0.gguf",
+          "pid": 18528,
+          "ready": false,
+          "load_seconds": 2.27,
+          "load_exit": 1,
+          "memory": {
+            "working_mib": 0.0,
+            "private_mib": 0.1,
+            "peak_working_mib": 158.6,
+            "free_ram_mib": 703.2
+          },
+          "gpu_used_free_util": "0, 3962, 0",
+          "exit_before_cleanup": 1,
+          "peak_sampled": {
+            "vram_mib": 0,
+            "working_mib": 1.8,
+            "private_mib": 0.4,
+            "minimum_free_ram_mib": 699.7,
+            "samples": 2
+          },
+          "stopped_for_sustained_low_ram": true,
+          "safety_guard_mib": 256,
+          "abort_reasons": [
+            "windows_low_memory"
+          ],
+          "windows_low_memory_notification_checked": true,
+          "minimum_fast_guard_free_ram_mib": 460.4,
+          "allocation_events": [],
+          "load_stderr_tail": [
+            "0.00.001.023 I srv  llama_server: initializing ..."
+          ]
+        }
+      ]
+    },
+    {
+      "source": "round6-discord-off-text-only-q4-embedgpu-pinned39-cpuops-ctx131072-512-1-39-none-ub64-kvq4_0-longTrue.json",
+      "sha256": "9617c54bbd5aabe657fcf75ea2bb94061742b752695954afeef42870113aa6ba",
+      "source_modified_utc": "2026-10-06T16:32:23.879205+00:00",
+      "observed_results": [
+        {
+          "margin_mib": 512,
+          "slots": 1,
+          "started_utc": "2026-10-06T16:32:17.577758+00:00",
+          "gpu_layers_requested": 39,
+          "attempt": 1,
+          "no_pinned": false,
+          "load_mode": "none",
+          "tag": "discord-off-text-only-q4-embedgpu-pinned39-cpuops",
+          "lazy_mode": "on",
+          "ubatch": 64,
+          "op_offload": false,
+          "kv_type": "q4_0",
+          "projector_enabled": false,
+          "input_embedding_gpu": true,
+          "context": 131072,
+          "adapter": "machine-spirit-v1.q8_0.gguf",
+          "pid": 21412,
+          "ready": false,
+          "load_seconds": 6.16,
+          "load_exit": 1,
+          "memory": {
+            "working_mib": 0.0,
+            "private_mib": 0.1,
+            "peak_working_mib": 746.7,
+            "free_ram_mib": 1392.2
+          },
+          "gpu_used_free_util": "0, 3962, 0",
+          "exit_before_cleanup": 1,
+          "peak_sampled": {
+            "vram_mib": 3897,
+            "working_mib": 669.4,
+            "private_mib": 4876.8,
+            "minimum_free_ram_mib": 537.4,
+            "samples": 9
+          },
+          "stopped_for_sustained_low_ram": true,
+          "safety_guard_mib": 256,
+          "abort_reasons": [
+            "windows_low_memory"
+          ],
+          "windows_low_memory_notification_checked": true,
+          "minimum_fast_guard_free_ram_mib": 484.2,
+          "allocation_events": [
+            "0.02.185.720 I load_tensors: offloading output layer to GPU",
+            "0.02.185.726 I load_tensors: offloading 38 repeating layers to GPU",
+            "0.02.185.726 I load_tensors: offloaded 39/43 layers to GPU",
+            "0.02.185.731 I load_tensors:        CUDA0 model buffer size =  2638.67 MiB",
+            "0.02.185.733 I load_tensors:    CUDA_Host model buffer size =   214.66 MiB",
+            "0.02.185.734 I load_tensors:   CPU_Mapped model buffer size =  1512.00 MiB",
+            "0.05.135.212 I llama_adapter_lora_init_impl:  CUDA_Host LoRA buffer size =     5.13 MiB",
+            "0.05.135.747 I llama_adapter_lora_init_impl:      CUDA0 LoRA buffer size =    47.44 MiB",
+            "0.05.318.807 I llama_context:  CUDA_Host  output buffer size =     1.00 MiB",
+            "0.05.322.841 I llama_kv_cache:      CUDA0 KV buffer size =   576.00 MiB",
+            "0.05.342.252 I llama_kv_cache:        CPU KV buffer size =     1.69 MiB",
+            "0.05.343.895 I llama_kv_cache:      CUDA0 KV buffer size =     6.75 MiB",
+            "0.05.375.182 I sched_reserve:      CUDA0 compute buffer size =   535.00 MiB",
+            "0.05.375.188 I sched_reserve:  CUDA_Host compute buffer size =    31.38 MiB",
+            "0.05.400.539 I sched_reserve:      CUDA0 compute buffer size =   535.00 MiB",
+            "0.05.400.545 I sched_reserve:  CUDA_Host compute buffer size =    31.38 MiB"
+          ],
+          "load_stderr_tail": [
+            "0.05.343.895 I llama_kv_cache:      CUDA0 KV buffer size =     6.75 MiB",
+            "0.05.345.891 I llama_kv_cache: size =    8.44 MiB (   768 cells,  20 layers,  1/1 seqs), K (q4_0):    4.22 MiB, V (q4_0):    4.22 MiB",
+            "0.05.345.897 I llama_kv_cache: attn_rot_k = 1, n_embd_head_k_all = 256",
+            "0.05.345.898 I llama_kv_cache: attn_rot_v = 1, n_embd_head_k_all = 256",
+            "0.05.345.974 I sched_reserve: reserving ...",
+            "0.05.347.705 I resolve_fused_ops: resolving fused DeepSeek V4 HC support:",
+            "0.05.351.482 I resolve_fused_ops: fused DeepSeek V4 HC pre enabled",
+            "0.05.352.364 I resolve_fused_ops: fused DeepSeek V4 HC comb enabled",
+            "0.05.353.287 I resolve_fused_ops: fused DeepSeek V4 HC post enabled",
+            "0.05.375.182 I sched_reserve:      CUDA0 compute buffer size =   535.00 MiB",
+            "0.05.375.188 I sched_reserve:  CUDA_Host compute buffer size =    31.38 MiB",
+            "0.05.375.190 I sched_reserve: graph: nodes = 2259, splits = 3, input objects = 5, input tensors = 14",
+            "0.05.375.191 I sched_reserve: reserve took 29.20 ms, sched copies = 1",
+            "0.05.375.571 I cmn          init: llama threadpool init, n_threads = 4",
+            "0.05.375.591 I cmn  common_init_: warming up the model with an empty run - please wait ... (--no-warmup to disable)",
+            "0.05.376.212 I sched_reserve: reserving ...",
+            "0.05.400.539 I sched_reserve:      CUDA0 compute buffer size =   535.00 MiB",
+            "0.05.400.545 I sched_reserve:  CUDA_Host compute buffer size =    31.38 MiB",
+            "0.05.400.547 I sched_reserve: graph: nodes = 3291, splits = 3, input objects = 5, input tensors = 14",
+            "0.05.400.548 I sched_reserve: reserve took 24.33 ms, sched copies = 1"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "round6-discord-off-text-only-q4-floor256-ctx131072-512-1-40-none-ub64-kvq4_0-longTrue.json",
+      "sha256": "304ee04a6aa13ee6b6e55eca71fdc3b4f53b86d35b26ee4433c96dc016956c44",
+      "source_modified_utc": "2026-10-06T16:08:42.902428+00:00",
+      "observed_results": [
+        {
+          "margin_mib": 512,
+          "slots": 1,
+          "started_utc": "2026-10-06T16:08:37.888754+00:00",
+          "gpu_layers_requested": 40,
+          "attempt": 1,
+          "no_pinned": false,
+          "load_mode": "none",
+          "tag": "discord-off-text-only-q4-floor256",
+          "lazy_mode": "on",
+          "ubatch": 64,
+          "op_offload": true,
+          "kv_type": "q4_0",
+          "projector_enabled": false,
+          "context": 131072,
+          "adapter": "machine-spirit-v1.q8_0.gguf",
+          "pid": 9968,
+          "ready": false,
+          "load_seconds": 4.38,
+          "load_exit": 1,
+          "memory": {
+            "working_mib": 0.0,
+            "private_mib": 0.1,
+            "peak_working_mib": 914.8,
+            "free_ram_mib": 1119.0
+          },
+          "gpu_used_free_util": "0, 3962, 0",
+          "exit_before_cleanup": 1,
+          "peak_sampled": {
+            "vram_mib": 79,
+            "working_mib": 332.7,
+            "private_mib": 377.0,
+            "minimum_free_ram_mib": 791.7,
+            "samples": 5
+          },
+          "stopped_for_sustained_low_ram": true,
+          "safety_guard_mib": 256,
+          "abort_reasons": [
+            "windows_low_memory"
+          ],
+          "windows_low_memory_notification_checked": true,
+          "minimum_fast_guard_free_ram_mib": 389.1,
+          "allocation_events": [],
+          "load_stderr_tail": [
+            "0.01.934.429 I print_info: model type            = E4B",
+            "0.01.934.430 I print_info: model params          = 7.46 B",
+            "0.01.934.431 I print_info: general.name          = Gemma-4 E4B IT (smart Q4_0, QAT-lossless)",
+            "0.01.934.431 I print_info: vocab type            = BPE",
+            "0.01.934.432 I print_info: n_vocab               = 262144",
+            "0.01.934.432 I print_info: n_merges              = 514906",
+            "0.01.934.433 I print_info: BOS token             = 2 '<bos>'",
+            "0.01.934.433 I print_info: EOS token             = 1 '<eos>'",
+            "0.01.934.435 I print_info: EOT token             = 106 '<turn|>'",
+            "0.01.934.435 I print_info: UNK token             = 3 '<unk>'",
+            "0.01.934.436 I print_info: PAD token             = 0 '<pad>'",
+            "0.01.934.436 I print_info: MASK token            = 4 '<mask>'",
+            "0.01.934.436 I print_info: LF token              = 107 '",
+            "'",
+            "0.01.934.437 I print_info: EOG token             = 1 '<eos>'",
+            "0.01.934.438 I print_info: EOG token             = 50 '<|tool_response>'",
+            "0.01.934.438 I print_info: EOG token             = 106 '<turn|>'",
+            "0.01.934.438 I print_info: max token length      = 93",
+            "0.01.934.440 I load_tensors: loading model tensors, this can take a while... (load_mode = none)",
+            "0.01.934.616 I add: tensor per_layer_token_embd.weight (size = 1512 MiB) lazy read enabled"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "round6-discord-off-text-only-q4-floor256-search-closed-ctx131072-512-1-40-none-ub64-kvq4_0-longTrue.json",
+      "sha256": "672289b236e06119a58f48e797b1d36d641ea3f6d7d9cd5de8ab1cb1847bde66",
+      "source_modified_utc": "2026-10-06T16:10:30.272294+00:00",
+      "observed_results": [
+        {
+          "margin_mib": 512,
+          "slots": 1,
+          "started_utc": "2026-10-06T16:10:25.690007+00:00",
+          "gpu_layers_requested": 40,
+          "attempt": 1,
+          "no_pinned": false,
+          "load_mode": "none",
+          "tag": "discord-off-text-only-q4-floor256-search-closed",
+          "lazy_mode": "on",
+          "ubatch": 64,
+          "op_offload": true,
+          "kv_type": "q4_0",
+          "projector_enabled": false,
+          "context": 131072,
+          "adapter": "machine-spirit-v1.q8_0.gguf",
+          "pid": 27576,
+          "ready": false,
+          "load_seconds": 4.47,
+          "load_exit": 1,
+          "memory": {
+            "working_mib": 0.0,
+            "private_mib": 0.1,
+            "peak_working_mib": 908.3,
+            "free_ram_mib": 1148.5
+          },
+          "gpu_used_free_util": "0, 3962, 0",
+          "exit_before_cleanup": 1,
+          "peak_sampled": {
+            "vram_mib": 79,
+            "working_mib": 379.9,
+            "private_mib": 426.4,
+            "minimum_free_ram_mib": 773.5,
+            "samples": 7
+          },
+          "stopped_for_sustained_low_ram": true,
+          "safety_guard_mib": 256,
+          "abort_reasons": [
+            "windows_low_memory"
+          ],
+          "windows_low_memory_notification_checked": true,
+          "minimum_fast_guard_free_ram_mib": 407.1,
+          "allocation_events": [],
+          "load_stderr_tail": [
+            "0.01.952.126 I print_info: model type            = E4B",
+            "0.01.952.127 I print_info: model params          = 7.46 B",
+            "0.01.952.128 I print_info: general.name          = Gemma-4 E4B IT (smart Q4_0, QAT-lossless)",
+            "0.01.952.129 I print_info: vocab type            = BPE",
+            "0.01.952.129 I print_info: n_vocab               = 262144",
+            "0.01.952.130 I print_info: n_merges              = 514906",
+            "0.01.952.131 I print_info: BOS token             = 2 '<bos>'",
+            "0.01.952.131 I print_info: EOS token             = 1 '<eos>'",
+            "0.01.952.132 I print_info: EOT token             = 106 '<turn|>'",
+            "0.01.952.132 I print_info: UNK token             = 3 '<unk>'",
+            "0.01.952.133 I print_info: PAD token             = 0 '<pad>'",
+            "0.01.952.133 I print_info: MASK token            = 4 '<mask>'",
+            "0.01.952.133 I print_info: LF token              = 107 '",
+            "'",
+            "0.01.952.134 I print_info: EOG token             = 1 '<eos>'",
+            "0.01.952.135 I print_info: EOG token             = 50 '<|tool_response>'",
+            "0.01.952.136 I print_info: EOG token             = 106 '<turn|>'",
+            "0.01.952.136 I print_info: max token length      = 93",
+            "0.01.952.138 I load_tensors: loading model tensors, this can take a while... (load_mode = none)",
+            "0.01.952.350 I add: tensor per_layer_token_embd.weight (size = 1512 MiB) lazy read enabled"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "round6-discord-off-user-cleaned-32k-mcp-no-warmup-ctx32768-512-1-43-none-ub64-kvq4_0-longTrue.json",
+      "sha256": "a3f601b91bf520801e607fad658096abc3c9cf5052c9c2051478d74a44b2bcb7",
+      "source_modified_utc": "2026-10-06T16:55:27.333940+00:00",
+      "observed_results": [
+        {
+          "margin_mib": 512,
+          "slots": 1,
+          "started_utc": "2026-10-06T16:55:16.914670+00:00",
+          "gpu_layers_requested": 43,
+          "attempt": 1,
+          "no_pinned": false,
+          "load_mode": "none",
+          "tag": "discord-off-user-cleaned-32k-mcp-no-warmup",
+          "lazy_mode": "on",
+          "ubatch": 64,
+          "op_offload": true,
+          "kv_type": "q4_0",
+          "projector_enabled": false,
+          "input_embedding_gpu": true,
+          "context": 32768,
+          "adapter": "machine-spirit-v1.q8_0.gguf",
+          "pid": 11780,
+          "warmup": false,
+          "ready": true,
+          "load_seconds": 5.84,
+          "load_exit": null,
+          "memory": {
+            "working_mib": 528.7,
+            "private_mib": 4074.7,
+            "peak_working_mib": 528.7,
+            "free_ram_mib": 603.4
+          },
+          "gpu_used_free_util": "3311, 652, 13",
+          "actual_context": 32768,
+          "error_type": "ConnectionResetError",
+          "exit_before_cleanup": null,
+          "peak_sampled": {
+            "vram_mib": 3337,
+            "working_mib": 613.3,
+            "private_mib": 4153.1,
+            "minimum_free_ram_mib": 526.8,
+            "samples": 16
+          },
+          "stopped_for_sustained_low_ram": true,
+          "safety_guard_mib": 256,
+          "abort_reasons": [
+            "windows_low_memory"
+          ],
+          "windows_low_memory_notification_checked": true,
+          "minimum_fast_guard_free_ram_mib": 490.6,
+          "allocation_events": [
+            "0.01.980.045 I load_tensors: offloading output layer to GPU",
+            "0.01.980.048 I load_tensors: offloading 41 repeating layers to GPU",
+            "0.01.980.049 I load_tensors: offloaded 43/43 layers to GPU",
+            "0.01.980.052 I load_tensors:        CUDA0 model buffer size =  2853.32 MiB",
+            "0.01.980.053 I load_tensors:   CPU_Mapped model buffer size =  1512.00 MiB",
+            "0.04.881.149 I llama_adapter_lora_init_impl:      CUDA0 LoRA buffer size =    52.57 MiB",
+            "0.05.187.101 I llama_context:  CUDA_Host  output buffer size =     1.00 MiB",
+            "0.05.188.690 I llama_kv_cache:      CUDA0 KV buffer size =   144.00 MiB",
+            "0.05.194.520 I llama_kv_cache:      CUDA0 KV buffer size =     8.44 MiB",
+            "0.05.208.866 I sched_reserve:      CUDA0 compute buffer size =   142.00 MiB",
+            "0.05.208.871 I sched_reserve:  CUDA_Host compute buffer size =     8.63 MiB",
+            "0.05.230.247 I sched_reserve:      CUDA0 compute buffer size =   142.00 MiB",
+            "0.05.230.254 I sched_reserve:  CUDA_Host compute buffer size =     8.63 MiB"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "round6-discord-off-user-cleaned-64k-mcp-ctx65536-512-1-43-none-ub64-kvq4_0-longTrue.json",
+      "sha256": "76f30b79815ef3d6abe1afc1f82a7e7bd8aea6a833cc8f5d05b1139c007ae044",
+      "source_modified_utc": "2026-10-06T16:53:27.942120+00:00",
+      "observed_results": [
+        {
+          "margin_mib": 512,
+          "slots": 1,
+          "started_utc": "2026-10-06T16:53:19.018192+00:00",
+          "gpu_layers_requested": 43,
+          "attempt": 1,
+          "no_pinned": false,
+          "load_mode": "none",
+          "tag": "discord-off-user-cleaned-64k-mcp",
+          "lazy_mode": "on",
+          "ubatch": 64,
+          "op_offload": true,
+          "kv_type": "q4_0",
+          "projector_enabled": false,
+          "input_embedding_gpu": true,
+          "context": 65536,
+          "adapter": "machine-spirit-v1.q8_0.gguf",
+          "pid": 15496,
+          "ready": false,
+          "load_seconds": 8.83,
+          "load_exit": 1,
+          "memory": {
+            "working_mib": 0.0,
+            "private_mib": 0.1,
+            "peak_working_mib": 504.3,
+            "free_ram_mib": 1138.9
+          },
+          "gpu_used_free_util": "0, 3962, 0",
+          "exit_before_cleanup": 1,
+          "peak_sampled": {
+            "vram_mib": 3571,
+            "working_mib": 402.8,
+            "private_mib": 4276.5,
+            "minimum_free_ram_mib": 581.1,
+            "samples": 12
+          },
+          "stopped_for_sustained_low_ram": true,
+          "safety_guard_mib": 256,
+          "abort_reasons": [
+            "windows_low_memory"
+          ],
+          "windows_low_memory_notification_checked": true,
+          "minimum_fast_guard_free_ram_mib": 480.5,
+          "allocation_events": [
+            "0.03.045.672 I load_tensors: offloading output layer to GPU",
+            "0.03.045.678 I load_tensors: offloading 41 repeating layers to GPU",
+            "0.03.045.679 I load_tensors: offloaded 43/43 layers to GPU",
+            "0.03.045.685 I load_tensors:        CUDA0 model buffer size =  2853.32 MiB",
+            "0.03.045.686 I load_tensors:   CPU_Mapped model buffer size =  1512.00 MiB",
+            "0.05.896.153 I llama_adapter_lora_init_impl:      CUDA0 LoRA buffer size =    52.57 MiB",
+            "0.06.077.827 I llama_context:  CUDA_Host  output buffer size =     1.00 MiB",
+            "0.06.080.022 I llama_kv_cache:      CUDA0 KV buffer size =   288.00 MiB",
+            "0.06.089.997 I llama_kv_cache:      CUDA0 KV buffer size =     8.44 MiB",
+            "0.06.107.878 I sched_reserve:      CUDA0 compute buffer size =   274.00 MiB",
+            "0.06.107.883 I sched_reserve:  CUDA_Host compute buffer size =    12.63 MiB",
+            "0.06.121.655 I sched_reserve:      CUDA0 compute buffer size =   274.00 MiB",
+            "0.06.121.659 I sched_reserve:  CUDA_Host compute buffer size =    12.63 MiB"
+          ],
+          "load_stderr_tail": [
+            "0.06.089.997 I llama_kv_cache:      CUDA0 KV buffer size =     8.44 MiB",
+            "0.06.090.646 I llama_kv_cache: size =    8.44 MiB (   768 cells,  20 layers,  1/1 seqs), K (q4_0):    4.22 MiB, V (q4_0):    4.22 MiB",
+            "0.06.090.651 I llama_kv_cache: attn_rot_k = 1, n_embd_head_k_all = 256",
+            "0.06.090.651 I llama_kv_cache: attn_rot_v = 1, n_embd_head_k_all = 256",
+            "0.06.090.708 I sched_reserve: reserving ...",
+            "0.06.093.295 I resolve_fused_ops: resolving fused DeepSeek V4 HC support:",
+            "0.06.096.895 I resolve_fused_ops: fused DeepSeek V4 HC pre enabled",
+            "0.06.097.820 I resolve_fused_ops: fused DeepSeek V4 HC comb enabled",
+            "0.06.098.694 I resolve_fused_ops: fused DeepSeek V4 HC post enabled",
+            "0.06.107.878 I sched_reserve:      CUDA0 compute buffer size =   274.00 MiB",
+            "0.06.107.883 I sched_reserve:  CUDA_Host compute buffer size =    12.63 MiB",
+            "0.06.107.885 I sched_reserve: graph: nodes = 2259, splits = 3, input objects = 5, input tensors = 14",
+            "0.06.107.886 I sched_reserve: reserve took 17.17 ms, sched copies = 1",
+            "0.06.108.418 I cmn          init: llama threadpool init, n_threads = 4",
+            "0.06.108.452 I cmn  common_init_: warming up the model with an empty run - please wait ... (--no-warmup to disable)",
+            "0.06.108.674 I sched_reserve: reserving ...",
+            "0.06.121.655 I sched_reserve:      CUDA0 compute buffer size =   274.00 MiB",
+            "0.06.121.659 I sched_reserve:  CUDA_Host compute buffer size =    12.63 MiB",
+            "0.06.121.661 I sched_reserve: graph: nodes = 3291, splits = 3, input objects = 5, input tensors = 14",
+            "0.06.121.662 I sched_reserve: reserve took 12.98 ms, sched copies = 1"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "round6-discord-off-user-cleaned-64k-mcp-no-warmup-ctx65536-512-1-43-none-ub64-kvq4_0-longTrue.json",
+      "sha256": "ac2a46adf27a1af67818a39cd5fb613885b4b26bc7c36de9535910f83fc8905c",
+      "source_modified_utc": "2026-10-06T16:54:03.949130+00:00",
+      "observed_results": [
+        {
+          "margin_mib": 512,
+          "slots": 1,
+          "started_utc": "2026-10-06T16:53:58.514257+00:00",
+          "gpu_layers_requested": 43,
+          "attempt": 1,
+          "no_pinned": false,
+          "load_mode": "none",
+          "tag": "discord-off-user-cleaned-64k-mcp-no-warmup",
+          "lazy_mode": "on",
+          "ubatch": 64,
+          "op_offload": true,
+          "kv_type": "q4_0",
+          "projector_enabled": false,
+          "input_embedding_gpu": true,
+          "context": 65536,
+          "adapter": "machine-spirit-v1.q8_0.gguf",
+          "pid": 7112,
+          "warmup": false,
+          "ready": false,
+          "load_seconds": 5.39,
+          "load_exit": 1,
+          "memory": {
+            "working_mib": 0.0,
+            "private_mib": 0.1,
+            "peak_working_mib": 512.1,
+            "free_ram_mib": 972.5
+          },
+          "gpu_used_free_util": "0, 3962, 1",
+          "exit_before_cleanup": 1,
+          "peak_sampled": {
+            "vram_mib": 2933,
+            "working_mib": 457.6,
+            "private_mib": 3307.0,
+            "minimum_free_ram_mib": 540.6,
+            "samples": 8
+          },
+          "stopped_for_sustained_low_ram": true,
+          "safety_guard_mib": 256,
+          "abort_reasons": [
+            "windows_low_memory"
+          ],
+          "windows_low_memory_notification_checked": true,
+          "minimum_fast_guard_free_ram_mib": 491.6,
+          "allocation_events": [
+            "0.01.970.292 I load_tensors: offloading output layer to GPU",
+            "0.01.970.295 I load_tensors: offloading 41 repeating layers to GPU",
+            "0.01.970.295 I load_tensors: offloaded 43/43 layers to GPU",
+            "0.01.970.298 I load_tensors:        CUDA0 model buffer size =  2853.32 MiB",
+            "0.01.970.300 I load_tensors:   CPU_Mapped model buffer size =  1512.00 MiB",
+            "0.04.754.517 I llama_adapter_lora_init_impl:      CUDA0 LoRA buffer size =    52.57 MiB",
+            "0.04.942.267 I llama_context:  CUDA_Host  output buffer size =     1.00 MiB",
+            "0.04.944.625 I llama_kv_cache:      CUDA0 KV buffer size =   288.00 MiB",
+            "0.04.954.782 I llama_kv_cache:      CUDA0 KV buffer size =     8.44 MiB",
+            "0.04.976.129 I sched_reserve:      CUDA0 compute buffer size =   274.00 MiB",
+            "0.04.976.133 I sched_reserve:  CUDA_Host compute buffer size =    12.63 MiB",
+            "0.04.993.020 I sched_reserve:      CUDA0 compute buffer size =   274.00 MiB",
+            "0.04.993.025 I sched_reserve:  CUDA_Host compute buffer size =    12.63 MiB"
+          ],
+          "load_stderr_tail": [
+            "0.04.954.567 I llama_kv_cache_iswa: creating     SWA KV cache, size = 768 cells",
+            "0.04.954.782 I llama_kv_cache:      CUDA0 KV buffer size =     8.44 MiB",
+            "0.04.955.635 I llama_kv_cache: size =    8.44 MiB (   768 cells,  20 layers,  1/1 seqs), K (q4_0):    4.22 MiB, V (q4_0):    4.22 MiB",
+            "0.04.955.639 I llama_kv_cache: attn_rot_k = 1, n_embd_head_k_all = 256",
+            "0.04.955.639 I llama_kv_cache: attn_rot_v = 1, n_embd_head_k_all = 256",
+            "0.04.955.714 I sched_reserve: reserving ...",
+            "0.04.957.723 I resolve_fused_ops: resolving fused DeepSeek V4 HC support:",
+            "0.04.961.445 I resolve_fused_ops: fused DeepSeek V4 HC pre enabled",
+            "0.04.962.453 I resolve_fused_ops: fused DeepSeek V4 HC comb enabled",
+            "0.04.963.639 I resolve_fused_ops: fused DeepSeek V4 HC post enabled",
+            "0.04.976.129 I sched_reserve:      CUDA0 compute buffer size =   274.00 MiB",
+            "0.04.976.133 I sched_reserve:  CUDA_Host compute buffer size =    12.63 MiB",
+            "0.04.976.135 I sched_reserve: graph: nodes = 2259, splits = 3, input objects = 5, input tensors = 14",
+            "0.04.976.136 I sched_reserve: reserve took 20.42 ms, sched copies = 1",
+            "0.04.976.462 I cmn          init: llama threadpool init, n_threads = 4",
+            "0.04.979.906 I sched_reserve: reserving ...",
+            "0.04.993.020 I sched_reserve:      CUDA0 compute buffer size =   274.00 MiB",
+            "0.04.993.025 I sched_reserve:  CUDA_Host compute buffer size =    12.63 MiB",
+            "0.04.993.027 I sched_reserve: graph: nodes = 3291, splits = 3, input objects = 5, input tensors = 14",
+            "0.04.993.028 I sched_reserve: reserve took 13.12 ms, sched copies = 1"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "round6-current-handoff-auto128-ctx131072-512-1--1-mmap-ub512-kvq8_0-longFalse.json",
+      "sha256": "b3aba34e42a502f7c8750bd293d246b362e542bd31ee7b359111982a61dda67a",
+      "source_modified_utc": "2026-10-06T17:13:36.701017+00:00",
+      "observed_results": [
+        {
+          "margin_mib": 512,
+          "slots": 1,
+          "started_utc": "2026-10-06T17:13:27.946559+00:00",
+          "gpu_layers_requested": -1,
+          "attempt": 1,
+          "no_pinned": false,
+          "load_mode": "mmap",
+          "tag": "current-handoff-auto128",
+          "lazy_mode": "on",
+          "ubatch": 512,
+          "op_offload": true,
+          "kv_type": "q8_0",
+          "projector_enabled": true,
+          "input_embedding_gpu": false,
+          "context": 131072,
+          "adapter": "agent-fw1.q8_0.gguf",
+          "pid": 24148,
+          "adapters_loaded": [
+            "agent-fw1.q8_0.gguf"
+          ],
+          "adapter_id_applied": 0,
+          "product_revision": "9ee593d28d06c1b7084ebbb289e2b769a5abada7",
+          "warmup": true,
+          "ready": false,
+          "load_seconds": 8.59,
+          "load_exit": 1,
+          "memory": {
+            "working_mib": 0.0,
+            "private_mib": 0.1,
+            "peak_working_mib": 391.7,
+            "free_ram_mib": 1236.5
+          },
+          "gpu_used_free_util": "0, 3962, 0",
+          "exit_before_cleanup": 1,
+          "peak_sampled": {
+            "vram_mib": 79,
+            "working_mib": 391.7,
+            "private_mib": 445.8,
+            "minimum_free_ram_mib": 864.6,
+            "samples": 13
+          },
+          "stopped_for_sustained_low_ram": true,
+          "safety_guard_mib": 512,
+          "abort_reasons": [
+            "windows_low_memory"
+          ],
+          "windows_low_memory_notification_checked": true,
+          "minimum_fast_guard_free_ram_mib": 403.2,
+          "allocation_events": [
+            "0.01.408.080 I common_params_fit_impl: getting device memory data for initial parameters:",
+            "0.02.160.561 I common_params_fit_impl: projected to use 4313 MiB of device memory vs. 3289 MiB of free device memory",
+            "0.02.160.568 I common_params_fit_impl: cannot meet free memory target of 512 MiB, need to reduce device memory by 1536 MiB",
+            "0.02.160.569 I common_params_fit_impl: context size set by user to 131072 -> no change",
+            "0.02.160.571 I common_params_fit_impl: id=0, target=2777 MiB",
+            "0.02.926.536 I common_params_fit_impl: memory for test allocation by device:",
+            "0.02.926.541 I common_params_fit_impl: id=0, n_layer= 0, n_part= 0, overflow_type=4, mem=  1100 MiB",
+            "0.02.926.544 I common_params_fit_impl: filling dense layers back-to-front:",
+            "0.03.684.747 I common_params_fit_impl: memory for test allocation by device:",
+            "0.03.684.754 I common_params_fit_impl: id=0, n_layer=43, n_part= 0, overflow_type=4, mem=  4313 MiB",
+            "0.03.684.758 I common_params_fit_impl: start filling device 0, delta=43",
+            "0.04.461.622 I common_params_fit_impl: memory for test allocation by device:",
+            "0.04.461.627 I common_params_fit_impl: id=0, n_layer=22, n_part= 0, overflow_type=4, mem=  2647 MiB",
+            "0.04.461.637 I common_params_fit_impl: set ngl_per_device[0].n_layer=22",
+            "0.05.375.425 I common_params_fit_impl: memory for test allocation by device:",
+            "0.05.375.431 I common_params_fit_impl: id=0, n_layer=23, n_part= 0, overflow_type=4, mem=  2698 MiB",
+            "0.05.375.436 I common_params_fit_impl: set ngl_per_device[0].n_layer=23",
+            "0.06.118.962 I common_params_fit_impl: memory for test allocation by device:",
+            "0.06.118.971 I common_params_fit_impl: id=0, n_layer=24, n_part= 0, overflow_type=4, mem=  2749 MiB",
+            "0.06.119.009 I common_params_fit_impl: set ngl_per_device[0].n_layer=24",
+            "0.06.816.520 I common_params_fit_impl: memory for test allocation by device:",
+            "0.06.816.524 I common_params_fit_impl: id=0, n_layer=25, n_part= 0, overflow_type=4, mem=  2800 MiB",
+            "0.06.816.528 I common_params_fit_impl: set ngl_per_device_high[0].n_layer=25",
+            "0.06.816.531 I common_params_fit_impl:   - CUDA0 (NVIDIA GeForce RTX 3050 Ti Laptop GPU): 24 layers,   2749 MiB used,    540 MiB free"
+          ],
+          "load_stderr_tail": [
+            "0.07.787.967 I print_info: model type            = E4B",
+            "0.07.787.968 I print_info: model params          = 7.46 B",
+            "0.07.787.968 I print_info: general.name          = Gemma-4 E4B IT (smart Q4_0, QAT-lossless)",
+            "0.07.787.969 I print_info: vocab type            = BPE",
+            "0.07.787.969 I print_info: n_vocab               = 262144",
+            "0.07.787.970 I print_info: n_merges              = 514906",
+            "0.07.787.970 I print_info: BOS token             = 2 '<bos>'",
+            "0.07.787.971 I print_info: EOS token             = 1 '<eos>'",
+            "0.07.787.971 I print_info: EOT token             = 106 '<turn|>'",
+            "0.07.787.972 I print_info: UNK token             = 3 '<unk>'",
+            "0.07.787.972 I print_info: PAD token             = 0 '<pad>'",
+            "0.07.787.972 I print_info: MASK token            = 4 '<mask>'",
+            "0.07.787.973 I print_info: LF token              = 107 '",
+            "'",
+            "0.07.787.973 I print_info: EOG token             = 1 '<eos>'",
+            "0.07.787.974 I print_info: EOG token             = 50 '<|tool_response>'",
+            "0.07.787.975 I print_info: EOG token             = 106 '<turn|>'",
+            "0.07.787.975 I print_info: max token length      = 93",
+            "0.07.787.977 I load_tensors: loading model tensors, this can take a while... (load_mode = mmap)",
+            "0.07.788.133 I add: tensor per_layer_token_embd.weight (size = 1512 MiB) lazy read enabled"
+          ]
+        }
+      ]
+    }
+  ],
+  "context_tokens_tested": [
+    32768,
+    65536,
+    98304,
+    131072
+  ],
+  "tested_adapters": [
+    "agent-fw1.q8_0.gguf",
+    "machine-spirit-v1.q8_0.gguf"
+  ],
+  "manual_split_disables_fit": true,
+  "scope_note": "The 64K full success and 96K/128K short successes predate the dual-adapter runtime. Current handoff probes identify their product revision; no current dual-adapter long-context stability success is claimed.",
+  "highest_completed_near_full_context_tokens": 65536,
+  "highest_completed_near_full_is_hardware_limit": false,
+  "current_64k_massive_mcp_stability_verified": false,
+  "mcp_stress": {
+    "source": "round6-mcp-stress-results.json",
+    "sha256": "f58c9bfe5d6b9a4b735672cd3f33577687d3523ac07a64a59ae233af4e90e758",
+    "observed_results": {
+      "started_utc": "2026-10-06T16:54:52.155886+00:00",
+      "real_model": false,
+      "model_fixture": "deterministic_http_sse",
+      "record_folder": null,
+      "fixture_payload_logging": false,
+      "available_before_mib": 1129.3,
+      "transport": {
+        "requested": 100,
+        "completed": 100,
+        "errors": 0,
+        "exit_code": 0,
+        "seconds": 0.906
+      },
+      "sdk_turns": [
+        {
+          "requested_quote_calls": 20,
+          "quote_calls_finished": 20,
+          "searches_finished": 1,
+          "tool_errors": 0,
+          "error_events": 0,
+          "cancelled": false,
+          "model_http_requests": 22,
+          "seconds": 2.937,
+          "available_after_mib": 974.6
+        },
+        {
+          "requested_quote_calls": 20,
+          "quote_calls_finished": 20,
+          "searches_finished": 1,
+          "tool_errors": 0,
+          "error_events": 0,
+          "cancelled": false,
+          "model_http_requests": 22,
+          "seconds": 0.109,
+          "available_after_mib": 969.2
+        },
+        {
+          "requested_quote_calls": 20,
+          "quote_calls_finished": 20,
+          "searches_finished": 1,
+          "tool_errors": 0,
+          "error_events": 0,
+          "cancelled": false,
+          "model_http_requests": 22,
+          "seconds": 0.125,
+          "available_after_mib": 958.3
+        },
+        {
+          "requested_quote_calls": 20,
+          "quote_calls_finished": 20,
+          "searches_finished": 1,
+          "tool_errors": 0,
+          "error_events": 0,
+          "cancelled": false,
+          "model_http_requests": 22,
+          "seconds": 0.157,
+          "available_after_mib": 950.2
+        },
+        {
+          "requested_quote_calls": 20,
+          "quote_calls_finished": 20,
+          "searches_finished": 1,
+          "tool_errors": 0,
+          "error_events": 0,
+          "cancelled": false,
+          "model_http_requests": 22,
+          "seconds": 0.14,
+          "available_after_mib": 939.5
+        }
+      ],
+      "sdk_passed": true
+    },
+    "fixture_http_connection_resets_on_cleanup_observed": 2,
+    "real_model_context_stability_test": false
+  },
+  "context_tokens_scope": "Initial 128K reference; each observed result records its actual context.",
+  "adapter_scope": "Initial automatic-fit adapter; later variants record their own adapter.",
+  "product_128k_probes": [
+    {
+      "source": "round6-product-128k-20261006T171151Z.json",
+      "sha256": "6a5156f5d524fe3e45aa7a9dad98d59a1e1948f7014a67aa10a5b051d3051197",
+      "observed_results": {
+        "started_utc": "20261006T171151Z",
+        "product_revision": "9ee593d28d06c1b7084ebbb289e2b769a5abada7",
+        "available_before_mib": 1250.9,
+        "requested_context": 131072,
+        "gpu_layers": -1,
+        "load_mode": "mmap",
+        "lazy_mode": "on",
+        "fit_target_mib": 512,
+        "adapter": "agent-fw1.q8_0.gguf",
+        "projector": "mmproj-gemma-4-E4B-it-Q8_0.gguf",
+        "attempts": [
+          {
+            "attempt": 1,
+            "service_pid": 9732,
+            "ready": false
+          }
+        ],
+        "abort_reasons": [
+          "windows_low_memory"
+        ],
+        "stopped_for_low_ram": true,
+        "minimum_fast_guard_available_mib": 442.9,
+        "samples": [
+          {
+            "free_ram_mib": 1091.4,
+            "processes": [
+              {
+                "pid": 9732,
+                "name": "python.exe",
+                "working_mib": 4.1,
+                "private_mib": 0.8,
+                "peak_working_mib": 4.1,
+                "free_ram_mib": 1079.7
+              },
+              {
+                "pid": 14612,
+                "name": "conhost.exe",
+                "working_mib": 6.9,
+                "private_mib": 1.2,
+                "peak_working_mib": 6.9,
+                "free_ram_mib": 1079.7
+              },
+              {
+                "pid": 2012,
+                "name": "python.exe",
+                "working_mib": 30.3,
+                "private_mib": 17.8,
+                "peak_working_mib": 30.3,
+                "free_ram_mib": 1079.7
+              },
+              {
+                "pid": 25920,
+                "name": "llama-server.exe",
+                "working_mib": 165.6,
+                "private_mib": 128.5,
+                "peak_working_mib": 165.6,
+                "free_ram_mib": 1079.7
+              },
+              {
+                "pid": 7312,
+                "name": "conhost.exe",
+                "working_mib": 6.8,
+                "private_mib": 1.2,
+                "peak_working_mib": 6.8,
+                "free_ram_mib": 1079.7
+              }
+            ],
+            "gpu": "0, 3962"
+          },
+          {
+            "free_ram_mib": 1014.1,
+            "processes": [
+              {
+                "pid": 6588,
+                "name": "DiscordSystemHelper.exe",
+                "working_mib": 0.0,
+                "private_mib": 0.0,
+                "peak_working_mib": 0.0,
+                "free_ram_mib": 1031.2
+              },
+              {
+                "pid": 9732,
+                "name": "python.exe",
+                "working_mib": 4.1,
+                "private_mib": 0.8,
+                "peak_working_mib": 4.1,
+                "free_ram_mib": 1031.2
+              },
+              {
+                "pid": 14612,
+                "name": "conhost.exe",
+                "working_mib": 6.9,
+                "private_mib": 1.2,
+                "peak_working_mib": 6.9,
+                "free_ram_mib": 1031.2
+              },
+              {
+                "pid": 2012,
+                "name": "python.exe",
+                "working_mib": 30.4,
+                "private_mib": 18.8,
+                "peak_working_mib": 30.4,
+                "free_ram_mib": 1031.2
+              },
+              {
+                "pid": 25920,
+                "name": "llama-server.exe",
+                "working_mib": 175.6,
+                "private_mib": 138.5,
+                "peak_working_mib": 175.6,
+                "free_ram_mib": 1031.2
+              },
+              {
+                "pid": 7312,
+                "name": "conhost.exe",
+                "working_mib": 6.8,
+                "private_mib": 1.2,
+                "peak_working_mib": 6.8,
+                "free_ram_mib": 1031.2
+              },
+              {
+                "pid": 26288,
+                "name": "llama-server.exe",
+                "working_mib": 165.6,
+                "private_mib": 128.5,
+                "peak_working_mib": 165.6,
+                "free_ram_mib": 1031.2
+              },
+              {
+                "pid": 25172,
+                "name": "conhost.exe",
+                "working_mib": 6.8,
+                "private_mib": 1.2,
+                "peak_working_mib": 6.8,
+                "free_ram_mib": 1031.2
+              }
+            ],
+            "gpu": "0, 3962"
+          },
+          {
+            "free_ram_mib": 941.5,
+            "processes": [
+              {
+                "pid": 6588,
+                "name": "DiscordSystemHelper.exe",
+                "working_mib": 0.0,
+                "private_mib": 0.0,
+                "peak_working_mib": 0.0,
+                "free_ram_mib": 990.9
+              },
+              {
+                "pid": 9732,
+                "name": "python.exe",
+                "working_mib": 4.1,
+                "private_mib": 0.8,
+                "peak_working_mib": 4.1,
+                "free_ram_mib": 990.9
+              },
+              {
+                "pid": 14612,
+                "name": "conhost.exe",
+                "working_mib": 6.9,
+                "private_mib": 1.2,
+                "peak_working_mib": 6.9,
+                "free_ram_mib": 990.9
+              },
+              {
+                "pid": 2012,
+                "name": "python.exe",
+                "working_mib": 30.4,
+                "private_mib": 18.8,
+                "peak_working_mib": 30.4,
+                "free_ram_mib": 990.9
+              },
+              {
+                "pid": 25920,
+                "name": "llama-server.exe",
+                "working_mib": 175.6,
+                "private_mib": 138.5,
+                "peak_working_mib": 175.6,
+                "free_ram_mib": 990.9
+              },
+              {
+                "pid": 7312,
+                "name": "conhost.exe",
+                "working_mib": 6.8,
+                "private_mib": 1.2,
+                "peak_working_mib": 6.8,
+                "free_ram_mib": 990.9
+              },
+              {
+                "pid": 26288,
+                "name": "llama-server.exe",
+                "working_mib": 197.7,
+                "private_mib": 161.6,
+                "peak_working_mib": 226.8,
+                "free_ram_mib": 990.9
+              },
+              {
+                "pid": 25172,
+                "name": "conhost.exe",
+                "working_mib": 6.8,
+                "private_mib": 1.2,
+                "peak_working_mib": 6.8,
+                "free_ram_mib": 990.9
+              }
+            ],
+            "gpu": "8, 3954"
+          },
+          {
+            "free_ram_mib": 895.2,
+            "processes": [
+              {
+                "pid": 6588,
+                "name": "DiscordSystemHelper.exe",
+                "working_mib": 0.0,
+                "private_mib": 0.0,
+                "peak_working_mib": 0.0,
+                "free_ram_mib": 894.8
+              },
+              {
+                "pid": 9732,
+                "name": "python.exe",
+                "working_mib": 4.1,
+                "private_mib": 0.8,
+                "peak_working_mib": 4.1,
+                "free_ram_mib": 894.8
+              },
+              {
+                "pid": 14612,
+                "name": "conhost.exe",
+                "working_mib": 6.9,
+                "private_mib": 1.2,
+                "peak_working_mib": 6.9,
+                "free_ram_mib": 894.8
+              },
+              {
+                "pid": 2012,
+                "name": "python.exe",
+                "working_mib": 30.4,
+                "private_mib": 18.8,
+                "peak_working_mib": 30.4,
+                "free_ram_mib": 894.8
+              },
+              {
+                "pid": 25920,
+                "name": "llama-server.exe",
+                "working_mib": 175.6,
+                "private_mib": 138.5,
+                "peak_working_mib": 175.6,
+                "free_ram_mib": 894.8
+              },
+              {
+                "pid": 7312,
+                "name": "conhost.exe",
+                "working_mib": 6.8,
+                "private_mib": 1.2,
+                "peak_working_mib": 6.8,
+                "free_ram_mib": 894.8
+              },
+              {
+                "pid": 26288,
+                "name": "llama-server.exe",
+                "working_mib": 292.1,
+                "private_mib": 387.3,
+                "peak_working_mib": 402.1,
+                "free_ram_mib": 894.8
+              },
+              {
+                "pid": 25172,
+                "name": "conhost.exe",
+                "working_mib": 6.8,
+                "private_mib": 1.2,
+                "peak_working_mib": 6.8,
+                "free_ram_mib": 894.8
+              }
+            ],
+            "gpu": "79, 3884"
+          },
+          {
+            "free_ram_mib": 1004.2,
+            "processes": [
+              {
+                "pid": 6588,
+                "name": "DiscordSystemHelper.exe",
+                "working_mib": 0.0,
+                "private_mib": 0.0,
+                "peak_working_mib": 0.0,
+                "free_ram_mib": 1012.0
+              },
+              {
+                "pid": 9732,
+                "name": "python.exe",
+                "working_mib": 4.1,
+                "private_mib": 0.8,
+                "peak_working_mib": 4.1,
+                "free_ram_mib": 1012.0
+              },
+              {
+                "pid": 14612,
+                "name": "conhost.exe",
+                "working_mib": 6.9,
+                "private_mib": 1.2,
+                "peak_working_mib": 6.9,
+                "free_ram_mib": 1011.6
+              },
+              {
+                "pid": 2012,
+                "name": "python.exe",
+                "working_mib": 30.4,
+                "private_mib": 18.8,
+                "peak_working_mib": 30.4,
+                "free_ram_mib": 1011.6
+              },
+              {
+                "pid": 25920,
+                "name": "llama-server.exe",
+                "working_mib": 175.6,
+                "private_mib": 138.5,
+                "peak_working_mib": 175.6,
+                "free_ram_mib": 1011.6
+              },
+              {
+                "pid": 7312,
+                "name": "conhost.exe",
+                "working_mib": 6.8,
+                "private_mib": 1.2,
+                "peak_working_mib": 6.8,
+                "free_ram_mib": 1011.6
+              },
+              {
+                "pid": 26288,
+                "name": "llama-server.exe",
+                "working_mib": 336.0,
+                "private_mib": 484.3,
+                "peak_working_mib": 402.1,
+                "free_ram_mib": 1011.6
+              },
+              {
+                "pid": 25172,
+                "name": "conhost.exe",
+                "working_mib": 6.8,
+                "private_mib": 1.2,
+                "peak_working_mib": 6.8,
+                "free_ram_mib": 1011.6
+              }
+            ],
+            "gpu": "79, 3884"
+          },
+          {
+            "free_ram_mib": 1110.7,
+            "processes": [],
+            "gpu": "0, 3962"
+          },
+          {
+            "free_ram_mib": 1370.6,
+            "processes": [],
+            "gpu": "0, 3962"
+          }
+        ],
+        "available_after_mib": 1378.2,
+        "three_reloads_passed": false
+      }
+    }
+  ],
+  "mcp_trace_probes": [
+    {
+      "source": "round6-mcp-trace-results-20261006T170934Z.json",
+      "sha256": "a639273409f5001a401c4d175efe7fef3cd6c949c1aa43bf3e0fef1aea4d218b",
+      "observed_results": {
+        "started_utc": "20261006T170934Z",
+        "results": [
+          {
+            "test": "test_read_only_tools_run_and_destructive_ones_ask_once",
+            "exit_code": 0,
+            "started_lines": 1,
+            "methods": [
+              "initialize",
+              "notifications/initialized",
+              "tools/list",
+              "tools/call"
+            ],
+            "pytest_summary": [
+              "1 passed in 2.49s"
+            ]
+          },
+          {
+            "test": "test_first_search_waits_for_a_connecting_deferred_server",
+            "exit_code": 0,
+            "started_lines": 1,
+            "methods": [
+              "initialize",
+              "notifications/initialized",
+              "tools/list",
+              "tools/call"
+            ],
+            "pytest_summary": [
+              "1 passed in 2.53s"
+            ]
+          }
+        ],
+        "raw_fixture_traces_removed": true
+      }
+    }
+  ],
+  "latest_deployed_adapters": [
+    {
+      "filename": "agent-fw1.q8_0.gguf",
+      "bytes": 55160736,
+      "sha256": "85b224ecec76572e2fb153b10d4b7d16f015bf69f0e6a63731a774c54e21566e"
+    },
+    {
+      "filename": "machine-spirit-char-v1.q8_0.gguf",
+      "bytes": 55160832,
+      "sha256": "99ea1581f8f1f0e0f46d6da9b04d444b941c6395b93343b173073e6ade6d29d9"
     }
   ]
 }
