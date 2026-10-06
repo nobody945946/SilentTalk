@@ -1,4 +1,4 @@
-﻿# 第 6 回合 2026-10-06（Codex，GPT-6）
+# 第 6 回合 2026-10-06（Codex，GPT-6）
 
 ## 機魂劇本
 
@@ -9,7 +9,7 @@
 
 - 檢查點：2026-10-06 12:16:01 +08:00。完整回合起始時間、Token、額度與推理等級看不到，不估算。
 - SilentTalk pull：82b4402 → a621d33，exit 0；EdgeAgent pull：eaa54fc → 90c5876，exit 0；report worktree pull：exit 0。
-- A1 指定的 git log --oneline -15 查不到框架标题。補充一次只讀定位：提交 893171f 已在 HEAD 中，git merge-base --is-ancestor 893171f HEAD exit 0；git rev-list --count 893171f..HEAD＝16，所以框架是最近第 17 筆，並非證明尚未併入。
+- A1 指定的 git log --oneline -15 查不到框架標題。補充一次只讀定位：提交 893171f 已在 HEAD 中，git merge-base --is-ancestor 893171f HEAD exit 0；git rev-list --count 893171f..HEAD＝16，所以框架是最近第 17 筆，並非證明尚未併入。
 - 工作檔仍要求查不到就停止。已提出一次 async 問題，待使用者決定是否以實際祖先證據繼續；尚未部署或重載。不能把時間經過當成批准。
 
 ## 目標完成度統計（分母 28）
@@ -57,7 +57,7 @@
 ## 修改檔案與 commit
 
 - 只有report worktree的handoff/reports/laptop.md與handoff/reports/machine-spirit-1.jsonl。
-- 兩個開發repo均未改程式、未commit。本回合回報提交待寫入Git。
+- 兩個開發repo均未改程式、未commit。劇本與此回合初版回報已提交fea56a3，git push origin laptop-report exit 0；本節的提交核對隨後更新於同一回報。
 
 ## 記憶體與速度
 
