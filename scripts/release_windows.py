@@ -132,7 +132,7 @@ def main() -> None:
     player = args.out / f"silenttalk-{tag}.zip"
     built = package_windows.build(edge_zip, player, manifest=None if args.publish else current)
     body = (f"下載 `{player.name}`，解壓後雙擊 `啟動 SilentTalk.cmd`。第一次啟動需要網路，約下載 7–8 GB；"
-            "EdgeAgent 已包在 ZIP 裡，不需要 GitHub 帳號。ZIP 裡沒有任何 LoRA、個人設定、帳號資料、角色狀態、模型權重或對話紀錄。\n\n"
+            "EdgeAgent 已包在 ZIP 裡，不需要 GitHub 帳號。ZIP 裡附帶 E4B 的兩個 LoRA（EdgeAgent 的 Agent、SilentTalk 的機魂）；沒有個人設定、帳號資料、角色狀態、模型權重或對話紀錄。\n\n"
             f"{notes}\n\nSilentTalk `{silent_head}`；EdgeAgent `{edge_head}`（{version}）。\n\n"
             f"SHA256：`{built['sha256']}`")
     (args.out / f"{tag}-notes.md").write_text(body + "\n", encoding="utf-8")
