@@ -101,6 +101,7 @@ B3資產：C:\Users\A8fm0\EdgeAgentTest\round6-files-20261006-201943、同名.zi
 - UI載入exit -1073740791（unsigned3221226505＝0xC0000409）；Windows Application Error模組ucrtbase.dll、exception c0000409。
 - 第一次直接診斷同設定約14.9秒結束，篩出CUDA error；第二次取得完整記憶體stderr，確認CUDA error: out of memory，位置ggml_backend_cuda_device_event_synchronize／cudaEventSynchronize。兩次未提交prompt、未降context/GPU或移除adapter。
 - --list-devices exit0：RTX3050Ti Laptop、4095MiB、當時3289MiB free，枚舉正常；自動fit仍未載入。
+- 分層核對：runtime.py確實設定n-gpu-layers auto、fit on、fit-ctx131072、fit-target512（GPU保留目標512MiB）；不是全GPU設定。這是載入時選擇GPU/CPU分配，不能當成CUDA錯誤後動態轉CPU的保證。service.py載入例外只恢復原配置，沒有OOM後改CPU重載；CPU在同一模型子程序中，程序abort時也一起結束。現有stderr未提供成功的最終層數或完整記憶體分配，不能確定是哪個buffer或自動估算環節出錯；本次GPU OOM只證明這組auto配置失敗，不證明CPU或更少GPU層的128K一定不能跑。CPU-only/手動層數未測，未改使用者設定。上游CUDA錯誤處理見[ggml_cuda_error](https://github.com/ggml-org/llama.cpp/blob/b11193/ggml/src/ggml-cuda/ggml-cuda.cu)，會呼叫GGML_ABORT。
 - E4B穩態RAM/VRAM、mlock成功、角色延遲、Agent字/秒未取得。不以舊Qwen RAM冒充E4B。UI自動回復Qwen後已CLI stop，未將回復配置當成驗收或手動降設定。
 - 2026-10-06 20:49:37 +08:00 使用者要求查log確認128K與SSD；只讀Windows事件及效能/儲存metadata，不讀對話。Application Error在20:22:14、20:24:10、20:25:25各1次，均llama-server.exe/ucrtbase.dll/c0000409，與UI及兩次診斷相符。SilentTalk log最後修改2026-10-05 21:12:46，不是本次啟動證據，未讀內容。正式模型stdout/stderr送DEVNULL，沒有可補查的持久載入log；先前原生診斷stderr僅在記憶體。
 - 查核時可用實體RAM約1.02GiB、總可見RAM約7.70GiB；C:\pagefile.sys配置24538MiB、目前使用1799MiB、系統回報峰值10987MiB。這些是全系統資料，不能歸因E4B或當累計SSD寫入量。當下Pages Output/sec及Page Writes/sec均0，但模型已停止，不能反推載入期間沒有分頁寫入。
