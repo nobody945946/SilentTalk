@@ -15,7 +15,7 @@
 3. 選「連續 3 次都載入成功」裡最小的 fit-target，改 `edge_agent/runtime.py`（`build_server_args` 的 `--fit-target`），補或改對應測試（搜 `fit-target`），EdgeAgent 完整 pytest 過，推 `copilot-story-mode`。三組都失敗：停下，把三組的數字和 stderr 最後 20 行寫進回報交開發機，不要改別的設定。
 4. 回 A5，用原設定（128K、GPU 自動）重載。
 
-附帶的 adapter 會換：開發機正在訓 `machine-spirit-v1.q8_0.gguf`（機魂的台詞和判斷＋Agent 的工具，一個 adapter），品質驗收過就推上來，`edge_agent/runtime.py` 的 `AGENT_ADAPTER` 會改成它。A2／A5 的 adapter 一律以 `AGENT_ADAPTER` 為準；沒推上來前照現在的 `agent-fw1`。
+附帶的 adapter 已換成 `machine-spirit-v1.q8_0.gguf`（EdgeAgent `11dc576`、SilentTalk `431a479`）：機魂的台詞和聊天工作判斷＋Agent 的工具，一個 adapter。A2／A5 一律以 `edge_agent/runtime.py` 的 `AGENT_ADAPTER` 為準。介面一件：`edge_agent/web.py` 模型頁那段說明還寫著舊檔名 `agent-fw1.q8_0.gguf`，改成不寫死檔名（從 `runtime.AGENT_ADAPTER` 取，或只說「附帶的 adapter」），補回歸測試。
 
 ## 第二段：已拍板的現況（不要再問）
 
