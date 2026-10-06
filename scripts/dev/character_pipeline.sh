@@ -10,7 +10,8 @@
 #   check     the checker, Gemma 4 31B (another family than the writers),
 #             answers every gate question and compares lines blind, both
 #             orders
-#   filter    the whole set or nothing (character_data.HARD_CHECK)
+#   filter    the whole set or nothing (character_data.HARD_CHECK);
+#             LINES_BY_RULES=1: lines need only the app's rules (no ranking)
 #
 # The rows train together with the Agent's, one adapter for both (the
 # product loads one); this script stops at the checked rows.
@@ -238,8 +239,8 @@ stage personas .venv/bin/python scripts/dev/machine_spirit.py builtin --chardata
 stage import step external-import --tasks "${TASKS:?set TASKS}" --file "${ANSWERS:?set ANSWERS}"
 stage render step render
 stage student student
-stage check checker check
+stage check checker check ${LINES_BY_RULES:+--lines-by-rules}
 teacher_down
-stage filter step filter
+stage filter step filter ${LINES_BY_RULES:+--lines-by-rules}
 touch "$STATE/done"
 log "character rows ready: $DIR/train-checked.jsonl"

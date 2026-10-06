@@ -244,7 +244,7 @@ def _checked_set(chardata: Path, agree: list[bool], wins: list[int]) -> None:
     )
 
 
-def _filter(min_lines: int = 3, max_gate_rows: int = 4000) -> int:
+def _filter(min_lines: int = 3, max_gate_rows: int = 4000, lines_by_rules: bool = False) -> int:
     args = type(
         "Args",
         (),
@@ -252,10 +252,23 @@ def _filter(min_lines: int = 3, max_gate_rows: int = 4000) -> int:
             "rows": "train.jsonl",
             "min_gate_agree": 0.85,
             "min_lines": min_lines,
-            "max_gate_rows": max_gate_rows,
+            "max_gate_rows": max_gate_rows, "lines_by_rules": lines_by_rules,
         },
     )()
     return character_data.make_filter(args)
+
+
+def test_lines_by_rules_keeps_unranked_lines_and_still_checks_the_gates(chardata: Path) -> None:
+    """The owner's call (2026-10-06): a strong writer's lines train on the
+    app's rules alone, without the checker's ranking; the gates still must
+    agree."""
+    _checked_set(chardata, [True] * 40, [0, 1, 0])
+    assert _filter(min_lines=1500) == 3  # ranked: no line wins, too few lines
+    assert _filter(min_lines=1500, lines_by_rules=True) == 0
+    kept = json.loads((chardata / "filter.json").read_text(encoding="utf-8"))["kept"]
+    assert kept["line"] == 3
+    _checked_set(chardata, [True] * 20 + [False] * 20, [0, 0, 0])
+    assert _filter(lines_by_rules=True) == 3  # the gates are still the gate
 
 
 def test_gate_rows_are_capped_keeping_two_no_per_yes(chardata: Path) -> None:
@@ -286,7 +299,7 @@ def test_only_the_gate_rows_filter_can_use_are_checked(
     args = type(
         "Args",
         (),
-        {"rows": "train.jsonl", "teacher_url": "", "workers": 2, "max_gate_rows": 6},
+        {"rows": "train.jsonl", "teacher_url": "", "workers": 2, "max_gate_rows": 6, "lines_by_rules": False},
     )()
 
     character_data.make_check(args)
@@ -310,7 +323,7 @@ def test_only_the_gate_rows_filter_can_use_are_checked(
                 "rows": "train.jsonl",
                 "min_gate_agree": 0.0,
                 "min_lines": 0,
-                "max_gate_rows": 6,
+                "max_gate_rows": 6, "lines_by_rules": False,
             },
         )()
     )

@@ -320,7 +320,7 @@ def _filter(chardata: Path, rows: list[dict[str, Any]], verdicts: list[dict]) ->
         "".join(json.dumps({"key": character_data.row_key(r)} | v, ensure_ascii=False) + "\n"
                 for r, v in zip(rows, verdicts, strict=True)), encoding="utf-8")
     args = type("Args", (), {"rows": "train.jsonl", "min_gate_agree": 0.85, "min_lines": 3,
-                             "max_gate_rows": 4000})()
+                             "max_gate_rows": 4000, "lines_by_rules": False})()
     return character_data.make_filter(args)
 
 
@@ -378,7 +378,7 @@ def test_the_checker_is_told_the_rules_and_what_the_app_told_the_character(
 
     monkeypatch.setattr(character_data, "chat", checker)
     args = type("Args", (), {"rows": "train.jsonl", "teacher_url": "", "workers": 1,
-                             "max_gate_rows": 4000})()
+                             "max_gate_rows": 4000, "lines_by_rules": False})()
     character_data.make_check(args)
     verdicts = {v["key"]: v for v in map(json.loads, (chardata / "check.jsonl")
                                          .read_text(encoding="utf-8").splitlines())}

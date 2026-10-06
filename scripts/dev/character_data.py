@@ -1294,7 +1294,8 @@ def make_check(args: argparse.Namespace) -> None:
         [r for r in jobs if r["kind"].startswith("gate") and r["script"] in chosen],
     )
     _pool_scripts(
-        args.workers, work, [r for r in jobs if not r["kind"].startswith("gate")]
+        args.workers, work, [r for r in jobs if not r["kind"].startswith("gate")
+                             and not (args.lines_by_rules and r["kind"] in LINE_KINDS)]
     )
 
 
@@ -1354,17 +1355,21 @@ def make_filter(args: argparse.Namespace) -> int:
         for r in checked
         if r["kind"].startswith("gate") and not verdict[id(r)].get("skipped")
     ]
-    lines = [r for r in checked if r["kind"] in LINE_KINDS]
+    lines = [r for r in (rows if args.lines_by_rules else checked) if r["kind"] in LINE_KINDS]
     tasks = [r for r in checked if r["kind"] == "task_text"]
-    lored = [r for r in lines if "lore" in verdict[id(r)]]
+    lored = [r for r in lines if "lore" in verdict.get(id(r), {})]
     kept_gates = [r for r in gates if verdict[id(r)].get("agree")]
+    # --lines-by-rules (the owner, 2026-10-06: train the writer's lines now):
+    # a line needs only the app's rules; the checker's comparison and lore
+    # verdicts are reported, not applied (it was not consistent enough to
+    # rank a strong writer's lines against the student's).
     kept_lines = [
         r for r in lines
-        if verdict[id(r)].get("wins", 0) >= 2 and rule_ok(r)
-        and verdict[id(r)].get("lore", True)
+        if rule_ok(r) and (args.lines_by_rules or (
+            verdict.get(id(r), {}).get("wins", 0) >= 2 and verdict.get(id(r), {}).get("lore", True)))
     ]
     kept_tasks = [r for r in tasks if verdict[id(r)].get("agree")]
-    compared = [verdict[id(r)]["wins"] for r in lines if verdict[id(r)].get("compared")]
+    compared = [verdict[id(r)]["wins"] for r in lines if verdict.get(id(r), {}).get("compared")]
 
     def agree_on(label: str, of: list[dict[str, Any]]) -> float:
         labelled = [r for r in of if r["messages"][-1]["content"] == label]
@@ -1374,27 +1379,29 @@ def make_filter(args: argparse.Namespace) -> int:
 
     stats = {
         "rows": len(rows),
-        "coverage": _share(len(checked), len(rows)),
+        "coverage": _share(len(checked), len([r for r in rows if not (
+            args.lines_by_rules and r["kind"] in LINE_KINDS)])),
         "gate_rows": len(gates),
         "gate_agree": _share(len(kept_gates), len(gates)),
         "gate_agree_yes": agree_on("是", gates),
         "gate_agree_no": agree_on("否", gates),
         "line_rows": len(lines),
         "line_win_rate": _share(
-            sum(verdict[id(r)].get("wins", 0) >= 2 for r in lines), len(lines)
+            sum(verdict.get(id(r), {}).get("wins", 0) >= 2 for r in lines), len(lines)
         ),
         "checker_consistent": _share(sum(w != 1 for w in compared), len(compared)),
         "lines_failed_rules": sum(not rule_ok(r) for r in lines),
         "lines_kept": len(kept_lines),
         "lull_kept": sum(r["kind"] == "lull" for r in kept_lines),
-        "lore_ok": _share(sum(bool(verdict[id(r)]["lore"]) for r in lored), len(lored)),
+        "lore_ok": _share(sum(bool(verdict.get(id(r), {}).get("lore")) for r in lored), len(lored)),
     }
     minimum = dict(
         HARD_CHECK, gate_agree=args.min_gate_agree, lines_kept=args.min_lines
     )
+    stats["lines_by_rules"] = args.lines_by_rules
     failed = [
         f"{name} {stats[name]} < {minimum[name]}"
-        for name in ("coverage", "gate_agree", "lines_kept")
+        for name in ("coverage", "gate_agree", *(() if args.lines_by_rules else ("lines_kept",)))
         if stats[name] < minimum[name]
     ]
     if gates:
@@ -1403,13 +1410,13 @@ def make_filter(args: argparse.Namespace) -> int:
             for name in ("gate_agree_yes", "gate_agree_no")
             if stats[name] < minimum["gate_agree_each"]
         ]
-    if lines:
+    if lines and not args.lines_by_rules:
         failed += [
             f"{name} {stats[name]} < {minimum[name]}"
             for name in ("line_win_rate", "checker_consistent")
             if stats[name] < minimum[name]
         ]
-    if lored:
+    if lored and not args.lines_by_rules:
         failed += [f"lore_ok {stats['lore_ok']} < {minimum['lore_ok']}"] * (
             stats["lore_ok"] < minimum["lore_ok"])
     # An agent character's two work questions, each on its own: a set whose
@@ -1481,6 +1488,8 @@ def main() -> int:
     parser.add_argument("--min-gate-agree", type=float, default=HARD_CHECK["gate_agree"])
     parser.add_argument("--min-lines", type=int, default=HARD_CHECK["lines_kept"])
     parser.add_argument("--max-gate-rows", type=int, default=4000)
+    parser.add_argument("--lines-by-rules", action="store_true",
+                        help="check: compare no lines; filter: keep every line that passes the app's rules")
     parser.add_argument("--workers", type=int, default=4, help="match llama-server --parallel")
     parser.add_argument("--max-chars", type=int, default=72)
     parser.add_argument("--max-prompt-chars", type=int, default=3400)
