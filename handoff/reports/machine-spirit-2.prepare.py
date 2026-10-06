@@ -126,12 +126,12 @@ def main() -> int:
         return 1
     for split, bucket in buckets.items():
         (root / f"machine-spirit-2.{split}.tasks.json").write_text(
-            json.dumps({"persona": job["persona"], "chats": bucket["tasks"]}, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+            json.dumps({"persona": job["persona"], "chats": bucket["tasks"]}, ensure_ascii=False, indent=1) + "\n", encoding="utf-8", newline="\n")
         (root / f"machine-spirit-2.{split}.jsonl").write_text(
-            "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in bucket["answers"]), encoding="utf-8")
+            "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in bucket["answers"]), encoding="utf-8", newline="\n")
         print(f"{split}: scenes={len(bucket['answers'])}, role_lines={len(bucket['roles'])}, quiet={bucket['quiet']}")
     print("exact role overlap=0; human overlap=0; Python snippets parse; existing owner checks pass")
-    print("source_sha256=" + hashlib.sha256(source.read_bytes()).hexdigest())
+    print("source_sha256=" + hashlib.sha256(source.read_bytes().replace(b"\r\n", b"\n")).hexdigest())
     return 0
 
 

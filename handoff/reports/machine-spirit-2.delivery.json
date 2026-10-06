@@ -1,5 +1,5 @@
 {
-  "created_at": "2026-10-06T14:50:17+08:00",
+  "created_at": "2026-10-06T14:53:15+08:00",
   "author": "GPT-6",
   "synthetic": true,
   "real_conversations_used": false,
@@ -43,7 +43,7 @@
     "insufficient_input_scene_rewrites": 5
   },
   "observed_checks": {
-    "prepare": "5 runs: first exit 1; 4 later exit 0 after explicit source/code changes; final 100/20 pass",
+    "prepare": "7 runs: 2 exit 1 (first content rejection; later quoting error during LF serialization edit), 5 exit 0; final 100/20 pass",
     "external_check_train": "ok 100/100, exit 0",
     "external_check_eval": "ok 20/20, exit 0",
     "project_held_human_audit": "first exit 1 (one reserved name); corrected through canonical owner exclusion set; final prepare exit 0",
@@ -51,11 +51,12 @@
     "train_eval_human_overlap": 0,
     "role_lines_repeated_more_than_twice": 0,
     "python_snippets": "AST parse passed",
-    "ruff_F_E9_I_B": "exit 0",
+    "ruff_F_E9_I_B": "4 runs: 1 exit 1 during LF serialization quoting error, 3 exit 0; final pass",
     "canonical_agent_points": "final exit 0; train: ack 100 / chat gate 300 / line 200 / report 100 / task 100; eval: ack 20 / chat gate 60 / line 40 / report 20 / task 20",
     "external_check_runs": 6,
     "one_sentence_role_lines": "486/486 pass",
-    "source_to_answer_turn_roundtrip": "train=True, eval=True"
+    "source_to_answer_turn_roundtrip": "train=True, eval=True",
+    "git_line_ending_audit": "Initial raw hashes mismatched 5 of 6 Git blobs due to CRLF; corrected LF-normalized hashes and explicit LF serialization; no dialogue text change"
   },
   "model_acceptance": {
     "status": "not_run",
@@ -68,32 +69,32 @@
   },
   "artifacts": {
     "machine-spirit-2.manuscript.jsonl": {
-      "bytes": 107168,
-      "sha256": "c124fac803cfc8cf3854254a73ea5133d0bda1dce8ccf04170fd64c01c5bc877"
+      "bytes": 107048,
+      "sha256": "6fb4e2f07412056e2e6d4fff7333d78505df2c8b53460605e048528119476357"
     },
     "machine-spirit-2.prepare.py": {
-      "bytes": 7340,
-      "sha256": "f6bbc284af4fba93dba47566262ae049aa35c06c11cf04e2c3e9ee0814352199"
+      "bytes": 7392,
+      "sha256": "acdb0a43e200ba2b88412b044d10af93e7782b964c1d5cb788ab4fb19177477b"
     },
     "machine-spirit-2.train.tasks.json": {
-      "bytes": 308638,
-      "sha256": "0408d60d3786ff39629e6651272def40bbfab4e070623f525a0a9b5f8791e6b8"
+      "bytes": 297669,
+      "sha256": "a867f9d89b4df88a9b824acd8d95e22a9e1b7fa237f9e1fa754676dbf2487b1d"
     },
     "machine-spirit-2.train.jsonl": {
-      "bytes": 82970,
-      "sha256": "28e3e305db7026b4db680b357b7795cbcd5b051b7522bb86f446e6f3f9b1085d"
+      "bytes": 82870,
+      "sha256": "ac1f3117ba322c9d0d3bd9df0a2e73b70484af08bbb30de476436ca1865d8643"
     },
     "machine-spirit-2.eval.tasks.json": {
-      "bytes": 65450,
-      "sha256": "cddc0ea505ed4466606106485a6ad637b152aad17ea67da484709ec270b3b992"
+      "bytes": 63193,
+      "sha256": "8bc6f56b48668aae0181911305a829cfbb51ebf3507faf55b0d4f5610f8130f9"
     },
     "machine-spirit-2.eval.jsonl": {
-      "bytes": 16885,
-      "sha256": "2ed50690e758bd1b515f54e4828e56bb7211789d2369a67d3cbaa434f0dbf11a"
+      "bytes": 16865,
+      "sha256": "d3d9241db3192c7b8cfafe27b9b738637dd9f811f53bf9e307d2b153ee33e0a5"
     }
   },
   "upstream_instructions": [
-    "Fetch origin/laptop-report and take this complete file family. Keep original machine-spirit-1 comparison separate; it is not counted in 100/20.",
+    "Fetch origin/laptop-report and take this complete file family. Keep original machine-spirit-1 comparison separate; it is not counted in 100/20. Verify artifact hashes using LF-normalized bytes as specified by artifact_hash_convention.",
     "Use the existing character_data.py external-check/import pipeline, not a new trainer. Import only the train task/answer pair into an initialized machine-spirit run.",
     "CHARDATA_DIR selects that run. Set it to the development machine's actual initialized run, not a new empty directory. Import this source once per run, preserving teacher=GPT-6.",
     "Do not refine or re-author this batch before the planned teacher comparison. Continue the existing render/student/check/filter workflow.",
@@ -105,5 +106,6 @@
     "https://arxiv.org/abs/2305.14314",
     "handoff/tasks/machine-spirit-1.json",
     "scripts/dev/character_data.py"
-  ]
+  ],
+  "artifact_hash_convention": "UTF-8 bytes with CRLF normalized to LF; bytes and sha256 below use LF. This matches Git blobs and Linux checkout; normalize CRLF before verification on Windows."
 }

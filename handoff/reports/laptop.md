@@ -56,12 +56,12 @@ pytest 0次；兩repo未改正式程式，沒有以資料檢查冒稱完整pytes
 | 資料驗收 | 次數／結果 | 證據 |
 |---|---|---|
 | 原12份external-check | 2次、ok 12/12 | 新版Python exit 0；初版shell後接時鐘，未獨立擷取Python exit |
-| 新批prepare | 5次，1次exit 1、4次exit 0 | 首輪固定評測語句碰撞1、7字角色台詞1；明確重寫後通過。後續各輪對應23句內容重寫、人名排除、5組資訊不足覆蓋更新 |
+| 新批prepare | 7次，2次exit 1、5次exit 0 | 首輪固定評測語句碰撞1、7字角色台詞1；明確重寫後通過。後續各輪對應23句內容重寫、人名排除、5組資訊不足覆蓋更新。最後補跨平台換行修正時發生引號語法錯誤，修正後重跑exit 0 |
 | 新批external-check | 6次均exit 0 | 3輪各train 100/100、eval 20/20；每輪都因資產內容有變才重驗 |
 | 專案固定評測人名核對 | 初次exit 1 | 碰撞1名；替換1組配角，最終prepare沿用owner.held_out()通過 |
-| 腳本ruff F,E9,I,B | 2次exit 0 | prepare.py；第二次包含新增人名與正規化檢查 |
+| 腳本ruff F,E9,I,B | 4次：3次exit 0、1次exit 1 | prepare.py；引號語法錯誤修正後最終exit 0 |
 | 角色句式／字數 | 最後exit 0 | 486/486句單句、每句8～30字 |
-| 分割與來源核對 | 最後exit 0 | 跨train/eval角色逐字重複0、人名交集0；來源至匯出turn文字兩邊均True；6個產物SHA256匹配 |
+| 分割與來源核對 | 最後exit 0 | 跨train/eval角色逐字重複0、人名交集0；來源至匯出turn文字兩邊均True；6個產物依LF正規化SHA256匹配；初次Git blob核對發現5個CRLF雜湊不符，已修正序列化與manifest規則，台詞不變 |
 | 既有agent_points相容 | 最後exit 0 | train：ack 100、gate_chat_task 300、line 200、report 100、task_text 100；eval：20、60、40、20、20 |
 | 主觀內容覆核 | 作者覆核120組 | GPT-6自行覆核；明確重寫23句，另修4句及5組資訊不足工作。不是獨立模型評審成績 |
 | 模型／老師品質比較 | 未跑 | 筆電本次只完成合成資料；沒有呼叫別的模型寫台詞、沒有訓練或生成學生回覆 |
@@ -92,7 +92,7 @@ pytest 0次；兩repo未改正式程式，沒有以資料檢查冒稱完整pytes
 ## 給接手模型的交接指示
 
 1. 這次資料入口是machine-spirit-2.delivery.json，記錄來源、分割、雜湊與實跑結果。可修改的唯一台詞來源是machine-spirit-2.manuscript.jsonl；prepare.py只把手寫標記序列化成既有task/answer格式，不生成台詞。修改後從新版SilentTalk repo執行 `.venv/Scripts/python.exe C:/Users/A8fm0/Downloads/SilentTalk-laptop-report/handoff/reports/machine-spirit-2.prepare.py --repo C:/Users/A8fm0/Downloads/SilentTalk`。預期train 100、eval 20、exit 0；失敗只改列出的來源組，不改owner檢查門檻。
-2. 開發機取origin/laptop-report這一整組7個檔案，先在新版SilentTalk repo核對：`python scripts/dev/character_data.py external-check --tasks handoff/reports/machine-spirit-2.train.tasks.json --file handoff/reports/machine-spirit-2.train.jsonl`；eval換成eval.tasks.json／eval.jsonl。預期100/100、20/20與exit 0。JSON manifest的6項SHA256必須匹配，否則不要匯入。
+2. 開發機取origin/laptop-report這一整組7個檔案，先在新版SilentTalk repo核對：`python scripts/dev/character_data.py external-check --tasks handoff/reports/machine-spirit-2.train.tasks.json --file handoff/reports/machine-spirit-2.train.jsonl`；eval換成eval.tasks.json／eval.jsonl。預期100/100、20/20與exit 0。JSON manifest的6項SHA256必須匹配（先將CRLF正規化為LF再計算，bytes也採LF），否則不要匯入。
 3. 只將train task/answer匯入已初始化的機魂資料run：沿用開發機工作檔指定的run作為CHARDATA_DIR，執行 `python scripts/dev/character_data.py external-import --tasks handoff/reports/machine-spirit-2.train.tasks.json --file handoff/reports/machine-spirit-2.train.jsonl`。預期100 kept、0 dropped。每個run只匯入一次，保留teacher=GPT-6；不要指向新空目錄，也不要再refine此批台詞後冒稱原作者比較。
 4. eval 20組永遠不匯入訓練run；分開做保留情境的學生評測。原machine-spirit-1的12份仍作原固定任務比較，不自動加入本次100/20。
 5. 合併既有資料池後續接既有render/student/check/filter。至少1500句保留角色台詞等hard gate照舊，不能為這406句下修。模型品質關卡若失敗，回報被拒ID與實際理由，再由作者重寫；不能拿本批資料格式通過冒稱LoRA或小模型人格通過。
