@@ -62,7 +62,10 @@ def main() -> int:
     from silenttalk import story_ui
     from silenttalk.config import config_defaults
     from silenttalk.copilot.persona import (
-        EXAMPLE_PERSONAS, MACHINE_SPIRIT, PersonaState, PersonaStore,
+        EXAMPLE_PERSONAS,
+        MACHINE_SPIRIT,
+        PersonaState,
+        PersonaStore,
     )
     from silenttalk.copilot.types import ConversationTurn, ReplySuggestions
     from silenttalk.phrases import QuickPhraseStore
