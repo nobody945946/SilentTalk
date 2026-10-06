@@ -1,21 +1,14 @@
 # Windows 工作檔：第 6 回合
 
-更新：2026-10-06 上午｜開發分支 `copilot-story-mode`｜回報分支 `laptop-report`
+更新：2026-10-06 下午｜開發分支 `copilot-story-mode`｜回報分支 `laptop-report`
 
-順序：**第一段寫機魂劇本**（不需要使用者）→ **第二段部署新框架、重載、實測**。
+劇本已完成（見下），**從第二段 A1 接著做**。
 
 開始：兩個 repo 都 `git pull --ff-only`，失敗就停下告訴使用者。回報寫在既有 worktree `C:\Users\A8fm0\Downloads\SilentTalk-laptop-report` 的 `handoff/reports/laptop.md`：整份換成第 6 回合，同一回合的檢查點改寫同一節。版面照第 5 回合（時間與額度、目標完成度統計、測試執行結果、修改檔案與 commit、記憶體與速度、Discord 數字表、紀錄目錄、使用者回饋、給接手模型的交接指示），最前面加一節「機魂劇本」。
 
-## 第一段：機魂劇本（不計入驗收分母）
+## 第一段：機魂劇本（已完成，不用再做）
 
-使用者 2026-10-06 決定：機魂聊天的訓練台詞由你（筆電這次的 agent）用自己的模型寫，開發機再用品質關卡和舊老師比。
-
-1. 讀 `handoff/tasks/machine-spirit-1.txt`（約 8,000 字）：開頭是格式，`=== 共用設定 ===` 是角色和記號，後面是 12 份任務。
-2. 一份一份寫：寫一份就在 `C:\Users\A8fm0\Downloads\SilentTalk-laptop-report\handoff\reports\machine-spirit-1.jsonl` 加一行，不要每份都重讀整個任務檔。台詞你自己寫：不寫程式或範本產生、不呼叫別的模型、不請使用者寫。`by` 照實填你的模型名稱和版本。
-3. 12 份寫完，在 SilentTalk repo 檢查：
-   `$env:PYTHONUTF8=1; .venv\Scripts\python.exe scripts\dev\character_data.py external-check --tasks handoff\tasks\machine-spirit-1.json --file C:\Users\A8fm0\Downloads\SilentTalk-laptop-report\handoff\reports\machine-spirit-1.jsonl`
-   預期最後一行 `ok 12/12`、exit 0。沒過就只重寫它列出的那幾份（`lines 22, needs 23`＝句數不對；`no answer`＝漏了），再檢查到 12/12。
-4. 和回報一起 commit、推 `laptop-report`。回報這節只寫：ok 幾/12、檢查幾次、`by` 的名稱、花多久；不貼台詞。
+開發機已收到並核對：`machine-spirit-1` 12/12、`machine-spirit-2` 訓練 100/100、保留 20/20，6 個雜湊相符，正在排隊跑品質關卡。回報的「機魂劇本」一節保留，不用再改。
 
 ## 第二段：已拍板的現況（不要再問）
 
@@ -31,7 +24,7 @@
 每項回報：完成（附證據）／未完成（原因）／沒測（條件不存在）。需要使用者時一次只請他做一件事。
 
 **A. 部署、重載、量測**
-- A1 EdgeAgent `git log --oneline -15` 有「The machine spirit's own framework」。沒有就停，告訴使用者「新框架還沒併進 copilot-story-mode，請在開發機確認」，其他標沒測。
+- A1 在 EdgeAgent：`git merge-base --is-ancestor 893171f HEAD` exit 0（新框架那筆 commit 在 HEAD 裡）。不是 0 就停，告訴使用者「新框架還沒併進 copilot-story-mode，請在開發機確認」，其他標沒測。（上一版只看最近 15 筆，框架排第 17 筆而誤擋，是開發機工作檔的錯。）
 - A2 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap.ps1 -SetupOnly` exit 0；`.venv\Scripts\python.exe -c "import opencc"` exit 0；`models\agent-fw1.q8_0.gguf` 存在（約 55 MB）。
 - A3 EdgeAgent 完整 pytest（含真 Edge）0 failed、exit 0（PYTHONIOENCODING=utf-8、取消 PYTHONUTF8、EDGE_AGENT_UI_REGRESSION=1、`--basetemp`）。
 - A4 SilentTalk 完整 pytest 0 failed、exit 0（PYTHONUTF8=1、`--basetemp`）。
