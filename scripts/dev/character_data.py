@@ -336,8 +336,8 @@ def assemble_agent_chat(data: dict[str, Any], spec: dict[str, Any], name: str,
 
 
 def external_answers(tasks: Path, answers: Path) -> tuple[list[dict[str, Any]], list[str]]:
-    """The other model's answers (--file) to the tasks (--tasks, the .json of
-    external-prompt), assembled and checked like the teacher's scripts.
+    """The writer's answers (--file) to the tasks (--tasks: the persona and each
+    chat's skeleton), assembled and checked by the app's rules (check_script).
     Returns the usable scripts and one problem line per unusable or missing
     chat."""
     job = json.loads(tasks.read_text(encoding="utf-8"))
