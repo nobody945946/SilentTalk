@@ -250,7 +250,6 @@ def _insert(index: int, *lines: dict[str, Any]) -> dict[str, Any]:
 
 
 @pytest.mark.parametrize(("data", "reason"), [
-    (_edit(2, t="測試聊天一"), "aimed line does not name it"),
     (_edit(0, t="機魂 測試閒聊甲"), "names it but not aimed"),
     (_drop(3), "call not answered"),
     (_edit(4, result=None), "work without task or result"),
@@ -265,6 +264,15 @@ def _insert(index: int, *lines: dict[str, Any]) -> dict[str, Any]:
 ])
 def test_scripts_the_app_would_not_play_out_are_refused(data: dict, reason: str) -> None:
     assert _check(data) == ([], reason)
+
+
+def test_a_spoken_call_without_the_name_gets_it_in_front() -> None:
+    """The app needs the name in every spoken line; the teacher often drops it
+    in a follow-up, so the line is given the name rather than the chat lost."""
+    lines, reason = _check(_edit(2, t="測試聊天一"))
+    assert reason == "" or lines, reason
+    called = next(line for line in lines if line["t"].endswith("測試聊天一"))
+    assert called["t"].startswith(("機魂，", "馬基納，")) and called["ask"]
 
 
 def test_a_script_that_copies_an_eval_line_is_refused() -> None:

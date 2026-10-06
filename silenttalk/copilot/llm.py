@@ -248,8 +248,11 @@ _GATE_GRAMMAR = 'root ::= "是" | "否"'
 # anything? Work that only reads goes to the Agent read-only, where EdgeAgent
 # refuses every change without asking, whatever the model then tries. A later
 # line that asks for changes is asked again.
+# The line is quoted: with the owner's earlier lines above it, models gave
+# the last line the changes the earlier ones asked for (the checker of the
+# character data, 2026-10-06; task_scope_eval x04-x09).
 _TASK_SCOPE_QUESTION = (
-    "（再判斷：主人最後這句要思考機做的事，除了讀檔案、搜尋、上網查資料、再回報給他之外，"
+    "（再判斷：主人最後這句「{line}」要思考機做的事，除了讀檔案、搜尋、上網查資料、再回報給他之外，"
     "有沒有要你建立、修改、刪除、移動或改名檔案或設定，或執行程式（跑測試、安裝、執行腳本都算；把結果寫進或存成檔案也算）？"
     "只要讀和查的答 否。只回答 是 或 否）"
 )
@@ -534,7 +537,7 @@ class LocalReplyModel:
         None unless the newest line is the owner's (owner_messages)."""
         if not self._agent_dispatch:
             return None
-        scope = self._owner_question(turns, engagement, _TASK_SCOPE_QUESTION)
+        scope = self.task_scope_messages(turns=turns, engagement=engagement)
         if scope is None:
             return None
         changes = await asyncio.to_thread(
@@ -593,6 +596,16 @@ class LocalReplyModel:
             {"role": "system", "content": self._build_turn_system_prompt(self._persona, engagement)},
             {"role": "user", "content": "\n".join([_OWNER_LINES_HEAD, *lines])},
         ]
+
+    def task_scope_messages(
+        self, *, turns: Sequence[ConversationTurn], engagement: str = "called"
+    ) -> list[dict[str, str]] | None:
+        """The change-or-read question on the owner's newest typed line."""
+        if not turns:
+            return None
+        return self._owner_question(
+            turns, engagement, _TASK_SCOPE_QUESTION.format(line=" ".join(turns[-1].text.split()))
+        )
 
     def _owner_question(
         self, turns: Sequence[ConversationTurn], engagement: str, question: str

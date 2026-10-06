@@ -69,7 +69,6 @@ from silenttalk.copilot.llm import (  # noqa: E402
     _CHAT_TASK_ASK,
     _CHAT_TASK_MAX_CHARS,
     _GATE_QUESTION,
-    _TASK_SCOPE_QUESTION,
     TASK_HINTS,
     LocalReplyModel,
     quiet_for,
@@ -1010,7 +1009,8 @@ def thread_prompt(persona: Persona, spec: dict[str, Any]) -> str:
 先想好{name}今天心裡掛著的 3～4 件具體小事（要符合人設），寫進 concerns。
 
 輸出 JSON：{{"concerns": ["…", "…", "…"], "lines": [{{"t": "內容", "changes": true 或 false}}, …]}}
-changes：這一則要思考機做的事，除了讀和查之外，有沒有要建立、修改、刪除、移動或改名檔案或設定，或執行程式。"""
+changes：只看這一則本身（前面幾則不算），要思考機做的事除了讀和查之外，有沒有要建立、修改、刪除、移動或改名檔案或設定，或執行程式。
+要它「跑」或「執行」任何東西（包括測試）是 true；要改名、移動、刪除，就算說「先給我看」也是 true；只上網查、讀檔案、解釋錯誤訊息、列清單回報是 false。"""
 
 
 def make_scripts(args: argparse.Namespace) -> None:
@@ -1189,7 +1189,11 @@ def check_agent_script(
             if calls(text) and target != name:
                 return [], "names it but not aimed"  # the app would call it
             if target == name and not typed and not calls(text):
-                return [], "aimed line does not name it"
+                # Spoken, it would not reach the character without its name
+                # (the app needs the name in every spoken line); people say
+                # it first, so the line gets it in front instead of losing
+                # the whole chat (half the pilot's chats, 2026-10-06).
+                line["t"] = text = f"{nicks[0] if nicks else name}，{text}"
             if target == name:
                 ask = str(raw.get("ask", "")).strip().lower()
                 if ask not in ASKS:
@@ -1797,7 +1801,7 @@ def agent_rows(
                 messages, answer = chat_task_request(gate), point["detail"]
         elif kind == "gate_task_scope":
             # The owner's own typed lines only (owner_messages), as the app asks.
-            messages = model._owner_question(history, spec["engagement"], _TASK_SCOPE_QUESTION)
+            messages = model.task_scope_messages(turns=history, engagement=spec["engagement"])
             if messages is None:
                 continue
             answer = "是" if point["answer"] else "否"

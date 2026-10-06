@@ -74,7 +74,7 @@ def main() -> None:
                      for i, line in enumerate(lines)]
             started = time.monotonic()
             scope = model._request_gate(
-                model._owner_question(turns, "called", llm._TASK_SCOPE_QUESTION), False)
+                model.task_scope_messages(turns=turns, engagement="called"), False)
             records.append({"id": item["id"], "changes": item["changes"],
                             "said_changes": scope == "是",
                             "ms": round((time.monotonic() - started) * 1000)})
