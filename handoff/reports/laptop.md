@@ -71,7 +71,7 @@ pytest 0次；兩repo未改正式程式，沒有以資料檢查冒稱完整pytes
 ## 修改檔案與 commit
 
 - 本批新增7個machine-spirit-2檔案並改寫laptop.md；原machine-spirit-1.jsonl本次未改。
-- 兩個開發repo均未改程式、未commit。初版fea56a3及回報86688ee已推送；12份整批重寫提交8e28536，git push origin laptop-report exit 0。本報仍是同一回合改寫；新批提交待實際Git提交與push後核對。
+- 兩個開發repo均未改程式、未commit。初版fea56a3及回報86688ee已推送；12份整批重寫提交8e28536，git push origin laptop-report exit 0。本報仍是同一回合改寫；新批資料提交c862861，跨平台序列化與雜湊修正提交1cee143；git push origin laptop-report exit 0，遠端已由0a8daf0更新至1cee143。6個已提交Git blob按manifest核對全部通過；本報補記實際推送結果。
 
 ## 記憶體與速度
 
