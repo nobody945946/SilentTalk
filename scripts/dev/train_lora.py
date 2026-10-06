@@ -29,7 +29,6 @@ from pathlib import Path
 import provenance  # scripts/dev
 
 PROJECT_DIR = Path(__file__).resolve().parents[2]
-DATA = PROJECT_DIR / ".runtime" / "dev" / "distill" / "replies.jsonl"
 TARGET_MODULES = (
     r"^(?!.*(vision|audio)).*layers\.\d+\."
     r"(self_attn\.(q|k|v|o)_proj|mlp\.(gate|up|down)_proj)$"
@@ -40,7 +39,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--base", required=True, help="HF model id or local path")
     parser.add_argument("--out", required=True)
-    parser.add_argument("--data", default=str(DATA))
+    parser.add_argument("--data", nargs="+", required=True, help="one or more stamped row files")
     parser.add_argument("--epochs", type=float, default=2.0)
     parser.add_argument("--lr", type=float, default=2e-4)
     parser.add_argument("--rank", type=int, default=16)
@@ -77,16 +76,18 @@ def main() -> int:
     from trl import SFTConfig, SFTTrainer
 
     # Only files whose rules are known and the same throughout (provenance.py).
-    stamp = provenance.read_stamp(Path(args.data))
-    if stamp is None:
-        raise SystemExit(f"{args.data} has no version stamp ({provenance.sidecar(Path(args.data)).name}); "
-                         "train only on files made by the stamped data steps")
-    print(f"data {args.data}: {stamp}")
+    # Several files train one adapter (the machine spirit's lines and the
+    # Agent's tool work: the product loads one); each keeps its own stamp.
+    rows = []
+    for data in args.data:
+        stamp = provenance.read_stamp(Path(data))
+        if stamp is None:
+            raise SystemExit(f"{data} has no version stamp ({provenance.sidecar(Path(data)).name}); "
+                             "train only on files made by the stamped data steps")
+        part = [json.loads(line) for line in Path(data).read_text(encoding="utf-8").splitlines()]
+        print(f"data {data}: {len(part)} rows, {stamp}")
+        rows += part
     tokenizer = AutoTokenizer.from_pretrained(args.base)
-    rows = [
-        json.loads(line)
-        for line in Path(args.data).read_text(encoding="utf-8").splitlines()
-    ]
     random.Random(0).shuffle(rows)
     results = tokenize_rows(args.base, rows, args.max_length)
     broken = sum(r == "broken" for r in results)
