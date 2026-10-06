@@ -15,7 +15,7 @@
 3. 選「連續 3 次都載入成功」裡最小的 fit-target，改 `edge_agent/runtime.py`（`build_server_args` 的 `--fit-target`），補或改對應測試（搜 `fit-target`），EdgeAgent 完整 pytest 過，推 `copilot-story-mode`。三組都失敗：停下，把三組的數字和 stderr 最後 20 行寫進回報交開發機，不要改別的設定。
 4. 回 A5，用原設定（128K、GPU 自動）重載。
 
-附帶的 adapter 已換成 `machine-spirit-v1.q8_0.gguf`（EdgeAgent `11dc576`、SilentTalk `431a479`）：機魂的台詞和聊天工作判斷＋Agent 的工具，一個 adapter。A2／A5 一律以 `edge_agent/runtime.py` 的 `AGENT_ADAPTER` 為準。介面一件：`edge_agent/web.py` 模型頁那段說明還寫著舊檔名 `agent-fw1.q8_0.gguf`，改成不寫死檔名（從 `runtime.AGENT_ADAPTER` 取，或只說「附帶的 adapter」），補回歸測試。
+附帶的 adapter 現在是兩個（EdgeAgent `57c12ab`、SilentTalk `1607472`）：Agent 用 `agent-fw1.q8_0.gguf`（`runtime.AGENT_ADAPTER`，模型頁選它），機魂用 `machine-spirit-char-v1.q8_0.gguf`（`runtime.CHARACTER_ADAPTER`，SilentTalk 租借時自動帶上，套用在台詞和聊天工作）。伺服器兩個都載入、預設不套用，每個請求只點名自己的。介面一件：`edge_agent/web.py` 模型頁那段說明寫死了舊檔名，改成從 `runtime` 取（兩個都列），補回歸測試。
 
 ## 第二段：已拍板的現況（不要再問）
 
@@ -23,7 +23,7 @@
 - **使用者已同意重載**：重載 EdgeAgent 和 SilentTalk（清掉 RAM 裡的對話），套用 E4B、context 131072、working 131072、GPU 自動、省 VRAM 開、mlock、提示快取每模式 256 MiB。載入失敗如實報告，不擅自降設定。
 - 紀錄只寫 `C:\Users\A8fm0\AgentRecords`（一般 SSD 目錄，已設好），不讀內容。
 - 日常 EdgeAgent 不開 VS Code、Discord 保留；`C:\Users\A8fm0\EdgeAgentTest` 保留。
-- 附帶的 adapter（`AGENT_ADAPTER`）：EdgeAgent 部署時從 `edge_agent/adapters` 複製到 `models`；SilentTalk 租借 E4B 時自動帶上。換成 `machine-spirit-v1` 後，角色的台詞和工作判斷也套用（`character_lora_uses` 預設 `line,task`）。
+- 附帶的 adapter：部署時從 `edge_agent/adapters` 複製到 `models`（兩個都驗 SHA256）。Agent 用 `AGENT_ADAPTER`，機魂用 `CHARACTER_ADAPTER`（`character_lora_uses` 預設 `line,task`）。
 - 新框架：機魂的系統提示、工具目錄（`tool_search` 找 20 個現成工具）、改程式沒過檢查主機會提醒、上網研究依來源分級並核對數字、輸出簡轉繁（新相依 `opencc-python-reimplemented`，部署會裝）。
 
 ## 驗收清單（分母 28）
@@ -32,10 +32,10 @@
 
 **A. 部署、重載、量測**
 - A1 在 EdgeAgent：`git merge-base --is-ancestor 893171f HEAD` exit 0（新框架那筆 commit 在 HEAD 裡）。不是 0 就停，告訴使用者「新框架還沒併進 copilot-story-mode，請在開發機確認」，其他標沒測。（上一版只看最近 15 筆，框架排第 17 筆而誤擋，是開發機工作檔的錯。）
-- A2 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap.ps1 -SetupOnly` exit 0；`.venv\Scripts\python.exe -c "import opencc"` exit 0；`models\` 裡有 `AGENT_ADAPTER` 指的那個檔（約 55 MB）。
+- A2 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap.ps1 -SetupOnly` exit 0；`.venv\Scripts\python.exe -c "import opencc"` exit 0；`models\` 裡有 `AGENT_ADAPTER` 和 `CHARACTER_ADAPTER` 兩個檔（各約 55 MB）。
 - A3 EdgeAgent 完整 pytest（含真 Edge）0 failed、exit 0（PYTHONIOENCODING=utf-8、取消 PYTHONUTF8、EDGE_AGENT_UI_REGRESSION=1、`--basetemp`）。
 - A4 SilentTalk 完整 pytest 0 failed、exit 0（PYTHONUTF8=1、`--basetemp`）。
-- A5 用 EdgeAgent CLI 按 PID 重載，模型頁套用上面設定，「LoRA（選用）」選 `AGENT_ADAPTER` 那個檔（不手改 config.json）；開 SilentTalk。/status：mode=character、agent_slot 有值、Agent context＝131072−角色的份、`lora`＝`AGENT_ADAPTER`；換成 `machine-spirit-v1` 後角色的 lora 套用部分是 `line,task`。不是的話，多半是設定頁存過舊值：用 SilentTalk 設定頁改回預設（不手改 settings.json），並寫進回報。
+- A5 用 EdgeAgent CLI 按 PID 重載，模型頁套用上面設定，「LoRA（選用）」選 `AGENT_ADAPTER`（不手改 config.json）；開 SilentTalk。/status：mode=character、agent_slot 有值、Agent context＝131072−角色的份、`lora`＝`agent-fw1.q8_0.gguf`、`character_lora`＝`machine-spirit-char-v1.q8_0.gguf`。SilentTalk 角色的套用部分是 `line,task`；不是的話，多半是設定頁存過舊值：用 SilentTalk 設定頁改回預設（不手改 settings.json），並寫進回報。
 - A6 實量：VRAM、模型 RAM、mlock 成敗（沒證據寫未測）、角色回覆延遲、Agent 每秒字數。
 - A7 `tests/browser_check.mjs --audit-live`（專用 Edge，先查 9223）24 項全過含 TXT 真下載。
 
