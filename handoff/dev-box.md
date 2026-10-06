@@ -21,14 +21,14 @@
 |---|---|
 | EdgeAgent 框架 | ✅ 已併（`8a4aab3`）：機魂提示、20 個現成工具、中文 tool_search、主機核對、簡轉繁。278 passed（4 個只在 Windows 過） |
 | Agent adapter | ✅ `agent-fw1` 已出貨（repo 附帶、部署複製）。`agent-fw2` 的 366 列已組好（`.runtime/agentdata/agent-rows-fw2.jsonl`，修了 MCP 題被誤判成另一版產品 `f0dab7a`），**先不訓**：等 coder 的列一起訓一個 adapter（產品一次只載一個） |
-| **Coding agent** | 🔬 進行中（§3、§6）。E4B 在 Agent 迴圈：程式題 1/14、repo 2/44；套 `agent-fw1` 變 0/44（66 輪 read/ls 打轉）。做了主機帶流程的 coder（`edge_agent/coder.py`，`39a4652`）：主機重現失敗、列候選函式、用語法樹換函式、跑測試；E4B 只選函式和寫函式，多抽版本由測試挑、沒過把新錯誤回饋。CPU 冒煙：boltons 一題 1 個版本就過。訓練列不需模型（`bench/coder_rows.py`，`9ca0fe0`）：答案是 repo 原本的函式，換進去測試過才收 |
+| **Coding agent** | 🔬 進行中（§3、§6）。E4B 在 Agent 迴圈：程式題 1/14、repo 2/44；套 `agent-fw1` 變 0/44（66 輪 read/ls 打轉）。三條路並行量：①主機帶流程的 coder（`edge_agent/coder.py`）：主機重現、列候選、用語法樹換函式、跑測試，E4B 只選和寫；沒有失敗測試時先寫重現測試（`7123cab`）；訓練列 `coder-rows-v1.jsonl` 958 列（482 題，答案是 repo 原本的函式，不需模型）。②mini-swe-agent 框架（`bench/mini_runner.py`，提示照開源軌跡逐字）：開源軌跡 nvidia/Open-SWE-Traces 的 Qwen3.6-27B 部分（CC BY 4.0）轉列中（`bench/trace_rows.py`，只收開源老師、已解出、32K 內、排除保留 repo 和 SWE-bench repo）。③原本的 Agent 迴圈。外部對照：SWE-bench Verified 固定抽 60 題（`bench/swebench_run.py`，官方評分）。CPU 冒煙：coder 1 題 1 版就過；mini 框架工具呼叫正常（CPU 太慢逾時） |
 | 角色資料 | 🔬 筆電（GPT-6）交了 `machine-spirit-1` 12 份（ms5 骨架）、`machine-spirit-2` 訓練 100／保留 20，雜湊和 `external-check` 全過，放在 `.runtime/dev/ext/`。試跑排在 queue11（ms7＝12 份，和 27B 的 42.4% 比；ms8＝100 份）。保留 20 份永遠不進訓練 |
 | 筆電 | 第 6 回合：劇本完成；A1 誤擋（只看最近 15 筆）已修（`5c28000`），等使用者回筆電接著部署和實測 |
 | 公開下載 | `windows-2026.10.02`；下一版等筆電驗過，用 `scripts/release_windows.py` |
 
 ## 3. 接下來
 
-1. **queue11**（`EdgeAgent/.runtime/fw/queue11.sh`、`.log`；每步 `<步>.done`，失敗 10 分鐘重試；GPU 步驟等到夠空才跑，**不擠別的專案**——下午 ace-step 佔 17 GB 數小時）：切考題完成 → `eval-selftest`（壞題移到 `eval-tasks-rejected`）→ 角色 ms7、ms8 → 27B 幫考題寫請求 → E4B 在 Agent 迴圈（`ho-agent-e4b`）和 coder（`ho-coder-e4b`）各考一次 → coder 列跑完 → 訓 `coder-v1` → `ho-coder-lora1`。跑完：`bench/report.py ho-agent-e4b ho-coder-e4b`、`ho-coder-e4b ho-coder-lora1`，角色看 `.runtime/dev/chardata-ms7/filter.json` 的 `line_win_rate`。
+1. **queue12**（`EdgeAgent/.runtime/fw/queue12.sh`、`.log`；每步 `<步>.done`，失敗 10 分鐘重試；GPU 步驟等到夠空才跑，**不擠別的專案**——ace-step 從 10/06 下午佔 17 GB）：切考題 → 自我檢查（壞題移到 `*-rejected`）→ 切「只有症狀」考題（`eval-issue-tasks`）→ 角色 ms7、ms8 → 27B 寫考題請求 → E4B：coder 全部、mini 每 repo 6 題、Agent 迴圈每 repo 6 題、SWE-bench 60 → 症狀題（coder、mini）→ 27B 在 mini 框架（上限）→ 訓 `coder-v1` → 再考 → 訓 `trace-v1`（32K）→ mini 再考、SWE-bench 再考。看結果：`bench/report.py <A> <B>`、`.runtime/bench/swe60-*/summary.json`、角色 `.runtime/dev/chardata-ms7/filter.json`。
 2. **Coding 的決策規則**（用結果決定，不再問使用者）：
    - coder 在陌生 repo 明顯贏 Agent 迴圈 → 把它做成 Agent 的工具（「修好失敗的測試」），筆電部署；Agent 迴圈只負責對話、找測試、交給 coder。
    - `coder-v1` 贏 → 下一輪資料：E4B 自己在練習題抽到的過關版本＋27B 解 E4B 解不出的題（同一流程、測試過才收），每輪在保留題上量。
@@ -67,7 +67,9 @@ cd /home/clawd/EdgeAgent && .venv/bin/python -m pytest -q -p no:cacheprovider   
 
 - 主機只跑模型和排程；容器沒網路、root 唯讀、非 root；`relay.py --record` 存下實際請求。設定 `runner: "coder"` 改跑 `coder_runner.py`（同題、同沙盒、同評分）；`gpu_layers: 0` 的設定（`e4b-coder-cpu`）不碰 GPU。
 - 題目：`bench/tasks/` 78 題（含 SilentTalk 自己的 repo 題 22）；練習題 `.runtime/agentdata/tasks/`（8 個 repo、519 題：埋 bug 343、拿掉實作 176，請求由 27B 寫）；**保留考題** `.runtime/agentdata/eval-tasks/`（21 個陌生 repo，`HELD_OUT`）。repo 都在 `.runtime/agentdata/repos/`。
-- `dataset.py`（Agent 軌跡→列）、`coder_rows.py`（coder 的兩種請求＋原本的函式，只收練習題）。
+- `dataset.py`（Agent 軌跡→列）、`coder_rows.py`（coder 的兩種請求＋原本的函式，只收練習題）、`trace_rows.py`（開源軌跡→列，由 SilentTalk `train_lora.tokenize_row` 決定能不能訓、多長）。
+- 跑法：`runner` 空＝Agent 迴圈；`coder`；`mini`（工作區也掛在 `/testbed`）。`--per-repo N` 每個 repo 固定取 N 題。`make_tasks.py cut --hide-tests` 切「只有症狀」題（失敗測試搬到 `hidden/`，評分時放回）。
+- 外部資料在 `.runtime/agentdata/external/`（Open-SWE-Traces minisweagent qwen36／qwen38、mini-coder 兩片）；SWE-bench 在 `.runtime/swebench/`（venv、`verified-60.jsonl`、映像檔清單）。
 
 ## 6. 量過的數字
 
