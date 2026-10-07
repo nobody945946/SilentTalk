@@ -3431,9 +3431,147 @@
     },
     "near_full_context_tested": false,
     "three_reloads_tested": false,
-    "human_feedback_received": false,
+    "human_feedback_received": true,
     "agent_shared_slot_available": false,
     "protected_user_files_manually_changed": false,
-    "computer_use_native_pipe_unavailable": true
+    "computer_use_native_pipe_unavailable": true,
+    "superseded_by_fault_isolation_delivery": true
+  },
+  "fault_isolation_delivery": {
+    "verified_utc": "2026-10-07T01:54:18.228401+00:00",
+    "silenttalk_revision": "9bb3714",
+    "edgeagent_revision": "4694e29",
+    "bootstrap_exit": 0,
+    "app_process": {
+      "pid": 24824,
+      "parent": 15184,
+      "created_utc": "2026-10-07T01:37:06.3506720Z"
+    },
+    "model_ready": true,
+    "mode": "character",
+    "agent_context_tokens": 32768,
+    "model_pool_tokens": 65536,
+    "slots": 3,
+    "agent_slot": 2,
+    "gpu_layers": 41,
+    "allocation": {
+      "character_slot_tokens": 16384,
+      "character_slots": 2,
+      "agent_tokens": 32768
+    },
+    "ai_disabled": false,
+    "user_files_manually_changed": false,
+    "event_counts": {
+      "copilot_persona_set": 1,
+      "copilot_character_mode": 1,
+      "copilot_stt_ready": 1,
+      "character_lease_connected": 1,
+      "copilot_runtime_ready": 1,
+      "discord_ready": 2,
+      "voice_receive_started": 2,
+      "voice_receive_stats": 20,
+      "voice_reconnect_backoff": 7,
+      "voice_self_heal_failed": 1,
+      "voice_reconcile_failed": 6,
+      "voice_reconnect_cooldown": 10
+    },
+    "issues": [
+      {
+        "level": "ERROR",
+        "logger": "discord.voice_state",
+        "event": "library_event",
+        "exception_type": "discord.errors.ConnectionClosed",
+        "count": 1
+      },
+      {
+        "level": "ERROR",
+        "logger": "discord.client",
+        "event": "library_event",
+        "exception_type": "aiohttp.client_exceptions.ClientConnectorDNSError",
+        "count": 8
+      },
+      {
+        "level": "ERROR",
+        "logger": "discord.voice_state",
+        "event": "library_event",
+        "exception_type": "aiohttp.client_exceptions.ClientConnectionResetError",
+        "count": 7
+      },
+      {
+        "level": "WARNING",
+        "logger": "silenttalk.discord_voice",
+        "event": "voice_reconnect_backoff",
+        "exception_type": "",
+        "count": 7
+      },
+      {
+        "level": "WARNING",
+        "logger": "silenttalk.discord_voice",
+        "event": "voice_self_heal_failed",
+        "exception_type": "",
+        "count": 1
+      },
+      {
+        "level": "WARNING",
+        "logger": "silenttalk.discord_voice",
+        "event": "voice_reconcile_failed",
+        "exception_type": "",
+        "count": 6
+      }
+    ],
+    "silenttalk_pytest": {
+      "passed": 354,
+      "skipped": 1,
+      "warnings": 1,
+      "seconds": 16.52,
+      "exit": 0
+    },
+    "edgeagent_pytest": {
+      "passed": 316,
+      "skipped": 9,
+      "seconds": 183.89,
+      "exit": 0,
+      "native_unicorn_access_violation_diagnostics_observed": true
+    },
+    "synthetic_codec": {
+      "opus_packets": 113,
+      "exit": 0
+    },
+    "ui_flow_exit": 0,
+    "pi_compaction_continuation": {
+      "same_task": true,
+      "writes_exactly_once": 2,
+      "real_sdk": true,
+      "synthetic_model": true
+    },
+    "human_audio_confirmation_after_fix": false,
+    "near_full_window_tested": false,
+    "module_lines": {
+      "ui.py": 569,
+      "copilot/llm.py": 409,
+      "copilot/runtime.py": 587,
+      "discord_voice.py": 511,
+      "persona_ui.py": 492
+    },
+    "app_loaded_revision": "d4f8dd0",
+    "application_python_files_over_600": {},
+    "recording_directory_metadata": {
+      "files": 2,
+      "bytes": 1073,
+      "contents_read": false
+    },
+    "ui_flow_runs": 2,
+    "memory_snapshot": {
+      "free_physical_kib": 890652,
+      "total_physical_kib": 8072528,
+      "gpu_used_mib": 3543,
+      "gpu_free_mib": 420
+    },
+    "recovery": {
+      "app_pid_unchanged": true,
+      "discord_ready_after_network_errors": true,
+      "voice_receive_started_after_network_errors": true,
+      "ai_ready_at_final_check": true
+    }
   }
 }
