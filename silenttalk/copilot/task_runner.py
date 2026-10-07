@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import logging
+import re
 import time
 from collections import deque
 
@@ -28,6 +29,14 @@ from silenttalk.conversation import Trigger as _Trigger
 
 _AGENT_RESULT_MAX_CHARS = 6000
 _BUSY = "目前工作仍在進行，請等完成後再交代下一件。"
+
+
+_FAILURE_CODE = re.compile(r"[a-z][a-z0-9_]{0,39}")
+
+
+def failure_code(value: object) -> str:
+    """The reason code if it is one (a short snake_case name), else unknown."""
+    return value if isinstance(value, str) and _FAILURE_CODE.fullmatch(value) else "unknown"
 
 
 class AgentTaskRunner:
@@ -220,6 +229,13 @@ class AgentTaskRunner:
                 )
                 _LOG.warning("agent_approval_failed error_type=%s", type(exc).__name__)
         elif kind in {"done", "error", "cancelled"}:
+            # Why a task failed, as a code only (never the message, which can
+            # quote the request): EdgeAgent's or the client's (agent_tasks.py).
+            _LOG.info(
+                "agent_task_ended kind=%s reason=%s",
+                kind,
+                failure_code(payload.get("reason")) if kind == "error" else "-",
+            )
             if kind == "done":
                 # EdgeAgent's own checks on the answer, as counts only: code
                 # changed with no passing check, cited numbers its sources do

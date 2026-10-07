@@ -14,6 +14,20 @@ from silenttalk.agent_lease import CONTROL_PORT, AgentLeaseError
 TaskEvent = Callable[[str, dict[str, object]], Awaitable[None]]
 
 
+def client_failure(exc: BaseException) -> str:
+    """A stable code for a task that failed on the way to or from EdgeAgent
+    (EdgeAgent's own failures arrive with their code in the error event)."""
+    if isinstance(exc, TimeoutError):
+        return "read_timeout"
+    if isinstance(exc, aiohttp.ClientResponseError):
+        return f"http_{exc.status}"
+    if isinstance(exc, (aiohttp.ClientError, OSError)):
+        return "connection"
+    if isinstance(exc, AgentLeaseError):
+        return "stream_ended"
+    return "invalid_event"
+
+
 class AgentTaskClient:
     def __init__(self, base_url: str | None = None) -> None:
         self.base_url = base_url or f"http://127.0.0.1:{CONTROL_PORT}"
@@ -93,7 +107,7 @@ class AgentTaskClient:
         except asyncio.CancelledError:
             raise
         except (aiohttp.ClientError, OSError, ValueError, AgentLeaseError) as exc:
-            await on_event("error", {"message": str(exc)})
+            await on_event("error", {"message": str(exc), "reason": client_failure(exc)})
         finally:
             if not terminal:
                 try:
