@@ -13,12 +13,9 @@ from silenttalk.voice_styles import (
     PERSONA_VOICES,
     VOICE_EFFECTS,
 )
-from silenttalk.widgets import (
-    Button,
-    Chip,
-    Segmented,
-    Stepper,
-)
+from silenttalk.widgets.button import Button, Chip
+from silenttalk.widgets.selection import Segmented
+from silenttalk.widgets.stepper import Stepper
 
 ApplyCallback = Callable[[Persona], None]
 StatusCallback = Callable[[str], None]

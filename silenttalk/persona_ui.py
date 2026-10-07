@@ -19,11 +19,9 @@ from silenttalk.persona import (
 )
 from silenttalk.persona_fields_ui import PersonaFields
 from silenttalk.persona_preview_ui import PersonaPreview
-from silenttalk.widgets import (
-    Avatar,
-    Button,
-    ScrollArea,
-)
+from silenttalk.widgets.avatar import Avatar
+from silenttalk.widgets.button import Button
+from silenttalk.widgets.scroll import ScrollArea
 
 ApplyCallback = Callable[[Persona], None]
 StatusCallback = Callable[[str], None]

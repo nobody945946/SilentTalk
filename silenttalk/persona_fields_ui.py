@@ -13,14 +13,11 @@ from silenttalk.persona import (
     TRAIT_AXES,
     Persona,
 )
-from silenttalk.widgets import (
-    Button,
-    Disclosure,
-    Field,
-    Segmented,
-    TraitSlider,
-    wrap_to_width,
-)
+from silenttalk.widgets.button import Button
+from silenttalk.widgets.disclosure import Disclosure
+from silenttalk.widgets.field import Field
+from silenttalk.widgets.layout import wrap_to_width
+from silenttalk.widgets.selection import Segmented, TraitSlider
 
 ApplyCallback = Callable[[Persona], None]
 StatusCallback = Callable[[str], None]

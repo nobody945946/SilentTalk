@@ -14,7 +14,10 @@ from collections.abc import Callable, Sequence
 from silenttalk import theme
 from silenttalk.conversation import ConversationTurn
 from silenttalk.persona import MOODS
-from silenttalk.widgets import Avatar, Button, Segmented, card, wrap_to_width
+from silenttalk.widgets.avatar import Avatar
+from silenttalk.widgets.button import Button
+from silenttalk.widgets.layout import card, wrap_to_width
+from silenttalk.widgets.selection import Segmented
 
 MAX_TRANSCRIPT_TURNS = 80
 

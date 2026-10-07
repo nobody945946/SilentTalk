@@ -4,9 +4,7 @@ import tkinter as tk
 
 from silenttalk import theme
 from silenttalk.state import AppState
-from silenttalk.widgets import (
-    StatusDot,
-)
+from silenttalk.widgets.status import StatusDot
 
 # Three places, like a phone's tab bar: talking, who you are, and settings.
 

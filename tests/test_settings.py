@@ -246,7 +246,7 @@ def test_settings_discord_invite_link_displays_and_updates(settings_ui) -> None:
 
         def build_discord_invite(parent: tk.Frame) -> None:
             nonlocal card_body
-            from silenttalk.widgets import card
+            from silenttalk.widgets.layout import card
             box = card(parent)
             box.outer.pack(fill="x")
             card_body = tk.Frame(box)

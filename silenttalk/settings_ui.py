@@ -15,16 +15,13 @@ from silenttalk import theme
 from silenttalk.records import prepare_record_folder, recording_status
 from silenttalk.settings_schema import PAGES, Page, Setting
 from silenttalk.settings_store import SettingsError, SettingsStore
-from silenttalk.widgets import (
-    Chip,
-    Disclosure,
-    ScrollArea,
-    Segmented,
-    Stepper,
-    Toggle,
-    card,
-    wrap_to_width,
-)
+from silenttalk.widgets.button import Chip
+from silenttalk.widgets.disclosure import Disclosure
+from silenttalk.widgets.layout import card, wrap_to_width
+from silenttalk.widgets.scroll import ScrollArea
+from silenttalk.widgets.selection import Segmented
+from silenttalk.widgets.stepper import Stepper
+from silenttalk.widgets.toggle import Toggle
 
 StatusCallback = Callable[[str], None]
 # Called with the merged section tables after a successful save, so the app

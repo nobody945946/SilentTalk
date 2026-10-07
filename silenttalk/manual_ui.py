@@ -6,13 +6,9 @@ from silenttalk import theme
 from silenttalk.conversation import REPLY_LANES, ReplySuggestions
 from silenttalk.phrases import QuickPhraseError, QuickPhraseStore
 from silenttalk.voice_styles import voice_style_label
-from silenttalk.widgets import (
-    Button,
-    Disclosure,
-    card,
-    hint_row,
-    wrap_to_width,
-)
+from silenttalk.widgets.button import Button
+from silenttalk.widgets.disclosure import Disclosure
+from silenttalk.widgets.layout import card, hint_row, wrap_to_width
 
 # Three places, like a phone's tab bar: talking, who you are, and settings.
 

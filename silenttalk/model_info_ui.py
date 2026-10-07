@@ -4,9 +4,7 @@ import tkinter as tk
 from collections.abc import Sequence
 
 from silenttalk import theme
-from silenttalk.widgets import (
-    card,
-)
+from silenttalk.widgets.layout import card
 
 # Three places, like a phone's tab bar: talking, who you are, and settings.
 

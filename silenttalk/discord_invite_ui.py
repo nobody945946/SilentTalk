@@ -4,11 +4,8 @@ import tkinter as tk
 from collections.abc import Callable
 
 from silenttalk import theme
-from silenttalk.widgets import (
-    Button,
-    card,
-    wrap_to_width,
-)
+from silenttalk.widgets.button import Button
+from silenttalk.widgets.layout import card, wrap_to_width
 
 # Three places, like a phone's tab bar: talking, who you are, and settings.
 

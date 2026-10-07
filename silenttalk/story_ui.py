@@ -19,7 +19,7 @@ from silenttalk.conversation import (
     ReplySuggestions,
 )
 from silenttalk.persona import MOODS
-from silenttalk.widgets import hint_row, wrap_to_width
+from silenttalk.widgets.layout import hint_row, wrap_to_width
 
 # Choices you are reading or picking from stay put this long after they
 # appeared or after your last key; a newer round waits behind them (R shows

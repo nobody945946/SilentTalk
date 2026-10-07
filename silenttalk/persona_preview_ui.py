@@ -10,10 +10,8 @@ from silenttalk.persona import (
     RECOMMENDED_PROMPT_CHARS,
     Persona,
 )
-from silenttalk.widgets import (
-    Disclosure,
-    wrap_to_width,
-)
+from silenttalk.widgets.disclosure import Disclosure
+from silenttalk.widgets.layout import wrap_to_width
 
 ApplyCallback = Callable[[Persona], None]
 StatusCallback = Callable[[str], None]

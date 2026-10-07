@@ -12,12 +12,8 @@ from silenttalk.speech_settings import (
     MIN_RATE_MULTIPLIER,
 )
 from silenttalk.voice_styles import voice_style_choices, voice_style_label
-from silenttalk.widgets import (
-    Button,
-    Chip,
-    card,
-    wrap_to_width,
-)
+from silenttalk.widgets.button import Button, Chip
+from silenttalk.widgets.layout import card, wrap_to_width
 
 # Three places, like a phone's tab bar: talking, who you are, and settings.
 
