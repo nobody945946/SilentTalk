@@ -1,0 +1,44 @@
+{
+  "generated_at_utc": "2026-10-07T06:13:15.200393+00:00",
+  "window_utc": {
+    "start": "2026-10-07T02:39:08+00:00",
+    "end": "2026-10-07T05:57:32.926596+00:00"
+  },
+  "records": 7383,
+  "events": {
+    "discord_ready": 1,
+    "discord_gateway_resumed": 3,
+    "voice_receive_started": 574,
+    "voice_receive_stats": 297,
+    "voice_transport_recovery": 0,
+    "voice_playback_failed_recovering": 0,
+    "text_message_received": 2,
+    "thread_opened": 1,
+    "agent_task_decision": 2,
+    "agent_result_posted": 2,
+    "copilot_character_line": 0,
+    "job_done": 0
+  },
+  "voice_force_disconnect": 573,
+  "voice_reconnect_unsuccessful": 573,
+  "voice_4006": 15,
+  "receive_start_interval_median_seconds": 20.279621,
+  "agent_task_elapsed_ms": [
+    104891,
+    175984
+  ],
+  "synthetic_reproduction_sha256": "28b848cf8610778372018358adcacb13a2f80ccdec246878cc3a7a6de91810fb",
+  "validation": {
+    "suite": "synthetic reproduction plus targeted existing Discord/runtime/task tests",
+    "passed": 70,
+    "warnings": 1,
+    "elapsed_seconds": 3.87,
+    "exit_code": 0
+  },
+  "limits": [
+    "No product fix or deployment",
+    "Initial voice invalidation source unknown",
+    "Original Agent terminal error causes unknown",
+    "No conversation records read"
+  ]
+}
