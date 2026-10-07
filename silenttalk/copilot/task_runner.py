@@ -18,6 +18,7 @@ from silenttalk.conversation import (
     ConversationTurn,
 )
 from silenttalk.copilot.reply_templates import PRIVATE_REPORTS
+from silenttalk.copilot.reply_transport import InferenceDeferred
 
 _LOG = logging.getLogger(__name__)
 
@@ -93,6 +94,8 @@ class AgentTaskRunner:
                 turns=turns,
                 engagement=self.engagement,
             )
+        except InferenceDeferred:
+            raise
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # noqa: BLE001 - task failures must reach the owner
@@ -137,6 +140,8 @@ class AgentTaskRunner:
                 ),
                 name="discord-agent-task",
             )
+        except InferenceDeferred:
+            raise
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # noqa: BLE001 - task failures must reach the character
@@ -322,3 +327,9 @@ class AgentTaskRunner:
 
     def queue_owner(self, trigger, turns):
         self._owner_tasks.append((trigger, turns))
+
+    def defer_hint(self, hint):
+        self._task_hints.appendleft(hint)
+
+    def defer_owner(self, trigger, turns):
+        self._owner_tasks.appendleft((trigger, turns))

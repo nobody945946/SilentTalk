@@ -5,6 +5,7 @@ import logging
 import time
 from dataclasses import replace
 
+from silenttalk.copilot.reply_transport import InferenceDeferred
 from silenttalk.persona import Persona, blank_persona
 
 _LOG = logging.getLogger(__name__)
@@ -68,13 +69,17 @@ class CharacterLife:
             state = replace(
                 state, concerns=tuple(c for c in state.concerns if c.status != "open")
             )
-        try:
-            state = await self._llm.fill_concerns(state)
-        except asyncio.CancelledError:
-            raise
-        except Exception as exc:
-            _LOG.warning("copilot_agenda_failed error_type=%s", type(exc).__name__)
-            return
+        while True:
+            try:
+                state = await self._llm.fill_concerns(state)
+                break
+            except InferenceDeferred:
+                await asyncio.sleep(1.0)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                _LOG.warning("copilot_agenda_failed error_type=%s", type(exc).__name__)
+                return
         self._llm.set_state(state)
         self._save_life()
         _LOG.info(
@@ -119,11 +124,12 @@ class CharacterLife:
         or dropped, new ones, recent and mood (views and feelings in "full").
         Counts only in the log; the state itself is the user's file."""
         started = time.perf_counter()
-        self.lines_since_update = 0
         try:
             state = await self._llm.update_state(self._all_turns())
             if len(state.active_concerns()) < 2:
                 state = await self._llm.fill_concerns(state)
+        except InferenceDeferred:
+            return
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -131,6 +137,7 @@ class CharacterLife:
                 "copilot_state_update_failed error_type=%s", type(exc).__name__
             )
             return
+        self.lines_since_update = 0
         self._llm.set_state(state)
         self._save_life()
         _LOG.info(

@@ -24,6 +24,8 @@ from silenttalk.copilot.character_life import CharacterLife
 from silenttalk.copilot.character_state import STATE_FILE, CharacterStateStore
 from silenttalk.copilot.llm import LocalReplyModel
 from silenttalk.copilot.replies import CharacterReplies
+from silenttalk.copilot.reply_transport import InferenceDeferred
+from silenttalk.copilot.reply_worker import run_reply_worker
 from silenttalk.copilot.sessions import ConversationSessions
 from silenttalk.copilot.stt import StreamingTranscriber
 from silenttalk.copilot.stt_offline import OfflineTranscriber
@@ -37,8 +39,6 @@ SuggestionCallback = Callable[[ReplySuggestions], None]
 MessageCallback = Callable[[str], None]
 AgendaCallback = Callable[[tuple[str, ...]], None]
 
-# How often the worker looks for a lull while nothing else wakes it.
-_LULL_POLL_SECONDS = 1.0
 LineCallback = Callable[[str], None]
 # A typed answer and the place it goes to (VOICE_ROOM or a thread).
 PlaceLineCallback = Callable[[str, int], None]
@@ -479,41 +479,12 @@ class CopilotRuntime:
 
     async def _suggestion_worker(self) -> None:
         assert self._wake is not None
-        while True:
-            try:
-                await asyncio.wait_for(self._wake.wait(), timeout=_LULL_POLL_SECONDS)
-            except TimeoutError:
-                if self.replies.lull_due():
-                    await self.replies.open_topic()
-                elif self.life.update_due(bool(self._pending)):
-                    await self.life.update()
-                continue
-            self._wake.clear()
-            if self.tasks.has_hint and self._character_mode:
-                kind, detail, place = self.tasks.take_hint()
-                await self.replies.task_line(kind, detail, place)
-                self._wake.set()
-                continue
-            if (
-                self.tasks.has_owner_task
-                and self._character_mode
-                and self._config.character_agent
-            ):
-                owner_trigger, turns = self.tasks.take_owner_task()
-                await self.tasks.dispatch_owner(owner_trigger, turns)
-                self._wake.set()
-                continue
-            if not self._pending:
-                continue
-            place = next(iter(self._pending))
-            trigger = self._pending.pop(place)
-            self.sessions.maybe_compact(place)
-            if self._pending:
-                self._wake.set()  # another place is waiting
-            if self._character_mode:
-                await self._respond(trigger)
-            else:
-                await self.replies.generate(trigger)
+        await run_reply_worker(
+            self._wake, self._pending, replies=self.replies, tasks=self.tasks,
+            sessions=self.sessions, life=self.life, respond=self._respond,
+            character_mode=lambda: self._character_mode,
+            agent_enabled=lambda: self._config.character_agent,
+        )
 
     async def _respond(self, trigger: _Trigger) -> None:
         """A line in a chat (the voice room or a text channel) that called the
@@ -529,6 +500,8 @@ class CopilotRuntime:
                     summary=context.summary,
                     engagement=self.replies.policy.mode,
                 )
+            except InferenceDeferred:
+                raise
             except asyncio.CancelledError:
                 raise
             except Exception as exc:  # noqa: BLE001 - the character still answers

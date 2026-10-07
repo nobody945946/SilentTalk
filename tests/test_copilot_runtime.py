@@ -123,6 +123,41 @@ async def _settle() -> None:
 
 
 @pytest.mark.asyncio
+async def test_borrower_waits_for_idle_and_then_answers_only_latest_trigger(tmp_path, monkeypatch):
+    from silenttalk.copilot import reply_worker
+    from silenttalk.copilot.reply_transport import InferenceDeferred
+
+    monkeypatch.setattr(reply_worker, "_RETRY_SECONDS", 0.01)
+    runtime, llm, delivered = await _runtime(tmp_path)
+    busy_seen, answered = asyncio.Event(), asyncio.Event()
+    owner_busy = True
+    errors = []
+    runtime.replies._on_error = errors.append
+
+    async def suggest(**kwargs):
+        if owner_busy:
+            busy_seen.set()
+            raise InferenceDeferred("fixture owner busy")
+        answered.set()
+        return ReplySuggestions(kwargs["trigger_speaker"], kwargs["trigger_text"], agree="好")
+
+    llm.suggest = suggest
+    try:
+        runtime._handle_turn(2, "A", "第一句話")
+        await asyncio.wait_for(busy_seen.wait(), 1)
+        runtime._handle_turn(2, "A", "第二句話")
+        assert not runtime._worker.done() and not errors
+        owner_busy = False
+        await asyncio.wait_for(answered.wait(), 1)
+        await _settle()
+        replies = [r for r in delivered if isinstance(r, ReplySuggestions)]
+        assert [r.trigger_text for r in replies] == ["第二句話"]
+        assert not errors and not runtime._worker.done()
+    finally:
+        await _stop(runtime)
+
+
+@pytest.mark.asyncio
 async def test_busy_chat_generates_only_for_newest_line(tmp_path: Path) -> None:
     runtime, llm, delivered = await _runtime(tmp_path)
     runtime._handle_turn(2, "A", "第一句話")
@@ -478,9 +513,9 @@ async def test_light_memory_carries_its_life_and_updates_only_when_quiet(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from silenttalk.copilot import character_life as life_module
-    from silenttalk.copilot import runtime as runtime_module
+    from silenttalk.copilot import reply_worker as worker_module
 
-    monkeypatch.setattr(runtime_module, "_LULL_POLL_SECONDS", 0.01)
+    monkeypatch.setattr(worker_module, "_POLL_SECONDS", 0.01)
     monkeypatch.setattr(life_module, "_QUIET_UPDATE_SECONDS", 0.3)
     store = CharacterStateStore(tmp_path / "character_state.json")
     store.save(
@@ -540,9 +575,9 @@ async def test_clearing_forgets_its_life(tmp_path: Path) -> None:
 async def test_a_lull_opens_one_topic_until_someone_speaks_again(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from silenttalk.copilot import runtime as runtime_module
+    from silenttalk.copilot import reply_worker as worker_module
 
-    monkeypatch.setattr(runtime_module, "_LULL_POLL_SECONDS", 0.01)
+    monkeypatch.setattr(worker_module, "_POLL_SECONDS", 0.01)
     runtime, llm, delivered = await _runtime(
         tmp_path, config=CopilotConfig(character_lull_seconds=0.05)
     )
@@ -577,9 +612,9 @@ async def test_a_lull_opens_one_topic_until_someone_speaks_again(
 async def test_no_lull_topics_outside_character_mode(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from silenttalk.copilot import runtime as runtime_module
+    from silenttalk.copilot import reply_worker as worker_module
 
-    monkeypatch.setattr(runtime_module, "_LULL_POLL_SECONDS", 0.01)
+    monkeypatch.setattr(worker_module, "_POLL_SECONDS", 0.01)
     runtime, llm, delivered = await _runtime(
         tmp_path, config=CopilotConfig(character_lull_seconds=0.05)
     )
@@ -595,9 +630,9 @@ async def test_no_lull_topics_outside_character_mode(
 async def test_a_lull_line_is_dropped_if_someone_speaks_meanwhile(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from silenttalk.copilot import runtime as runtime_module
+    from silenttalk.copilot import reply_worker as worker_module
 
-    monkeypatch.setattr(runtime_module, "_LULL_POLL_SECONDS", 0.01)
+    monkeypatch.setattr(worker_module, "_POLL_SECONDS", 0.01)
     runtime, llm, delivered = await _runtime(
         tmp_path, config=CopilotConfig(character_lull_seconds=0.05)
     )

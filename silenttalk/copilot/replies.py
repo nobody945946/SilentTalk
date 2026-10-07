@@ -10,6 +10,7 @@ from silenttalk.conversation import (
 )
 from silenttalk.conversation import Trigger as _Trigger
 from silenttalk.copilot.character import CharacterPolicy
+from silenttalk.copilot.reply_transport import InferenceDeferred
 
 _LOG = logging.getLogger(__name__)
 
@@ -79,6 +80,8 @@ class CharacterReplies:
                         self._on_agent_line(line)
                 elif self._on_character_text is not None:
                     self._on_character_text(line, place)
+        except InferenceDeferred:
+            raise
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # noqa: BLE001 - preserve the worker when notice generation fails
@@ -102,6 +105,8 @@ class CharacterReplies:
                 addressed=trigger.addressed,
                 engagement=self.policy.mode,
             )
+        except InferenceDeferred:
+            raise
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -148,6 +153,8 @@ class CharacterReplies:
                 trigger_text=trigger.text,
                 on_partial=self._on_suggestions,
             )
+        except InferenceDeferred:
+            raise
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -183,6 +190,8 @@ class CharacterReplies:
                 engagement=self.policy.mode,
                 lull=True,
             )
+        except InferenceDeferred:
+            raise
         except asyncio.CancelledError:
             raise
         except Exception as exc:

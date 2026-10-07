@@ -468,17 +468,16 @@ def test_only_character_requests_use_the_lora() -> None:
     model = LocalReplyModel(Path("unused.gguf"), lora_path=Path("adapter.gguf"))
     assert model.transport.lora_field(True) == {
         "id_slot": 0
-    }  # role cache stays separate from Agent
+    }  # all requests borrow one slot
     model.transport.adapter_loaded = True
-    # Each scale keeps its own slot: llama-server drops a slot's prompt cache
-    # when the scale changes.
+    # The service clears the disposable cache at an inference handover.
     assert model.transport.lora_field(True) == {
         "lora": [{"id": 0, "scale": 1.0}],
         "id_slot": 0,
     }
     assert model.transport.lora_field(False) == {
         "lora": [{"id": 0, "scale": 0.0}],
-        "id_slot": 1,
+        "id_slot": 0,
     }
 
 

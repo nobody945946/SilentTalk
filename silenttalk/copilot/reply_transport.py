@@ -6,6 +6,7 @@ import urllib.error
 import urllib.request
 from collections.abc import Callable, Iterable
 from pathlib import Path
+from typing import NoReturn
 
 from silenttalk.agent_lease import CharacterLease
 from silenttalk.copilot import reply_templates as templates
@@ -15,11 +16,16 @@ class LocalLLMError(RuntimeError):
     """The independent reply service did not provide a usable response."""
 
 
+class InferenceDeferred(RuntimeError):
+    """The model owner is working; keep the client alive and retry when idle."""
+
+
 class ReplyTransport:
     def __init__(self, project_dir: Path, port: int, adapter: bool, timeout: float):
         self.base_url = f"http://127.0.0.1:{port}"
         self.adapter_loaded = False
         self._adapter = adapter
+        self._owner_pid = os.getpid()
         self.timeout_seconds = max(3.0, timeout)
         self.lease = CharacterLease(project_dir, os.getpid(), self._connected)
 
@@ -85,7 +91,7 @@ class ReplyTransport:
         request = urllib.request.Request(
             self.base_url + "/v1/chat/completions",
             data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
+            headers=self._headers(),
             method="POST",
         )
         try:
@@ -93,19 +99,33 @@ class ReplyTransport:
                 request, timeout=self.timeout_seconds
             ) as response:
                 return json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            self._http_error(exc)
         except (OSError, urllib.error.URLError, json.JSONDecodeError) as exc:
             raise LocalLLMError(f"本機回覆模型失敗：{exc}") from exc
 
     def lora_field(self, character: bool) -> dict[str, object]:
-        """Every request sets the adapter's scale (llama-server applies a
-        loaded adapter to requests that leave it out) and the slot kept for
-        that scale, so switching does not throw away the other's cache."""
+        """Borrow the same slot; the service owns priority and adapter isolation."""
         if not self.adapter_loaded:
             return {"id_slot": 0}
         return {
             "lora": [{"id": 0, "scale": 1.0 if character else 0.0}],
-            "id_slot": 0 if character else 1,
+            "id_slot": 0,
         }
+
+    def _headers(self) -> dict[str, str]:
+        return {"Content-Type": "application/json", "X-Character-Owner": str(self._owner_pid)}
+
+    @staticmethod
+    def _http_error(exc: urllib.error.HTTPError) -> NoReturn:
+        if exc.code == 423:
+            try:
+                body = json.loads(exc.read().decode("utf-8"))
+            except (OSError, ValueError):
+                body = {}
+            if isinstance(body, dict) and isinstance(body.get("error"), dict) and body["error"].get("code") == "inference_busy":
+                raise InferenceDeferred("AI 正在執行工作，角色等待模型閒置。") from exc
+        raise LocalLLMError(f"本機回覆模型失敗（HTTP {exc.code}）。") from exc
 
     def request_messages(
         self,
@@ -130,7 +150,7 @@ class ReplyTransport:
         request = urllib.request.Request(
             self.base_url + "/v1/chat/completions",
             data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
+            headers=self._headers(),
             method="POST",
         )
         try:
@@ -140,6 +160,8 @@ class ReplyTransport:
                 if on_lines is not None:
                     return consume_stream(response, on_lines)
                 body = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            self._http_error(exc)
         except (OSError, urllib.error.URLError, json.JSONDecodeError) as exc:
             raise LocalLLMError(f"本機回覆模型失敗：{exc}") from exc
 

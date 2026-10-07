@@ -15,6 +15,7 @@ from silenttalk.conversation import (
     ConversationTurn,
 )
 from silenttalk.copilot.context import ConversationStore
+from silenttalk.copilot.reply_transport import InferenceDeferred
 
 _LOG = logging.getLogger(__name__)
 
@@ -106,6 +107,8 @@ class ConversationSessions:
                         )
                     )
             _LOG.info("thread_history_read lines=%d", len(turns))
+        except InferenceDeferred:
+            return
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # noqa: BLE001 - an unreadable thread is said, not guessed
@@ -179,6 +182,8 @@ class ConversationSessions:
                 len(summary),
                 round((time.perf_counter() - started) * 1000),
             )
+        except InferenceDeferred:
+            return
         except asyncio.CancelledError:
             raise
         except Exception:
