@@ -63,12 +63,23 @@ def main() -> int:
         "materialize logits over a 250k vocabulary for every token",
     )
     parser.add_argument(
+        "--offload-activations",
+        action="store_true",
+        help="keep what the backward pass needs (each layer's input, 6 GiB at 32K tokens) "
+        "in RAM instead of on the GPU; long Agent rows need it",
+    )
+    parser.add_argument(
         "--check",
         action="store_true",
         help="build everything, show which tokens are trained on, one short forward; no training",
     )
     args = parser.parse_args()
 
+    import os
+
+    # Long rows allocate activations of many sizes; without this the cache
+    # fragments and a 32K row runs out with a gigabyte reserved but unused.
+    os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
     import torch
     from datasets import Dataset
     from peft import LoraConfig
@@ -122,8 +133,11 @@ def main() -> int:
             ),
             "device_map": {"": 0},
         }
+    from transformers import AttentionInterface
+
+    AttentionInterface.register("window_sdpa", window_attention)
     model = AutoModelForCausalLM.from_pretrained(
-        args.base, dtype=torch.bfloat16, attn_implementation="sdpa", **quantized
+        args.base, dtype=torch.bfloat16, attn_implementation="window_sdpa", **quantized
     )
     # Text only: Gemma 4 also ships vision/audio towers (~0.9 GiB) that a
     # text forward never calls. Drop them before the trainer moves the model
@@ -138,6 +152,13 @@ def main() -> int:
         # embedding tables alone then need 8.75 GiB more. They stay bf16 and
         # frozen; only the inputs need gradients for checkpointing to work.
         model.enable_input_require_grads()
+        # The per-layer embedding table (vocab x layers x 256: 5.25 GiB in
+        # bf16) is a frozen lookup. On the GPU it left a 32K-token row no room
+        # for its activations; in RAM only the looked-up rows go to the GPU.
+        tables = [name for name, _ in model.named_modules() if name.endswith(".embed_tokens_per_layer")]
+        for name in tables:
+            parent, _, attribute = name.rpartition(".")
+            lookup_in_ram(model.get_submodule(parent), attribute)
     config = SFTConfig(
         output_dir=args.out,
         num_train_epochs=args.epochs,
@@ -159,6 +180,7 @@ def main() -> int:
         completion_only_loss=True,
         max_length=args.max_length,
         use_liger_kernel=args.liger,
+        activation_offloading=args.offload_activations,
     )
     trainer = SFTTrainer(
         model=model,
@@ -179,9 +201,104 @@ def main() -> int:
     if args.check:
         return check(trainer, tokenizer)
     trainer.train()
+    if torch.cuda.is_available():
+        print(f"peak GPU memory {torch.cuda.max_memory_allocated() / 2**30:.1f} GiB")
     trainer.save_model(args.out)
     print(f"saved adapter to {args.out}")
     return 0
+
+
+def window_attention(module, query, key, value, attention_mask, dropout=0.0, scaling=None,
+                     sliding_window=None, **kwargs):
+    """Attention for training on whole rows without a length x length mask.
+
+    Under "sdpa" a 32K-token row got a materialized 32K x 32K mask (0.9 GiB),
+    and Gemma 4's sliding-window layers (5 of every 6, a 512-token window)
+    computed attention over the whole row: a step took 105 s, now 40 s. Here a
+    sliding-window layer cuts the row into window-sized blocks and each block
+    attends only to itself and the block before it, masked to the window;
+    other layers use sdpa's causal kernel. The model gets no attention mask
+    (this name has no mask function), which is right because TRL pads on the
+    right: under causal attention no real token sees the padding.
+    check() compares this with sdpa under transformers' own window mask."""
+    import torch
+    from transformers.integrations.sdpa_attention import (
+        repeat_kv,
+        sdpa_attention_forward,
+    )
+
+    if not sliding_window:
+        return sdpa_attention_forward(module, query, key, value, None, dropout, scaling, **kwargs)
+    batch, heads, length, dim = query.shape
+    if key.shape[2] != length:
+        raise ValueError("window attention is for training on whole rows, not a cache")
+    groups = getattr(module, "num_key_value_groups", 1)
+    key, value = repeat_kv(key, groups), repeat_kv(value, groups)
+    width = sliding_window
+    blocks = -(-length // width)
+
+    def split(x):  # [B, H, L, D] -> [B * blocks, H, width, D]
+        x = torch.nn.functional.pad(x, (0, 0, 0, blocks * width - length))
+        return x.view(batch, heads, blocks, width, dim).transpose(1, 2).reshape(
+            batch * blocks, heads, width, dim)
+
+    def with_previous(x):  # each block after the one before it: [B * blocks, H, 2 * width, D]
+        x = split(x).view(batch, blocks, heads, width, dim)
+        previous = torch.nn.functional.pad(x, (0, 0, 0, 0, 0, 0, 1, 0))[:, :-1]
+        return torch.cat([previous, x], dim=3).view(batch * blocks, heads, 2 * width, dim)
+
+    # Query i of block b is token b*width+i; key j is token (b-1)*width+j. The
+    # window lets a query see itself and the width-1 tokens before it.
+    i = torch.arange(width, device=query.device)[:, None]
+    j = torch.arange(2 * width, device=query.device)[None, :]
+    mask = ((j > i) & (j <= i + width)).expand(blocks, width, 2 * width).clone()
+    mask[0, :, :width] = False  # the first block has no block before it
+    mask = mask[:, None].repeat(batch, 1, 1, 1)
+    output = torch.nn.functional.scaled_dot_product_attention(
+        split(query), with_previous(key), with_previous(value), attn_mask=mask,
+        dropout_p=dropout, scale=scaling)
+    output = output.view(batch, blocks, heads, width, dim).transpose(2, 3)
+    return output.reshape(batch, blocks * width, heads, dim)[:, :length], None
+
+
+def check_window_attention() -> float:
+    """Largest difference between window_attention and sdpa under
+    transformers' sliding-window causal mask, on random float32 inputs whose
+    length is not a multiple of the window."""
+    import torch
+    from transformers.integrations.sdpa_attention import sdpa_attention_forward
+    from transformers.masking_utils import sliding_window_causal_mask_function
+
+    torch.manual_seed(0)
+    width, length = 64, 64 * 5 + 17
+    module = torch.nn.Module()
+    module.num_key_value_groups, module.is_causal = 4, True
+    query = torch.randn(2, 8, length, 32)
+    key, value = torch.randn(2, 2, length, 32), torch.randn(2, 2, length, 32)
+    allowed = sliding_window_causal_mask_function(width)
+    positions = torch.arange(length)
+    reference_mask = allowed(0, 0, positions[:, None], positions[None, :])[None, None]
+    reference, _ = sdpa_attention_forward(module, query, key, value, reference_mask, scaling=0.2)
+    windowed, _ = window_attention(module, query, key, value, None, scaling=0.2, sliding_window=width)
+    return (reference - windowed).abs().max().item()
+
+
+def lookup_in_ram(parent, attribute: str) -> None:
+    """Replace parent.<attribute>, a frozen embedding table, with a lookup
+    that keeps the table in RAM: ids go there, rows come back to the ids'
+    device. The table is not a registered submodule, so the trainer moving
+    the model to the GPU leaves it where it is."""
+    import torch
+
+    class RamLookup(torch.nn.Module):
+        def __init__(self, table: torch.nn.Module) -> None:
+            super().__init__()
+            object.__setattr__(self, "table", table.to("cpu"))
+
+        def forward(self, ids: torch.Tensor) -> torch.Tensor:
+            return self.table(ids.to("cpu")).to(ids.device)
+
+    setattr(parent, attribute, RamLookup(getattr(parent, attribute)))
 
 
 # Characters per token is about 3-4 for code and 1-2 for Chinese: a row with
@@ -326,6 +443,11 @@ def check(trainer, tokenizer) -> int:
     end = tokenizer.convert_tokens_to_ids(["<turn|>", "<|tool_response>", "<|im_end|>"])
     if not spans or any(not any(t in end for t in ids[a:b]) for a, b in spans):
         print("MASK WRONG: every trained span must end its turn with the end-of-turn marker")
+        return 1
+    difference = check_window_attention()
+    print(f"window attention vs sdpa: max difference {difference:.1e}")
+    if difference > 1e-4:
+        print("WINDOW ATTENTION WRONG: it must match sdpa under the sliding-window mask")
         return 1
     model = trainer.model
     sample = torch.tensor([ids[-64:]], device=model.device)
