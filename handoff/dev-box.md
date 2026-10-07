@@ -32,13 +32,10 @@
 
 ## 3. 接下來
 
-1. **通用修正的判定**：`bench/report.py laptop-fw1 laptop-fw1-general`、`laptop-fw1-high laptop-fw1-general-high`。贏（或持平且 repo 題不再撞「重複 3 次」）就把 EdgeAgent 推上 `copilot-story-mode`（含拆檔與情境卡）；某項變差就只 revert 那一項再量。推之前先 `git fetch`，筆電有新 commit 就 rebase。
-2. **試產結果**：評審驗證要 ≥90%；看各類通過率、老師每段對話花多久；VRAM 估值（`teacher-38` 18500＋1500/slot、`judge-gemma` 13000＋2500）照實際改。合理就放大（每類 40～60 張），加上工具題，`dataset.py --thinking both`，訓 `agent-fw2`。
-3. **學生的驗收**：驗收卡要讓 E4B 上場、Qwen3.8 扮使用者 → 新設定（學生設定加 `"simulator": "<另一個設定>"`；模擬者用 Qwen3.8 IQ3 才放得下）。fw2 要在驗收卡和 78 題（off 和 high）都贏 fw1 才換 `AGENT_ADAPTER`。
-4. **從使用者對話抽卡**：在 `scenario_cards.py` 加入口，Qwen3.8 讀使用者交來的匯出，寫抽象目標的卡（不照抄）。
-5. **機魂下一批**：`handoff/tasks/machine-spirit-3`（不套贏的 4 組：被問設定直接答、要選就選、回報照實；加 `scope` 判斷題）。
-6. **筆電**：第 7 回合 A（`handoff/laptop.md`）只驗語音修正（SilentTalk `87578a9`，使用者要開發機修的）。推 EdgeAgent 後寫 B：Windows 驗拆完的 service／chat、Agent 失敗原因碼（Discord @ 派工兩次 error，原因待查：SilentTalk `767d917` 已記 `agent_task_ended reason=`）、通用修正的實際對話、拆 `browser_check.mjs` 和三個 app 測試、machine-spirit-3。第 6 回合照規則 12 評分（劇本不計分母）。
-7. 拆檔子 agent 回報的既有問題（未修）：載入失敗時 `mode` 先變了；租借的 `port` 沒用到；非 Windows 上別人擁有的程序被當成死了。
+**2026-10-07 晚：急用版 `agent-fw2`（使用者：「先搞急用版」「有問題自己料理，我沒空幫忙把關」）**。佇列（`EdgeAgent/.runtime/fw/queue.sh`）自動跑：錄 240 段情境對話（C、D、G 先）＋152 題工具題 → Gemma 評審（先驗證能擋 ≥90% 壞對話，否則只用程式檢查）→ `dataset.py --thinking both` → 訓 `agent-fw2`（32K、2 輪）→ 驗收。老師每步思考上限 1,024 token（`teacher-38` 的 `--reasoning-budget`）。
+- **訓練用的提示**是 EdgeAgent `e70b53d`（舊規則＋`<runtime>` 自我事實＋「打招呼閒聊不用查」）。量過的新規則（何時問／確認）都讓 E4B 改成反問，已拿掉。錄資料期間不改 `prompt.py`（`dataset.py` 會拒收混版本）。
+- **出貨規則（自己判，不再問）**：fw2＋新提示對上使用者現在用的「基底 E4B＋舊提示」（`base-old`、`base-old-high`、`scen-eval-base`）：產品考場 off 和 high 的總通過率都不低於、閒聊題全過、驗收卡通過率較高 → 出貨。出貨＝fw2 放進 EdgeAgent `edge_agent/adapters/`、`deploy.ADAPTERS` 記 SHA、`runtime.AGENT_ADAPTER` 改 fw2、拿掉 fw1、推 EdgeAgent（含拆檔、原因碼、情境卡）、寫筆電第 7 回合 B。沒過就不出貨，寫明哪一關沒過，下一輪修資料。
+- 之後（不急）：Gemma 評審的完整版、驗收卡擴充、`agent-fw2` 之後再談 coding agent（Qwen3.8 軌跡）、machine-spirit-3、筆電第 6 回合評分、清掉 Qwen3.6 老師。
 
 ## 4. 開發機規則（通用規則在 AGENTS.md）
 
