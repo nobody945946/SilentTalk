@@ -35,6 +35,7 @@
 **2026-10-07 晚：急用版 `agent-fw2`（使用者：「先搞急用版」「有問題自己料理，我沒空幫忙把關」）**。佇列（`EdgeAgent/.runtime/fw/queue.sh`）自動跑：錄 240 段情境對話（C、D、G 先）＋152 題工具題 → Gemma 評審（先驗證能擋 ≥90% 壞對話，否則只用程式檢查）→ `dataset.py --thinking both` → 訓 `agent-fw2`（32K、2 輪）→ 驗收。老師每步思考上限 1,024 token（`teacher-38` 的 `--reasoning-budget`）。
 - **訓練用的提示**是 EdgeAgent `e70b53d`（舊規則＋`<runtime>` 自我事實＋「打招呼閒聊不用查」）。量過的新規則（何時問／確認）都讓 E4B 改成反問，已拿掉。錄資料期間不改 `prompt.py`（`dataset.py` 會拒收混版本）。
 - **出貨規則（自己判，不再問）**：fw2＋新提示對上使用者現在用的「基底 E4B＋舊提示」（`base-old`、`base-old-high`、`scen-eval-base`）：產品考場 off 和 high 的總通過率都不低於、閒聊題全過、驗收卡通過率較高 → 出貨。出貨＝fw2 放進 EdgeAgent `edge_agent/adapters/`、`deploy.ADAPTERS` 記 SHA、`runtime.AGENT_ADAPTER` 改 fw2、拿掉 fw1、推 EdgeAgent（含拆檔、原因碼、情境卡）、寫筆電第 7 回合 B。沒過就不出貨，寫明哪一關沒過，下一輪修資料。
+- **下一輪資料前先改提示**：`prompt_sections.mjs` 的 `modelFacts` 加上硬體事實（顯卡、VRAM、RAM、幾層在 GPU；主機都知道）。fw2 錄製中 D 類 21/47 段因老師去查本機（在開發機就是沙盒：Docker、RTX 3090）而作廢；提示有寫，它就不用查。
 - 之後（不急）：Gemma 評審的完整版、驗收卡擴充、`agent-fw2` 之後再談 coding agent（Qwen3.8 軌跡）、machine-spirit-3、筆電第 6 回合評分。
 
 ## 4. 開發機規則（通用規則在 AGENTS.md）
