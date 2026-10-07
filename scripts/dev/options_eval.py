@@ -35,11 +35,14 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+# The turn_eval modules and the app (silenttalk, imported when it runs).
+sys.path[:0] = [str(Path(__file__).resolve().parents[2]), str(Path(__file__).resolve().parent)]
 
-import turn_eval as te
+import turn_eval_judge  # noqa: E402
+import turn_eval_model  # noqa: E402
+import turn_eval_set  # noqa: E402
 
-OUT_DIR = te.PROJECT_DIR / ".runtime" / "dev" / "options_eval"
+OUT_DIR = turn_eval_set.PROJECT_DIR / ".runtime" / "dev" / "options_eval"
 PORT = 18432
 SCORES = ("own", "grounded", "voice", "natural", "usable")
 
@@ -70,18 +73,18 @@ async def generate(args: argparse.Namespace) -> None:
     from silenttalk.copilot import llm as llm_module
     from silenttalk.copilot import persona as persona_module
 
-    test_set = te.load_test_set()
-    old = te.load_old_modules(args.rev)
-    te.ensure_llama_server_on_path()
-    config = te.copilot_config()
-    te.CPU_ONLY = args.cpu
-    llm_dir = te.E4B_MODEL_DIR
+    test_set = turn_eval_set.load_test_set()
+    old = turn_eval_model.load_old_modules(args.rev)
+    turn_eval_model.ensure_llama_server_on_path()
+    config = turn_eval_model.copilot_config()
+    turn_eval_model.CPU_ONLY = args.cpu
+    llm_dir = turn_eval_model.EDGE_AGENT_MODEL_DIR
     model_path = llm_dir / (args.model or config["llm_model"])
     old_path = llm_dir / args.old_model if args.old_model else model_path
     port = args.port or PORT
-    te.EVAL_PORT = port
+    turn_eval_model.EVAL_PORT = port
     lora = llm_dir / args.lora if args.lora else None
-    new_model = te.make_model(llm_module, model_path, config, lora)
+    new_model = turn_eval_model.make_model(llm_module, model_path, config, lora)
     if lora is not None:
         new_model._lora_uses = frozenset({"options"})
     # Same server for both (the old client only builds different prompts)
@@ -90,8 +93,8 @@ async def generate(args: argparse.Namespace) -> None:
     # scale, which the old client never does.
     own_server = old_path != model_path or lora is not None
     if own_server:
-        te.EVAL_PORT = port + 1
-    old_model = te.make_model(old.llm, old_path, config)
+        turn_eval_model.EVAL_PORT = port + 1
+    old_model = turn_eval_model.make_model(old.llm, old_path, config)
     # The app's 15 s limit is for a live chat; a shared or CPU-only eval box
     # can be slower, and one timeout should not cost the whole run.
     new_model.transport.timeout_seconds = 180.0
@@ -128,15 +131,15 @@ async def generate(args: argparse.Namespace) -> None:
         for conv in test_set.conversations:
             if (only and conv.id not in only) or conv.id in done:
                 continue
-            new_persona = te.resolve_persona(persona_module, test_set, conv.persona_id)
-            old_persona = te.resolve_persona(old.persona, test_set, conv.persona_id)
+            new_persona = turn_eval_set.resolve_persona(persona_module, test_set, conv.persona_id)
+            old_persona = turn_eval_set.resolve_persona(old.persona, test_set, conv.persona_id)
             new_model.set_persona(new_persona)
             old_model.set_persona(old_persona)
             if args.agenda and hasattr(new_model, "make_agenda"):
                 # As in the app: today's concerns are made when the persona is set.
                 new_model.set_agenda(())
                 await new_model.make_agenda()
-            ids = te.speaker_ids(conv)
+            ids = turn_eval_set.speaker_ids(conv)
             new_turns: list[Any] = []
             old_turns: list[Any] = []
             old_store = old.context.ConversationStore()
@@ -220,7 +223,7 @@ def judge(args: argparse.Namespace) -> None:
     path = OUT_DIR / f"{args.tag}.json"
     result = json.loads(path.read_text(encoding="utf-8"))
     records = result["records"]
-    test_set = te.load_test_set()
+    test_set = turn_eval_set.load_test_set()
     convs = {c.id: c for c in test_set.conversations}
     rng = random.Random(args.seed)
     by_persona: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -238,7 +241,7 @@ def judge(args: argparse.Namespace) -> None:
         temp.replace(path)
 
     for persona_id, items in sorted(by_persona.items()):
-        persona = te.resolve_persona(persona_module, test_set, persona_id)
+        persona = turn_eval_set.resolve_persona(persona_module, test_set, persona_id)
         for chunk_start in range(0, len(items), args.batch):
             chunk = items[chunk_start:chunk_start + args.batch]
             first = [rng.random() < 0.5 for _ in chunk]  # True: new is A
@@ -260,12 +263,12 @@ def judge(args: argparse.Namespace) -> None:
                     )
                     rendered.append(f"=== 第 {n} 個時間點 ===\n{chat}\n{shown}")
                 prompt = JUDGE_PROMPT.format(
-                    sheet=te.persona_sheet(persona), items="\n\n".join(rendered), k=len(chunk)
+                    sheet=turn_eval_judge.persona_sheet(persona), items="\n\n".join(rendered), k=len(chunk)
                 )
                 verdicts: list[dict[str, Any]] = []
                 for attempt in range(3):
                     try:
-                        verdicts = te.run_judge(prompt, args.judge_model)
+                        verdicts = turn_eval_judge.run_judge(prompt, args.judge_model)
                         break
                     except (RuntimeError, subprocess.TimeoutExpired, json.JSONDecodeError) as exc:
                         print(f"  judge attempt {attempt + 1} failed: {type(exc).__name__}", flush=True)
