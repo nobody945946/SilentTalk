@@ -11,7 +11,12 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts" / "dev"))
 
-import character_data  # noqa: E402
+import chardata_check  # noqa: E402
+import chardata_filter  # noqa: E402
+import chardata_render  # noqa: E402
+import chardata_requests  # noqa: E402
+import chardata_scripts  # noqa: E402
+import chardata_store  # noqa: E402
 
 NAME = "小雯"
 
@@ -48,7 +53,7 @@ def test_called_mode_drops_points_that_contradict_the_addressee() -> None:
             (NAME, "掰掰", "小芸"),
         ]
     )
-    points = {p["index"]: p for p in character_data.decision_points(script, NAME)}
+    points = {p["index"]: p for p in chardata_requests.decision_points(script, NAME)}
     assert points[0]["speaks"] and points[0]["aimed"]
     assert not points[2]["speaks"] and not points[2]["aimed"]
     assert 3 not in points and 4 not in points
@@ -59,7 +64,7 @@ def test_active_mode_keeps_chiming_in() -> None:
         [("阿豪", "有人要喝飲料嗎", "大家"), (NAME, "我要半糖", "阿豪")],
         engagement="active",
     )
-    [point] = character_data.decision_points(script, NAME)
+    [point] = chardata_requests.decision_points(script, NAME)
     assert point["speaks"] and not point["aimed"]
 
 
@@ -79,7 +84,7 @@ def chardata(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     (tmp_path / "personas.jsonl").write_text(
         json.dumps(persona, ensure_ascii=False) + "\n", encoding="utf-8"
     )
-    monkeypatch.setattr(character_data, "OUT_DIR", tmp_path)
+    monkeypatch.setattr(chardata_store, "OUT_DIR", tmp_path)
     return tmp_path
 
 
@@ -99,7 +104,7 @@ def _render(chardata: Path, script: dict, refined: dict) -> list[dict]:
         encoding="utf-8",
     )
     args = type("Args", (), {"max_prompt_chars": 100_000, "max_chars": 72})()
-    character_data.make_render(args)
+    chardata_render.make_render(args)
     return [
         json.loads(line)
         for line in (chardata / "train.jsonl").read_text(encoding="utf-8").splitlines()
@@ -143,7 +148,7 @@ def test_render_asks_what_the_app_asks(chardata: Path) -> None:
 
 
 def test_no_test_set_name_can_be_used(chardata: Path) -> None:
-    personas, humans = character_data.held_out()
+    personas, humans = chardata_scripts.held_out()
     assert "凱哥" in personas and "小晴" in personas
     assert personas <= humans  # a test persona name is not allowed as a speaker either
 
@@ -162,13 +167,13 @@ def test_unrefined_lines_fall_back_to_the_script(chardata: Path) -> None:
 def test_lines_admitting_to_be_a_program_are_rejected(line: str) -> None:
     spec = {"honesty": "in_character"}
     args = type("Args", (), {"max_chars": 72})()
-    assert not character_data.usable(line, spec, args)
-    assert character_data.usable(line, {"honesty": "admit"}, args)
+    assert not chardata_render.usable(line, spec, args)
+    assert chardata_render.usable(line, {"honesty": "admit"}, args)
 
 
 def test_a_normal_line_passes() -> None:
     args = type("Args", (), {"max_chars": 72})()
-    assert character_data.usable(
+    assert chardata_render.usable(
         "我是你老婆欸，還問", {"honesty": "in_character"}, args
     )
 
@@ -185,7 +190,7 @@ def test_a_quiet_spell_opens_a_topic_and_is_not_an_answer(chardata: Path) -> Non
     script["lines"][3]["quiet"] = True
     script["concerns"] = ["今天烤了戚風蛋糕", "想約大家週末吃火鍋"]
     # The line before the quiet spell got no answer.
-    assert [p["speaks"] for p in character_data.decision_points(script, NAME)] == [
+    assert [p["speaks"] for p in chardata_requests.decision_points(script, NAME)] == [
         True,
         False,
     ]
@@ -216,9 +221,9 @@ def _row(
 
 
 def test_rules_drop_stacked_particles_and_echoes() -> None:
-    assert character_data.rule_ok(_row("line", "那你早點睡"))
-    assert not character_data.rule_ok(_row("line", "好啦，你早點睡喔"))  # two particles
-    assert not character_data.rule_ok(
+    assert chardata_filter.rule_ok(_row("line", "那你早點睡"))
+    assert not chardata_filter.rule_ok(_row("line", "好啦，你早點睡喔"))  # two particles
+    assert not chardata_filter.rule_ok(
         _row("line", "今天好累喔", "阿誠：今天好累喔")
     )  # echo
 
@@ -232,11 +237,11 @@ def _checked_set(chardata: Path, agree: list[bool], wins: list[int]) -> None:
         encoding="utf-8",
     )
     verdicts = [
-        {"key": character_data.row_key(r), "agree": a}
+        {"key": chardata_store.row_key(r), "agree": a}
         for r, a in zip(gates, agree, strict=True)
     ]
     verdicts += [
-        {"key": character_data.row_key(r), "wins": w, "compared": True}
+        {"key": chardata_store.row_key(r), "wins": w, "compared": True}
         for r, w in zip(lines, wins, strict=True)
     ]
     (chardata / "check.jsonl").write_text(
@@ -255,7 +260,7 @@ def _filter(min_lines: int = 3, max_gate_rows: int = 4000, lines_by_rules: bool 
             "max_gate_rows": max_gate_rows, "lines_by_rules": lines_by_rules,
         },
     )()
-    return character_data.make_filter(args)
+    return chardata_filter.make_filter(args)
 
 
 def test_lines_by_rules_keeps_unranked_lines_and_still_checks_the_gates(chardata: Path) -> None:
@@ -294,7 +299,7 @@ def test_only_the_gate_rows_filter_can_use_are_checked(
     (chardata / "check.jsonl").unlink()
     asked: list[int] = []
     monkeypatch.setattr(
-        character_data, "chat", lambda url, messages, **kw: asked.append(1) or ["是"]
+        chardata_check, "chat", lambda url, messages, **kw: asked.append(1) or ["是"]
     )
     args = type(
         "Args",
@@ -302,7 +307,7 @@ def test_only_the_gate_rows_filter_can_use_are_checked(
         {"rows": "train.jsonl", "teacher_url": "", "workers": 2, "max_gate_rows": 6, "lines_by_rules": False},
     )()
 
-    character_data.make_check(args)
+    chardata_check.make_check(args)
 
     verdicts = [
         json.loads(line)
@@ -315,7 +320,7 @@ def test_only_the_gate_rows_filter_can_use_are_checked(
     # filter keeps 6 // 3 = 2 "是": scripts are added until 3 (2 × 1.25) are in.
     assert len(asked) == len(checked) < 12
     assert sum(v["agree"] for v in checked) == 3  # the checker says 是 to all
-    character_data.make_filter(
+    chardata_filter.make_filter(
         type(
             "Args",
             (),
@@ -389,8 +394,8 @@ def test_a_nickname_names_the_character() -> None:
         {"s": "阿豪", "t": "雯雯 晚點打嗎", "to": "雯雯"}, {"s": "雯雯", "t": "好啊", "to": "阿豪"},
         {"s": "小芸", "t": "雯雯 你來嗎", "to": "雯雯"}, {"s": "雯雯", "t": "來", "to": "小芸"},
         *chat]}
-    kept, reason = character_data.check_script(data, NAME, spec, ["雯雯"])
+    kept, reason = chardata_scripts.check_script(data, NAME, spec, ["雯雯"])
     assert reason == ""
     assert {line["s"] for line in kept} == {"阿誠", "阿豪", "小芸", NAME}
     assert kept[0]["to"] == NAME
-    assert character_data.check_script(data, NAME, spec)[1] == "unknown speaker"
+    assert chardata_scripts.check_script(data, NAME, spec)[1] == "unknown speaker"

@@ -10,7 +10,7 @@
 #   check     the checker, Gemma 4 31B (another family than the writers),
 #             answers every gate question and compares lines blind, both
 #             orders
-#   filter    the whole set or nothing (character_data.HARD_CHECK);
+#   filter    the whole set or nothing (chardata_filter.HARD_CHECK);
 #             LINES_BY_RULES=1: lines need only the app's rules (no ranking)
 #
 # The rows train together with the Agent's, one adapter for both (the

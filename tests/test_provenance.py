@@ -10,6 +10,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts" / "dev"))
 import character_data  # noqa: E402
+import chardata_store  # noqa: E402
 import provenance  # noqa: E402
 
 
@@ -39,11 +40,11 @@ def test_a_set_must_share_one_version(tmp_path: Path) -> None:
 def test_the_pipeline_refuses_a_directory_made_under_other_rules(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(character_data, "OUT_DIR", tmp_path)
+    monkeypatch.setattr(chardata_store, "OUT_DIR", tmp_path)
     (tmp_path / "personas.jsonl").write_text("{}\n", encoding="utf-8")
     scripts = tmp_path / "scripts.jsonl"
-    character_data._append(scripts, {"lines": []})
-    assert json.loads(provenance.sidecar(scripts).read_text())["version"] == character_data.rules_version()
+    chardata_store.append_row(scripts, {"lines": []})
+    assert json.loads(provenance.sidecar(scripts).read_text())["version"] == chardata_store.rules_version()
     monkeypatch.setattr(sys, "argv", ["character_data.py", "render"])
     monkeypatch.setattr(character_data, "make_render", lambda args: None)
     assert character_data.main() == 0

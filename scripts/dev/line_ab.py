@@ -22,8 +22,11 @@ import sys
 import urllib.request
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import character_data  # noqa: E402
+# The character data modules import the app (silenttalk) from the repository root.
+sys.path[:0] = [str(Path(__file__).resolve().parents[2]), str(Path(__file__).resolve().parent)]
+import chardata_check  # noqa: E402
+import chardata_requests  # noqa: E402
+import chardata_store  # noqa: E402
 from eval_server import MODEL, serve  # noqa: E402
 
 PORT = 18414
@@ -39,29 +42,29 @@ def ask(row: dict, lora: bool) -> str:
                                      json.dumps(body, ensure_ascii=False).encode("utf-8"),
                                      {"Content-Type": "application/json"})
     with urllib.request.urlopen(request, timeout=300) as response:
-        return character_data._clean_line(json.loads(response.read())["choices"][0]["message"]["content"] or "")
+        return chardata_check.clean_line(json.loads(response.read())["choices"][0]["message"]["content"] or "")
 
 
 def answers(rows: list[dict], lora: Path | None) -> dict[str, str]:
     process = serve(MODEL, PORT, lora)
     try:
-        return {character_data.row_key(row): ask(row, lora is not None) for row in rows}
+        return {chardata_store.row_key(row): ask(row, lora is not None) for row in rows}
     finally:
         process.terminate()
         process.wait(timeout=60)
 
 
 def lines(args: argparse.Namespace) -> None:
-    rows = [r for r in character_data._read(character_data.OUT_DIR / "train.jsonl")
-            if r["kind"] in character_data.LINE_KINDS]
-    persona = character_data._persona(next(iter(character_data._read(character_data.OUT_DIR / "personas.jsonl"))))
+    rows = [r for r in chardata_store.read_rows(chardata_store.OUT_DIR / "train.jsonl")
+            if r["kind"] in chardata_requests.LINE_KINDS]
+    persona = chardata_store.persona_of(next(iter(chardata_store.read_rows(chardata_store.OUT_DIR / "personas.jsonl"))))
     base, tuned = answers(rows, None), answers(rows, args.lora)
     rng = random.Random(7)
     pairs, key = [], {}
     for n, row in enumerate(rows, 1):
-        k = character_data.row_key(row)
+        k = chardata_store.row_key(row)
         a, b = (base[k], tuned[k]) if rng.random() < 0.5 else (tuned[k], base[k])
-        pairs.append({"n": n, "chat": character_data._chat_text(row, persona.name), "A": a, "B": b})
+        pairs.append({"n": n, "chat": chardata_check.chat_text(row, persona.name), "A": a, "B": b})
         key[str(n)] = "A" if a == tuned[k] and a != base[k] else "B" if b == tuned[k] and b != base[k] else "same"
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.with_suffix(".pairs.json").write_text(json.dumps(pairs, ensure_ascii=False, indent=1), encoding="utf-8")

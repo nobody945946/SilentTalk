@@ -17,7 +17,13 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts" / "dev"))
 
-import character_data  # noqa: E402
+import chardata_check  # noqa: E402
+import chardata_external  # noqa: E402
+import chardata_filter  # noqa: E402
+import chardata_render  # noqa: E402
+import chardata_requests  # noqa: E402
+import chardata_scripts  # noqa: E402
+import chardata_store  # noqa: E402
 import machine_spirit  # noqa: E402
 
 from silenttalk.copilot.llm import LocalReplyModel
@@ -70,7 +76,7 @@ def _spec(kind: str = "chat") -> dict[str, Any]:
 
 
 def _check(data: dict[str, Any], kind: str = "chat") -> tuple[list[dict[str, Any]], str]:
-    return character_data.check_script(data, NAME, _spec(kind), ["機魂", "馬基納"])
+    return chardata_scripts.check_script(data, NAME, _spec(kind), ["機魂", "馬基納"])
 
 
 def _stored(data: dict[str, Any], kind: str = "chat") -> dict[str, Any]:
@@ -87,14 +93,14 @@ def chardata(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
            "stt_variants": ["雞魂"], "role": "machine spirit"}
     (tmp_path / "personas.jsonl").write_text(json.dumps(row, ensure_ascii=False) + "\n",
                                              encoding="utf-8")
-    monkeypatch.setattr(character_data, "OUT_DIR", tmp_path)
+    monkeypatch.setattr(chardata_store, "OUT_DIR", tmp_path)
     return tmp_path
 
 
 def _render(chardata: Path, scripts: list[dict[str, Any]]) -> list[dict[str, Any]]:
     (chardata / "scripts.jsonl").write_text(
         "".join(json.dumps(s, ensure_ascii=False) + "\n" for s in scripts), encoding="utf-8")
-    character_data.make_render(ARGS)
+    chardata_render.make_render(ARGS)
     return [json.loads(line) for line in
             (chardata / "train.jsonl").read_text(encoding="utf-8").splitlines()]
 
@@ -237,7 +243,7 @@ def test_every_row_is_the_request_the_app_makes(chardata: Path) -> None:
     raw = json.loads((chardata / "personas.jsonl").read_text(encoding="utf-8"))
     for number, script in enumerate(scripts):
         noisy = dict(script, stt_variants=raw["stt_variants"])
-        persona, turns = character_data.conversation(noisy, character_data._persona(raw),
+        persona, turns = chardata_requests.conversation(noisy, chardata_store.persona_of(raw),
                                                      noisy=True)
         sent = _app_requests(script, turns, persona)
         mine = {(r["index"], r["kind"]): r["messages"][:-1] for r in rows if r["script"] == number}
@@ -323,7 +329,7 @@ def test_a_line_that_names_it_and_gets_its_answer_is_a_call() -> None:
 
 
 def test_a_script_that_copies_an_eval_line_is_refused() -> None:
-    held = Path(character_data.__file__).with_name("chat_task_eval.jsonl")
+    held = Path(chardata_scripts.__file__).with_name("chat_task_eval.jsonl")
     text = json.loads(held.read_text(encoding="utf-8").splitlines()[1])["text"]
     assert _check(_edit(2, t=text)) == ([], "eval line")
 
@@ -350,11 +356,11 @@ def _filter(chardata: Path, rows: list[dict[str, Any]], verdicts: list[dict]) ->
     (chardata / "train.jsonl").write_text(
         "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), encoding="utf-8")
     (chardata / "check.jsonl").write_text(
-        "".join(json.dumps({"key": character_data.row_key(r)} | v, ensure_ascii=False) + "\n"
+        "".join(json.dumps({"key": chardata_store.row_key(r)} | v, ensure_ascii=False) + "\n"
                 for r, v in zip(rows, verdicts, strict=True)), encoding="utf-8")
     args = type("Args", (), {"rows": "train.jsonl", "min_gate_agree": 0.85, "min_lines": 3,
                              "max_gate_rows": 4000, "lines_by_rules": False})()
-    return character_data.make_filter(args)
+    return chardata_filter.make_filter(args)
 
 
 def _agent_set(weak: str) -> tuple[list[dict], list[dict]]:
@@ -402,22 +408,22 @@ def test_the_checker_is_told_the_rules_and_what_the_app_told_the_character(
     rows = _render(chardata, [_stored(TEACHER_CHAT)])
     (chardata / "student.jsonl").write_text("".join(
         json.dumps({"key": r["key"], "line": "測試學生"}, ensure_ascii=False) + "\n"
-        for r in rows if r["kind"] in character_data.LINE_KINDS), encoding="utf-8")
+        for r in rows if r["kind"] in chardata_requests.LINE_KINDS), encoding="utf-8")
     prompts: list[str] = []
 
     def checker(url, messages, **kw):
         prompts.append(messages[-1]["content"])
         return ["A" if "A" in kw.get("grammar", "") else "是"]
 
-    monkeypatch.setattr(character_data, "chat", checker)
+    monkeypatch.setattr(chardata_check, "chat", checker)
     args = type("Args", (), {"rows": "train.jsonl", "teacher_url": "", "workers": 1,
                              "max_gate_rows": 4000, "lines_by_rules": False})()
-    character_data.make_check(args)
+    chardata_check.make_check(args)
     verdicts = {v["key"]: v for v in map(json.loads, (chardata / "check.jsonl")
                                          .read_text(encoding="utf-8").splitlines())}
     task_key = next(r["key"] for r in rows if r["kind"] == "task_text")
     assert "agree" in verdicts[task_key]
-    assert any(p.startswith(character_data.CHECK_TASK.split("{")[0]) and "測試指示一" in p
+    assert any(p.startswith(chardata_check.CHECK_TASK.split("{")[0]) and "測試指示一" in p
                for p in prompts)
     # The prompts judging the report itself (its pair and its lore check).
     report = [p for p in prompts if any(f"{who}：測試轉述一\n" in p for who in ("A", "B", NAME))]
@@ -436,7 +442,7 @@ def test_the_builtin_card_is_the_one_the_app_ships(
     monkeypatch.setattr(machine_spirit, "OUT", tmp_path)
     machine_spirit.builtin(tmp_path / "data", 2)
     raw = json.loads((tmp_path / "data" / "personas.jsonl").read_text(encoding="utf-8"))
-    assert character_data._persona(raw) == MACHINE_SPIRIT
+    assert chardata_store.persona_of(raw) == MACHINE_SPIRIT
     assert raw["agent"] and raw["lore"] == [{"term": "測試用語", "meaning": "測試意思"}]
     with pytest.raises(SystemExit):
         machine_spirit.builtin(tmp_path / "data", 3)
@@ -458,8 +464,8 @@ def test_skeleton_chats_play_out_as_the_app_would_by_construction() -> None:
         spec = item["spec"]
         words = [f"測試第{n}句" for n in range(len(spec["skeleton"]))]
         data = {"lines": words, "work": [{"task": "測試指示", "result": "測試結果"}] * 3}
-        assembled = character_data.assemble_agent_chat(data, spec, NAME, ["機魂", "馬基納"])
-        lines, reason = character_data.check_script(assembled, NAME, spec, ["機魂", "馬基納"])
+        assembled = chardata_external.assemble_agent_chat(data, spec, NAME, ["機魂", "馬基納"])
+        lines, reason = chardata_scripts.check_script(assembled, NAME, spec, ["機魂", "馬基納"])
         assert reason == "" and lines, item["id"]
 
 
@@ -468,7 +474,7 @@ def test_a_chat_line_that_names_the_character_in_passing_loses_the_name() -> Non
     chat_at = next(i for i, slot in enumerate(spec["skeleton"]) if slot["kind"] == "chat")
     words = [f"測試第{n}句" for n in range(len(spec["skeleton"]))]
     words[chat_at] = "機魂剛剛那句好好笑"
-    assembled = character_data.assemble_agent_chat({"lines": words, "work": []}, spec, NAME, ["機魂", "馬基納"])
+    assembled = chardata_external.assemble_agent_chat({"lines": words, "work": []}, spec, NAME, ["機魂", "馬基納"])
     assert "機魂" not in assembled["lines"][chat_at]["t"]
 
 
@@ -490,10 +496,10 @@ def test_the_writers_answers_are_checked_like_the_apps_rules(tmp_path: Path) -> 
     answers = tmp_path / "answers.jsonl"
     answers.write_text("\n".join([answer(1, specs[0]), answer(2, specs[1], lines=["太短"]),
                                   answer(3, specs[2], by="")]), encoding="utf-8")
-    scripts, problems = character_data.external_answers(tasks, answers)
+    scripts, problems = chardata_external.external_answers(tasks, answers)
     assert [s["spec"]["teacher"] for s in scripts] == ["測試模型"]
     assert len(problems) == 2 and "needs" in problems[0] and '"by"' in problems[1]
     answers.write_text("\n".join(answer(n, spec) for n, spec in enumerate(specs, 1)), encoding="utf-8")
-    assert len(character_data.external_answers(tasks, answers)[0]) == 3
+    assert len(chardata_external.external_answers(tasks, answers)[0]) == 3
     answers.write_text(answer(1, specs[0]), encoding="utf-8")
-    assert character_data.external_answers(tasks, answers)[1] == ["ms002: no answer", "ms003: no answer"]
+    assert chardata_external.external_answers(tasks, answers)[1] == ["ms002: no answer", "ms003: no answer"]
