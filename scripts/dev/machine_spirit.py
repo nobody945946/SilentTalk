@@ -36,9 +36,9 @@ from silenttalk.persona import (  # noqa: E402
 
 OUT = ROOT / ".runtime/dev/machine-spirit"
 SERVER = ROOT / ".runtime/tools/llama.cpp-b11193-src/build-cuda/bin/llama-server"
-# The MoE teacher runs on CPU at a usable speed while the GPU is busy; its
-# character lines ranked close to the dense 27B (2.54 vs 2.38, dev-box 5.5).
-TEACHER = ROOT / ".runtime/models/teacher/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf"
+# The dev box's one teacher (the owner, 2026-10-07: with Qwen3.8 no other
+# model is needed); dense 27B, so on the GPU, its thinking capped.
+TEACHER = ROOT / ".runtime/models/teacher/Qwen3.8-27B-UD-Q4_K_XL.gguf"
 PORT = 18210
 
 # The owner's own words (2026-10-03), the only source of the character.
@@ -159,8 +159,8 @@ def drafts(variants: list[int], threads: int, teacher: Path, extra: list[str]) -
     OUT.mkdir(parents=True, exist_ok=True)
     server = subprocess.Popen(
         [str(SERVER), "--model", str(teacher), "--host", "127.0.0.1", "--port", str(PORT),
-         "--ctx-size", "8192", "--n-gpu-layers", "0", "--threads", str(threads), "--jinja",
-         "--parallel", "1", *extra],
+         "--ctx-size", "8192", "--n-gpu-layers", "99", "--threads", str(threads), "--jinja",
+         "--parallel", "1", "--reasoning-budget", "1024", *extra],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     path = OUT / "drafts.json"
     # Redrafting some variants keeps the others.
@@ -260,7 +260,7 @@ def main() -> None:
     d.add_argument("--threads", type=int, default=12)
     d.add_argument("--teacher", type=Path, default=TEACHER)
     d.add_argument("--server-args", default="",
-                   help='extra llama-server args, e.g. "-ngl 99 --n-cpu-moe 40"')
+                   help='extra llama-server args, e.g. "--reasoning-budget 2048"')
     v = sub.add_parser("verify-lore")
     v.add_argument("--threads", type=int, default=12)
     v.add_argument("--server-args", default="")

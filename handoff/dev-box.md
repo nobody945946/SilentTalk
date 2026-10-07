@@ -17,25 +17,25 @@
 - **巨檔**：程式檔每個 < 600 行（使用者要求）。開發機範圍已完成；剩 `EdgeAgent/tests/browser_check.mjs`、SilentTalk `tests/test_agent_tasks.py`、`test_copilot_llm.py`、`test_copilot_runtime.py` 屬筆電。
 - **Discord／權限**：語音每句喊「機魂」；主人 @＝主人的 Agent 串；用說的不能動電腦；刪檔要主人同意（沒回應＝拒絕，最多封存）。不能做的事：模型要懂**而且**程式擋得住。
 - **紀錄**：對話只寫進使用者指定的紀錄資料夾（AGENTS.md 規則 1）。使用者親手給的對話匯出放 `archive/`（不 commit）；開發機只讀使用者明確交來的匯出。
-- **本地老師**：使用者說「有 Qwen3.8 就不需要其他模型」。Qwen3.8 在框架裡驗過後，刪 Qwen3.6-27B（Q4、IQ3）和 Qwen3.6-35B-A3B，程式改指 Qwen3.8（`scripts/dev/machine_spirit.py` 的 `TEACHER`、EdgeAgent `teacher-27b*` 設定）；Gemma 31B 留著當評審。
+- **本地老師**：使用者說「有 Qwen3.8 就不需要其他模型」。唯一老師 Qwen3.8-27B（Q4 出卡＝`teacher-38`，IQ3 錄對話＝`teacher-38-iq3`），Gemma 31B 當評審。Qwen3.6 已刪（2026-10-08），程式已改指。
 
 ## 2. 每件工作的那一條路
 
 | 工作 | 那一條路 | 現況 |
 |---|---|---|
-| **產品 Agent**（筆電的對話、雜事、工具、MCP、研究） | EdgeAgent Pi 迴圈＋20 個工具。考：`bench/run.py`（78 題，`bench/report.py A B` 配對）。資料：情境卡（下一列）＋工具題（`bench/make_tool_tasks.py`），老師在框架裡錄（`run.py --record`），`bench/dataset.py --thinking both` 轉列，SilentTalk `scripts/dev/train_lora.py` 訓（列標 `thinking` 就用思考格式） | 出貨 `agent-fw1`。基準 `laptop-fw1`／`laptop-fw1-high`（64K）跑中；通用修正在 `integration` 待量 |
-| **情境卡**（多輪蒸餾，使用者核准的設計） | `bench/scenarios/families.json`（8 類能力：脈絡、查資料並整理、交付完整、認識自己、自我稽核、工具紀律、該不該查、電腦雜事）→ `scenario_cards.py generate/tasks`（老師出卡；驗收卡主題和訓練卡分開）→ `run.py` 跑卡（`agent_runner.py` 模擬使用者只看回答）→ `scenario_checks.py`（程式檢查）→ `scenario_judge.py validate`（壞對話至少擋 90% 才信）／`judge`（Gemma 評兩次）→ `dataset.py`（每輪一列，只收評審通過的） | 程式在 `integration`，佇列試產 40 張訓練卡、24 張驗收卡 |
+| **產品 Agent**（筆電的對話、雜事、工具、MCP、研究） | EdgeAgent Pi 迴圈＋20 個工具。考：`bench/run.py`（78 題，`bench/report.py A B` 配對）。資料：情境卡（下一列）＋工具題（`bench/make_tool_tasks.py`），老師在框架裡錄（`run.py --record`），`bench/dataset.py --thinking both` 轉列，SilentTalk `scripts/dev/train_lora.py` 訓（列標 `thinking` 就用思考格式） | 筆電現在用**基底 E4B**（筆電 2026-10-07 停用 fw1：打招呼也去列目錄）。拆檔、原因碼、通用修正在 EdgeAgent 本機 `copilot-story-mode`，**未推**，等 fw2 出貨一起推（§3） |
+| **情境卡**（多輪蒸餾，使用者核准的設計） | `bench/scenarios/families.json`（8 類能力：脈絡、查資料並整理、交付完整、認識自己、自我稽核、工具紀律、該不該查、電腦雜事）→ `scenario_cards.py generate/tasks`（老師出卡；驗收卡主題和訓練卡分開）→ `run.py` 跑卡（`agent_runner.py` 模擬使用者只看回答）→ `scenario_checks.py`（程式檢查）→ `scenario_judge.py validate`（壞對話至少擋 90% 才信）／`judge`（Gemma 評兩次）→ `dataset.py`（每輪一列，只收評審通過的） | 訓練卡 240（C、D 各 50）、驗收卡 70；錄製中（§3） |
 | **寫程式的 Agent**（主線） | mini-swe-agent 框架（`bench/mini_runner.py`），SWE-bench Verified 60 題（`bench/swebench_run.py`） | 基準 E4B 4/60。trace-v1 停；等 Qwen3.8 產生軌跡 |
 | **機魂資料／台詞** | 筆電寫 → `character_data.py external-check` → `scripts/dev/character_pipeline.sh` → `line_ab.py` 盲評＋`chat_task_eval.py`、`task_scope_eval.py` | 出貨 `machine-spirit-char-v1`（台詞 76/80） |
 | **筆電上的 adapter** | 一個 llama-server 兩個 adapter（`--lora-init-without-apply`，請求點名）；EdgeAgent `runtime.AGENT_ADAPTER`／`CHARACTER_ADAPTER` | 不變 |
-| **佇列** | `EdgeAgent/.runtime/fw/queue.sh`；`chain.sh` 等舊佇列結束後換上 `queue.next.sh` | 順序：基準 off/high →（換手）`integrate`（主目錄快轉到 `integration`）→ `bench-general`／`-high` → `cards-pilot` → `scen-pilot` → `judge-validate` → `judge-pilot` → `teacher-bench` |
+| **佇列** | `EdgeAgent/.runtime/fw/queue.sh`（一步一個 `.done`；同一步連錯 3 次就停）。顯卡是共用的：`run.py` 等得到顯存才開伺服器，被別人搶走回 3，佇列等 2 分鐘重試、不算失敗；錄製加 `--fit-slots`（放得下幾條開幾條，少於 4 條時 30 分鐘後重開） | `fw2-scen-cdg` → `fw2-scen` → `fw2-tools` → `fw2-judged` → `fw2-rows` → `fw2-train` → `base-old-high` → `fw2-eval`／`-high` → `scen-eval-base`／`-fw2` |
 
 ## 3. 接下來
 
 **2026-10-07 晚：急用版 `agent-fw2`（使用者：「先搞急用版」「有問題自己料理，我沒空幫忙把關」）**。佇列（`EdgeAgent/.runtime/fw/queue.sh`）自動跑：錄 240 段情境對話（C、D、G 先）＋152 題工具題 → Gemma 評審（先驗證能擋 ≥90% 壞對話，否則只用程式檢查）→ `dataset.py --thinking both` → 訓 `agent-fw2`（32K、2 輪）→ 驗收。老師每步思考上限 1,024 token（`teacher-38` 的 `--reasoning-budget`）。
 - **訓練用的提示**是 EdgeAgent `e70b53d`（舊規則＋`<runtime>` 自我事實＋「打招呼閒聊不用查」）。量過的新規則（何時問／確認）都讓 E4B 改成反問，已拿掉。錄資料期間不改 `prompt.py`（`dataset.py` 會拒收混版本）。
 - **出貨規則（自己判，不再問）**：fw2＋新提示對上使用者現在用的「基底 E4B＋舊提示」（`base-old`、`base-old-high`、`scen-eval-base`）：產品考場 off 和 high 的總通過率都不低於、閒聊題全過、驗收卡通過率較高 → 出貨。出貨＝fw2 放進 EdgeAgent `edge_agent/adapters/`、`deploy.ADAPTERS` 記 SHA、`runtime.AGENT_ADAPTER` 改 fw2、拿掉 fw1、推 EdgeAgent（含拆檔、原因碼、情境卡）、寫筆電第 7 回合 B。沒過就不出貨，寫明哪一關沒過，下一輪修資料。
-- 之後（不急）：Gemma 評審的完整版、驗收卡擴充、`agent-fw2` 之後再談 coding agent（Qwen3.8 軌跡）、machine-spirit-3、筆電第 6 回合評分、清掉 Qwen3.6 老師。
+- 之後（不急）：Gemma 評審的完整版、驗收卡擴充、`agent-fw2` 之後再談 coding agent（Qwen3.8 軌跡）、machine-spirit-3、筆電第 6 回合評分。
 
 ## 4. 開發機規則（通用規則在 AGENTS.md）
 
