@@ -1,109 +1,116 @@
-# Discord audit｜2026-10-07（Windows）
+# 筆電回報：第 7 回合 A（語音驗收中止；@bot 失敗優先）
 
-## 機魂劇本
+## 1. 機魂劇本
 
-本回合為 Discord 文字與語音稽核，沒有訓練資料工作，未讀使用者對話、人設或角色狀態內容。
+本回合無預設劇本。使用者自行在 Discord @bot 一次；未讀取、複製或保存其訊息內容。沒有另做 Agent 派工測試。
 
-## 時間與額度
+## 2. 時間與額度
 
-回報時間依時鐘核對 2026-10-07 14:10:29 +08:00。本次固定實機事件視窗：10:39:08～13:57:32.926596 +08:00；不是稽核總耗時。平臺未提供 token／額度總數。
+日期：2026-10-07，Asia/Taipei（UTC+08:00）。
 
-兩 repo 與 report worktree 均 pull --ff-only 成功。SilentTalk HEAD a5ee772、EdgeAgent HEAD 5422f02。discord_voice、discord_messages、runtime、task_runner 相對7355d68無差異。沒有開 sub-agent。
+- SilentTalk 新程序建立：14:35:19.319；launcher PID 25668，app PID 7004。
+- 使用者確認在語音頻道：14:43:54。
+- 本次 text_message_received：14:45:03.233。
+- 使用者要求停止監控：約 14:52；診斷摘要截點 14:52:48.950。
+- 從啟動到摘要截點約 17 分 30 秒；從 @bot 到截點約 7 分 46 秒。未達 30 分鐘。
+- 帳戶額度、token 用量不可見，未估算。
 
-## 目標完成度統計（分母 29）
+## 3. 目標完成度
 
-完成故障稽核與隔離重現；沒有修復、部署或真人驗收，不重新評定歷史29項。
+V1（語音穩定 30 分鐘）：**使用者中止，未完成驗收，不判通過**。截至中止未重現斷線循環，但不足以宣稱已修好。
 
-**P1：語音替換沒有收回舊連線背景重連工作的控制權。**
+使用者最新指示優先於工作檔：停止語音監控，優先處理 @bot 無效。已用本次 session 的事件數字確認 **收到訊息 → 派工 → 任務失敗**。這不是成功完成的任務；agent_result_posted 和 agent_task_finished 本身也不能作為成功證據。
 
-owner：silenttalk/discord_voice.py:501 `_close_voice`，caller :303 `_connect_fresh_locked`、:248 `_follow`。只 await disconnect(force=True) 後建立替換連線；沒有終止／等待舊SDK重連runner。`_follow`也只選is_connected()，沒有區分SDK正在重連和真正退役。
+@bot 無效：**確認失敗，根因未定位，未修復**。Agent 工具與角色邏輯由開發機負責，本回合未越界修改。
 
-實際安裝discord.py 2.7.1的voice_state.py:741一般異常分支先backoff，之後:743 disconnect(cleanup=False)、:746 _connect。disconnect本身不取消runner。隔離重現使用真VoiceConnectionState._poll_voice_ws、disconnect及app._close_voice，只mock網路。注入4006使runner進入backoff，app關閉舊voice並建立替換後，舊runner仍實際送channel=None並再次連線，兩個生命週期因此互相干擾。
+## 4. 測試執行結果
 
-實機15次4006、573次by force、573次Reconnect was unsuccessful；收音啟動574次，間隔中位數20.279621秒，符合SDK20秒等待加app重建。測試證實競態存在；固定週期與之相符，但缺少connection/task identity診斷，不能確定每一個實機週期都由它觸發，首次失效來源也未確認。不能把它全部歸咎於網路或DAVE。
+完整測試只跑一次：
 
-修復應由voice transport唯一owner統一管理建立、SDK自動重連、退役、shutdown；替換前完成舊工作退役，不立即替換正在握手／重連的client。不能只調長監測週期掩蓋。回歸需驗舊工作不能再發離開／連線、transient reconnect、關閉及健康連線。
+`.\.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider --basetemp "$env:TEMP\silenttalk-round7a-pytest-<本次隨機識別碼>"`
 
-**P1：兩次 Agent 派工執行失敗，具體原因尚未定位。**
+結果：**365 passed、1 skipped、1 warning，16.46 秒，pytest exit code 0**。warning 為 discord/player.py 的 audioop DeprecationWarning。
 
-使用者已澄清：@ 就是為了派工。silenttalk/discord_messages.py:110、:176 `_opens_thread` 與 runtime._handle_turn 的 agent 分支符合這個目的，開 Agent 串與派工本身不是缺陷。撤回先前「與聊天目的衝突」的 P1 判定及修改入口語意的交接要求；錯誤來自 agent 將「聊天」一詞解讀成一般角色聊天，忽略既定 @ 派工上下文。
+診斷摘要使用 scripts/dev/log_summary.py 的 generate_summary，先在記憶體依新程序建立時間篩選，再指定 all_sessions=True，避免預設 session 切點納入舊事件。第一次匯入呼叫因 stdout cp950 無法輸出符號而 exit code 1（UnicodeEncodeError）；設定本次呼叫 stdout UTF-8 後 exit code 0。沒有修改摘要腳本。
 
-13:51:45.248245 第一則開串；13:54:00.734641 第二則為串內文字。兩次皆 addressed=True、place=thread、dispatched=True，表示派工入口有接收並送出工作。兩次工作分別 104891／175984 ms 後返回 kind=error，task_marked=failed；工作成功完成 0 次。角色聊天判斷與回覆為 0 是這條派工路徑的正常結果，不能當成故障。待查的是上游 Agent 執行失敗，不是把 @ 改為普通聊天。
+交接文件 pytest 共嘗試兩次：在程式工作區執行 `python -m pytest -q -p no:cacheprovider tests/test_handoff_docs.py`，4 passed、0.04 秒、exit code 0（檢查程式工作區的既有交接）；在 laptop-report 工作樹用同一個 venv 執行相同測試，exit code 1，該回報分支沒有 tests/test_handoff_docs.py，no tests ran。新回報改由實際檔案的十節結構、字數和 Git diff 檢查核對；不把未跑的回報分支測試當通過。
 
-**P2：Agent失敗事件沒有安全、穩定的原因碼。**
+## 5. 修改檔案與 commit
 
-owner：silenttalk/copilot/task_runner.py:222 `_agent_event`、:279 `agent_result_posted`及EdgeAgent `/chat` error來源。兩次錯誤均 posted=True，證明錯誤結果成功送達，不能當作工作成功。
+- 程式、使用者設定：無修改。
+- 只整份替換 handoff/reports/laptop.md，提交至 laptop-report；commit 以該分支 Git 紀錄為準。
+- 驗證程式版本：SilentTalk 431ff1369ad35628f3ef3aba13b1f7c8ff5c113f，包含工作檔指定的語音修正。
+- EdgeAgent 本機與遠端 copilot-story-mode 均為 5422f027d1547d2a6cc766e3cbb0435aa562e08d；本回合未拉取、未重啟、未修改。工作檔所說尚待發布的原因碼修正，當時未在遠端。
 
-數字log只記kind，未記穩定error code、失敗階段或例外類別，上游即使帶reason也沒有保留。因此不能確診為token截斷、推論逾時、模型品質或SDK故障。禁止把error message、prompt或結果全文寫入log補診斷；需由開發機提供結構化原因，再由筆電傳遞安全列舉。
+## 6. 記憶體與速度
 
-## 測試執行結果
+- app PID 7004 已觀察 working set 約 48.6–390.3 MiB；此為離散取樣範圍，非連續量測的峰值。
+- GPU 一次取樣：RTX 3050 Ti Laptop GPU，VRAM 3597 / 4096 MiB，GPU utilization 0%。
+- agent_task_decision latency_ms=2484。
+- agent_task_finished elapsed_ms=147656；這是失敗任務的耗時。
+- 角色發言和 TTS 輸出均為 0，沒有可報的語音回應速度。
 
-使用SilentTalk .venv，pytest -q -p no:cacheprovider，exit取pytest自己。
+## 7. Discord 數字表
 
-| 執行 | 結果 | exit |
+切點：本次程序建立時間；截至中止後的診斷摘要截點。
+
+| 事件／項目 | 次數／數字 |
+|---|---:|
+| discord_ready / discord_gateway_resumed | 1 / 0 |
+| Disconnected from voice by force | 0 |
+| Reconnect was unsuccessful | 0 |
+| 4006 | 0 |
+| ConnectionClosed | 0 |
+| voice_receive_started | 1 |
+| voice_receive_started 間隔中位數 | 不適用，只有 1 次 |
+| voice_reconnect_backoff | 0 |
+| voice_reconcile_failed | 0 |
+| voice_receive_stats | 26 |
+| RTP 語音封包 | 0 |
+| text_message_received | 1 |
+| agent_task_decision（dispatched=True） | 1 |
+| agent_task_ended（reason=unknown） | 1 |
+| agent_task_checks | 0 |
+| agent_approval_decided | 0 |
+| agent_result_posted（posted=True） | 1 |
+| agent_task_finished | 1 |
+| task_marked accepted / done / failed | 1 / 0 / 1 |
+| copilot_character_line / job_done | 0 / 0 |
+| WARNING / ERROR / CRITICAL | 0 / 0 / 0 |
+
+失敗相關時間線（只有事件、時間和原因碼）：
+
+| 台北時間 | 事件 | 數值／原因碼 |
 |---|---|---|
-| 合成重現＋voice_monitor／voice_receive／discord_config／copilot_runtime／agent_tasks第一次 | 1 failed、69 passed、2 warnings，4.68秒；fixture的AsyncMock回傳coroutine未await，尚無有效重現 | 1 |
-| 同組第二次 | 1 failed、69 passed、1 warning，4.91秒；合成guild缺me.voice，不能走完reconnect，不能當產品失敗 | 1 |
-| 修正fixture後同組 | 70 passed、1 warning，3.87秒；重現舊runner離開替換連線，確認主人@開串規則 | 0 |
+| 14:45:03.233 | text_message_received | 1 |
+| 14:45:05.727 | agent_task_decision | dispatched=True；latency_ms=2484 |
+| 14:45:06.444 | task_marked | accepted |
+| 14:47:32.869 | agent_task_ended | reason=unknown |
+| 14:47:33.404 | agent_result_posted | posted=True |
+| 14:47:33.407 | agent_task_finished | elapsed_ms=147656 |
+| 14:47:34.342 | task_marked | failed |
 
-warning 為 audioop deprecation。歷史 70 項包含語音缺陷重現及正常 @ 派工入口檢查；後者不能支持路由有缺陷的判定。語音重現通過表示缺陷可重現，不是修好了。未重跑全套、壓測、發 Discord 訊息或重啟。現有測試綠燈未涵蓋 SDK 退役競態。
+診斷時 18087/status：mode=character、ready=True、owner_pid=7004、agent_busy=False、inference_reserved=False、inference_slots=1。這僅代表查詢時的服務狀態，不證明失敗當下的推論或工具正常。/openapi.json 回傳 HTTP 404，未取得進一步任務狀態接口。未讀取 EdgeAgent 任務輸出、使用者紀錄或其他工作檔。
 
-可重跑合成重現：[discord-lifecycle-repro.py](discord-lifecycle-repro.py)。在SilentTalk repo：
+## 8. 紀錄目錄
 
-```powershell
-$env:PYTHONPATH = 'C:\Users\A8fm0\Downloads\SilentTalk'
-.\.venv\Scripts\python.exe -m pytest C:\Users\A8fm0\Downloads\SilentTalk-laptop-report\handoff\reports\discord-lifecycle-repro.py -q -p no:cacheprovider
-```
+僅查 C:\Users\A8fm0\AgentRecords 的 metadata；沒有讀取內容，沒有改動使用者設定或角色狀態。
 
-本次更正移除附件中的正常 @ 路由檢查，附件只保留一項語音缺陷重現。目前應 1 passed 表示語音缺陷可重現；修復時轉為正式回歸，改為斷言舊 runner 不能干擾替換。
+- 觀察前：8 個檔案，402814 bytes。
+- 診斷時：9 個檔案，486612 bytes；最新修改時間 14:47:33.405。
+- 事件 transcript_recording 1 次。未另存任何對話或原始 log 到暫存檔／回報。
 
-更正後附件實跑：1 passed、1 warning、0.62 秒，pytest exit 0。同步更新 receipt 的附件 SHA256，並明確登記 @ 派工路由為符合預期。
+## 9. 使用者回饋
 
-交付附件與 handoff 文件驗證：6 passed、1 warning、1.05 秒，pytest exit 0；包含已複製的兩項重現與四項既有文件檢查。receipt 一致性檢查 exit 0，固定窗口、數字、重現 SHA256、十節與引用檔均核對；git diff --check exit 0。初次整份 report 的 apply_patch 因重複 target 被拒絕，未寫入；交付結果追加腳本第一次因定位 assertion 失敗，未寫入，改用直接 patch 完成。
+- 「已在頻道內，會繼續掛著」
+- 「我當時會瘋狂斷線，起源於我@bot」
+- 「我現在 @bot 說一句話」
+- 「不要監控了，浪費時間，我@bot她無效比較嚴重吧」
 
-## 修改檔案與 commit
+## 10. 給接手模型的交接指示
 
-沒有修改產品碼／正式測試、四個使用者設定檔。只重寫最新report，儲存合成重現與不含對話的數字receipt；提交／push到laptop-report。使用者本次audit授權讀相關程式，覆蓋工作檔僅讀檔案限制，沒有擴大成角色policy修復。
-
-## 記憶體與速度
-
-唯讀HTTP snapshot：18087 mode=character、ready=true、owner_pid=12076、context_size=65536、agent_slot=0、inference_slots=1、error空；18089 total_slots=1、n_ctx=65536。沒有生成probe；ready不能當Agent全流程可用。
-
-程式metadata：SilentTalk wrapper15520／app12076，10:39:08 +08:00建立；Edge Python14444／17512、router12788、model child11280，約10:55建立。只是snapshot，禁止照抄PID停止。
-
-## Discord 數字表
-
-固定視窗7383筆metadata，僅在RAM解析時間、事件、數字、例外類別。receipt：[discord-audit-counts.json](discord-audit-counts.json)。
-
-| 指標 | 數字 |
-|---|---|
-| discord_ready／gateway_resumed | 1／3 |
-| Voice connecting／connection complete | 589／587 |
-| voice_receive_started | 574，DAVE v1 |
-| receive_stats／RTP packets／STT final | 297／0／0 |
-| by force／Reconnect was unsuccessful | 573／573 |
-| ConnectionClosed／4006 | 15／15 |
-| ClientConnectionResetError | 1，11:01:54，早於本次文字測試 |
-| voice_reconnect_backoff／voice_reconcile_failed | 1／1 |
-| voice_transport_recovery／voice_playback_failed_recovering | 0／0 |
-| text_message_received／thread_opened | 2／1 |
-| agent_task_decision dispatched | 2 |
-| agent_result_posted error／task_marked failed | 2／2 |
-| character_line／job_done | 0／0 |
-
-RTP0不能當麥克風或解密故障證據，沒有本次真人語音輸入確認。官方[Voice Close Event Codes](https://docs.discord.com/developers/topics/opcodes-and-status-codes#voice-close-event-codes)將4006定義為session不再有效，不是直接歸因網路品質的程式碼；SDK by force事件對應Voice4014分支，與主Gateway同號程式碼意義不同。
-
-## 紀錄目錄
-
-沒有讀AgentRecords、人設或角色狀態內容；沒有對話／心事進入report、重現或receipt。沒有修改.env、settings.json、personas.json、character_state.json或紀錄設定。
-
-## 使用者回饋
-
-使用者回報 Discord @ 派工大失敗，機魂在網路穩定時仍於語音頻道反覆進出，要求 audit；之後明確糾正：@ 就是為了派工，既有上下文已有此目的。agent 原先的聊天路由缺陷判定有誤，已撤回。未重做舊 128K 驗收或自動重啟。
-
-## 給接手模型的交接指示
-
-1. 先同步、讀本機工作檔與本回報。這是稽核成果，不是修復／部署完成。
-2. Windows優先修語音生命週期owner，納入真SDK退役與transient reconnect測試；可沿用合成重現，不讀真人對話。
-3. @ 派工入口符合使用者目的，不要求修改路由或角色／工具入口語意。開發機定位 EdgeAgent 執行失敗並提供結構化失敗原因；筆電配合 caller 與安全事件碼，不在 Windows 改模型、角色 policy 或 lingua。
-4. 修復後有界驗證。首次voice失效來源、兩次原工作具體失敗原因、修復後真人體驗仍未確認，不能寫成已修好或網路不穩，也不請使用者標註資料。
+1. **先解決 @bot 無效，不要重啟 30 分鐘監控。** 本次已有真實 Discord 失敗證據：派工 1 次、failed 1 次、reason=unknown。沒有可引用的具體例外類別；不能憑 unknown 推定模型、網路或工具是根因。
+2. 開發機依責任分工從 Agent 任務執行與結束結果的 owner 查因，將已規劃的失敗原因碼完整送到 SilentTalk，確認失敗對應的終止狀態與使用者可見回應。不得把 posted=True 或 task_finished 當成功。
+3. 先發布可定位本次失敗的修正／診斷，再交筆電重啟部署並驗證 @bot 的實際有效回應；不要要求使用者評判樣本或反覆做無因的重試。
+4. V1 保留為使用者中止、未驗完。沒有失效前後 10 行摘錄，因為本回合未觀察到語音失效；不能虛構。
+5. 筆電 app 仍在運行，沒有停止 bot 或後端；停止的是本次監控。未改 .env、settings.json、personas.json、character_state.json。繼續遵守紀錄隱私和機器分工。
