@@ -13,26 +13,15 @@
 
 ## 步驟
 
-1. 在 SilentTalk 執行 `git pull --ff-only`，拉不下來就停下回報。再讀 AGENTS.md 和這份。EdgeAgent 這回合不用拉。
-2. 跑完整測試：`.\.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider --basetemp <暫存資料夾>`。預期 357 passed、13 skipped 上下，Windows 專用的 skip 數可能不同。看 pytest 自己的 exit code。失敗就停下回報，不要改。
-3. 照平常的方式重啟 SilentTalk（`scripts\restart_silenttalk.ps1`；或照使用者習慣的方法）。關程序只用核對過的 PID。
-4. 使用者在語音頻道時，讓 app 至少連續掛 **30 分鐘**。這期間不要求使用者講話；如果使用者剛好講話，就照實記下。
-5. 用 `scripts\dev\log_summary.py` 只算這次 session 的數字，切點是這次 app 程序的建立時間。另外算你稽核時的那幾項：
-   - `Disconnected from voice by force`；
-   - `Reconnect was unsuccessful`；
-   - 4006 和 `ConnectionClosed`；
-   - `voice_receive_started` 次數和間隔中位數；
-   - `voice_reconnect_backoff`、`voice_reconcile_failed`。
-
-   只記事件名稱和次數，不記內容。
-6. 判定：
-   - **通過**：30 分鐘內 `by force` 和 `voice_receive_started` 的次數個位數以內，而且沒有固定 20 秒左右的循環。
-   - **沒通過**：照實記數字和例外類別，附上最早一次失效前後 10 行 log。只要事件名稱、時間、close code，不要訊息內容。不要自己改程式，寫進回報給開發機。
-7. 推回報：只寫最新這一回合，整份換掉；推到 `laptop-report`。
+1. 在 SilentTalk 執行 `git pull --ff-only`；拉不下來就停下回報。
+2. 跑完整測試（`--basetemp`，看 pytest 自己的 exit code）。預期 357 passed 上下，其中 `tests/test_voice_lifecycle.py` 要通過：這支就是語音修正的驗證，用的是真的 discord.py。失敗就停下回報，不要改。
+3. 重啟 SilentTalk 讓修正生效（核對過的 PID）。**不安排掛機測試，也不要求使用者做任何事。**
+4. 之後使用者正常使用 Discord 時，順手從 log 數這次 session 的 `Disconnected from voice by force`、`Reconnect was unsuccessful`、4006 次數。沒有用到語音就寫「沒有語音使用，未觀察」。
+5. 推回報（整份換掉，推到 `laptop-report`）。
 
 ## 回報格式（沿用固定十節）
 
-機魂劇本（本回合無）／時間與額度／目標完成度（本回合只有 V1：語音穩定 30 分鐘）／測試執行結果（每次 pytest 都列，含失敗）／修改檔案與 commit（應該是無）／記憶體與速度（只寫看得到的數字）／Discord 數字表（上面那些）／紀錄目錄（只看 metadata）／使用者回饋（使用者自己說的感想，原話照錄）／給接手模型的交接指示。
+機魂劇本（本回合無）／時間與額度／目標完成度（V1：回歸測試通過＋正常使用時的被踢次數）／測試執行結果（每次 pytest 都列，含失敗）／修改檔案與 commit（應該是無）／記憶體與速度（只寫看得到的數字）／Discord 數字表（上面那些）／紀錄目錄（只看 metadata）／使用者回饋（使用者自己說的感想，原話照錄）／給接手模型的交接指示。
 
 ## 不變的規則
 
