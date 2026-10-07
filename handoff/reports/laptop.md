@@ -9,7 +9,7 @@
 
 ## 時間與額度
 
-- 檢查點：2026-10-07 01:16:15 +08:00。Token、額度與推理等級看不到，不估算。
+- 檢查點：2026-10-07T08:25:17.430696+08:00。Token、額度與推理等級看不到，不估算。
 - SilentTalk 開工 pull a621d33→9f56fa9、EdgeAgent 90c5876→7bf7d72、report pull 均 exit 0。
 - 更新工作檔改 A1 為祖先檢查，本次 exit 0；先前最近15筆的誤擋已解除。
 - SilentTalk 首次 push 因開發機同時更新 exit 1；fetch、rebase 無衝突，再 push exit 0，重驗完整 pytest。
@@ -18,7 +18,7 @@
 
 ## 目標完成度統計（分母 29）
 
-完成12／未完成2／沒測15。最新工作檔新增B6；劇本不計入分母。A3已修復並完成指定trace；A5新版128K仍未就緒，不宣稱正式部署或真人驗收完成。
+完成13／未完成2／沒測14。最新工作檔新增B6；劇本不計入分母。A3已修復並完成指定trace；A5原128K未完成；使用者改授權64K／多放GPU的試聊部署已就緒，不回填原128K驗收成功，真人品質仍待使用者確認。
 
 | 項目 | 狀態 | 證據或原因 |
 |---|---|---|
@@ -26,8 +26,8 @@
 | A2 | 完成 | 最新bootstrap -SetupOnly exit0；已部署Agent與機魂兩個adapter，檔案長度/SHA另列。早期單adapter結果屬舊配置。 |
 | A3 | 完成 | 最新完整307 passed、10 skipped、182.98秒、pytest exit0；指定兩項MCP trace各1 passed、exit0、started各1，方法次序均initialize→notifications/initialized→tools/list→tools/call。歷史失敗保留。 |
 | A4 | 完成 | SilentTalk最新9674f49完整335 passed、1 skipped、1 warning，13.19秒，pytest exit0。 |
-| A5 | 未完成 | 清場後可用RAM1335.2MiB。正式啟動在套用E4B前低RAM中止；工作檔指定手動E4B 128K/mmap/lazy/auto512診斷在fit估算時亦低RAM中止。未就緒，未做三次成功重載或開SilentTalk。 |
-| A6 | 未完成 | 已有合成E4B短/長提示速度與RAM/VRAM；64K完整長測通過一次，未穩定重現。雙adapter／共享slots的角色延遲與實際Agent速度未測。 |
+| A5 | 未完成 | 原128K未通過。新增雙adapter／2slot的128K診斷在啟動前已收到Windows低記憶體通知（Available360MiB），exit1，未啟動模型。使用者另授權64K／GPU41；正式接口切換成功，SilentTalk角色ready，真引擎65536／2slots；未跑三次重載。 |
+| A6 | 未完成 | 本次64K／GPU41正式部署短測：Agent20生成tokens、22.49 token/s；角色3生成tokens、12.74 token/s，樣本極短。角色ready取樣VRAM3565MiB、Available477.9MiB；真人回覆延遲及近滿窗未驗。Agent共享空間為0。 |
 | A7 | 沒測 | E4B未載入，未跑 --audit-live；不以回復的Qwen或合成模型代替。 |
 | B1 | 完成 | 批准卡用 payload.explain_title，無欄位用指定泛用字句。真Edge先紅後綠，驗工具/PowerShell/fallback三種標題。 |
 | B2 | 完成 | EdgeAgentTest九項均exit0、有中文與數字/清單，Traceback0、沒辦法0；行數表如下。 |
@@ -47,14 +47,16 @@
 | C8 | 沒測 | 無本次批准逾時測試。 |
 | C9 | 沒測 | 無本次重啟後串歷史真人確認。 |
 | C10 | 沒測 | 無第二真人帳號測試，未用bot替代。 |
-| C11 | 沒測 | 本次app session不存在，未貼歷史log_summary代替。 |
+| C11 | 完成 | 64K試聊app PID14940，以其建立時間切出本session後，用既有log_summary.generate_summary產出完整數字表（含Agent主機核對），見下表。真人項目另算。 |
 | D1 | 沒測 | 無本次真人工作；紀錄metadata基準1檔、0bytes，未讀內容。 |
-| E1 | 完成 | 收尾llama-server0、9223/18190/18087/18089 listener0；自建service/模型程序已按PID清掉，Discord6程序保留。 |
+| E1 | 完成 | 歷史診斷已清理；本次無新專用Edge／9223。依使用者64K試聊授權，保留正式EdgeAgent、model router／child及SilentTalk；不能把正式服務當測試殘留關掉。 |
 | E2 | 完成 | 原UI三次＋512/256共5次自然CUDA OOM；36份容量receipt有29次低RAM保護中止，另正式startup低RAM中止1次，合計30次保護中止，與CUDA OOM分开計。所有source SHA核對，無本次SilentTalk對話log。 |
 
 ## 測試執行結果
 
 下表保留同回合全部pytest（含失敗），均看pytest自己的exit code。
+
+本次沒有產品程式修改，未重跑已完成的全套pytest。實跑部署bootstrap exit0、正式模型切換job=done、live API與引擎context核對通過、base及character兩次合成completion皆exit0。128K新雙adapter／2slot探測preflight exit1（沒有啟動模型）；computer-use兩次native pipe unavailable，未成功操作介面。回報數字脚本初次tuple key序列化失敗exit1、後來stdout cp950編碼失敗exit1及字串匹配失敗exit1，均未寫入回報；改UTF-8管道及stdout後成功，沒有改產品或對話檔。回報一致性初查exit1，是驗證腳本誤將沒測期待為16；實際29列為13完成／2未完成／14沒測，修正斷言後重驗。
 
 | 執行 | 結果 | exit | 說明 |
 |---|---|---|---|
@@ -142,6 +144,16 @@ B3資產：C:\Users\A8fm0\EdgeAgentTest\round6-files-20261006-201943、同名.zi
 
 ## 記憶體與速度
 
+最新試聊部署（使用者本次指令覆蓋128K限定）：兩repo及report pull皆exit0，EdgeAgent仍9ee593d、SilentTalk1829f85，沒有新loader；ecf9884祖先exit0。bootstrap -SetupOnly再跑exit0，兩adapter SHA与已記錄值相同。空載Available804.3MiB、Code14程序working2656.3MiB，GPU used0/free3962MiB；之後Discord已開。雙adapter／2slot128K診斷preflight時Available360MiB並收到Windows低記憶體通知，未啟動模型、無stderr，exit1；這是前置阻礙，不能說新雙adapter模型已自然載入失敗。
+
+使用者接著指示「先裝上64k gpu用多一點減輕ram壓力，我實際去對話看看能不能用」。依此透過正式POST /models/switch設定E4B、context/working65536、GPU41（比舊auto24更多）、low_vram、Agent adapter及原mmproj；不手改config.json或受保護檔。正式引擎ready且n_ctx65536，base合成238prompt／20生成token、1.906秒、251.86 prompt token/s及22.49生成token/s、未截斷。SilentTalk重啟exit0，wrapper PID27272、實際app PID14940；角色ready、雙adapter、引擎n_ctx65536、2slots。角色slot0另做合成48prompt／3生成token、0.953秒、12.74生成token/s，不能把這種極短樣本當真人或滿窗效能。
+
+08:23:46 +08:00角色就緒取樣：VRAM3565MiB／free398MiB、Available477.9MiB；模型child PID13944 working1169.2MiB／private5587.5MiB，router PID25132 working43.8MiB／private139.0MiB。private commit不是當下實體RAM，也不宣稱沒有分頁。Discord保留6程序。沒有本次64K近滿窗或三次重載證據；保留服務讓使用者試聊，不執行會爭用slot或清掉對話的額外壓測。
+
+目前限制：原SilentTalk角色context32768，角色adapter需要2個角色slot，合計占滿65536；因此/status的context_size=0是Agent剩餘空間，agent_slot=null，並不是引擎context=0。角色能生成；Agent共享工作目前不可用。嘗試透過computer-use查看設定介面時兩次native pipe unavailable，沒有取得可操作視窗，沒有改settings.json。已向使用者說明；若要同時Agent工作，下一步需在可用的正式設定介面把角色每slot份額降到16384，然後確認總65536、Agent32768、3slots並重驗。此方案尚未套用。
+
+歷史診斷以下保留；其數字不能當最新64K或雙adapter實測。
+
 最新工作檔1829f85已拉到；EdgeAgent pull --ff-only成功，ecf9884祖先檢查exit0，沿用mmap/lazy/auto fit512，不再調runtime/context/GPU。使用者再關Code分頁與其他程序後，空載Available1335.2MiB，Code16程序1559MiB、Discord6程序576MiB、svchost92程序770MiB、MsMpEng285MiB、webview2六程序184MiB；獨立GPU仍used0/free3962MiB。較前次空載881.5MiB多453.7MiB，非隔離A/B，只按當次環境評估。
 
 - 正式service入口9ee593d、guard每20ms：開始Available1250.9MiB，尚未在模型頁套用E4B時收到Windows low-memory，最低442.9MiB；已終止自建service與模型子程序，未啟動專用Edge，因此沒有UI套用成功或三次重載證據。未手改config.json或使用者settings。
@@ -175,7 +187,7 @@ B3資產：C:\Users\A8fm0\EdgeAgentTest\round6-files-20261006-201943、同名.zi
 0.07.788.133 I add: tensor per_layer_token_embd.weight (size = 1512 MiB) lazy read enabled
 ```
 
-目前結論：64K是已完成近滿窗輸入＋生成的最高**實測值**，不是已證明的硬體上限，更不是日常穩定保證。96K、128K均有手動GPU／CPU分配短提示成功；長測觸發低RAM保護，不能算通過。使用者關掉應用後、完整回歸結束時實測可用RAM881.5MiB（總7883.3）；Code19程序工作集合計1821MiB、Discord6程序659MiB、svchost93程序759MiB。工作集相加不是唯一實體占用，也不是保證可釋放量。
+目前結論：128K在現有筆電工作條件沒有部署成功的證據，不沿用「mmap後一定可用」的前提；也沒有證明硬體在任何條件下絕對不可能。64K／GPU41的新正式部署已ready、雙adapter角色可生成；穩定性待真人試聊。64K仍是歷史已完成近滿窗輸入＋生成的最高**實測值**，不是硬體上限或日常穩定保證。96K、128K均有手動GPU／CPU分配短提示成功；長測觸發低RAM保護，不能算通過。使用者關掉應用後、完整回歸結束時實測可用RAM881.5MiB（總7883.3）；Code19程序工作集合計1821MiB、Discord6程序659MiB、svchost93程序759MiB。工作集相加不是唯一實體占用，也不是保證可釋放量。
 
 36份容量來源、正式啟動及MCP壓測數字見 [laptop-fit-diagnostics.json](laptop-fit-diagnostics.json)，全部來源SHA256已核對。合成prompt、completion及原生stderr全程只在RAM；持久檔只有數字與載入事件，不含真人對話。前35份容量試跑在最新雙adapter更新**以前**；新增current-handoff-auto128是9ee593d單Agent配置的失敗診斷。完整64K成績仍不得當新雙adapter產品驗證。
 
@@ -213,7 +225,47 @@ B3資產：C:\Users\A8fm0\EdgeAgentTest\round6-files-20261006-201943、同名.zi
 
 ## Discord 數字表
 
-本次新版SilentTalk app session未啟動，未跑log_summary.py；沒有完整數字表，不引用歷史session。真人項目待指定E4B成功載入。
+64K 真人試聊部署的 app PID14940；以程序建立時間 2026-10-07 08:21:39.655188 +08:00 為切點，沿用 scripts/dev/log_summary.py 的 generate_summary，只處理本次 session。以下是啟動與目前收音的數字；沒有使用者確認，不算 C1–C10 真人驗收。
+
+| 項目 | 數字 |
+|---|---|
+| GPU（llama.cpp 看到的） | — |
+| 連上 Discord（ready／resumed） | 1／0 |
+| 語音接收 | dave_version=1 |
+| 收音（每 30 秒記一次） | 3 次；收到 326 個語音封包、路上遺失 0.0%；大小不對 0、沒 DAVE session 丟掉 0、解碼錯誤 0、有 padding 0、DAVE 解不開丟掉 0、SSRC 未對應丟掉 0、DAVE 復原 0；最後一次 DAVE：v1 |
+| STT 斷出的句子 | 2 |
+| STT 片段音量／頻譜平坦度（人聲 < 0.3，雜訊約 0.56） | 中位數 -43.2 dBFS／0.04；像雜訊（> 0.4）0/2 段 |
+| 真人辨識測試（--stt-check） | 沒有跑 |
+| STT 聲音片段長度（SenseVoice） | 中位數 1754 ms、p90 2138 ms（n=2） |
+| STT 辨識一段花的時間 | 中位數 221 ms、p90 301 ms（n=2） |
+| STT 聽到聲音但沒辨識出字（SenseVoice） | 0 |
+| 打字訊息 | 0 |
+| 角色判斷次數 | 0（開口 0、沒開口 0） |
+| 聽到 → 角色的話備好（開口時） | — |
+| 聽到 → 決定不開口 | — |
+| 模型本身（開口時） | — |
+| 因為還在說話而丟掉的句子 | 0 |
+| 說出口的句子 | 3（串流 3） |
+| TTS 到第一段聲音（串流） | 中位數 909 ms、p90 1920 ms（n=3） |
+| 聊天工作判斷（叫到機魂的句子） | 0（交給 Agent 0、自己回 0） |
+| 聊天工作判斷延遲 | — |
+| Agent 派工判斷（主人的 Agent 串） | 0（派工 0、不派工 0） |
+| Agent 派工判斷延遲 | — |
+| Agent 任務執行時間 | — |
+| Agent 主機核對（完成的工作） | 0（改了程式沒通過檢查 0、來源對不上的數字 0、簡轉繁觸發 0） |
+| Agent 批准 | 0（准許 0、拒絕 0） |
+| Agent 批准往返延遲 | — |
+| 結果貼到聊天室或串 | 0（貼出 0、貼不上 0） |
+| 討論串讀回 | 0 |
+| Agent 私訊結果 | 0（送達 0、未送達 0） |
+| 討論串建立 | 0 |
+| 訊息表情標記（⚙️／✅／❌） | 0（accepted 0、done 0、failed 0） |
+
+警告／錯誤（只列事件名稱和次數）：
+- ERROR discord.voice_state（discord.errors.ConnectionClosed） × 1
+- ERROR asyncio（TimeoutError） × 1
+- WARNING voice_playback_failed_recovering × 1
+- WARNING voice_transport_recovery × 1
 
 ## 紀錄目錄
 
@@ -221,13 +273,15 @@ B3資產：C:\Users\A8fm0\EdgeAgentTest\round6-files-20261006-201943、同名.zi
 
 ## 使用者回饋
 
+本次最新修正：先質疑128K；隨後明確要求部署64K、增加GPU承擔，自己實際試聊。此指令覆蓋工作檔128K限定與不得改context/GPU的規則；已落地64K／GPU41，不等待額外批准。尚無使用者對效果的評語。
+
 使用者要求Discord保留、正常運作下優先模型效能，明確授權筆電修MCP及手動CPU／GPU分配，之後關Discord硬體加速／視效與其他應用，要求重測context和大量MCP。覆蓋工作檔auto fit 1024/1536/2048的既定試法與MCP開發機分工；合成或短提示結果不替代正式128K、角色、多slot驗收。最新要求先查看開發機任務，已依1829f85用新loader原配置做失敗診斷與指定trace。不填未測效能提升百分比，前段劇本保留。
 
 ## 給接手模型的交接指示
 
-1. 開工仍先pull --ff-only，讀AGENTS及最新laptop；不用另一台工作檔。單agent，保留Discord、用PID清掉自己啟動的測試程序。
-2. 最高完整長測是單adapter、單slot、純文字、Q4 KV的64K一回，不是硬體上限，也沒有穩定重現。96K／128K短提示成功、長測中止；前一次空載RAM881.5MiB時連64K載入也遇Windows low-memory；本次使用者再清場到1335.2MiB，最新128K auto診斷仍中止。不要再盲重複相同配置、移除低RAM保護或聲稱32K/64K日常穩定。
-3. 最新產品已改mmap/lazy與兩adapter、按請求點名；本機探測script已跟進lora_paths、每請求lora索引並存product revision。9ee593d的128K auto仍在fit估算觸發低RAM，依1.6交開發機；不得把舊結果當新配置。所有探測設定都未寫入使用者settings。下一次實測前先量空載Available、部署兩adapter SHA；需要較多RAM且仍正常運作的條件，再驗正式shared slots、CPU剩餘層、長輸入及生成。
-4. MCP root-cause已修，SDK／transport各100次工具完成；真E4B＋64K＋大量MCP＋context滿窗壓縮仍未驗。不要引用模擬模型壓測作真模型工具能力或記憶體穩定證據。
-5. 正式原設定就緒後再開SilentTalk，核對/status mode=character與兩adapter/slots/context，量A6、跑A7 audit-live，真人每次只請使用者做一件事。C9重啟、C11最新session不可省；無本次session，不讀歷史紀錄代替。
-6. 紀錄只看AgentRecords metadata，未動.env/settings.json/personas.json/character_state.json。服務／視效如要還原用既有RestoreServices／RestoreLight；無啟動自動app清場承諾。劇本沿用既有100/20 delivery，未再改資料、模型品質關卡不冒稱完成。
+1. 同機單agent；仍先pull --ff-only，讀AGENTS及最新laptop；這份回報的使用者最新指令優先：64K／多放GPU，保留供真人試聊，不擅自回128K。
+2. 現在正式EdgeAgent18087、router18089、child13944及SilentTalk實際app14940在跑；以API查現況，不只憑這些PID猜。model E4B、GPU41／43、總65536、mmap/lazy、Q8 KV、CPU projector、兩adapter。兩個角色slot各32768，Agent餘額0／slot null；角色ready不等於Agent工作可用。
+3. computer-use兩次native pipe不可用，未動settings。要同時Agent，需可用的正式設定介面把角色每slotcontext改16384，再驗總65536／Agent32768／3slots及生成；未獲得使用者效果回饋前不要說真人驗收通過。
+4. 本次只驗載入、引擎context和兩次短合成生成；沒有近滿64K或三次重載，不能沿用歷史特殊純文字Q4單slot滿窗成功當本次配置成功。RAM餘額數百MiB，先觀察實際聊天，不同時跑全套回歸或模型壓測。
+5. 只看AgentRecords metadata、不讀內容。紀錄與角色狀態不進回報；不用手改.env/settings.json/personas.json/character_state.json。Discord已連線、語音接收啟動，數字表是本session；有voice network recovery事件，不等於角色或模型CUDA失敗。
+6. C1–C10及D1仍待真人／工作條件；C11已產出本session數字表。其餘已完成UI／MCP／劇本沿用證據，不重做。回報推laptop-report；原128K驗收仍未完成，這次64K試聊是新授權的交付。

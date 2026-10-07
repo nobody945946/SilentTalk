@@ -3350,5 +3350,90 @@
       "bytes": 55160832,
       "sha256": "99ea1581f8f1f0e0f46d6da9b04d444b941c6395b93343b173073e6ade6d29d9"
     }
-  ]
+  ],
+  "current_dual_adapter_shared_slot_probe": {
+    "started_utc": "2026-10-07T00:14:48.540975+00:00",
+    "product_revision": "9ee593d28d06c1b7084ebbb289e2b769a5abada7",
+    "requested_context": 131072,
+    "slots": 2,
+    "adapters_loaded_requested": [
+      "agent-fw1.q8_0.gguf",
+      "machine-spirit-char-v1.q8_0.gguf"
+    ],
+    "adapter_sha256": [
+      "85b224ecec76572e2fb153b10d4b7d16f015bf69f0e6a63731a774c54e21566e",
+      "99ea1581f8f1f0e0f46d6da9b04d444b941c6395b93343b173073e6ade6d29d9"
+    ],
+    "load_mode": "mmap",
+    "lazy_mode": "on",
+    "fit_target_mib": 512,
+    "projector_enabled": true,
+    "kv_type": "q8_0",
+    "available_before_mib": 360.0,
+    "ready": false,
+    "inference_run": false,
+    "configuration_persisted": false,
+    "guard_interval_ms": 20,
+    "abort_reasons": [
+      "windows_low_memory_before_launch"
+    ],
+    "minimum_available_mib": 360.0,
+    "gpu_samples": [],
+    "available_after_mib": 360.0,
+    "stderr_tail": [],
+    "allocation_events": [],
+    "three_reloads_passed": false,
+    "test_passed": false
+  },
+  "current_64k_trial_deployment": {
+    "verified_utc": "2026-10-07T00:25:17.445389+00:00",
+    "product_revision": "9ee593d28d06c1b7084ebbb289e2b769a5abada7",
+    "service_status": {
+      "service": "edge-agent",
+      "mode": "character",
+      "ready": true,
+      "port": 18089,
+      "url": "http://127.0.0.1:18087/",
+      "model_url": "http://127.0.0.1:18089",
+      "owner_pid": 14940,
+      "agent_slot": null,
+      "agent_busy": false,
+      "error": "",
+      "model": "gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf",
+      "lora": "agent-fw1.q8_0.gguf",
+      "character_lora": "machine-spirit-char-v1.q8_0.gguf",
+      "context_size": 0,
+      "capabilities": {
+        "vision": true,
+        "audio": true
+      }
+    },
+    "engine_context": 65536,
+    "slots": 2,
+    "configured_gpu_layers": 41,
+    "configuration_owner": "POST /models/switch",
+    "bootstrap_exit": 0,
+    "base_completion": {
+      "prompt_tokens": 238,
+      "generated_tokens": 20,
+      "elapsed_seconds": 1.906,
+      "prompt_per_second": 251.86384536829794,
+      "predicted_per_second": 22.48518049091066,
+      "truncated": false
+    },
+    "character_completion": {
+      "prompt_tokens": 48,
+      "generated_tokens": 3,
+      "elapsed_seconds": 0.953,
+      "prompt_per_second": 72.18674711478596,
+      "predicted_per_second": 12.743480116985147,
+      "truncated": false
+    },
+    "near_full_context_tested": false,
+    "three_reloads_tested": false,
+    "human_feedback_received": false,
+    "agent_shared_slot_available": false,
+    "protected_user_files_manually_changed": false,
+    "computer_use_native_pipe_unavailable": true
+  }
 }
