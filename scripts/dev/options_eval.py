@@ -69,9 +69,9 @@ def lanes_of(suggestions: Any) -> list[str]:
 
 
 async def generate(args: argparse.Namespace) -> None:
+    from silenttalk import persona as persona_module
     from silenttalk.conversation import ConversationTurn
     from silenttalk.copilot import llm as llm_module
-    from silenttalk.copilot import persona as persona_module
 
     test_set = turn_eval_set.load_test_set()
     old = turn_eval_model.load_old_modules(args.rev)
@@ -218,7 +218,7 @@ async def generate(args: argparse.Namespace) -> None:
 
 
 def judge(args: argparse.Namespace) -> None:
-    from silenttalk.copilot import persona as persona_module
+    from silenttalk import persona as persona_module
 
     path = OUT_DIR / f"{args.tag}.json"
     result = json.loads(path.read_text(encoding="utf-8"))

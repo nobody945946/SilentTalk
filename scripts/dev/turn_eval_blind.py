@@ -71,7 +71,7 @@ def judge_pair(
     and per conversation for "do I know this person". Both orders, so the
     judge's position bias cancels. Absolute 1-5 scores drift between judge
     sessions by more than the effects we look for; a paired choice does not."""
-    from silenttalk.copilot import persona as persona_module
+    from silenttalk import persona as persona_module
 
     runs = [json.loads((OUT_DIR / f"{tag}.json").read_text(encoding="utf-8")) for tag in (tag_a, tag_b)]
     def wanted(record: dict[str, Any]) -> bool:
@@ -186,7 +186,7 @@ def judge_soul(
     """Can you tell who is talking, and what they want, from what they said?
     Per conversation: the character's own lines, the true persona and two
     others (core only), blind, twice with the order shuffled."""
-    from silenttalk.copilot import persona as persona_module
+    from silenttalk import persona as persona_module
 
     personas = {pid: resolve_persona(persona_module, test_set, pid)
                 for pid in sorted({c.persona_id for c in test_set.conversations})}

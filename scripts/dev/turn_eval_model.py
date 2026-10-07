@@ -62,8 +62,9 @@ def load_old_modules(rev: str) -> types.SimpleNamespace:
     the working tree (being rewritten) cannot change the baseline. "worktree"
     imports silenttalk.copilot as it is on disk instead."""
     if rev == "worktree":
-        from silenttalk.copilot import character, context, llm, persona
-        from silenttalk.copilot import types as ctypes
+        from silenttalk import conversation as ctypes
+        from silenttalk import persona
+        from silenttalk.copilot import character, context, llm
         return types.SimpleNamespace(
             character=character, context=context, llm=llm, persona=persona, types=ctypes
         )

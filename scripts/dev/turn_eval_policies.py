@@ -185,9 +185,9 @@ async def new_policy_turn(model: Any, turns: list[Any], addressed: bool, engagem
 
 
 async def run_new(args: argparse.Namespace, test_set: TestSet) -> list[dict[str, Any]]:
+    from silenttalk import persona as persona_module
     from silenttalk.conversation import ConversationTurn
     from silenttalk.copilot import llm as llm_module
-    from silenttalk.copilot import persona as persona_module
 
     if not hasattr(llm_module.LocalReplyModel, "character_turn"):
         raise SystemExit(

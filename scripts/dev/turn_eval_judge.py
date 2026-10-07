@@ -67,7 +67,7 @@ def run_judge(prompt: str, model: str) -> list[dict[str, Any]]:
 def judge_records(
     records: list[dict[str, Any]], test_set: TestSet, model: str, seed: int, batch: int
 ) -> dict[str, Any]:
-    from silenttalk.copilot import persona as persona_module
+    from silenttalk import persona as persona_module
 
     convs = {c.id: c for c in test_set.conversations}
     rng = random.Random(seed)
