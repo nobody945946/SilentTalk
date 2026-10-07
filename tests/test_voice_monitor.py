@@ -29,7 +29,7 @@ async def test_voice_connection_capabilities_do_not_depend_on_ai_readiness(monke
     monkeypatch.setattr(client, "_mark_voice_healthy", Mock())
     await client._connect_fresh_locked(channel, [])
     channel.connect.assert_awaited_once_with(
-        timeout=20.0, reconnect=True, cls=voice_recv.VoiceRecvClient
+        timeout=20.0, reconnect=False, cls=voice_recv.VoiceRecvClient
     )
     await client.close()
 

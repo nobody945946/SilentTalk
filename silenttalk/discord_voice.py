@@ -310,9 +310,15 @@ class DiscordVoiceClient(discord.Client):
         try:
             # Transport capabilities do not depend on AI readiness. Attaching
             # a recovered receiver must never require replacing this connection.
+            # reconnect=False: this client is the one owner of reconnecting
+            # (reconcile with its back-off). The SDK's own loop would wake
+            # after its back-off, leave the channel and connect again, knocking
+            # out the connection made meanwhile (laptop audit 2026-10-07: 573
+            # forced disconnects in 3 hours, one every ~20 s). The SDK still
+            # resumes on 4015 and follows a channel move by itself.
             new_voice = await channel.connect(
                 timeout=20.0,
-                reconnect=True,
+                reconnect=False,
                 cls=voice_recv.VoiceRecvClient,
             )
         except Exception:
@@ -499,6 +505,19 @@ class DiscordVoiceClient(discord.Client):
 
     @staticmethod
     async def _close_voice(voice: discord.VoiceClient) -> None:
+        """Retire a voice client for good. Its SDK tasks (the websocket poller
+        and a pending connect) are cancelled before it disconnects:
+        disconnect() alone leaves them running, and a poller sleeping in its
+        back-off would later leave the channel and reconnect over the
+        replacement. discord.py 2.7.1 (pinned) keeps them on the connection
+        state; tests/test_voice_lifecycle.py runs the real one."""
+        connection = getattr(voice, "_connection", None)
+        for name in ("_runner", "_connector"):
+            task = getattr(connection, name, None)
+            if isinstance(task, asyncio.Task) and task is not asyncio.current_task():
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+                setattr(connection, name, None)
         try:
             await voice.disconnect(force=True)
         except Exception:
