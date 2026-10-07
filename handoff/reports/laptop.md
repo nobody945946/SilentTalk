@@ -57,6 +57,8 @@ $env:PYTHONPATH = 'C:\Users\A8fm0\Downloads\SilentTalk'
 
 目前應2 passed表示現況缺陷存在。修復時轉為正式回歸，改為斷言舊runner不能幹擾替換。
 
+交付附件與 handoff 文件驗證：6 passed、1 warning、1.05 秒，pytest exit 0；包含已複製的兩項重現與四項既有文件檢查。receipt 一致性檢查 exit 0，固定窗口、數字、重現 SHA256、十節與引用檔均核對；git diff --check exit 0。初次整份 report 的 apply_patch 因重複 target 被拒絕，未寫入；交付結果追加腳本第一次因定位 assertion 失敗，未寫入，改用直接 patch 完成。
+
 ## 修改檔案與 commit
 
 沒有修改產品碼／正式測試、四個使用者設定檔。只重寫最新report，儲存合成重現與不含對話的數字receipt；提交／push到laptop-report。使用者本次audit授權讀相關程式，覆蓋工作檔僅讀檔案限制，沒有擴大成角色policy修復。
