@@ -384,11 +384,16 @@ def tokenize_row(tokenizer, row: dict) -> dict[str, list[int]]:
 
 def _tokenize(tokenizer, messages: list[dict], row: dict) -> dict[str, list[int]]:
     tools = row.get("tools")
+    # A row with the teacher's reasoning (EdgeAgent bench/dataset.py marks it
+    # "thinking") is rendered as the server renders a thinking request: the
+    # template's think switch on, each reply after the last user message with
+    # its reasoning channel. Other rows as before, thinking off.
+    thinking = bool(row.get("thinking"))
 
     def render(part: list[dict], prompt: bool) -> str:
         return tokenizer.apply_chat_template(
             part, tools=tools, tokenize=False, add_generation_prompt=prompt,
-            enable_thinking=False)
+            enable_thinking=thinking)
 
     def ids(text: str) -> list[int]:
         # The template writes BOS as text where the model wants one.
