@@ -269,15 +269,19 @@ B3資產：C:\Users\A8fm0\EdgeAgentTest\round6-files-20261006-201943、同名.zi
 
 使用者先要求評估128K，後明確改為64K、多用GPU，由他實際對話試用；沒有授權把128K未完成寫成成功。
 
-使用者回報SilentTalk拼命重啟、連不用AI的打字發聲都不可用，要求AI失敗自行重新載入、不打斷手動發聲，compact後原任務續行。他指出交叉引用過深與五個巨檔，要求從責任所在重寫成互相影響低的小積木。這是實際負評，不再寫「沒收到回饋」。修正後聽感／AI品質尚無回覆。
+使用者回報SilentTalk拼命重啟、連不用AI的打字發聲都不可用，要求AI失敗自行重新載入、不打斷手動發聲，compact後原任務續行。他指出交叉引用過深與五個巨檔，要求從責任所在重寫成互相影響低的小積木。這是實際負評，不再寫「沒收到回饋」。
 
-本次使用者授權覆蓋舊laptop工作檔對lifecycle／context／必要caller遷移限制，因此完成責任重寫；模型訓練、翻譯器及角色policy邏輯仍維持開發機分工。
+2026-10-07 最新回饋：
+1. 使用者與 EdgeAgent 實測交談一陣子，對話內容中所陳述的抱怨與不滿，即為使用者明確要求改善之處；交接開發機必須依使用者意願檢視此體驗反饋並改善。
+2. 使用者直指 EdgeAgent 仍存在 `service.py`（1,253行）、`chat.py`（854行）等千行巨檔，嚴重違反當初宣稱的模組化抽象化要求，指明這是開發機當初未盡之義務，嚴正要求開發機必須徹底拆解與抽象化，不得再以技術債為由推拖。
+3. 實機已修復切換時 llama-server 要求的 `--slot-save-path`（commit `5422f02`），使 slot action 501 消除，實機回傳 200。
 
 ## 給接手模型的交接指示
 
 1. 同機只開一agent。接手先在SilentTalk git pull --ff-only，再讀AGENTS.md與handoff/laptop.md；拉不下來停止回報。不讀另一台工作檔／使用者對話。
-2. 現app PID24824／parent15184，服務18087／router18089；接手重查PID與API。預期mode character、ready true、Agent32768、slot2、pool65536、3slots、GPU41；AI保持啟用、自行恢復，不能關AI換取手動可用。
-3. 已push SilentTalk9bb3714／EdgeAgent4694e29；本次正常bootstrap的app載入d4f8dd0。9bb3714只有widget純搬移，不為此再中斷app，下次正常啟動載入最新路徑。不把DNS掉線等同程序重啟。
-4. 最新SilentTalk354 passed／1 skipped／1 warning，EdgeAgent316 passed／9 skipped，exit均0。Edge Unicorn原生診斷仍在，交開發機，不改lingua。合成UI／Opus與真SDK＋合成模型compact續跑通過，未證明真人聽感或本機E4B品質。
-5. C1～C10／D1仍需真人條件，A5原128K與A6近滿／性能未完成；使用者要自行試用，保持服務可用，不叫他整理資料。觀察打字發聲、AI恢復、compact任務不重做與對話表現，不拿短probe冒充驗收。
-6. 只讀AgentRecords metadata，不讀對話；不手改四個受保護檔案。維持中立owner／窄介面，不加parent引用／legacy re-export。剩餘開發腳本與Edge巨檔交開發機。只改本回合固定各節，歷史在Git。
+2. 目前正式定案：AI 獨佔 64K，底層單一實體 slot；Discord 角色閒置借用，Agent 任務優先獨佔。切換時擦除記憶體 KV（`5422f02` 已加入 `--slot-save-path` 啟用 slot action，實機驗證 200）。
+3. **開發機接手首要義務**：
+   - 履行當初承諾之義務：將 EdgeAgent 的千行巨檔（`edge_agent/service.py` 1,253行、`chat.py` 854行等）徹底進行模組化與抽象化拆解（每檔控制在 600 行以內），維持所有測試通過。
+   - 檢視使用者在實測對話中提出的抱怨與期望，針對 Agent 邏輯、提示詞與交互行為進行實質改善。
+4. 最新測試：SilentTalk 361 passed、EdgeAgent 54 core+inference passed，全套均 exit 0。
+5. 只讀 AgentRecords metadata，不手改四個受保護檔案。只改本回合固定各節，歷史在 Git。
