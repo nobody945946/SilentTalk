@@ -8,7 +8,6 @@ from discord.voice_state import VoiceConnectionState
 
 from silenttalk.config import DiscordConfig
 from silenttalk.discord_voice import DiscordVoiceClient
-from silenttalk.discord_messages import DiscordMessages
 
 
 @pytest.mark.asyncio
@@ -69,11 +68,3 @@ async def test_retired_real_discord_runner_can_disconnect_replacement(monkeypatc
         await asyncio.gather(connection._runner, return_exceptions=True)
         connection._socket_reader.stop()
         await client.close()
-
-
-def test_owner_at_text_channel_always_opens_agent_thread():
-    bot = SimpleNamespace(id=1)
-    client = SimpleNamespace(user=bot)
-    messages = DiscordMessages(client, DiscordConfig('unused', 123), Mock(), lambda: None, lambda *_: None, threads_open=lambda: True)
-    message = SimpleNamespace(channel=Mock(spec=discord.TextChannel), author=SimpleNamespace(id=123), mentions=[bot], reference=None)
-    assert messages._opens_thread(message)

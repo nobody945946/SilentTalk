@@ -24,15 +24,15 @@ owner：silenttalk/discord_voice.py:501 `_close_voice`，caller :303 `_connect_f
 
 修復應由voice transport唯一owner統一管理建立、SDK自動重連、退役、shutdown；替換前完成舊工作退役，不立即替換正在握手／重連的client。不能只調長監測週期掩蓋。回歸需驗舊工作不能再發離開／連線、transient reconnect、關閉及健康連線。
 
-**P1：主人在文字頻道直接@固定變成Agent派工，和這次聊天目的衝突。**
+**P1：兩次 Agent 派工執行失敗，具體原因尚未定位。**
 
-owner：silenttalk/discord_messages.py:110、:176 `_opens_thread`；runtime._handle_turn的agent分支。主人在TextChannel直接@、沒有reference、角色開啟時，不看聊天意圖，一律開Agent串並標agent=True。聊天分支位於其後，串內主人文字也一律派工。
+使用者已澄清：@ 就是為了派工。silenttalk/discord_messages.py:110、:176 `_opens_thread` 與 runtime._handle_turn 的 agent 分支符合這個目的，開 Agent 串與派工本身不是缺陷。撤回先前「與聊天目的衝突」的 P1 判定及修改入口語意的交接要求；錯誤來自 agent 將「聊天」一詞解讀成一般角色聊天，忽略既定 @ 派工上下文。
 
-13:51:45.248245第一則即開串；13:54:00.734641第二則是串內文字。皆addressed=True、place=thread，兩次dispatched=True，角色聊天判斷及回覆皆0。這符合2026-10-05的舊規則，不能寫成新引入回歸；此次使用者明確要聊天，需交開發機處理角色／工具入口語意，筆電配合Discord caller與實測。不要直接取消所有@派工，造成既有工作入口失效。
+13:51:45.248245 第一則開串；13:54:00.734641 第二則為串內文字。兩次皆 addressed=True、place=thread、dispatched=True，表示派工入口有接收並送出工作。兩次工作分別 104891／175984 ms 後返回 kind=error，task_marked=failed；工作成功完成 0 次。角色聊天判斷與回覆為 0 是這條派工路徑的正常結果，不能當成故障。待查的是上游 Agent 執行失敗，不是把 @ 改為普通聊天。
 
 **P2：Agent失敗事件沒有安全、穩定的原因碼。**
 
-owner：silenttalk/copilot/task_runner.py:222 `_agent_event`、:279 `agent_result_posted`及EdgeAgent `/chat` error來源。兩次工作104891／175984ms，均kind=error、posted=True、task_marked=failed；是派工失敗，並非Discord沒收到@或貼不出錯誤結果。
+owner：silenttalk/copilot/task_runner.py:222 `_agent_event`、:279 `agent_result_posted`及EdgeAgent `/chat` error來源。兩次錯誤均 posted=True，證明錯誤結果成功送達，不能當作工作成功。
 
 數字log只記kind，未記穩定error code、失敗階段或例外類別，上游即使帶reason也沒有保留。因此不能確診為token截斷、推論逾時、模型品質或SDK故障。禁止把error message、prompt或結果全文寫入log補診斷；需由開發機提供結構化原因，再由筆電傳遞安全列舉。
 
@@ -46,7 +46,7 @@ owner：silenttalk/copilot/task_runner.py:222 `_agent_event`、:279 `agent_resul
 | 同組第二次 | 1 failed、69 passed、1 warning，4.91秒；合成guild缺me.voice，不能走完reconnect，不能當產品失敗 | 1 |
 | 修正fixture後同組 | 70 passed、1 warning，3.87秒；重現舊runner離開替換連線，確認主人@開串規則 | 0 |
 
-warning為audioop deprecation。透過表示缺陷成功重現，不是修好了。未重跑全套、壓測、發Discord訊息或重啟。現有測試綠燈未涵蓋SDK退役競態。
+warning 為 audioop deprecation。歷史 70 項包含語音缺陷重現及正常 @ 派工入口檢查；後者不能支持路由有缺陷的判定。語音重現通過表示缺陷可重現，不是修好了。未重跑全套、壓測、發 Discord 訊息或重啟。現有測試綠燈未涵蓋 SDK 退役競態。
 
 可重跑合成重現：[discord-lifecycle-repro.py](discord-lifecycle-repro.py)。在SilentTalk repo：
 
@@ -55,7 +55,9 @@ $env:PYTHONPATH = 'C:\Users\A8fm0\Downloads\SilentTalk'
 .\.venv\Scripts\python.exe -m pytest C:\Users\A8fm0\Downloads\SilentTalk-laptop-report\handoff\reports\discord-lifecycle-repro.py -q -p no:cacheprovider
 ```
 
-目前應2 passed表示現況缺陷存在。修復時轉為正式回歸，改為斷言舊runner不能幹擾替換。
+本次更正移除附件中的正常 @ 路由檢查，附件只保留一項語音缺陷重現。目前應 1 passed 表示語音缺陷可重現；修復時轉為正式回歸，改為斷言舊 runner 不能干擾替換。
+
+更正後附件實跑：1 passed、1 warning、0.62 秒，pytest exit 0。同步更新 receipt 的附件 SHA256，並明確登記 @ 派工路由為符合預期。
 
 交付附件與 handoff 文件驗證：6 passed、1 warning、1.05 秒，pytest exit 0；包含已複製的兩項重現與四項既有文件檢查。receipt 一致性檢查 exit 0，固定窗口、數字、重現 SHA256、十節與引用檔均核對；git diff --check exit 0。初次整份 report 的 apply_patch 因重複 target 被拒絕，未寫入；交付結果追加腳本第一次因定位 assertion 失敗，未寫入，改用直接 patch 完成。
 
@@ -97,11 +99,11 @@ RTP0不能當麥克風或解密故障證據，沒有本次真人語音輸入確�
 
 ## 使用者回饋
 
-使用者回報：「我剛才在DC上使用@跟機魂聊天，結果大失敗，而且機魂本身在語音訊道，網路穩定情況下瘋狂進出，audit」。依最新要求做audit，未重做舊128K驗收或自動重啟。
+使用者回報 Discord @ 派工大失敗，機魂在網路穩定時仍於語音頻道反覆進出，要求 audit；之後明確糾正：@ 就是為了派工，既有上下文已有此目的。agent 原先的聊天路由缺陷判定有誤，已撤回。未重做舊 128K 驗收或自動重啟。
 
 ## 給接手模型的交接指示
 
 1. 先同步、讀本機工作檔與本回報。這是稽核成果，不是修復／部署完成。
 2. Windows優先修語音生命週期owner，納入真SDK退役與transient reconnect測試；可沿用合成重現，不讀真人對話。
-3. 開發機處理@聊天／派工的角色與工具語意、EdgeAgent結構化失敗原因，筆電配合caller與安全事件碼；不在Windows改模型、角色policy或lingua。
+3. @ 派工入口符合使用者目的，不要求修改路由或角色／工具入口語意。開發機定位 EdgeAgent 執行失敗並提供結構化失敗原因；筆電配合 caller 與安全事件碼，不在 Windows 改模型、角色 policy 或 lingua。
 4. 修復後有界驗證。首次voice失效來源、兩次原工作具體失敗原因、修復後真人體驗仍未確認，不能寫成已修好或網路不穩，也不請使用者標註資料。

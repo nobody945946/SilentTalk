@@ -27,7 +27,7 @@
     104891,
     175984
   ],
-  "synthetic_reproduction_sha256": "28b848cf8610778372018358adcacb13a2f80ccdec246878cc3a7a6de91810fb",
+  "synthetic_reproduction_sha256": "0a41985c664e9d10067a60ee118d7a82986a156ba68b882a2965ebaab55cb685",
   "validation": {
     "suite": "synthetic reproduction plus targeted existing Discord/runtime/task tests",
     "passed": 70,
@@ -40,5 +40,18 @@
     "Initial voice invalidation source unknown",
     "Original Agent terminal error causes unknown",
     "No conversation records read"
-  ]
+  ],
+  "original_synthetic_reproduction_sha256": "28b848cf8610778372018358adcacb13a2f80ccdec246878cc3a7a6de91810fb",
+  "correction": {
+    "at_utc": "2026-10-07T06:16:38.255534+00:00",
+    "mention_intent": "Agent task dispatch",
+    "routing_expected": true,
+    "withdrawn_finding": "Mention routing conflicts with user chat intent",
+    "reproduction_validation": {
+      "passed": 1,
+      "warnings": 1,
+      "elapsed_seconds": 0.62,
+      "exit_code": 0
+    }
+  }
 }
