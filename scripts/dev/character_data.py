@@ -53,39 +53,33 @@ sys.path.insert(0, str(PROJECT_DIR))
 
 import provenance  # noqa: E402  (scripts/dev)
 
+from silenttalk.conversation import (  # noqa: E402  # noqa: E402  # noqa: E402  # noqa: E402
+    AGENT_NAME,
+    AGENT_RESULT_CONTEXT_CHARS,
+    AGENT_SPEAKER_ID,
+    SPOKEN_RESULT_CHARS,
+    ConversationTurn,  # noqa: E402
+)
 from silenttalk.copilot.character import NameMatcher, persona_names  # noqa: E402
-from silenttalk.copilot.llm import (  # noqa: E402
+from silenttalk.copilot.llm import LocalReplyModel
+from silenttalk.copilot.reply_parsing import quiet_for
+from silenttalk.copilot.reply_templates import (
     _CHAT_TASK_ASK,
     _CHAT_TASK_MAX_CHARS,
     _GATE_QUESTION,
     TASK_HINTS,
-    LocalReplyModel,
-    quiet_for,
 )
-from silenttalk.copilot.llm import (  # noqa: E402
+from silenttalk.copilot.reply_templates import (
     _JOIN_AFTER_QUIET_LINES as JOIN_AFTER_QUIET_LINES,
 )
-from silenttalk.copilot.persona import (  # noqa: E402
+from silenttalk.copilot.script import to_taiwan_traditional  # noqa: E402
+from silenttalk.persona import (  # noqa: E402
     EXAMPLE_PERSONAS,
     PRESET_PERSONAS,
     Persona,
     Relationship,
     persona_from_dict,
 )
-from silenttalk.copilot.runtime import (  # noqa: E402
-    _AGENT_NAME as AGENT_NAME,
-)
-from silenttalk.copilot.runtime import (  # noqa: E402
-    _AGENT_RESULT_CONTEXT_CHARS as AGENT_RESULT_CONTEXT_CHARS,
-)
-from silenttalk.copilot.runtime import (  # noqa: E402
-    _AGENT_SPEAKER_ID as AGENT_SPEAKER_ID,
-)
-from silenttalk.copilot.runtime import (  # noqa: E402
-    _SPOKEN_RESULT_CHARS as SPOKEN_RESULT_CHARS,
-)
-from silenttalk.copilot.script import to_taiwan_traditional  # noqa: E402
-from silenttalk.copilot.types import ConversationTurn  # noqa: E402
 
 # CHARDATA_DIR keeps each round's data apart (v1 stays in chardata/).
 OUT_DIR = (
@@ -100,7 +94,13 @@ _WRITE_LOCK = threading.Lock()
 # rules and checks, the persona cards. A data directory holds one version.
 RULE_FILES = (
     PROJECT_DIR / "silenttalk" / "copilot" / "llm.py",
-    PROJECT_DIR / "silenttalk" / "copilot" / "persona.py",
+    PROJECT_DIR / "silenttalk" / "persona.py",
+    PROJECT_DIR / "silenttalk" / "ai_options.py",
+    PROJECT_DIR / "silenttalk" / "copilot" / "reply_templates.py",
+    PROJECT_DIR / "silenttalk" / "copilot" / "reply_prompts.py",
+    PROJECT_DIR / "silenttalk" / "copilot" / "reply_parsing.py",
+    PROJECT_DIR / "silenttalk" / "copilot" / "character_generation.py",
+
     Path(__file__).resolve(),
 )
 DATA_FILES = (
@@ -677,12 +677,15 @@ def line_request(
     history = turns[:index] if own else turns[: index + 1]
     # Today's concerns sit in the system prompt, as in the app.
     model.set_agenda(script.get("concerns", []))
-    model._recent_character_lines.clear()
+    model.prompts.recent_lines.clear()
     for turn in history:
         if turn.is_self:
-            model._recent_character_lines.append(turn.text)
-    common = {"turns": history, "summary": script["summary_before"],
-              "engagement": script["spec"]["engagement"]}
+            model.prompts.recent_lines.append(turn.text)
+    common = {
+        "turns": history,
+        "summary": script["summary_before"],
+        "engagement": script["spec"]["engagement"],
+    }
     if kind == "lull":
         return model.character_messages(**common, lull=True)
     if kind in TASK_HINTS:
@@ -906,10 +909,10 @@ def listener_rows(
     rows: list[dict[str, Any]] = []
     for point in decision_points(script, persona.name):
         index = point["index"]
-        model._recent_character_lines.clear()
+        model.prompts.recent_lines.clear()
         for turn in turns[: index + 1]:
             if turn.is_self:
-                model._recent_character_lines.append(turn.text)
+                model.prompts.recent_lines.append(turn.text)
         history = turns[: index + 1]
         meta = {
             "script": number,
@@ -943,17 +946,21 @@ def listener_rows(
                 )
                 if gate is None:
                     continue
-                rows.append(meta | {
-                    "kind": f"gate_{question}",
-                    "messages": gate
-                    + [{"role": "assistant", "content": "是" if answer else "否"}],
-                })
+                rows.append(
+                    meta
+                    | {
+                        "kind": f"gate_{question}",
+                        "messages": gate
+                        + [{"role": "assistant", "content": "是" if answer else "否"}],
+                    }
+                )
         if point["speaks"]:
             line = _trained_line(script, number, index, line_kind, refined, args)
             if not line:
                 continue
-            messages = line_request(model, script, turns, index=index, kind=line_kind,
-                                    aimed=point["aimed"])
+            messages = line_request(
+                model, script, turns, index=index, kind=line_kind, aimed=point["aimed"]
+            )
             rows.append(
                 meta
                 | {

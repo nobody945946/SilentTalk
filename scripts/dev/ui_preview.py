@@ -61,13 +61,13 @@ def main() -> int:
 
     from silenttalk import story_ui
     from silenttalk.config import config_defaults
-    from silenttalk.copilot.persona import (
+    from silenttalk.conversation import ConversationTurn, ReplySuggestions
+    from silenttalk.persona import (
         EXAMPLE_PERSONAS,
         MACHINE_SPIRIT,
         PersonaState,
         PersonaStore,
     )
-    from silenttalk.copilot.types import ConversationTurn, ReplySuggestions
     from silenttalk.phrases import QuickPhraseStore
     from silenttalk.preferences import PreferenceStore
     from silenttalk.settings_schema import all_settings
@@ -103,7 +103,9 @@ def main() -> int:
         personas=personas,
         apply_persona=lambda persona: applied.append(persona.mood),
         set_character_mode=lambda on, style, rate: character.append((on, style, rate)),
-        preview_voice=lambda text, persona, _rate: previews.append((text, persona.voice)),
+        preview_voice=lambda text, persona, _rate: previews.append(
+            (text, persona.voice)
+        ),
         send_text=typed.append,
         reroll_agenda=lambda: rerolled.append(True),
         settings_store=SettingsStore(temp / "settings.json"),
@@ -130,7 +132,7 @@ def main() -> int:
 
     def press(keysym: str) -> None:
         ui.popup.focus_force()
-        ui.story.focus_set()
+        ui.chat.story.focus_set()
         pump(0.05)
         ui.popup.event_generate(f"<KeyPress-{keysym}>", state=0, when="now")
         pump(0.1)
@@ -177,7 +179,7 @@ def main() -> int:
         )
     )
     pump()
-    streamed = (ui.story._selected, ui.story._round)
+    streamed = (ui.chat.story._selected, ui.chat.story._round)
     shot("3_choices")
     press("d")
     shot("4_selected_d")
@@ -212,33 +214,39 @@ def main() -> int:
     # Choices being read stay put: a newer round waits (R shows it), and
     # takes over by itself once nobody has touched the keys for a while.
     ui.show_page("story")
-    held_text = ui.story._choices["w"]
+    held_text = ui.chat.story._choices["w"]
     newer = "那我先丟煙你們跟"
     ui.add_conversation_turn(ConversationTurn(12, "小雨", newer))
     ui.set_suggestions_thinking("小雨", newer)
     pump()
-    ui.set_suggestions(ReplySuggestions("小雨", newer, agree="好，煙丟完我第一個進", partial=True))
-    pump()
     ui.set_suggestions(
-        ReplySuggestions("小雨", newer, agree="好，煙丟完我第一個進", ask="煙要丟哪裡？")
+        ReplySuggestions("小雨", newer, agree="好，煙丟完我第一個進", partial=True)
     )
     pump()
-    held = (ui.story._choices["w"], ui.story._line_var.get())
+    ui.set_suggestions(
+        ReplySuggestions(
+            "小雨", newer, agree="好，煙丟完我第一個進", ask="煙要丟哪裡？"
+        )
+    )
+    pump()
+    held = (ui.chat.story._choices["w"], ui.chat.story._line_var.get())
     shot("16_held")
     press("r")
-    revealed = (ui.story._choices["w"], ui.story._line_var.get(), len(regenerated))
+    revealed = (ui.chat.story._choices["w"], ui.chat.story._line_var.get(), len(regenerated))
     shot("17_revealed")
     story_ui.HOLD_SECONDS = 1.0
     press("s")  # reading again (a second press on the selected lane would send)
     ui.set_suggestions_thinking("阿傑", "好啦走")
-    ui.set_suggestions(ReplySuggestions("阿傑", "好啦走", agree="走走走", ask="誰先進？"))
+    ui.set_suggestions(
+        ReplySuggestions("阿傑", "好啦走", agree="走走走", ask="誰先進？")
+    )
     pump(0.3)
-    still_held = ui.story._choices["w"]
+    still_held = ui.chat.story._choices["w"]
     pump(1.5)
-    auto = ui.story._choices["w"]
+    auto = ui.chat.story._choices["w"]
     ui.show_page("persona")
     shot("8_persona")
-    for section in ui.persona_panel._sections:
+    for section in ui.persona_panel.fields._sections:
         section.set_open(True)
     pump()
     ui.persona_panel._scroll._canvas.yview_moveto(0.55)
@@ -280,11 +288,13 @@ def main() -> int:
     ]
     ui.set_agenda(concerns)
     pump()
-    shown_agenda = ui._character_view._mind.cget("text")
+    shown_agenda = ui.chat.character._mind.cget("text")
     shot("12a_character_paused")
-    ui._character_view._toggle()  # 開始
+    ui.chat.character._toggle()  # 開始
     ui.add_conversation_turn(ConversationTurn(12, "小雨", "凱哥你晚餐要吃什麼"))
-    ui.add_conversation_turn(ConversationTurn(0, "凱哥", "欸我都可以啦，拉麵？", is_self=True))
+    ui.add_conversation_turn(
+        ConversationTurn(0, "凱哥", "欸我都可以啦，拉麵？", is_self=True)
+    )
     shot("12_character")
     # Looking at another page is not leaving the character view.
     ui.show_page("persona")
@@ -301,11 +311,17 @@ def main() -> int:
     expected = "上一把就是這樣被架，我覺得先丟煙再進比較穩"
     problems = []
     if shown_agenda != "\n".join(f"・{item}" for item in concerns):
-        problems.append(f"today's concerns should show in the character view, got {shown_agenda!r}")
+        problems.append(
+            f"today's concerns should show in the character view, got {shown_agenda!r}"
+        )
     if held != (held_text, trigger):
-        problems.append(f"a newer round must not replace choices being read, got {held}")
+        problems.append(
+            f"a newer round must not replace choices being read, got {held}"
+        )
     if revealed != ("好，煙丟完我第一個進", newer, 1):
-        problems.append(f"R should show the waiting round without regenerating, got {revealed}")
+        problems.append(
+            f"R should show the waiting round without regenerating, got {revealed}"
+        )
     if (still_held, auto) != ("好，煙丟完我第一個進", "走走走"):
         problems.append(
             f"a waiting round should take over once the hold ends, got {(still_held, auto)}"
@@ -313,17 +329,23 @@ def main() -> int:
     if sent != [expected]:
         problems.append(f"double-press D should send once, got {sent}")
     if streamed != ("a", 1):
-        problems.append(f"streamed choice should survive the final result, got {streamed}")
+        problems.append(
+            f"streamed choice should survive the final result, got {streamed}"
+        )
     if [on for on, _style, _rate in character] != [True, False]:
         problems.append(f"character toggle should switch on then off, got {character}")
     if previews != [("欸我的，下波我先進", "zh-TW-YunJheNeural")]:
-        problems.append(f"voice preview should say 凱哥's first sample line in his voice, got {previews}")
+        problems.append(
+            f"voice preview should say 凱哥's first sample line in his voice, got {previews}"
+        )
     saved = json.loads((temp / "settings.json").read_text(encoding="utf-8"))
-    if saved != {"copilot": {
-        "character_engagement": "active",
-        "record_folder": str(record_fixture),
-        "record_transcripts": True,
-    }}:
+    if saved != {
+        "copilot": {
+            "character_engagement": "active",
+            "record_folder": str(record_fixture),
+            "record_transcripts": True,
+        }
+    }:
         problems.append(f"settings page should save only what changed, got {saved}")
     if not applied_settings:
         problems.append("settings page should apply live changes")

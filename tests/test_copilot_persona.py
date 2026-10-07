@@ -3,8 +3,9 @@ from pathlib import Path
 
 import pytest
 
+from silenttalk.conversation import ConversationTurn
 from silenttalk.copilot.llm import LocalReplyModel
-from silenttalk.copilot.persona import (
+from silenttalk.persona import (
     EXAMPLE_PERSONAS,
     MACHINE_SPIRIT,
     PRESET_PERSONAS,
@@ -18,7 +19,6 @@ from silenttalk.copilot.persona import (
     persona_to_dict,
     validate_persona,
 )
-from silenttalk.copilot.types import ConversationTurn
 
 
 def test_blank_persona_adds_nothing_to_the_prompt() -> None:
@@ -27,7 +27,9 @@ def test_blank_persona_adds_nothing_to_the_prompt() -> None:
 
     assert blank.is_blank
     assert blank.render_system_block() == ""
-    assert "【你的人設】" not in model._build_turn_system_prompt(blank, "options")
+    assert "【你的人設】" not in model.prompts._build_turn_system_prompt(
+        blank, "options"
+    )
 
 
 def test_the_prompt_gets_who_the_person_is_not_words_to_copy() -> None:
@@ -43,7 +45,9 @@ def test_the_prompt_gets_who_the_person_is_not_words_to_copy() -> None:
         traits={"tongue": 5, "energy": 2, "warmth": 3},
         mood="累",
     )
-    system = LocalReplyModel(Path("unused.gguf"))._build_turn_system_prompt(persona, "options")
+    system = LocalReplyModel(Path("unused.gguf")).prompts._build_turn_system_prompt(
+        persona, "options"
+    )
 
     assert "名字：凱哥" in system
     assert "你想要：想帶大家贏" in system
@@ -64,17 +68,19 @@ def test_system_prompt_is_stable_so_the_kv_cache_is_reused() -> None:
     model = LocalReplyModel(Path("unused.gguf"))
     persona = PRESET_PERSONAS[0]
 
-    assert model._build_turn_system_prompt(persona, "options") == model._build_turn_system_prompt(
+    assert model.prompts._build_turn_system_prompt(
         persona, "options"
-    )
+    ) == model.prompts._build_turn_system_prompt(persona, "options")
 
 
 def test_reply_length_preference_changes_the_length_rule() -> None:
     model = LocalReplyModel(Path("unused.gguf"))
     short = Persona(id="p", name="", reply_length="short")
 
-    assert "4～12 字" in model._build_turn_system_prompt(short, "options")
-    assert "8～30 字" in model._build_turn_system_prompt(blank_persona(), "options")
+    assert "4～12 字" in model.prompts._build_turn_system_prompt(short, "options")
+    assert "8～30 字" in model.prompts._build_turn_system_prompt(
+        blank_persona(), "options"
+    )
 
 
 def test_validation_rejects_overlong_fields_and_half_relationships() -> None:
@@ -178,24 +184,28 @@ def test_persona_reminder_sits_right_before_the_options_request() -> None:
         "阿傑：衝B啦\n\n（記住：你是凱哥；句子短、節奏快、講話直接。"
         "說出口的話要是這個人會說的話。）\n（換你說話了"
     )
-    assert "【你的人設】" in model._build_turn_system_prompt(EXAMPLE_PERSONAS[0], "options")
+    assert "【你的人設】" in model.prompts._build_turn_system_prompt(
+        EXAMPLE_PERSONAS[0], "options"
+    )
 
 
 def test_persona_voice_is_tts_only_and_validated() -> None:
-    from silenttalk.copilot.persona import persona_from_dict, persona_to_dict
+    from silenttalk.persona import persona_from_dict, persona_to_dict
 
     chuuni = EXAMPLE_PERSONAS[2]
     style = chuuni.voice_style()
 
     assert style is not None and style.voice == "zh-CN-YunjianNeural"
     assert style.pitch == "-15Hz" and style.ffmpeg_filter
-    assert "Yunjian" not in LocalReplyModel(Path("unused.gguf"))._build_turn_system_prompt(
-        chuuni, "options"
-    )
+    assert "Yunjian" not in LocalReplyModel(
+        Path("unused.gguf")
+    ).prompts._build_turn_system_prompt(chuuni, "options")
     assert persona_from_dict(persona_to_dict(chuuni)).voice_style() == style
     # No voice settings: the voice page decides.
     assert Persona(id="p", name="x").voice_style() is None
     with pytest.raises(PersonaError, match="聲線"):
         validate_persona(Persona(id="p", name="x", voice="en-US-Unknown"))
-    loud = validate_persona(Persona(id="p", name="x", voice_pitch=999, voice_speed=-999))
+    loud = validate_persona(
+        Persona(id="p", name="x", voice_pitch=999, voice_speed=-999)
+    )
     assert (loud.voice_pitch, loud.voice_speed) == (50, -40)

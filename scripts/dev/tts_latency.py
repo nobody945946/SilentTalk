@@ -25,8 +25,8 @@ PROJECT_DIR = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_DIR))
 
 from silenttalk.config import AudioConfig, TTSConfig  # noqa: E402
-from silenttalk.copilot.persona import EXAMPLE_PERSONAS  # noqa: E402
-from silenttalk.discord_voice import DiscordAudioPlayer  # noqa: E402
+from silenttalk.discord_playback import DiscordAudioPlayer
+from silenttalk.persona import EXAMPLE_PERSONAS  # noqa: E402
 from silenttalk.tts.edge import EdgeTTSEngine  # noqa: E402
 
 LINES = (

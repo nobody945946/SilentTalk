@@ -11,7 +11,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from silenttalk import discord_voice, voice_recv_patch
+from silenttalk import voice_recv_patch, voice_stats
 from silenttalk.config import DiscordConfig
 from silenttalk.copilot.stt_offline import SAMPLE_RATE, audio_stats
 from silenttalk.discord_voice import DiscordVoiceClient
@@ -86,9 +86,9 @@ def _voice(version: int, session: object | None) -> SimpleNamespace:
 
 
 def test_frames_need_a_dave_session_only_when_dave_is_on() -> None:
-    assert discord_voice._dave_receive_ready(_voice(0, None))
-    assert not discord_voice._dave_receive_ready(_voice(1, None))
-    assert discord_voice._dave_receive_ready(_voice(1, object()))
+    assert voice_stats.dave_receive_ready(_voice(0, None))
+    assert not voice_stats.dave_receive_ready(_voice(1, None))
+    assert voice_stats.dave_receive_ready(_voice(1, object()))
 
 
 class _Session:
@@ -104,12 +104,12 @@ class _Session:
 def test_receive_stats_show_decrypt_counters_even_for_silent_members(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    stats = discord_voice.ReceiveStats(started=0.0)
+    stats = voice_stats.ReceiveStats(started=0.0)
     for _ in range(1500):
-        stats.frame(1, discord_voice.FRAME_BYTES)
+        stats.frame(1, voice_stats.FRAME_BYTES)
     stats.frame(1, 100)
     stats.dropped = 4
-    with caplog.at_level(logging.INFO, logger="silenttalk.discord_voice"):
+    with caplog.at_level(logging.INFO, logger="silenttalk.voice_stats"):
         stats.log(_voice(1, _Session()), 30.0, members=[1, 2, 3])
     [line] = [r.getMessage() for r in caplog.records]
     assert "speakers=1 fps=[50.0]" in line
@@ -182,7 +182,7 @@ def test_the_local_microphone_arrives_as_discord_frames(
 
     [frame] = frames  # 20 ms out, 10 ms kept for the next one
     assert -60 < microphone.peak_dbfs < -20
-    assert len(frame) == discord_voice.FRAME_BYTES
+    assert len(frame) == voice_stats.FRAME_BYTES
     assert np.frombuffer(frame, "<i2")[:6].tolist() == [0, 0, 1, 1, 2, 2]
 
 

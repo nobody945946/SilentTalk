@@ -7,36 +7,22 @@ from collections.abc import Callable
 from dataclasses import replace
 
 from silenttalk import theme
-from silenttalk.copilot.persona import (
+from silenttalk.persona import (
     MACHINE_SPIRIT,
-    RECOMMENDED_PROMPT_CHARS,
-    REPLY_LENGTHS,
-    TEXT_FIELDS,
-    TRAIT_AXES,
     Persona,
     PersonaError,
     PersonaState,
     PersonaStore,
-    Relationship,
     blank_persona,
     new_persona_id,
     validate_persona,
 )
-from silenttalk.voice_styles import (
-    PERSONA_VOICES,
-    VOICE_EFFECTS,
-)
+from silenttalk.persona_fields_ui import PersonaFields
+from silenttalk.persona_preview_ui import PersonaPreview
 from silenttalk.widgets import (
     Avatar,
     Button,
-    Chip,
-    Disclosure,
-    Field,
     ScrollArea,
-    Segmented,
-    Stepper,
-    TraitSlider,
-    wrap_to_width,
 )
 
 ApplyCallback = Callable[[Persona], None]
@@ -51,41 +37,6 @@ NONE_ID = "none"
 # is here: catchphrases, sample lines, pet peeves, knowledge, secrets and
 # boundaries were copied word for word or did nothing for a small model.
 # Older personas keep those values in personas.json; they are just not shown.
-SECTIONS: tuple[tuple[str, str, tuple[str, ...], bool], ...] = (
-    (
-        "基本",
-        "別人怎麼叫你、你是誰，以及你和頻道裡每個人的關係。",
-        ("nickname", "identity", "relationships"),
-        True,
-    ),
-    (
-        "他想要什麼",
-        (
-            "這一段最重要：想要的、怕的、在意的、最近發生的事，決定他會聊什麼、"
-            "冷場時會說什麼，也是別人認識他的地方。寫得越具體越像真人。"
-        ),
-        ("desires", "fears", "values", "recent", "background"),
-        True,
-    ),
-    (
-        "個性",
-        "他講話的感覺。不用寫他常說哪些詞：小模型會每句照抄，聽起來很假。",
-        ("traits", "speech_style", "humor_style", "reply_length"),
-        False,
-    ),
-    (
-        "聲音",
-        "這個角色講話的聲音；Bot 說的每句話都會用它，不影響 AI 想出來的內容。",
-        ("voice",),
-        False,
-    ),
-)
-MULTILINE = {"background": 3, "sample_lines": 3, "speech_style": 2, "desires": 2}
-HINTS = {
-    "nickname": "用「、」分隔。語音常被聽錯的寫法也可以寫進來（例：凱哥、開哥）。",
-    "recent": "例：昨天排位連輸五場、下個月要搬家。他每天會從這裡想出幾件心事。",
-    "speech_style": "例：句子短、講話直接、偶爾一句台語。引號裡的詞不會交給 AI。",
-}
 
 
 class PersonaPanel(tk.Frame):
@@ -100,8 +51,6 @@ class PersonaPanel(tk.Frame):
     ) -> None:
         super().__init__(master, bg=theme.BG)
         self._on_preview = on_preview
-        self._voice = ""
-        self._voice_chips: dict[str, Chip] = {}
         self._store = store
         self._on_apply = on_apply
         self._on_status = on_status
@@ -109,9 +58,6 @@ class PersonaPanel(tk.Frame):
         self._editing: str = NONE_ID
         self._dirty = False
         self._loading = False
-        self._fields: dict[str, Field] = {}
-        self._sliders: dict[str, TraitSlider] = {}
-        self._relation_rows: list[tuple[tk.Frame, tk.StringVar, tk.StringVar]] = []
 
         # ---- left: persona list ----------------------------------------------
         left = tk.Frame(self, bg=theme.SURFACE, width=theme.px(230))
@@ -169,10 +115,12 @@ class PersonaPanel(tk.Frame):
         self._name_entry.pack(anchor="w", fill="x")
         # Looks like a title until you hover it; then it shows it is editable.
         self._name_entry.bind(
-            "<Enter>", lambda _: self._name_entry.configure(highlightbackground=theme.LINE)
+            "<Enter>",
+            lambda _: self._name_entry.configure(highlightbackground=theme.LINE),
         )
         self._name_entry.bind(
-            "<Leave>", lambda _: self._name_entry.configure(highlightbackground=theme.BG)
+            "<Leave>",
+            lambda _: self._name_entry.configure(highlightbackground=theme.BG),
         )
         self._name_var.trace_add("write", lambda *_: self._changed())
         self._subtitle = tk.Label(
@@ -209,10 +157,10 @@ class PersonaPanel(tk.Frame):
             justify="left",
         )
         self._editor = tk.Frame(body, bg=theme.BG)
-        self._sections: list[Disclosure] = []
-        for title, subtitle, keys, opened in SECTIONS:
-            self._build_section(self._editor, title, subtitle, keys, opened)
-        self._build_preview(self._editor)
+        self.fields = PersonaFields(
+            self._editor, on_change=self._changed, on_preview=self._preview_voice
+        )
+        self.preview = PersonaPreview(self._editor)
 
         self.reload()
 
@@ -247,185 +195,17 @@ class PersonaPanel(tk.Frame):
 
     # ---- building --------------------------------------------------------------
 
-    def _build_section(
-        self,
-        parent: tk.Frame,
-        title: str,
-        subtitle: str,
-        keys: tuple[str, ...],
-        opened: bool,
-    ) -> None:
-        section = Disclosure(parent, title, subtitle, opened=opened)
-        section.pack(fill="x", pady=(0, theme.px(12)), padx=(0, theme.px(18)))
-        self._sections.append(section)
-        box = section.body
-        for key in keys:
-            if key == "traits":
-                for axis in TRAIT_AXES:
-                    slider = TraitSlider(
-                        box, axis.low, axis.high, lambda _v: self._changed()
-                    )
-                    slider.pack(anchor="w", pady=theme.px(3))
-                    self._sliders[axis.key] = slider
-            elif key == "reply_length":
-                row = tk.Frame(box, bg=theme.PANEL)
-                row.pack(fill="x", pady=(theme.px(4), theme.px(10)))
-                tk.Label(
-                    row,
-                    text="回覆長度",
-                    bg=theme.PANEL,
-                    fg=theme.MUTED,
-                    font=theme.font(9),
-                ).pack(side="left", padx=(0, 10))
-                self._length = Segmented(
-                    row,
-                    [("short", "短"), ("normal", "中"), ("long", "長")],
-                    lambda _v: self._changed(),
-                )
-                self._length.pack(side="left")
-                self._length_hint = tk.Label(
-                    row, text="", bg=theme.PANEL, fg=theme.DIM, font=theme.font(8)
-                )
-                self._length_hint.pack(side="left", padx=(10, 0))
-            elif key == "voice":
-                self._build_voice(box)
-            elif key == "relationships":
-                tk.Label(
-                    box, text="人際關係", bg=theme.PANEL, fg=theme.MUTED, font=theme.font(9)
-                ).pack(anchor="w")
-                wrap_to_width(
-                    tk.Label(
-                        box,
-                        text=(
-                            "左邊填 Discord 顯示名稱（也填你自己），右邊從角色的角度寫這個人是誰。"
-                            "例：「阿明」「我老公，結婚三年」→ 角色會把阿明當老公。"
-                        ),
-                        bg=theme.PANEL,
-                        fg=theme.DIM,
-                        font=theme.font(9),
-                        justify="left",
-                        anchor="w",
-                    )
-                ).pack(anchor="w", fill="x", pady=(0, theme.px(6)))
-                self._relations = tk.Frame(box, bg=theme.PANEL)
-                self._relations.pack(fill="x")
-                Button(
-                    box, "＋ 新增一位", self._add_relation_row, kind="ghost", size=9
-                ).pack(anchor="w", pady=(theme.px(6), 0))
-            else:
-                label, _, limit = TEXT_FIELDS[key]
-                field = Field(
-                    box,
-                    label,
-                    limit=limit,
-                    lines=MULTILINE.get(key, 1),
-                    hint=HINTS.get(key, ""),
-                    on_change=self._changed,
-                )
-                field.pack(fill="x", pady=(0, theme.px(10)))
-                self._fields[key] = field
-
-    def _build_voice(self, box: tk.Frame) -> None:
-        grid = tk.Frame(box, bg=theme.PANEL)
-        grid.pack(anchor="w", pady=(0, 8))
-        for index, (voice, label) in enumerate(PERSONA_VOICES):
-            chip = Chip(grid, label, lambda v=voice: self._pick_voice(v), size=9)
-            chip.grid(row=index // 3, column=index % 3, sticky="w", padx=(0, 6), pady=2)
-            self._voice_chips[voice] = chip
-        self._voice_knobs: dict[str, Stepper | Segmented] = {}
-        for key, label, limit, unit in (
-            ("voice_pitch", "音高", 50, "Hz"),
-            ("voice_speed", "語速", 40, "%"),
-            ("voice_effect", "音效", 0, ""),
-        ):
-            row = tk.Frame(box, bg=theme.PANEL)
-            row.pack(fill="x", pady=(2, 4))
-            tk.Label(
-                row, text=label, width=4, anchor="w", bg=theme.PANEL, fg=theme.MUTED,
-                font=theme.font(9),
-            ).pack(side="left", padx=(0, 10))
-            if key == "voice_effect":
-                knob = Segmented(
-                    row, [(k, name) for k, (name, _) in VOICE_EFFECTS.items()],
-                    lambda _v: self._changed(),
-                )
-            else:
-                knob = Stepper(
-                    row, minimum=-limit, maximum=limit, unit=unit,
-                    command=lambda _v: self._changed(),
-                )
-            knob.pack(side="left")
-            self._voice_knobs[key] = knob
-        actions = tk.Frame(box, bg=theme.PANEL)
-        actions.pack(fill="x", pady=(6, 0))
-        Button(actions, "▶ 試聽", self._preview_voice, kind="secondary", size=9).pack(
-            side="left"
-        )
-        tk.Label(
-            actions,
-            text="用代表台詞的第一句，在這台電腦播放，不會送進 Discord。語速頁的整體語速會再疊加。",
-            bg=theme.PANEL, fg=theme.DIM, font=theme.font(8),
-        ).pack(side="left", padx=(10, 0))
-
-    def _pick_voice(self, voice: str) -> None:
-        self._voice = voice
-        for key, chip in self._voice_chips.items():
-            chip.set_selected(key == voice)
-        self._changed()
-
     def _preview_voice(self) -> None:
         persona = self._current()
         if persona is None or self._on_preview is None:
             return
-        draft = self._collect()
-        lines = [line.strip() for line in draft.sample_lines.splitlines() if line.strip()]
+        draft = self.fields.collect(self._current(), self._name_var.get())
+        lines = [
+            line.strip() for line in draft.sample_lines.splitlines() if line.strip()
+        ]
         text = lines[0] if lines else f"你好，我是{draft.name or '這個角色'}。"
         self._on_status("試聽中…")
         self._on_preview(draft, text)
-
-    def _build_preview(self, parent: tk.Frame) -> None:
-        section = Disclosure(
-            parent,
-            "AI 實際看到的人設",
-            "上面寫的東西整理後給模型的樣子，以及長度。",
-            bg=theme.SURFACE,
-        )
-        section.pack(fill="x", pady=(0, theme.px(18)), padx=(0, theme.px(18)))
-        box = section.body
-        top = tk.Frame(box, bg=theme.SURFACE)
-        top.pack(fill="x")
-        self._meter_text = tk.Label(
-            top, text="", bg=theme.SURFACE, fg=theme.MUTED, font=theme.font(9)
-        )
-        self._meter_text.pack(side="left")
-        self._meter = tk.Canvas(
-            box, height=theme.px(6), bg=theme.SURFACE, highlightthickness=0
-        )
-        self._meter.pack(fill="x", pady=(theme.px(6), theme.px(8)))
-        self._preview = tk.Text(
-            box,
-            height=8,
-            wrap="word",
-            bg=theme.SURFACE,
-            fg=theme.MUTED,
-            relief="flat",
-            font=theme.font(9),
-            takefocus=0,
-        )
-        self._preview.pack(fill="x")
-        note = tk.Label(
-            box,
-            text=(
-                f"建議控制在 {RECOMMENDED_PROMPT_CHARS} 字內：太長的人設會讓本機小模型"
-                "開始不照四行格式，也會讓第一次回覆變慢（之後會被快取）。"
-            ),
-            bg=theme.SURFACE,
-            fg=theme.DIM,
-            font=theme.font(9),
-            justify="left",
-            anchor="w",
-        )
-        wrap_to_width(note).pack(anchor="w", fill="x", pady=(theme.px(6), 0))
 
     # ---- list --------------------------------------------------------------------
 
@@ -526,22 +306,7 @@ class PersonaPanel(tk.Frame):
                 self._name_entry.configure(state="normal")
                 self._name_var.set(persona.name)
                 self._avatar.set_name(persona.name)
-                for key, field in self._fields.items():
-                    field.set(str(getattr(persona, key)))
-                for axis in TRAIT_AXES:
-                    self._sliders[axis.key].set(persona.trait(axis.key))
-                self._length.set(persona.reply_length)
-                self._pick_voice(persona.voice)
-                self._voice_knobs["voice_pitch"].set(persona.voice_pitch)
-                self._voice_knobs["voice_speed"].set(persona.voice_speed)
-                self._voice_knobs["voice_effect"].set(persona.voice_effect)
-                for frame, _, _ in self._relation_rows:
-                    frame.destroy()
-                self._relation_rows.clear()
-                for rel in persona.relationships:
-                    self._add_relation_row(rel)
-                if not persona.relationships:
-                    self._add_relation_row()
+                self.fields.load(persona)
                 if persona.id == MACHINE_SPIRIT.id:
                     self._delete_button.pack_forget()
                 else:
@@ -554,73 +319,6 @@ class PersonaPanel(tk.Frame):
         self._dirty = False
         self._update_chrome()
         self._update_preview()
-
-    def _add_relation_row(self, rel: Relationship | None = None) -> None:
-        frame = tk.Frame(self._relations, bg=theme.PANEL)
-        frame.pack(fill="x", pady=2)
-        name_var = tk.StringVar(value=rel.name if rel else "")
-        relation_var = tk.StringVar(value=rel.relation if rel else "")
-        for var, width, placeholder_width in ((name_var, 10, 0), (relation_var, 40, 1)):
-            border = tk.Frame(frame, bg=theme.LINE, padx=1, pady=1)
-            border.pack(
-                side="left", padx=(0, 6), fill="x", expand=bool(placeholder_width)
-            )
-            entry = tk.Entry(
-                border,
-                textvariable=var,
-                width=width,
-                bg=theme.PANEL_HI,
-                fg=theme.TEXT,
-                insertbackground=theme.TEXT,
-                relief="flat",
-                highlightthickness=0,
-                font=theme.font(10),
-            )
-            entry.pack(fill="x", ipady=theme.px(5), ipadx=theme.px(6))
-            var.trace_add("write", lambda *_: self._changed())
-        remove = tk.Label(
-            frame,
-            text="✕",
-            bg=theme.PANEL,
-            fg=theme.DIM,
-            cursor="hand2",
-            font=theme.font(10),
-        )
-        remove.pack(side="left")
-        entry_row = (frame, name_var, relation_var)
-        remove.bind("<Button-1>", lambda _: self._remove_relation_row(entry_row))
-        self._relation_rows.append(entry_row)
-        if rel is None and not self._loading:
-            self._changed()
-
-    def _remove_relation_row(
-        self, row: tuple[tk.Frame, tk.StringVar, tk.StringVar]
-    ) -> None:
-        row[0].destroy()
-        self._relation_rows.remove(row)
-        self._changed()
-
-    def _collect(self) -> Persona:
-        base = self._current()
-        assert base is not None
-        values: dict[str, object] = {
-            key: field.get() for key, field in self._fields.items()
-        }
-        return replace(
-            base,
-            name=self._name_var.get(),
-            traits={axis.key: self._sliders[axis.key].get() for axis in TRAIT_AXES},
-            reply_length=self._length.get(),
-            voice=self._voice,
-            voice_pitch=int(self._voice_knobs["voice_pitch"].get() or 0),
-            voice_speed=int(self._voice_knobs["voice_speed"].get() or 0),
-            voice_effect=self._voice_knobs["voice_effect"].get(),
-            relationships=tuple(
-                Relationship(name.get(), relation.get())
-                for _, name, relation in self._relation_rows
-            ),
-            **values,  # type: ignore[arg-type]
-        )
 
     def _changed(self) -> None:
         if self._loading or self._current() is None:
@@ -656,45 +354,16 @@ class PersonaPanel(tk.Frame):
         )
         self._use_button.set_enabled(self._dirty or not active)
         self._save_button.set_enabled(self._dirty)
-        self._length_hint.configure(text=REPLY_LENGTHS.get(self._length.get(), ""))
 
     def _update_preview(self) -> None:
-        if self._current() is None:
+        persona = self._current()
+        if persona is None:
             return
         try:
-            persona = replace(self._collect(), mood=self._state.mood)
+            draft = self.fields.collect(persona, self._name_var.get())
+            self.preview.render(replace(draft, mood=self._state.mood))
         except (TypeError, ValueError):
             return
-        sheet = persona.render_prompt_block()
-        notes = [
-            f"{r.name}：{r.relation}"
-            for r in persona.relationships
-            if r.name and r.relation
-        ]
-        shown = sheet or "（空白：AI 會用中性口吻）"
-        if notes:
-            shown += "\n\n〔對話中出現才加入〕\n" + "\n".join(notes)
-        self._preview.configure(state="normal")
-        self._preview.delete("1.0", "end")
-        self._preview.insert("1.0", shown)
-        self._preview.configure(
-            state="disabled", height=min(14, max(4, shown.count("\n") + 2))
-        )
-        length = len(sheet)
-        ratio = min(1.0, length / RECOMMENDED_PROMPT_CHARS)
-        color = (
-            theme.OK
-            if ratio < 0.8
-            else (theme.WARN if length <= RECOMMENDED_PROMPT_CHARS else theme.ERROR)
-        )
-        self._meter_text.configure(
-            text=f"{length} / {RECOMMENDED_PROMPT_CHARS} 字", fg=color
-        )
-        self._meter.update_idletasks()
-        width = max(1, self._meter.winfo_width())
-        self._meter.delete("all")
-        self._meter.create_rectangle(0, 0, width, 6, fill=theme.PANEL_TOP, outline="")
-        self._meter.create_rectangle(0, 0, width * ratio, 6, fill=color, outline="")
 
     # ---- actions -----------------------------------------------------------------
 
@@ -703,7 +372,9 @@ class PersonaPanel(tk.Frame):
         if persona is None:
             return True
         try:
-            updated = validate_persona(self._collect())
+            updated = validate_persona(
+                self.fields.collect(self._current(), self._name_var.get())
+            )
         except PersonaError as exc:
             self._on_status(str(exc))
             return False

@@ -24,7 +24,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from silenttalk.copilot.types import ConversationTurn
+from silenttalk.conversation import ConversationTurn
 
 _LOG = logging.getLogger(__name__)
 # Written by setup to identify the folder selected for records.

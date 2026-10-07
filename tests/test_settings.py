@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from silenttalk.config import ConfigError, config_defaults, load_settings
-from silenttalk.discord_voice import invite_url
+from silenttalk.discord_invite import invite_url
 from silenttalk.settings_schema import all_settings
 from silenttalk.settings_store import SettingsError, SettingsStore, merge
 from silenttalk.settings_ui import SettingsPanel
@@ -108,7 +108,10 @@ def test_retired_agent_settings_are_absent_and_old_overrides_are_ignored(
 
 
 @pytest.mark.parametrize("enabled", [True, False])
-def test_app_startup_uses_current_model_settings(tmp_path, monkeypatch, enabled):
+@pytest.mark.parametrize("tts_only", [True, False])
+def test_app_startup_uses_current_model_settings(
+    tmp_path, monkeypatch, enabled, tts_only
+):
     import sys
     from dataclasses import replace
     from unittest.mock import Mock
@@ -119,7 +122,9 @@ def test_app_startup_uses_current_model_settings(tmp_path, monkeypatch, enabled)
     settings = replace(settings, copilot=replace(settings.copilot, enabled=enabled))
     controller = Mock()
     ui_factory = Mock()
-    monkeypatch.setattr(sys, "argv", ["app.py", "--character-mode"])
+    monkeypatch.setattr(
+        sys, "argv", ["app.py", "--tts-only" if tts_only else "--character-mode"]
+    )
     monkeypatch.setattr(app, "configure_logging", lambda _: None)
     monkeypatch.setattr(app, "load_settings", lambda _: settings)
     monkeypatch.setattr(app, "config_defaults", lambda _: {})
@@ -129,10 +134,18 @@ def test_app_startup_uses_current_model_settings(tmp_path, monkeypatch, enabled)
     assert app.main() == 0
     arguments = ui_factory.call_args.kwargs
     assert arguments["copilot_info"] == (
-        [("回覆模型", settings.copilot.llm_model), ("語音辨識", settings.copilot.stt_engine)]
-        if enabled else []
+        [
+            ("回覆模型", settings.copilot.llm_model),
+            ("語音辨識", settings.copilot.stt_engine),
+        ]
+        if enabled and not tts_only
+        else []
     )
-    assert arguments["start_character_mode"] is True
+    assert arguments["start_character_mode"] is (not tts_only)
+    assert app.AppController.call_args.args[0].copilot.enabled is (
+        enabled and not tts_only
+    )
+    assert settings.copilot.enabled is enabled
     controller.start.assert_called_once()
     ui_factory.return_value.run.assert_called_once()
 
@@ -142,17 +155,21 @@ def test_persona_editor_preserves_voice_values_and_protects_builtin(
 ) -> None:
     from dataclasses import replace
 
-    from silenttalk.copilot.persona import MACHINE_SPIRIT, PersonaState, PersonaStore
+    from silenttalk.persona import MACHINE_SPIRIT, PersonaState, PersonaStore
     from silenttalk.persona_ui import PersonaPanel
 
     root = settings_ui.root
     store = PersonaStore(tmp_path / "personas.json")
-    custom = replace(MACHINE_SPIRIT, id="custom", name="Test", voice_pitch=23, voice_speed=7)
+    custom = replace(
+        MACHINE_SPIRIT, id="custom", name="Test", voice_pitch=23, voice_speed=7
+    )
     store.save(PersonaState([MACHINE_SPIRIT, custom], MACHINE_SPIRIT.id))
     statuses = []
     try:
-        panel = PersonaPanel(root, store, on_apply=lambda _: None, on_status=statuses.append)
-        assert panel._collect().voice_pitch == 22
+        panel = PersonaPanel(
+            root, store, on_apply=lambda _: None, on_status=statuses.append
+        )
+        assert panel.fields.collect(panel._current(), panel._name_var.get()).voice_pitch == 22
         assert panel._save(apply=True)
         assert store.load().active_persona().voice_pitch == 22
         before = store.path.read_bytes()
@@ -164,9 +181,9 @@ def test_persona_editor_preserves_voice_values_and_protects_builtin(
         assert any("內建" in message for message in statuses)
 
         panel._open(custom.id)
-        assert panel._collect().voice_pitch == 23
-        assert panel._collect().voice_speed == 7
-        panel._voice_knobs["voice_pitch"].set(24, notify=True)
+        assert panel.fields.collect(panel._current(), panel._name_var.get()).voice_pitch == 23
+        assert panel.fields.collect(panel._current(), panel._name_var.get()).voice_speed == 7
+        panel.fields.voice._voice_knobs["voice_pitch"].set(24, notify=True)
         assert panel._save(apply=True)
         saved = store.load().find(custom.id)
         assert (saved.voice_pitch, saved.voice_speed) == (24, 7)
@@ -271,11 +288,13 @@ def test_settings_discord_invite_link_displays_and_updates(settings_ui) -> None:
 def test_silenttalk_ui_invite_link_card(settings_ui, monkeypatch) -> None:
     link_state = ""
     ui = settings_ui
-    monkeypatch.setattr(ui, "_invite_link_getter", lambda: link_state)
+    monkeypatch.setattr(ui.invite, "_invite_link_getter", lambda: link_state)
     try:
         ui.settings_panel.show("discord")
-        assert ui._invite_card_body is not None
-        labels = [c for c in ui._invite_card_body.winfo_children() if isinstance(c, tk.Label)]
+        assert ui.invite._invite_card_body is not None
+        labels = [
+            c for c in ui.invite._invite_card_body.winfo_children() if isinstance(c, tk.Label)
+        ]
         assert any("連上 Discord 後才會出現" in c.cget("text") for c in labels)
 
         url = invite_url(1552128066719981608)
@@ -283,7 +302,7 @@ def test_silenttalk_ui_invite_link_card(settings_ui, monkeypatch) -> None:
         ui.settings_panel.show("discord")
 
         found = False
-        for child in ui._invite_card_body.winfo_children():
+        for child in ui.invite._invite_card_body.winfo_children():
             for sub in child.winfo_children():
                 if isinstance(sub, tk.Entry):
                     assert sub.get() == url
@@ -322,4 +341,3 @@ def test_records_settings_prepare_and_show_status(tmp_path, settings_ui):
         assert messages[-1].startswith("無法設定紀錄資料夾")
     finally:
         panel.destroy()
-

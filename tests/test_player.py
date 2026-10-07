@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import discord
 import pytest
 
 from silenttalk.config import AudioConfig
-from silenttalk.discord_voice import DiscordAudioPlayer
+from silenttalk.discord_playback import DiscordAudioPlayer
 from silenttalk.tts.base import AudioResult
 
 
@@ -44,8 +45,8 @@ async def test_multiple_messages_reuse_existing_voice_connection(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(
-        "silenttalk.discord_voice.discord.FFmpegOpusAudio",
-        lambda *args, **kwargs: object(),
+        "silenttalk.discord_playback.OpusSource",
+        lambda *args, **kwargs: type("Source", (), {"cleanup": lambda self: None})(),
     )
     audio_path = tmp_path / "speech.mp3"
     audio_path.write_bytes(b"audio")
@@ -69,11 +70,11 @@ async def test_ffmpeg_filter_is_forwarded(
     calls: list[dict[str, object]] = []
 
     def fake_source(*args: object, **kwargs: object) -> object:
-        calls.append(kwargs)
-        return object()
+        calls.append({"options": args[0].ffmpeg_filter})
+        return type("Source", (), {"cleanup": lambda self: None})()
 
     monkeypatch.setattr(
-        "silenttalk.discord_voice.discord.FFmpegOpusAudio",
+        "silenttalk.discord_playback.OpusSource",
         fake_source,
     )
     audio_path = tmp_path / "speech.mp3"
@@ -91,7 +92,6 @@ async def test_ffmpeg_filter_is_forwarded(
         )
     )
 
-    assert "-af" in str(calls[0]["options"])
     assert "aecho=" in str(calls[0]["options"])
 
 
@@ -100,8 +100,8 @@ async def test_voice_drop_recovers_transport_without_replaying_sentence(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(
-        "silenttalk.discord_voice.discord.FFmpegOpusAudio",
-        lambda *args, **kwargs: object(),
+        "silenttalk.discord_playback.OpusSource",
+        lambda *args, **kwargs: type("Source", (), {"cleanup": lambda self: None})(),
     )
     audio_path = tmp_path / "speech.mp3"
     audio_path.write_bytes(b"audio")
@@ -115,3 +115,22 @@ async def test_voice_drop_recovers_transport_without_replaying_sentence(
 
     assert voice.play_calls == 1
     assert client.recovery_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_ffmpeg_failure_does_not_reconnect_healthy_discord(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "silenttalk.discord_playback.OpusSource",
+        lambda *args, **kwargs: type("Source", (), {"cleanup": lambda self: None})(),
+    )
+    voice = FakeVoice()
+    voice.errors = [discord.FFmpegProcessError("FFmpeg exited with code 3221225477")]
+    client = FakeClient(voice)
+    player = DiscordAudioPlayer(client, AudioConfig())  # type: ignore[arg-type]
+
+    with pytest.raises(discord.FFmpegProcessError):
+        await player.play(AudioResult(Path("synthetic.mp3"), None, None, "mp3"))
+
+    assert client.recovery_calls == 0

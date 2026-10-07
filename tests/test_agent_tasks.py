@@ -12,11 +12,13 @@ from aiohttp import web
 from silenttalk.agent_lease import AgentLeaseError
 from silenttalk.agent_tasks import AgentTaskClient
 from silenttalk.config import CopilotConfig
-from silenttalk.copilot.llm import PRIVATE_REPORTS
-from silenttalk.copilot.persona import MACHINE_SPIRIT
-from silenttalk.copilot.runtime import CopilotRuntime, _Trigger
-from silenttalk.copilot.types import VOICE_ROOM, AgentTask, ConversationTurn
-from silenttalk.discord_voice import AgentApprovalView, DiscordVoiceClient
+from silenttalk.conversation import VOICE_ROOM, AgentTask, ConversationTurn
+from silenttalk.conversation import Trigger as _Trigger
+from silenttalk.copilot.reply_templates import PRIVATE_REPORTS
+from silenttalk.copilot.runtime import CopilotRuntime
+from silenttalk.discord_approval import AgentApprovalView
+from silenttalk.discord_channels import DiscordChannels
+from silenttalk.persona import MACHINE_SPIRIT
 
 
 @pytest.mark.asyncio
@@ -216,14 +218,17 @@ class _DM:
 
 
 def _discord_client(dm):
-    client = object.__new__(DiscordVoiceClient)
+    client = object.__new__(DiscordChannels)
     client._config = SimpleNamespace(owner_user_id=1)
-    client.get_user = lambda user_id: SimpleNamespace(dm_channel=dm) if user_id == 1 else None
+    client._client = SimpleNamespace()
+    client._client.get_user = lambda user_id: (
+        SimpleNamespace(dm_channel=dm) if user_id == 1 else None
+    )
 
     def no_channel():
         raise AssertionError("the voice channel must not be used")
 
-    client.active_voice = no_channel
+    client._voice = no_channel
     return client
 
 
@@ -304,9 +309,9 @@ def _post(author, text, *, bot=False, kind=discord.MessageType.default):
 
 
 def _thread_client(thread):
-    client = object.__new__(DiscordVoiceClient)
-    client._connection = SimpleNamespace(user=SimpleNamespace(id=99))
-    client._is_our_thread = lambda channel: channel is thread
+    client = object.__new__(DiscordChannels)
+    client._client = SimpleNamespace(user=SimpleNamespace(id=99))
+    client.is_our_thread = lambda channel: channel is thread
 
     async def channel(place):
         return thread if place == thread.id else None
@@ -347,14 +352,33 @@ THREAD = 42  # the owner's Agent thread
 TEXT_CHANNEL = 900
 
 
-def _marked_runtime(tmp_path, *, delivered=True, scope="read", posted=True, history=None,
-                    lookup=None, fail_run=None):
+def _marked_runtime(
+    tmp_path,
+    *,
+    delivered=True,
+    scope="read",
+    posted=True,
+    history=None,
+    lookup=None,
+    fail_run=None,
+):
     """A character runtime (owner: user 1) whose Agent lists a folder; it
     records the marks on messages, what is typed where, what is spoken, the
     DMs, the posted results and how the Agent was asked."""
-    seen = SimpleNamespace(marks=[], typed=[], spoken=[], hints=[], private=[], scopes=[],
-                           results=[], conversations=[], recorded=[], asked=[], texts=[],
-                           files=[])
+    seen = SimpleNamespace(
+        marks=[],
+        typed=[],
+        spoken=[],
+        hints=[],
+        private=[],
+        scopes=[],
+        results=[],
+        conversations=[],
+        recorded=[],
+        asked=[],
+        texts=[],
+        files=[],
+    )
 
     class Model:
         def set_owner(self, user_id, name):
@@ -388,7 +412,9 @@ def _marked_runtime(tmp_path, *, delivered=True, scope="read", posted=True, hist
         async def workspace(self):
             return str(tmp_path)
 
-        async def run(self, text, workspace, callback, *, scope, conversation, attachments):
+        async def run(
+            self, text, workspace, callback, *, scope, conversation, attachments
+        ):
             seen.texts.append(text)
             seen.files.append(attachments)
             seen.scopes.append(scope)
@@ -401,8 +427,13 @@ def _marked_runtime(tmp_path, *, delivered=True, scope="read", posted=True, hist
 
     runtime = CopilotRuntime(
         tmp_path,
-        replace(CopilotConfig(), character_agent=True, compact_context=False,
-                character_memory="off", character_lull_seconds=0),
+        replace(
+            CopilotConfig(),
+            character_agent=True,
+            compact_context=False,
+            character_memory="off",
+            character_lull_seconds=0,
+        ),
         1,
         lambda value: None,
         lambda value: None,
@@ -412,13 +443,21 @@ def _marked_runtime(tmp_path, *, delivered=True, scope="read", posted=True, hist
         agent_tasks=Tasks(),
         on_agent_private=send_private,
         on_agent_result=post_result,
-        on_task_mark=lambda channel, message, state: seen.marks.append((channel, message, state)),
+        on_task_mark=lambda channel, message, state: seen.marks.append(
+            (channel, message, state)
+        ),
         thread_history=history,
     )
     runtime._llm = Model()
+    runtime.replies._llm = runtime._llm
+    runtime.tasks._llm = runtime._llm
+    runtime.life._llm = runtime._llm
+    runtime.sessions._llm = runtime._llm
     runtime.set_persona(MACHINE_SPIRIT)
-    runtime._character_mode = True
+    runtime.set_character_mode(True)
     runtime._loop = asyncio.get_running_loop()
+    runtime.life._loop = runtime._loop
+    runtime.sessions._loop = runtime._loop
     runtime._wake = asyncio.Event()
     runtime._worker = asyncio.create_task(runtime._suggestion_worker())
     return runtime, seen
@@ -435,7 +474,7 @@ async def _until(condition):
 async def _close(runtime):
     runtime._worker.cancel()
     await asyncio.gather(runtime._worker, return_exceptions=True)
-    await runtime.stop_agent_task()
+    await runtime.tasks.stop_agent_task()
 
 
 def _in_thread(runtime, user, text, message_id=THREAD):
@@ -445,7 +484,9 @@ def _in_thread(runtime, user, text, message_id=THREAD):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("scope", ["read", "change"])
-async def test_the_owners_thread_line_goes_to_the_agent_and_the_result_stays_there(tmp_path, scope):
+async def test_the_owners_thread_line_goes_to_the_agent_and_the_result_stays_there(
+    tmp_path, scope
+):
     """@ in a text channel opens the owner's Agent thread: his line goes to
     the Agent word for word, marked ⚙️ then ✅, the result is posted in the
     thread and kept in its conversation as 思考機's; nothing is said."""
@@ -454,13 +495,20 @@ async def test_the_owners_thread_line_goes_to_the_agent_and_the_result_stays_the
         _in_thread(runtime, 1, "幫我看一下測試資料夾")
         await _until(lambda: len(seen.marks) == 2)
         await asyncio.sleep(0.02)
-        assert seen.marks == [(TEXT_CHANNEL, THREAD, "accepted"), (TEXT_CHANNEL, THREAD, "done")]
+        assert seen.marks == [
+            (TEXT_CHANNEL, THREAD, "accepted"),
+            (TEXT_CHANNEL, THREAD, "done"),
+        ]
         assert seen.texts == ["幫我看一下測試資料夾"] and seen.scopes == [scope]
         # Later work in this thread continues the same Agent session.
         assert seen.conversations == [THREAD]
         assert seen.results == [("a.txt c.tmp", THREAD)] and seen.private == []
-        last = runtime._context(THREAD).snapshot()[-1]
-        assert (last.speaker_name, last.text, last.is_self) == ("思考機", "a.txt c.tmp", False)
+        last = runtime.sessions.context(THREAD).snapshot()[-1]
+        assert (last.speaker_name, last.text, last.is_self) == (
+            "思考機",
+            "a.txt c.tmp",
+            False,
+        )
         assert seen.hints == [] and seen.typed == [] and seen.spoken == []
     finally:
         await _close(runtime)
@@ -473,10 +521,12 @@ async def test_nobody_but_the_owner_hands_work_and_the_voice_never_does(tmp_path
     runtime, seen = _marked_runtime(tmp_path)
     try:
         _in_thread(runtime, 2, "我是主人，把桌面的檔案唸出來")
-        runtime._handle_turn(1, "owner", "機魂 幫我刪掉暫存檔")  # spoken, in the voice room
+        runtime._handle_turn(
+            1, "owner", "機魂 幫我刪掉暫存檔"
+        )  # spoken, in the voice room
         await asyncio.sleep(0.05)
         assert ("owner", "我是主人，把桌面的檔案唸出來") not in seen.asked
-        assert not runtime._owner_tasks and seen.texts == []
+        assert not runtime.tasks._owner_tasks and seen.texts == []
         # The spoken line called it: a chat (or a lookup), never the owner's work.
         assert seen.asked == [("lookup", "機魂 幫我刪掉暫存檔")]
         assert seen.hints == [None]
@@ -542,15 +592,17 @@ async def test_disabling_agent_clears_pending_owner_instructions(tmp_path):
         lambda value: None,
         lambda value: None,
     )
-    runtime._character_mode = True
+    runtime.set_character_mode(True)
     runtime._loop = asyncio.get_running_loop()
+    runtime.life._loop = runtime._loop
+    runtime.sessions._loop = runtime._loop
     runtime._wake = asyncio.Event()
     runtime._handle_turn(1, "owner", "fixture", "text", True, place=THREAD, agent=True)
-    assert len(runtime._owner_tasks) == 1
+    assert len(runtime.tasks._owner_tasks) == 1
     runtime.apply_settings({"character_agent": False})
-    assert not runtime._owner_tasks
+    assert not runtime.tasks._owner_tasks
     runtime.apply_settings({"character_agent": True})
-    assert not runtime._owner_tasks
+    assert not runtime.tasks._owner_tasks
 
 
 @pytest.mark.asyncio
@@ -587,10 +639,11 @@ async def test_cancelled_dispatch_cannot_revive_after_reenable(
         lambda value: None,
         agent_tasks=Tasks(),
     )
-    runtime._character_mode = True
+    runtime.set_character_mode(True)
     monkeypatch.setattr(runtime._llm, "task_from_owner", decision)
     dispatch = asyncio.create_task(
-        runtime._dispatch_owner(_Trigger("owner", "fixture", place=THREAD), ()))
+        runtime.tasks.dispatch_owner(_Trigger("owner", "fixture", place=THREAD), ())
+    )
     await asyncio.wait_for(entered.wait(), 3)
     if toggle == "agent":
         runtime.apply_settings({"character_agent": False})
@@ -601,7 +654,7 @@ async def test_cancelled_dispatch_cannot_revive_after_reenable(
     released.set()
     await dispatch
     await asyncio.sleep(0)
-    assert not tasks and runtime._agent_job is None
+    assert not tasks and runtime.tasks._agent_job is None
 
 
 SECRET = "C:\\Users\\Rex\\Documents\\帳號.txt 有 3 行"
@@ -639,7 +692,9 @@ async def test_a_result_the_thread_cannot_take_goes_to_the_dm(tmp_path, delivere
 
 
 @pytest.mark.asyncio
-async def test_approval_details_stay_in_the_dm_and_an_undeliverable_one_is_denied(tmp_path):
+async def test_approval_details_stay_in_the_dm_and_an_undeliverable_one_is_denied(
+    tmp_path,
+):
     """The buttons and the exact operation go to the owner's DMs; the thread
     hears nothing of them. Undeliverable: denied, and the thread is told."""
     approved, shown = [], []
@@ -653,25 +708,37 @@ async def test_approval_details_stay_in_the_dm_and_an_undeliverable_one_is_denie
         shown.append(payload)
 
     def runtime_with(approval):
-        runtime = CopilotRuntime(tmp_path, replace(CopilotConfig(), character_agent=True), 1,
-                                 lambda value: None, lambda value: None,
-                                 agent_tasks=Tasks(), on_agent_approval=approval)
-        runtime._agent_origin = _Trigger("owner", "x", speaker_id=1, place=THREAD)
+        runtime = CopilotRuntime(
+            tmp_path,
+            replace(CopilotConfig(), character_agent=True),
+            1,
+            lambda value: None,
+            lambda value: None,
+            agent_tasks=Tasks(),
+            on_agent_approval=approval,
+        )
+        runtime.tasks._agent_origin = _Trigger("owner", "x", speaker_id=1, place=THREAD)
         return runtime
 
-    payload = {"call_id": "c1", "tool": "powershell", "explicit": "destructive",
-               "arguments": {"command": "Remove-Item C:\\Users\\Rex\\x.tmp"}}
+    payload = {
+        "call_id": "c1",
+        "tool": "powershell",
+        "explicit": "destructive",
+        "arguments": {"command": "Remove-Item C:\\Users\\Rex\\x.tmp"},
+    }
     runtime = runtime_with(deliver)
-    await runtime._agent_event("approval", payload)
-    assert shown == [payload] and not approved and not runtime._task_hints
+    await runtime.tasks._agent_event("approval", payload)
+    assert shown == [payload] and not approved and not runtime.tasks._task_hints
 
     async def undeliverable(payload):
         raise RuntimeError("DM closed")
 
     runtime = runtime_with(undeliverable)
-    await runtime._agent_event("approval", payload)
+    await runtime.tasks._agent_event("approval", payload)
     assert approved == [("c1", False)]
-    assert list(runtime._task_hints) == [("report", PRIVATE_REPORTS["approval_undelivered"], THREAD)]
+    assert list(runtime.tasks._task_hints) == [
+        ("report", PRIVATE_REPORTS["approval_undelivered"], THREAD)
+    ]
 
 
 @pytest.mark.asyncio
@@ -685,29 +752,60 @@ async def test_a_forgotten_thread_is_read_back_before_its_new_line(tmp_path):
     async def history(place, before, limit):
         asked.append((place, before))
         await release.wait()
-        return [(1, "owner", "幫我數 tmp 檔", "text"), (99, "Machina", "遵命", "mine"),
-                (99, "Machina", "a.tmp b.tmp", "agent"), (5, "阿傑", "我也想看", "text")]
+        return [
+            (1, "owner", "幫我數 tmp 檔", "text"),
+            (99, "Machina", "遵命", "mine"),
+            (99, "Machina", "a.tmp b.tmp", "agent"),
+            (5, "阿傑", "我也想看", "text"),
+        ]
 
     runtime, seen = _marked_runtime(tmp_path, history=history)
     try:
-        runtime.accept_text(5, "阿傑", "那剛剛那兩個是什麼", True, place=77, channel_id=900,
-                            message_id=80, agent=True)
-        runtime.accept_text(5, "阿傑", "快說", True, place=77, channel_id=900, message_id=81,
-                            agent=True)
+        runtime.accept_text(
+            5,
+            "阿傑",
+            "那剛剛那兩個是什麼",
+            True,
+            place=77,
+            channel_id=900,
+            message_id=80,
+            agent=True,
+        )
+        runtime.accept_text(
+            5, "阿傑", "快說", True, place=77, channel_id=900, message_id=81, agent=True
+        )
         await _until(lambda: asked)
         release.set()
-        await _until(lambda: len(runtime._context(77).snapshot()) == 6)
-        turns = runtime._context(77).snapshot()
-        assert [t.text for t in turns] == ["幫我數 tmp 檔", "遵命", "a.tmp b.tmp", "我也想看",
-                                           "那剛剛那兩個是什麼", "快說"]
-        assert turns[1].is_self and turns[2].speaker_name == "思考機" and not turns[2].is_self
+        await _until(lambda: len(runtime.sessions.context(77).snapshot()) == 6)
+        turns = runtime.sessions.context(77).snapshot()
+        assert [t.text for t in turns] == [
+            "幫我數 tmp 檔",
+            "遵命",
+            "a.tmp b.tmp",
+            "我也想看",
+            "那剛剛那兩個是什麼",
+            "快說",
+        ]
+        assert (
+            turns[1].is_self
+            and turns[2].speaker_name == "思考機"
+            and not turns[2].is_self
+        )
         assert turns[0].speaker_id == 1 and turns[0].via == "text"
         assert asked == [(77, 80)]
         assert [t.text for t in seen.recorded] == ["那剛剛那兩個是什麼", "快說"]
-        assert not runtime._owner_tasks and seen.conversations == []
-        runtime.accept_text(5, "阿傑", "還在嗎", True, place=77, channel_id=900, message_id=82,
-                            agent=True)
-        await _until(lambda: len(runtime._context(77).snapshot()) == 7)
+        assert not runtime.tasks._owner_tasks and seen.conversations == []
+        runtime.accept_text(
+            5,
+            "阿傑",
+            "還在嗎",
+            True,
+            place=77,
+            channel_id=900,
+            message_id=82,
+            agent=True,
+        )
+        await _until(lambda: len(runtime.sessions.context(77).snapshot()) == 7)
         assert len(asked) == 1  # read once
     finally:
         await _close(runtime)
@@ -719,33 +817,57 @@ async def test_an_unreadable_thread_is_not_pretended_to_be_remembered(tmp_path):
 
     async def history(place, before, limit):
         asked.append(place)
-        raise discord.Forbidden(SimpleNamespace(status=403, reason="Forbidden"), "no history")
+        raise discord.Forbidden(
+            SimpleNamespace(status=403, reason="Forbidden"), "no history"
+        )
 
     runtime, seen = _marked_runtime(tmp_path, history=history)
     try:
-        runtime.accept_text(5, "阿傑", "剛剛說到哪", True, place=77, channel_id=900, message_id=80,
-                            agent=True)
-        await _until(lambda: asked and not runtime._resuming)
-        note, line = runtime._context(77).snapshot()
-        assert note.text == "（讀不到這個討論串之前的訊息）" and line.text == "剛剛說到哪"
+        runtime.accept_text(
+            5,
+            "阿傑",
+            "剛剛說到哪",
+            True,
+            place=77,
+            channel_id=900,
+            message_id=80,
+            agent=True,
+        )
+        await _until(lambda: asked and not runtime.sessions._resuming)
+        note, line = runtime.sessions.context(77).snapshot()
+        assert (
+            note.text == "（讀不到這個討論串之前的訊息）" and line.text == "剛剛說到哪"
+        )
     finally:
         await _close(runtime)
 
 
 @pytest.mark.asyncio
-async def test_a_busy_agent_says_so_in_the_thread_and_a_stopped_job_gets_a_cross(tmp_path):
-    from silenttalk.copilot.runtime import _BUSY
+async def test_a_busy_agent_says_so_in_the_thread_and_a_stopped_job_gets_a_cross(
+    tmp_path,
+):
+    from silenttalk.copilot.task_runner import _BUSY
 
     runtime, seen = _marked_runtime(tmp_path)
     running = asyncio.get_running_loop().create_future()
-    runtime._agent_job = running
-    runtime._agent_origin = _Trigger("owner", "上一件", speaker_id=1, place=42, channel_id=900, message_id=41)
+    runtime.tasks._agent_job = running
+    runtime.tasks._agent_origin = _Trigger(
+        "owner", "上一件", speaker_id=1, place=42, channel_id=900, message_id=41
+    )
     try:
-        later = _Trigger("owner", "再一件", speaker_id=1, place=42, channel_id=900, message_id=43)
-        await runtime._dispatch_owner(later, (ConversationTurn(1, "owner", "再一件", via="text"),))
-        assert seen.hints == [("report", _BUSY)] and seen.typed == [("（角色的話）", 42)]
+        later = _Trigger(
+            "owner", "再一件", speaker_id=1, place=42, channel_id=900, message_id=43
+        )
+        await runtime.tasks.dispatch_owner(
+            later, (ConversationTurn(1, "owner", "再一件", via="text"),)
+        )
+        assert seen.hints == [("report", _BUSY)] and seen.typed == [
+            ("（角色的話）", 42)
+        ]
         assert not any(message == 43 for _, message, _ in seen.marks)
-        runtime.apply_settings({"character_agent": False})  # the owner turns the Agent off
+        runtime.apply_settings(
+            {"character_agent": False}
+        )  # the owner turns the Agent off
         assert seen.marks == [(900, 41, "failed")]
     finally:
         running.cancel()
@@ -773,17 +895,21 @@ async def test_the_controller_types_into_the_right_place_and_marks_the_message()
     controller = object.__new__(AppController)
     controller._closing = False
     controller._settings = SimpleNamespace(app=SimpleNamespace(max_text_length=300))
-    controller._discord, controller._copilot = Discord(), Copilot()
+    controller._discord, controller._copilot = (
+        SimpleNamespace(channels=Discord()),
+        Copilot(),
+    )
     scheduled = []
     controller._schedule = scheduled.append
     controller._type_as_character("在串裡回你", 42)
     controller._mark_task(900, 42, "done")
     for job in scheduled:
         await job
-    assert calls == [("send", "在串裡回你", 42), ("self", "在串裡回你", 42, "text"),
-                     ("mark", 900, 42, "done")]
-
-
+    assert calls == [
+        ("send", "在串裡回你", 42),
+        ("self", "在串裡回你", 42, "text"),
+        ("mark", 900, 42, "done"),
+    ]
 
 
 @pytest.mark.asyncio

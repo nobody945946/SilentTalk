@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import threading
 
-from silenttalk.copilot.types import ConversationTurn
+from silenttalk.conversation import ConversationTurn
 
 
 class ConversationStore:

@@ -3,36 +3,53 @@ from pathlib import Path
 
 import pytest
 
+from silenttalk.conversation import AgentTask, ConversationTurn
 from silenttalk.copilot.llm import LocalReplyModel
-from silenttalk.copilot.persona import EXAMPLE_PERSONAS
-from silenttalk.copilot.types import AgentTask, ConversationTurn
+from silenttalk.copilot.reply_parsing import parse_character_line
+from silenttalk.persona import EXAMPLE_PERSONAS
 
 
 def test_stream_reports_each_completed_line() -> None:
-    from silenttalk.copilot.llm import consume_stream
+    from silenttalk.copilot.reply_transport import consume_stream
 
     pieces = ["AGREE|好", "啊\nASK|真的", "嗎？\nDISAG", "REE|不要\nHUMOR|笑死"]
-    events = [b": keep-alive\n"] + [
-        ("data: " + json.dumps({"choices": [{"delta": {"content": p}}]}) + "\n").encode()
-        for p in pieces
-    ] + [b"data: [DONE]\n"]
+    events = (
+        [b": keep-alive\n"]
+        + [
+            (
+                "data: " + json.dumps({"choices": [{"delta": {"content": p}}]}) + "\n"
+            ).encode()
+            for p in pieces
+        ]
+        + [b"data: [DONE]\n"]
+    )
     seen: list[str] = []
 
     text = consume_stream(events, seen.append)
 
     assert text == "AGREE|好啊\nASK|真的嗎？\nDISAGREE|不要\nHUMOR|笑死"
-    assert seen == ["AGREE|好啊", "AGREE|好啊\nASK|真的嗎？", "AGREE|好啊\nASK|真的嗎？\nDISAGREE|不要"]
+    assert seen == [
+        "AGREE|好啊",
+        "AGREE|好啊\nASK|真的嗎？",
+        "AGREE|好啊\nASK|真的嗎？\nDISAGREE|不要",
+    ]
 
 
 def _sampling(model: LocalReplyModel, answers: list[str]) -> list[float]:
     """Make the model answer these lines in turn; returns the temperatures used."""
     temperatures: list[float] = []
 
-    def fake(messages, on_lines=None, max_tokens=240, character=False, temperature=0.65):
+    def fake(
+        messages, on_lines=None, max_tokens=240, character=False, temperature=0.65
+    ):
         temperatures.append(temperature)
-        return answers[len(temperatures) - 1] if len(temperatures) <= len(answers) else "好啊走"
+        return (
+            answers[len(temperatures) - 1]
+            if len(temperatures) <= len(answers)
+            else "好啊走"
+        )
 
-    model._request_messages = fake  # type: ignore[method-assign]
+    model.transport.request_messages = fake  # type: ignore[method-assign]
     return temperatures
 
 
@@ -87,7 +104,7 @@ def test_summary_uses_the_expanded_budget_and_keeps_previous_context() -> None:
         calls.append((system, prompt, max_tokens))
         return "重" * 800
 
-    model._request_completion = fake  # type: ignore[method-assign]
+    model.transport.request_completion = fake  # type: ignore[method-assign]
     summary = asyncio.run(model.summarize("這段對話", "更早的重要決定"))
 
     assert "最多六句、320 字以內" in calls[0][0]
@@ -140,26 +157,57 @@ def test_options_after_your_own_line_get_their_own_request_turn() -> None:
 
 
 def test_character_line_parsing() -> None:
-    from silenttalk.copilot.persona import EXAMPLE_PERSONAS
+    from silenttalk.persona import EXAMPLE_PERSONAS
 
     model = LocalReplyModel(Path("unused.gguf"))
     model.set_persona(EXAMPLE_PERSONAS[0])
 
-    assert model._parse_character_line("凱哥：穩啦，下波我先進\n多的", "衝B") == "穩啦，下波我先進"
-    assert model._parse_character_line("SAY|好啊走", "衝B") == "好啊走"
-    assert model._parse_character_line("說真的：我覺得先丟煙", "衝B") == "說真的：我覺得先丟煙"
-    assert model._parse_character_line("SKIP", "衝B") == ""
-    assert model._parse_character_line("衝B", "衝B") == ""
+    assert (
+        parse_character_line(
+            "凱哥：穩啦，下波我先進\n多的",
+            "衝B",
+            model.prompts.persona,
+            model.prompts.max_reply_chars,
+        )
+        == "穩啦，下波我先進"
+    )
+    assert (
+        parse_character_line(
+            "SAY|好啊走", "衝B", model.prompts.persona, model.prompts.max_reply_chars
+        )
+        == "好啊走"
+    )
+    assert (
+        parse_character_line(
+            "說真的：我覺得先丟煙",
+            "衝B",
+            model.prompts.persona,
+            model.prompts.max_reply_chars,
+        )
+        == "說真的：我覺得先丟煙"
+    )
+    assert (
+        parse_character_line(
+            "SKIP", "衝B", model.prompts.persona, model.prompts.max_reply_chars
+        )
+        == ""
+    )
+    assert (
+        parse_character_line(
+            "衝B", "衝B", model.prompts.persona, model.prompts.max_reply_chars
+        )
+        == ""
+    )
 
 
 def test_character_keeps_the_act_by_default_and_can_be_told_to_own_up() -> None:
     carry = EXAMPLE_PERSONAS[0]
-    in_character = LocalReplyModel(Path("unused.gguf"))._build_turn_system_prompt(
-        carry, "called"
-    )
+    in_character = LocalReplyModel(
+        Path("unused.gguf")
+    ).prompts._build_turn_system_prompt(carry, "called")
     admitting = LocalReplyModel(
         Path("unused.gguf"), ai_honesty="admit"
-    )._build_turn_system_prompt(carry, "called")
+    ).prompts._build_turn_system_prompt(carry, "called")
 
     assert "不要承認自己是程式" in in_character
     assert "誠實承認你是 AI 角色" not in in_character
@@ -186,7 +234,7 @@ def test_character_is_told_not_to_repeat_a_recent_catchphrase() -> None:
     turns = [ConversationTurn(2, "Ken", "打團嗎")]
 
     first = model.character_messages(turns=turns, addressed=True)[-1]["content"]
-    model._recent_character_lines.append("哼，吾之右手尚未解放")
+    model.prompts.recent_lines.append("哼，吾之右手尚未解放")
     second = model.character_messages(turns=turns, addressed=True)[-1]["content"]
 
     assert "你最近已經說過" not in first
@@ -293,13 +341,15 @@ class _Scripted(LocalReplyModel):
         self.set_persona(EXAMPLE_PERSONAS[0])
         self.gate, self.line = gate, line
         self.requests: list[tuple[str, list[dict[str, str]]]] = []
+        self.transport.request_gate = self._scripted_gate
+        self.transport.request_messages = self._scripted_line
 
-    def _request_gate(self, messages, character=True):
+    def _scripted_gate(self, messages, character=True):
         self.requests.append(("gate", messages))
         # A list scripts one answer per question, in order.
         return self.gate.pop(0) if isinstance(self.gate, list) else self.gate
 
-    def _request_messages(
+    def _scripted_line(
         self, messages, on_lines=None, max_tokens=240, character=False, temperature=0.65
     ):
         self.requests.append(("line", messages))
@@ -375,11 +425,14 @@ def test_relationships_are_in_the_character_system_prompt() -> None:
     """A "wife" persona has to know which speaker is her husband."""
     from dataclasses import replace
 
-    from silenttalk.copilot.persona import Relationship
+    from silenttalk.persona import Relationship
 
     model = LocalReplyModel(Path("unused.gguf"))
     model.set_persona(
-        replace(EXAMPLE_PERSONAS[1], relationships=(Relationship("阿明", "我老公，結婚三年"),))
+        replace(
+            EXAMPLE_PERSONAS[1],
+            relationships=(Relationship("阿明", "我老公，結婚三年"),),
+        )
     )
     system = model.character_messages(turns=_chat(CHAT))[0]["content"]
     assert "- 阿明：我老公，結婚三年" in system
@@ -387,20 +440,46 @@ def test_relationships_are_in_the_character_system_prompt() -> None:
 
 def test_a_line_that_mostly_repeats_what_was_said_is_dropped() -> None:
     model = LocalReplyModel(Path("unused.gguf"))
-    assert model._parse_character_line("有啊，週末去看電影", "有啊我們週末去看電影") == ""
+    assert (
+        parse_character_line(
+            "有啊，週末去看電影",
+            "有啊我們週末去看電影",
+            model.prompts.persona,
+            model.prompts.max_reply_chars,
+        )
+        == ""
+    )
     # Sharing a phrase is not echoing.
-    assert model._parse_character_line("好啦好啦，油錢我們分吧", "讚喔 那油錢我們分")
-    assert model._parse_character_line("穩啦", "穩") == "穩啦"
+    assert parse_character_line(
+        "好啦好啦，油錢我們分吧",
+        "讚喔 那油錢我們分",
+        model.prompts.persona,
+        model.prompts.max_reply_chars,
+    )
+    assert (
+        parse_character_line(
+            "穩啦", "穩", model.prompts.persona, model.prompts.max_reply_chars
+        )
+        == "穩啦"
+    )
 
 
 def test_only_character_requests_use_the_lora() -> None:
     model = LocalReplyModel(Path("unused.gguf"), lora_path=Path("adapter.gguf"))
-    assert model._lora_field(True) == {"id_slot": 0}  # role cache stays separate from Agent
-    model._lora_loaded = True
+    assert model.transport.lora_field(True) == {
+        "id_slot": 0
+    }  # role cache stays separate from Agent
+    model.transport.adapter_loaded = True
     # Each scale keeps its own slot: llama-server drops a slot's prompt cache
     # when the scale changes.
-    assert model._lora_field(True) == {"lora": [{"id": 0, "scale": 1.0}], "id_slot": 0}
-    assert model._lora_field(False) == {"lora": [{"id": 0, "scale": 0.0}], "id_slot": 1}
+    assert model.transport.lora_field(True) == {
+        "lora": [{"id": 0, "scale": 1.0}],
+        "id_slot": 0,
+    }
+    assert model.transport.lora_field(False) == {
+        "lora": [{"id": 0, "scale": 0.0}],
+        "id_slot": 1,
+    }
 
 
 @pytest.mark.asyncio
@@ -408,19 +487,23 @@ async def test_each_part_uses_the_lora_only_if_chosen() -> None:
     model = LocalReplyModel(
         Path("unused.gguf"), lora_path=Path("adapter.gguf"), lora_uses=("called",)
     )
-    model._lora_loaded = True
+    model.transport.adapter_loaded = True
     scales: list[tuple[str, float]] = []
 
     def gate(messages, character=True):
-        scales.append(("gate", model._lora_field(character)["lora"][0]["scale"]))
+        scales.append(
+            ("gate", model.transport.lora_field(character)["lora"][0]["scale"])
+        )
         return "是"
 
     def line(messages, on_lines=None, max_tokens=240, character=False):
-        scales.append(("line", model._lora_field(character)["lora"][0]["scale"]))
+        scales.append(
+            ("line", model.transport.lora_field(character)["lora"][0]["scale"])
+        )
         return "好啊"
 
-    model._request_gate = gate  # type: ignore[method-assign]
-    model._request_messages = line  # type: ignore[method-assign]
+    model.transport.request_gate = gate  # type: ignore[method-assign]
+    model.transport.request_messages = line  # type: ignore[method-assign]
     await model.character_turn(turns=_chat(CHAT), engagement="active")
 
     assert scales == [("gate", 1.0), ("line", 0.0)]
@@ -431,17 +514,23 @@ async def test_each_part_uses_the_lora_only_if_chosen() -> None:
 async def test_the_owners_thread_question_has_its_own_part(uses, applied) -> None:
     """Chat work ("task") and the owner's change-or-read question ("scope") are
     separate parts: an adapter trained on one is not applied to the other."""
-    model = LocalReplyModel(Path("unused.gguf"), lora_path=Path("adapter.gguf"), lora_uses=uses,
-                            agent_dispatch=True)
-    model._lora_loaded = True
+    model = LocalReplyModel(
+        Path("unused.gguf"),
+        lora_path=Path("adapter.gguf"),
+        lora_uses=uses,
+        agent_dispatch=True,
+    )
+    model.transport.adapter_loaded = True
     seen: list[bool] = []
-    model.task_scope_messages = lambda **_: [{"role": "user", "content": "測試"}]  # type: ignore[method-assign]
+    model.prompts.task_scope_messages = lambda **_: [
+        {"role": "user", "content": "測試"}
+    ]  # type: ignore[method-assign]
 
     def gate(messages, character=True):
         seen.append(character)
         return "否"
 
-    model._request_gate = gate  # type: ignore[method-assign]
+    model.transport.request_gate = gate  # type: ignore[method-assign]
     task = await model.task_from_owner(turns=_chat(CHAT))
     assert seen == [applied] and task is not None and task.scope == "read"
 
@@ -461,8 +550,8 @@ class _Dispatching(_Scripted):
 
     def __init__(self, gate, line="遵命") -> None:
         super().__init__(gate=gate, line=line)
-        self._agent_dispatch = True
-        self._ai_honesty = "machine"
+        self.set_agent_dispatch(True)
+        self.set_ai_honesty("machine")
         self.set_owner(7, "Rex")
 
 
@@ -561,7 +650,7 @@ async def test_no_task_unless_the_newest_line_is_the_owners_by_id() -> None:
     assert await model.task_from_owner(turns=spoken) is None
     assert model.requests == []
     unset = _Dispatching(gate="是")
-    unset._owner_id = None
+    unset.prompts.owner_id = None
     assert await unset.task_from_owner(turns=_owner_chat()) is None
     assert unset.requests == []
 

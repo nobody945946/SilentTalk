@@ -7,15 +7,21 @@ import threading
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import discord
 
 from silenttalk.agent_tasks import AgentTaskClient
 from silenttalk.config import Settings
-from silenttalk.copilot.persona import Persona
-from silenttalk.copilot.runtime import CopilotRuntime, ThinkingCallback, TurnCallback
-from silenttalk.copilot.types import VOICE_ROOM, ReplySuggestions
-from silenttalk.discord_voice import DiscordAudioPlayer, DiscordVoiceClient
+from silenttalk.conversation import (
+    VOICE_ROOM,
+    ReplySuggestions,
+    ThinkingCallback,
+    TurnCallback,
+)
+from silenttalk.discord_playback import DiscordAudioPlayer
+from silenttalk.discord_voice import DiscordVoiceClient
+from silenttalk.persona import Persona
 from silenttalk.speech_queue import SpeechQueue
 from silenttalk.speech_settings import validate_rate_multiplier
 from silenttalk.state import AppState
@@ -24,7 +30,11 @@ from silenttalk.tts.edge import EdgeTTSEngine
 from silenttalk.tts.local_play import play_wav, render_wav
 from silenttalk.voice_styles import VOICE_STYLES, VoiceStyle
 
+if TYPE_CHECKING:
+    from silenttalk.copilot.runtime import CopilotRuntime
+
 _LOG = logging.getLogger(__name__)
+_COPILOT_RETRY_SECONDS = 5.0
 StatusCallback = Callable[[AppState, str], None]
 SuggestionCallback = Callable[[ReplySuggestions], None]
 
@@ -40,6 +50,7 @@ class AppController:
         on_turn: TurnCallback | None = None,
         on_thinking: ThinkingCallback | None = None,
         on_agenda: Callable[[tuple[str, ...]], None] | None = None,
+        on_ai_status: Callable[[str], None] | None = None,
     ) -> None:
         self._settings = settings
         self._status = status
@@ -49,14 +60,22 @@ class AppController:
         )
         self._temp = tempfile.TemporaryDirectory(prefix="silenttalk-")
         self._copilot: CopilotRuntime | None = None
+        self._copilot_startup: asyncio.Task[None] | None = None
         self._agent_tasks = AgentTaskClient()
-        if settings.copilot.enabled and suggestions is not None:
-            self._copilot = CopilotRuntime(
+        self._on_ai_status = on_ai_status or (lambda message: None)
+        self._copilot_requested = settings.copilot.enabled and suggestions is not None
+        self._active_persona = None
+        self._desired_character_mode = False
+
+        def create_copilot():
+            from silenttalk.copilot.runtime import CopilotRuntime
+
+            return CopilotRuntime(
                 project_dir,
                 settings.copilot,
                 settings.discord.owner_user_id,
                 on_suggestions=suggestions,
-                on_error=lambda message: status(AppState.ERROR, message),
+                on_error=self._on_ai_status,
                 on_turn=on_turn,
                 on_thinking=on_thinking,
                 on_character_line=self._speak_as_character,
@@ -71,6 +90,16 @@ class AppController:
                 on_task_mark=self._mark_task,
                 thread_history=self._thread_history,
             )
+
+        self._copilot_factory = create_copilot
+        if self._copilot_requested:
+            try:
+                self._copilot = self._copilot_factory()
+            except Exception as exc:
+                _LOG.error(
+                    "copilot_initialization_failed error_type=%s", type(exc).__name__
+                )
+                self._on_ai_status("AI 正在重試載入")
         self._discord = DiscordVoiceClient(
             settings.discord,
             status,
@@ -82,7 +111,9 @@ class AppController:
             ),
             # Text channels and threads are conversations with the character,
             # so only in character mode.
-            threads_open=lambda: self._copilot is not None and self._copilot.character_mode,
+            threads_open=lambda: (
+                self._copilot is not None and self._copilot.character_mode
+            ),
             names=self._copilot.accepts_name if self._copilot else None,
         )
         self._tts = EdgeTTSEngine(settings.tts, Path(self._temp.name))
@@ -193,13 +224,15 @@ class AppController:
     ) -> None:
         """Safe from any thread. In character mode the bot is the active
         persona and speaks up by itself, in this voice."""
-        copilot = self._copilot
-        if copilot is None:
-            raise RuntimeError("Copilot 未啟用或啟動失敗。")
+        self._desired_character_mode = enabled
         if voice_style not in VOICE_STYLES:
             voice_style = "default"
         self._character_voice = (voice_style, validate_rate_multiplier(rate_multiplier))
-        self._loop.call_soon_threadsafe(copilot.set_character_mode, enabled)
+        copilot = self._copilot
+        if copilot is not None:
+            self._loop.call_soon_threadsafe(copilot.set_character_mode, enabled)
+        elif self._copilot_requested:
+            self._on_ai_status("AI 正在重試載入")
 
     def send_text(self, raw_text: str) -> None:
         """Type a line into the voice channel's text chat instead of saying it."""
@@ -207,8 +240,11 @@ class AppController:
         self._schedule(self._send_text(text))
 
     async def _send_text(self, text: str, place: int = VOICE_ROOM) -> None:
-        if not await self._discord.send_text(text, place):
-            self._status(AppState.ERROR, "訊息送不出去：確認 Bot 有這個頻道（或討論串）的發言權限。")
+        if not await self._discord.channels.send_text(text, place):
+            self._status(
+                AppState.ERROR,
+                "訊息送不出去：確認 Bot 有這個頻道（或討論串）的發言權限。",
+            )
             return
         if self._copilot is not None:
             # Same rule as speech: only what actually reached the channel
@@ -229,7 +265,9 @@ class AppController:
     def _mark_task(self, channel_id: int, message_id: int, state: str) -> None:
         """⚙️ / ✅ / ❌ on the owner's message that handed over the work."""
         if not self._closing:
-            self._schedule(self._discord.mark_task(channel_id, message_id, state))
+            self._schedule(
+                self._discord.channels.mark_task(channel_id, message_id, state)
+            )
 
     async def _agent_approval(self, payload: dict[str, object]) -> None:
         session_id = self._agent_tasks.session_id
@@ -239,16 +277,16 @@ class AppController:
                 return False
             return await self._agent_tasks.approve(call_id, approved)
 
-        await self._discord.send_approval(payload, decide)
+        await self._discord.channels.send_approval(payload, decide)
 
     async def _agent_private(self, text: str) -> bool:
-        return await self._discord.send_private(text)
+        return await self._discord.channels.send_private(text)
 
     async def _agent_result(self, text: str, place: int) -> bool:
-        return await self._discord.send_result(text, place)
+        return await self._discord.channels.send_result(text, place)
 
     async def _thread_history(self, place: int, before: int, limit: int) -> list:
-        return await self._discord.thread_history(place, before, limit)
+        return await self._discord.channels.thread_history(place, before, limit)
 
     def _speak_agent_line(self, line: str) -> None:
         """Task acknowledgments and reports wait behind current speech."""
@@ -293,6 +331,7 @@ class AppController:
 
     def set_persona(self, persona: Persona) -> None:
         """Safe from any thread; before start() it is applied once the loop runs."""
+        self._active_persona = persona
         self._persona_voice = persona.voice_style()
         copilot = self._copilot
         if copilot is not None and not self._closing:
@@ -357,26 +396,12 @@ class AppController:
 
     async def _bootstrap(self) -> None:
         self._queue.start()
-        try:
-            await self._tts.initialize()
-        except Exception as exc:  # noqa: BLE001 - online TTS failure is recoverable by design.
-            _LOG.warning(
-                "tts_initialization_deferred error_type=%s", type(exc).__name__
+        # TTS initializes on its first synthesis request. AI has its own
+        # startup task: neither optional service delays the voice gateway.
+        if self._copilot_requested:
+            self._copilot_startup = asyncio.create_task(
+                self._start_copilot(), name="copilot-startup"
             )
-            self._status(AppState.ERROR, f"TTS 暫時不可用：{exc}")
-
-        if self._copilot is not None:
-            try:
-                await self._copilot.start()
-            except Exception as exc:  # noqa: BLE001 - TTS-only mode must remain usable.
-                _LOG.exception("copilot_startup_failed")
-                self._status(AppState.ERROR, f"Copilot 啟動失敗：{exc}")
-                self._discord.set_pcm_callback(None)
-                try:
-                    await self._copilot.stop()
-                except Exception:
-                    _LOG.debug("copilot_partial_shutdown_failed", exc_info=True)
-                self._copilot = None
 
         try:
             await self._discord.start(self._settings.discord.token, reconnect=True)
@@ -388,11 +413,66 @@ class AppController:
             _LOG.exception("discord_connection_failed")
             self._status(AppState.ERROR, f"Discord 連線失敗：{exc}")
 
+    async def _start_copilot(self) -> None:
+        runtime = self._copilot
+        delay = _COPILOT_RETRY_SECONDS
+        while not self._closing:
+            try:
+                if runtime is None:
+                    runtime = self._copilot_factory()
+                    self._copilot = runtime
+                    if self._active_persona is not None:
+                        runtime.set_persona(self._active_persona)
+                    runtime.set_character_mode(self._desired_character_mode)
+                await runtime.start()
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                _LOG.error(
+                    "copilot_startup_retry error_type=%s delay_seconds=%.1f",
+                    type(exc).__name__,
+                    delay,
+                )
+                self._discord.set_pcm_callback(None)
+                self._discord.set_text_callback(None)
+                self._on_ai_status("AI 正在重試載入")
+                try:
+                    if runtime is not None:
+                        await runtime.stop()
+                except Exception as stop_exc:
+                    _LOG.error(
+                        "copilot_partial_shutdown_failed error_type=%s",
+                        type(stop_exc).__name__,
+                    )
+                await asyncio.sleep(delay)
+                delay = min(30.0, delay * 2)
+            else:
+                self._on_ai_status("AI 待命")
+                self._discord.messages.names = runtime.accepts_name
+                self._discord.set_pcm_callback(runtime.accept_pcm)
+                self._discord.set_text_callback(
+                    runtime.accept_text if self._settings.discord.text_chat else None
+                )
+                return
+
     async def _shutdown_async(self) -> None:
-        if self._copilot is not None:
-            await self._copilot.stop_agent_task()
-        await self._queue.shutdown()
+        startup = self._copilot_startup
+        self._copilot_startup = None
+        if startup is not None:
+            startup.cancel()
+            await asyncio.gather(startup, return_exceptions=True)
+        components = [("speech", self._queue.shutdown())]
         if not self._discord.is_closed():
-            await self._discord.close()
+            components.append(("discord", self._discord.close()))
         if self._copilot is not None:
-            await self._copilot.stop()
+            components.append(("copilot", self._copilot.stop()))
+        results = await asyncio.gather(
+            *(operation for _, operation in components), return_exceptions=True
+        )
+        for (name, _), result in zip(components, results, strict=True):
+            if isinstance(result, BaseException):
+                _LOG.error(
+                    "component_shutdown_failed component=%s error_type=%s",
+                    name,
+                    type(result).__name__,
+                )

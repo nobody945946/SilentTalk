@@ -2,16 +2,17 @@ from __future__ import annotations
 
 import os
 import shutil
-import tomllib
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+import tomllib
 from dotenv import load_dotenv
 
-from silenttalk.copilot.character import AI_HONESTY_MODES, ENGAGEMENT_MODES
+from silenttalk.ai_options import AI_HONESTY_MODES, ENGAGEMENT_MODES
 
-# Mirrors copilot.llm.MEMORY_LEVELS (config must not import the LLM module).
-MEMORY_LEVEL_NAMES = ("off", "light", "full")
+# The policy options are independent of model implementation.
+from silenttalk.ai_options import MEMORY_LEVELS as MEMORY_LEVEL_NAMES
+
 MEMORY_LEVEL_CHOICES: tuple[tuple[str, str], ...] = (
     ("off", "不記得（每次重新想今天的心事）"),
     ("light", "記得心事、近況和心情"),
@@ -163,7 +164,7 @@ def _model_filename(value: object) -> str:
 
 
 def _lora_uses(value: object) -> tuple[str, ...]:
-    from silenttalk.copilot.llm import LORA_PARTS
+    from silenttalk.ai_options import LORA_PARTS
 
     if value is None:
         return ()

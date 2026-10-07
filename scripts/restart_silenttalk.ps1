@@ -3,7 +3,9 @@ param(
     [string]$ProjectDir,
 
     [Parameter(Mandatory = $true)]
-    [string]$Pythonw
+    [string]$Pythonw,
+
+    [switch]$TtsOnly
 )
 
 Set-StrictMode -Version Latest
@@ -99,7 +101,8 @@ try {
         }
     }
 
-    $newProcess = Start-Process -FilePath $pythonwPath -ArgumentList @(('"' + $appPath + '"'), "--character-mode") -WorkingDirectory $projectDirPath -WindowStyle Hidden -PassThru
+    $modeArgument = if ($TtsOnly) { "--tts-only" } else { "--character-mode" }
+    $newProcess = Start-Process -FilePath $pythonwPath -ArgumentList @(('"' + $appPath + '"'), $modeArgument) -WorkingDirectory $projectDirPath -WindowStyle Hidden -PassThru
     Start-Sleep -Seconds 2
     if ($newProcess.HasExited) {
         throw "SilentTalk exited immediately after launch (exit code $($newProcess.ExitCode))."

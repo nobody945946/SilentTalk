@@ -4,7 +4,9 @@ import asyncio
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from silenttalk.copilot import llm
+from silenttalk import ai_options
+from silenttalk.conversation import ConversationTurn
+from silenttalk.copilot import character_generation, reply_prompts
 from silenttalk.copilot.character_state import (
     CharacterState,
     CharacterStateStore,
@@ -12,8 +14,7 @@ from silenttalk.copilot.character_state import (
     merge_state,
 )
 from silenttalk.copilot.llm import LocalReplyModel
-from silenttalk.copilot.persona import EXAMPLE_PERSONAS
-from silenttalk.copilot.types import ConversationTurn
+from silenttalk.persona import EXAMPLE_PERSONAS
 
 LIFE = CharacterState(
     concerns=(
@@ -85,7 +86,7 @@ def test_the_update_moves_concerns_on_in_its_own_words() -> None:
 看法|通宵還是要有人顧著時間
 感覺|小雨|每次都最早答應，很講義氣
 心情|很期待"""
-    state = llm._parse_state_update(raw, LIFE)
+    state = character_generation.parse_state_update(raw, LIFE)
 
     concerns = {c.text: c for c in state.concerns}
     assert concerns["想揪大家週六打通宵"].status == "done"
@@ -108,17 +109,23 @@ def test_off_is_the_measured_prompt_and_light_adds_its_life_and_the_clock() -> N
         model.set_persona(EXAMPLE_PERSONAS[0])
         model.set_state(LIFE)
 
-    system = off._build_turn_system_prompt(EXAMPLE_PERSONAS[0], "called")
+    system = off.prompts._build_turn_system_prompt(EXAMPLE_PERSONAS[0], "called")
     assert (
         "你今天心裡掛著的事（聊天時接得上就自然帶到，冷場時可以拿來開話題，不要硬塞）：\n"
         "- 想揪大家週六打通宵\n- 新滑鼠還沒拆\n"
     ) in system
     assert "【你自己的生活】" not in system and "加班" not in system
-    assert "現在是" not in off.character_messages(turns=turns, addressed=True)[-1]["content"]
+    assert (
+        "現在是"
+        not in off.character_messages(turns=turns, addressed=True)[-1]["content"]
+    )
 
-    system = light._build_turn_system_prompt(EXAMPLE_PERSONAS[0], "called")
+    system = light.prompts._build_turn_system_prompt(EXAMPLE_PERSONAS[0], "called")
     assert "【你自己的生活】" in system and "你最近：這週公司一直加班" in system
-    assert "現在是星期" in light.character_messages(turns=turns, addressed=True)[-1]["content"]
+    assert (
+        "現在是星期"
+        in light.character_messages(turns=turns, addressed=True)[-1]["content"]
+    )
 
 
 def test_new_concerns_follow_on_and_do_not_repeat() -> None:
@@ -126,15 +133,22 @@ def test_new_concerns_follow_on_and_do_not_repeat() -> None:
     model.set_persona(EXAMPLE_PERSONAS[0])
     asked: list[str] = []
 
-    def fake(messages, on_lines=None, max_tokens=240, character=False, temperature=0.65):
+    def fake(
+        messages, on_lines=None, max_tokens=240, character=False, temperature=0.65
+    ):
         asked.append(messages[0]["content"] + messages[-1]["content"])
         return "想揪大家週六打通宵啦\n1. 想把新鍵盤的燈調好\n下班想吃一碗牛肉麵"
 
-    model._request_messages = fake  # type: ignore[method-assign]
+    model.transport.request_messages = fake  # type: ignore[method-assign]
     state = asyncio.run(model.fill_concerns(LIFE))
 
     texts = [c.text for c in state.active_concerns()]
-    assert texts == ["想揪大家週六打通宵", "新滑鼠還沒拆", "想把新鍵盤的燈調好", "下班想吃一碗牛肉麵"]
+    assert texts == [
+        "想揪大家週六打通宵",
+        "新滑鼠還沒拆",
+        "想把新鍵盤的燈調好",
+        "下班想吃一碗牛肉麵",
+    ]
     assert "這週公司一直加班" in asked[0]  # it knows its recent life
     assert "再用第一人稱寫 2 件" in asked[0]
 
@@ -145,12 +159,17 @@ def test_updating_reads_the_chat_and_keeps_the_rest() -> None:
     model.set_state(LIFE)
     seen: list[str] = []
 
-    def fake(messages, on_lines=None, max_tokens=240, character=False, temperature=0.65):
+    def fake(
+        messages, on_lines=None, max_tokens=240, character=False, temperature=0.65
+    ):
         seen.append(messages[-1]["content"])
         return "進度|2|progress|拆了，手感比舊的好"
 
-    model._request_messages = fake  # type: ignore[method-assign]
-    turns = [ConversationTurn(2, "阿明", "你滑鼠拆了沒"), ConversationTurn(1, "凱哥", "拆了啊", is_self=True)]
+    model.transport.request_messages = fake  # type: ignore[method-assign]
+    turns = [
+        ConversationTurn(2, "阿明", "你滑鼠拆了沒"),
+        ConversationTurn(1, "凱哥", "拆了啊", is_self=True),
+    ]
     state = asyncio.run(model.update_state(turns))
 
     assert "阿明：你滑鼠拆了沒" in seen[0] and "你（凱哥）：拆了啊" in seen[0]
@@ -160,15 +179,15 @@ def test_updating_reads_the_chat_and_keeps_the_rest() -> None:
 
 
 def test_now_in_words() -> None:
-    assert llm._now_words(datetime(2026, 9, 25, 23, 40)) == "星期五晚上 23:40"
-    assert llm._now_words(datetime(2026, 9, 27, 2, 5)) == "星期日半夜 02:05"
-    assert llm._now_words(datetime.now() + timedelta(0)).startswith("星期")
+    assert reply_prompts._now_words(datetime(2026, 9, 25, 23, 40)) == "星期五晚上 23:40"
+    assert reply_prompts._now_words(datetime(2026, 9, 27, 2, 5)) == "星期日半夜 02:05"
+    assert reply_prompts._now_words(datetime.now() + timedelta(0)).startswith("星期")
 
 
 def test_memory_levels_are_the_same_in_config_and_model() -> None:
     from silenttalk.config import MEMORY_LEVEL_CHOICES, MEMORY_LEVEL_NAMES
 
-    assert llm.MEMORY_LEVELS == MEMORY_LEVEL_NAMES
+    assert ai_options.MEMORY_LEVELS == MEMORY_LEVEL_NAMES
     assert tuple(key for key, _ in MEMORY_LEVEL_CHOICES) == MEMORY_LEVEL_NAMES
 
 

@@ -12,13 +12,13 @@ import tkinter as tk
 from collections.abc import Callable
 
 from silenttalk import theme
-from silenttalk.copilot.persona import MOODS
-from silenttalk.copilot.types import (
+from silenttalk.conversation import (
     REPLY_LANES,
     ConversationTurn,
     ReplyLane,
     ReplySuggestions,
 )
+from silenttalk.persona import MOODS
 from silenttalk.widgets import hint_row, wrap_to_width
 
 # Choices you are reading or picking from stay put this long after they

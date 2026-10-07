@@ -66,9 +66,9 @@ def lanes_of(suggestions: Any) -> list[str]:
 
 
 async def generate(args: argparse.Namespace) -> None:
+    from silenttalk.conversation import ConversationTurn
     from silenttalk.copilot import llm as llm_module
     from silenttalk.copilot import persona as persona_module
-    from silenttalk.copilot.types import ConversationTurn
 
     test_set = te.load_test_set()
     old = te.load_old_modules(args.rev)
@@ -94,7 +94,8 @@ async def generate(args: argparse.Namespace) -> None:
     old_model = te.make_model(old.llm, old_path, config)
     # The app's 15 s limit is for a live chat; a shared or CPU-only eval box
     # can be slower, and one timeout should not cost the whole run.
-    new_model._request_timeout = old_model._request_timeout = 180.0
+    new_model.transport.timeout_seconds = 180.0
+    old_model._request_timeout = 180.0
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     out = OUT_DIR / f"{args.tag}.json"
     records: list[dict[str, Any]] = []
@@ -103,10 +104,21 @@ async def generate(args: argparse.Namespace) -> None:
     done = {r["conv"] for r in records}
 
     def save() -> None:
-        out.write_text(json.dumps({
-            "rev": args.rev, "model": model_path.name, "old_model": old_path.name,
-            "lora": args.lora, "cpu": args.cpu, "records": records,
-        }, ensure_ascii=False, indent=1), encoding="utf-8")
+        out.write_text(
+            json.dumps(
+                {
+                    "rev": args.rev,
+                    "model": model_path.name,
+                    "old_model": old_path.name,
+                    "lora": args.lora,
+                    "cpu": args.cpu,
+                    "records": records,
+                },
+                ensure_ascii=False,
+                indent=1,
+            ),
+            encoding="utf-8",
+        )
 
     await new_model.start()
     if own_server:
@@ -131,23 +143,37 @@ async def generate(args: argparse.Namespace) -> None:
             others = 0
             for index, line in enumerate(conv.lines):
                 if line.get("self"):
-                    new_turns.append(ConversationTurn(0, new_persona.name, line["text"], is_self=True))
-                    old_turns.append(old.types.ConversationTurn(
-                        0, old_persona.name, line["text"], is_self=True
-                    ))
+                    new_turns.append(
+                        ConversationTurn(
+                            0, new_persona.name, line["text"], is_self=True
+                        )
+                    )
+                    old_turns.append(
+                        old.types.ConversationTurn(
+                            0, old_persona.name, line["text"], is_self=True
+                        )
+                    )
                     old_store.append(old_turns[-1])
                     continue
-                new_turns.append(ConversationTurn(ids[line["speaker"]], line["speaker"], line["text"]))
-                old_turns.append(old.types.ConversationTurn(
-                    ids[line["speaker"]], line["speaker"], line["text"]
-                ))
+                new_turns.append(
+                    ConversationTurn(
+                        ids[line["speaker"]], line["speaker"], line["text"]
+                    )
+                )
+                old_turns.append(
+                    old.types.ConversationTurn(
+                        ids[line["speaker"]], line["speaker"], line["text"]
+                    )
+                )
                 old_store.append(old_turns[-1])
                 others += 1
                 if others % args.every:
                     continue
                 started = time.perf_counter()
                 new = await new_model.suggest(
-                    turns=list(new_turns), trigger_speaker=line["speaker"], trigger_text=line["text"]
+                    turns=list(new_turns),
+                    trigger_speaker=line["speaker"],
+                    trigger_text=line["text"],
                 )
                 new_ms = (time.perf_counter() - started) * 1000
                 started = time.perf_counter()
@@ -159,17 +185,28 @@ async def generate(args: argparse.Namespace) -> None:
                     else {"context": old_store.render_for_prompt()}
                 )
                 before = await old_model.suggest(
-                    **history, trigger_speaker=line["speaker"], trigger_text=line["text"]
+                    **history,
+                    trigger_speaker=line["speaker"],
+                    trigger_text=line["text"],
                 )
                 old_ms = (time.perf_counter() - started) * 1000
-                records.append({
-                    "conv": conv.id, "index": index, "persona": conv.persona_id,
-                    "old": lanes_of(before), "new": lanes_of(new),
-                    "thought": getattr(new, "thought", ""),
-                    "old_ms": round(old_ms), "new_ms": round(new_ms),
-                })
+                records.append(
+                    {
+                        "conv": conv.id,
+                        "index": index,
+                        "persona": conv.persona_id,
+                        "old": lanes_of(before),
+                        "new": lanes_of(new),
+                        "thought": getattr(new, "thought", ""),
+                        "old_ms": round(old_ms),
+                        "new_ms": round(new_ms),
+                    }
+                )
             save()
-            print(f"  {conv.id}: {sum(r['conv'] == conv.id for r in records)} points", flush=True)
+            print(
+                f"  {conv.id}: {sum(r['conv'] == conv.id for r in records)} points",
+                flush=True,
+            )
     finally:
         await new_model.stop()
         if own_server:

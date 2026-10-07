@@ -47,13 +47,14 @@ import subprocess
 import sys
 import tempfile
 import time
-import tomllib
 import types
 import urllib.request
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+import tomllib
 
 PROJECT_DIR = Path(__file__).resolve().parents[2]
 EDGE_AGENT_MODEL_DIR = Path(
@@ -332,13 +333,13 @@ def _compact(text: str) -> str:
 def _forget_generated(model: Any, line: str) -> None:
     """Teacher forcing: the generated line was never said, so it must not count
     as a recently used catchphrase; the scripted line is added instead."""
-    recent = getattr(model, "_recent_character_lines", None)
+    recent = recent_lines(model)
     if line and recent and recent[-1] == line:
         recent.pop()
 
 
 def _remember_said(model: Any, text: str) -> None:
-    recent = getattr(model, "_recent_character_lines", None)
+    recent = recent_lines(model)
     if recent is not None:
         recent.append(text)
 
@@ -356,27 +357,56 @@ class LeaseStandIn:
     own character-lease arguments (runtime.build_server_args: two slots with
     an adapter) and points the product's lease calls at it."""
 
-    def __init__(self, llm_module: Any, model_path: Path, lora: Path | None,
-                 config: dict[str, Any]) -> None:
+    def __init__(
+        self,
+        llm_module: Any,
+        model_path: Path,
+        lora: Path | None,
+        config: dict[str, Any],
+    ) -> None:
         sys.path.insert(0, str(EDGE_AGENT_ROOT))
         from edge_agent.runtime import build_server_args
 
         args = build_server_args(
-            str(EVAL_SERVER), model_path, port=EVAL_PORT,
-            context_size=int(config["llm_context_size"]), threads=8,
-            gpu_layers=0 if CPU_ONLY else 99, low_vram=True,
-            lora_paths=[lora] if lora is not None else (), slots=2 if lora is not None else 1)
-        self.process = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            str(EVAL_SERVER),
+            model_path,
+            port=EVAL_PORT,
+            context_size=int(config["llm_context_size"]),
+            threads=8,
+            gpu_layers=0 if CPU_ONLY else 99,
+            low_vram=True,
+            lora_paths=[lora] if lora is not None else (),
+            slots=2 if lora is not None else 1,
+        )
+        self.process = subprocess.Popen(
+            args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
         for _ in range(600):
             if self.process.poll() is not None:
                 raise SystemExit("eval llama-server exited while loading")
             try:
-                with urllib.request.urlopen(f"http://127.0.0.1:{EVAL_PORT}/health", timeout=2):
+                with urllib.request.urlopen(
+                    f"http://127.0.0.1:{EVAL_PORT}/health", timeout=2
+                ):
                     break
             except OSError:
                 time.sleep(1)
-        llm_module.acquire_character = lambda *_args, **_kw: {"port": EVAL_PORT}
-        llm_module.release_character = lambda *_args, **_kw: None
+        # Older baselines owned the lease calls in llm; current clients use
+        # the independent HTTP lease owner. The fixture replaces that owner.
+        transport_class = getattr(llm_module, "ReplyTransport", None)
+        lease_class = (sys.modules[transport_class.__module__].CharacterLease if transport_class
+                       else getattr(llm_module, "CharacterLease", None))
+        lease_module = (
+            sys.modules[lease_class.__module__] if lease_class else llm_module
+        )
+        lease_module.acquire_character = lambda *_args, **_kw: {"port": EVAL_PORT}
+        lease_module.release_character = lambda *_args, **_kw: None
+        if lease_class:
+            lease_module.service_status = lambda: {
+                "ready": self.process.poll() is None,
+                "mode": "character",
+                "owner_pid": os.getpid(),
+            }
 
     def close(self) -> None:
         self.process.terminate()
@@ -393,14 +423,18 @@ async def run_old(args: argparse.Namespace, test_set: TestSet) -> list[dict[str,
         for conv in test_set.conversations:
             persona = resolve_persona(old.persona, test_set, conv.persona_id)
             model.set_persona(persona)
-            model._recent_character_lines.clear()
+            recent = recent_lines(model)
+            if recent is not None:
+                recent.clear()
             store = old.context.ConversationStore(
                 recent_turns=int(config["recent_turns"]),
                 max_turns=int(config["max_session_turns"]),
                 char_budget=int(config["context_char_budget"]),
                 older_self_turns=4,
             )
-            compact_keep = max(int(config["recent_turns"]), int(config["compact_keep_turns"]))
+            compact_keep = max(
+                int(config["recent_turns"]), int(config["compact_keep_turns"])
+            )
             compact_trigger = compact_keep + max(4, int(config["compact_batch_turns"]))
             policy = old.character.CharacterPolicy(
                 mode=conv.engagement,
@@ -416,17 +450,32 @@ async def run_old(args: argparse.Namespace, test_set: TestSet) -> list[dict[str,
                 now += args.seconds_per_line
                 if line.get("self"):
                     # record_self(): what the bot actually said aloud.
-                    store.append(old.types.ConversationTurn(
-                        OWNER_ID, persona.name, line["text"], is_self=True, created_at=now
-                    ))
+                    store.append(
+                        old.types.ConversationTurn(
+                            OWNER_ID,
+                            persona.name,
+                            line["text"],
+                            is_self=True,
+                            created_at=now,
+                        )
+                    )
                     state.spoke(now)
                     _remember_said(model, line["text"])
                     continue
                 via = line.get("via", "voice")
-                store.append(old.types.ConversationTurn(
-                    ids[line["speaker"]], line["speaker"], line["text"], via=via, created_at=now
-                ))
-                if config["compact_context"] and len(store.snapshot()) >= compact_trigger:
+                store.append(
+                    old.types.ConversationTurn(
+                        ids[line["speaker"]],
+                        line["speaker"],
+                        line["text"],
+                        via=via,
+                        created_at=now,
+                    )
+                )
+                if (
+                    config["compact_context"]
+                    and len(store.snapshot()) >= compact_trigger
+                ):
                     # Production compacts in the background when idle; here it
                     # runs before the decision and is not counted as latency.
                     await compact(store, model, compact_keep)
@@ -439,7 +488,11 @@ async def run_old(args: argparse.Namespace, test_set: TestSet) -> list[dict[str,
                     line["text"], persona, mention=bool(line.get("mention"))
                 )
                 if not old.character.should_reply(
-                    policy, state, line["text"], addressed=address.worth_reading, now=now
+                    policy,
+                    state,
+                    line["text"],
+                    addressed=address.worth_reading,
+                    now=now,
                 ):
                     records.append(record | {"gate": "rule"})
                     continue
@@ -454,10 +507,16 @@ async def run_old(args: argparse.Namespace, test_set: TestSet) -> list[dict[str,
                 )
                 latency = (time.perf_counter() - started) * 1000
                 _forget_generated(model, reply)
-                records.append(record | {
-                    "gate": "model", "addressed": address.called, "spoke": bool(reply),
-                    "reply": reply, "latency_ms": round(latency, 1),
-                })
+                records.append(
+                    record
+                    | {
+                        "gate": "model",
+                        "addressed": address.called,
+                        "spoke": bool(reply),
+                        "reply": reply,
+                        "latency_ms": round(latency, 1),
+                    }
+                )
             print(f"  {conv.id}: done", flush=True)
     finally:
         await model.stop()
@@ -485,9 +544,9 @@ async def new_policy_turn(model: Any, turns: list[Any], addressed: bool, engagem
 
 
 async def run_new(args: argparse.Namespace, test_set: TestSet) -> list[dict[str, Any]]:
+    from silenttalk.conversation import ConversationTurn
     from silenttalk.copilot import llm as llm_module
     from silenttalk.copilot import persona as persona_module
-    from silenttalk.copilot.types import ConversationTurn
 
     if not hasattr(llm_module.LocalReplyModel, "character_turn"):
         raise SystemExit(
@@ -495,7 +554,9 @@ async def run_new(args: argparse.Namespace, test_set: TestSet) -> list[dict[str,
             "addressed=..., engagement=...) in silenttalk/copilot/llm.py; it does not exist yet."
         )
     config = copilot_config()
-    lora = PROJECT_DIR / ".runtime" / "models" / "llm" / args.lora if args.lora else None
+    lora = (
+        PROJECT_DIR / ".runtime" / "models" / "llm" / args.lora if args.lora else None
+    )
     if lora is not None and not lora.is_file():
         raise SystemExit(f"LoRA adapter not found: {lora}")
     model = make_model(llm_module, args.model_path, config, lora)
@@ -511,13 +572,17 @@ async def run_new(args: argparse.Namespace, test_set: TestSet) -> list[dict[str,
             persona = resolve_persona(persona_module, test_set, conv.persona_id)
             model.set_persona(persona)
             chain_pos[conv.persona_id] += 1
-            if hasattr(model, "_recent_character_lines"):
-                model._recent_character_lines.clear()
+            recent = recent_lines(model)
+            if recent is not None:
+                recent.clear()
             if hasattr(model, "set_state"):
                 from silenttalk.copilot.character_state import CharacterState
 
-                model.set_state(lives.get(conv.persona_id, CharacterState())
-                                if args.chain and MEMORY not in (None, "off") else CharacterState())
+                model.set_state(
+                    lives.get(conv.persona_id, CharacterState())
+                    if args.chain and MEMORY not in (None, "off")
+                    else CharacterState()
+                )
             agenda: tuple[str, ...] = ()
             if args.agenda:
                 agenda = await model.make_agenda()
@@ -530,55 +595,97 @@ async def run_new(args: argparse.Namespace, test_set: TestSet) -> list[dict[str,
             for index, line in enumerate(conv.lines):
                 now += args.seconds_per_line
                 if line.get("self"):
-                    turns.append(ConversationTurn(
-                        OWNER_ID, persona.name, line["text"], is_self=True, created_at=now
-                    ))
+                    turns.append(
+                        ConversationTurn(
+                            OWNER_ID,
+                            persona.name,
+                            line["text"],
+                            is_self=True,
+                            created_at=now,
+                        )
+                    )
                     _remember_said(model, line["text"])
                     continue
-                turns.append(ConversationTurn(
-                    ids[line["speaker"]], line["speaker"], line["text"],
-                    via=line.get("via", "voice"), created_at=now,
-                ))
+                turns.append(
+                    ConversationTurn(
+                        ids[line["speaker"]],
+                        line["speaker"],
+                        line["text"],
+                        via=line.get("via", "voice"),
+                        created_at=now,
+                    )
+                )
                 started = time.perf_counter()
                 task_fields: dict[str, Any] = {}
                 task = ""
                 if agent_persona() and line["speaker"] == OWNER_NAME:
                     # What the app asks first for the owner's lines: is it work?
-                    found = await model.task_from_owner(turns=list(turns), engagement=conv.engagement)
+                    found = await model.task_from_owner(
+                        turns=list(turns), engagement=conv.engagement
+                    )
                     # Older revisions (--old-rev) return the text alone.
                     task = getattr(found, "text", found) or ""
-                    task_fields = {"task_expected": bool(line.get("task")),
-                                   "task_said": bool(task), "task_text": task,
-                                   "task_scope": getattr(found, "scope", None)}
+                    task_fields = {
+                        "task_expected": bool(line.get("task")),
+                        "task_said": bool(task),
+                        "task_text": task,
+                        "task_scope": getattr(found, "scope", None),
+                    }
                 if task:
                     reply = await model.character_turn(
-                        turns=list(turns), engagement=conv.engagement, task_hint=("ack", task))
+                        turns=list(turns),
+                        engagement=conv.engagement,
+                        task_hint=("ack", task),
+                    )
                 else:
                     reply = await new_policy_turn(
                         model, list(turns), bool(line.get("mention")), conv.engagement
                     )
                 latency = (time.perf_counter() - started) * 1000
                 _forget_generated(model, reply)
-                records.append(base_record(conv, index, line) | {
-                    "gate": "model", "addressed": bool(line.get("mention")),
-                    "spoke": bool(reply), "reply": reply, "latency_ms": round(latency, 1),
-                    "chain_pos": chain_pos[conv.persona_id], **task_fields,
-                })
+                records.append(
+                    base_record(conv, index, line)
+                    | {
+                        "gate": "model",
+                        "addressed": bool(line.get("mention")),
+                        "spoke": bool(reply),
+                        "reply": reply,
+                        "latency_ms": round(latency, 1),
+                        "chain_pos": chain_pos[conv.persona_id],
+                        **task_fields,
+                    }
+                )
             if args.lull:
                 # The channel goes quiet after the last line: does the
                 # character open a topic of its own?
                 started = time.perf_counter()
                 reply = await model.character_turn(
-                    turns=list(turns), addressed=False, engagement=conv.engagement, lull=True
+                    turns=list(turns),
+                    addressed=False,
+                    engagement=conv.engagement,
+                    lull=True,
                 )
-                records.append({
-                    "conv": conv.id, "index": len(conv.lines), "persona": conv.persona_id,
-                    "engagement": conv.engagement, "speaker": "", "text": "",
-                    "via": "voice", "mention": False, "expect": "lull", "tags": ["lull"],
-                    "gate": "lull", "lull": True, "addressed": False,
-                    "spoke": bool(reply), "reply": reply, "chain_pos": chain_pos[conv.persona_id],
-                    "latency_ms": round((time.perf_counter() - started) * 1000, 1),
-                })
+                records.append(
+                    {
+                        "conv": conv.id,
+                        "index": len(conv.lines),
+                        "persona": conv.persona_id,
+                        "engagement": conv.engagement,
+                        "speaker": "",
+                        "text": "",
+                        "via": "voice",
+                        "mention": False,
+                        "expect": "lull",
+                        "tags": ["lull"],
+                        "gate": "lull",
+                        "lull": True,
+                        "addressed": False,
+                        "spoke": bool(reply),
+                        "reply": reply,
+                        "chain_pos": chain_pos[conv.persona_id],
+                        "latency_ms": round((time.perf_counter() - started) * 1000, 1),
+                    }
+                )
             if agenda:
                 AGENDAS[conv.id] = list(agenda)
             if args.chain and MEMORY not in (None, "off"):
@@ -1163,6 +1270,13 @@ def main() -> int:
     print_metrics(metrics, result.get("judge"))
     print(f"saved {path}")
     return 0
+
+
+
+
+def recent_lines(model):
+    prompts = getattr(model, "prompts", None)
+    return prompts.recent_lines if prompts is not None else getattr(model, "_recent_character_lines", None)
 
 
 if __name__ == "__main__":

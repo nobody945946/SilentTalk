@@ -11,8 +11,8 @@ import pytest
 
 from silenttalk import records
 from silenttalk.config import CopilotConfig
+from silenttalk.conversation import ConversationTurn
 from silenttalk.copilot.runtime import CopilotRuntime
-from silenttalk.copilot.types import ConversationTurn
 from silenttalk.records import (
     MARKER,
     TranscriptRecorder,

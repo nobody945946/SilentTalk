@@ -3,6 +3,7 @@ param(
     [string]$AgentDir = $env:EDGE_AGENT_HOME,
     [switch]$SetupOnly,
     [switch]$Check,
+    [switch]$TtsOnly,
     [switch]$Library
 )
 Set-StrictMode -Version Latest
@@ -222,4 +223,4 @@ try {
     & (Join-Path $ProjectDir '.venv\Scripts\python.exe') -c 'from pathlib import Path; from silenttalk.config import load_settings; load_settings(Path.cwd())'
     if ($LASTEXITCODE -ne 0) { throw 'SilentTalk configuration is invalid.' }
 } finally { Pop-Location }
-& (Join-Path $ProjectDir 'scripts\restart_silenttalk.ps1') -ProjectDir $ProjectDir -Pythonw (Join-Path $ProjectDir '.venv\Scripts\pythonw.exe')
+& (Join-Path $ProjectDir 'scripts\restart_silenttalk.ps1') -ProjectDir $ProjectDir -Pythonw (Join-Path $ProjectDir '.venv\Scripts\pythonw.exe') -TtsOnly:$TtsOnly

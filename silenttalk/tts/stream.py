@@ -26,6 +26,7 @@ class AudioStream:
         self._pending = b""
         self._ended = False
         self._task: asyncio.Task[None] | None = None
+        self._loop: asyncio.AbstractEventLoop | None = None
         self.error: BaseException | None = None
 
     def feed(self, data: bytes) -> None:
@@ -60,6 +61,7 @@ class AudioStream:
         first chunk is in; errors before that are raised here, so a failed
         synthesis still fails the job instead of playing silence."""
         loop = asyncio.get_running_loop()
+        self._loop = loop
         first: asyncio.Future[None] = loop.create_future()
 
         async def pump() -> None:
@@ -90,5 +92,12 @@ class AudioStream:
     def close(self) -> None:
         """Stop the producer and release a reader blocked in read()."""
         if self._task is not None and not self._task.done():
-            self._task.cancel()
+            try:
+                current = asyncio.get_running_loop()
+            except RuntimeError:
+                current = None
+            if current is self._loop:
+                self._task.cancel()
+            elif self._loop is not None and not self._loop.is_closed():
+                self._loop.call_soon_threadsafe(self._task.cancel)
         self.finish()

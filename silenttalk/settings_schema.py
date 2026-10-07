@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from silenttalk.ai_options import AI_HONESTY_MODES, ENGAGEMENT_MODES
 from silenttalk.config import MEMORY_LEVEL_CHOICES, STT_ENGINES
-from silenttalk.copilot.character import AI_HONESTY_MODES, ENGAGEMENT_MODES
 from silenttalk.voice_styles import PERSONA_VOICES
 
 

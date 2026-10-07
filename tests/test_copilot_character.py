@@ -1,5 +1,5 @@
 from silenttalk.copilot.character import NameMatcher, asks_if_ai, persona_names
-from silenttalk.copilot.persona import (
+from silenttalk.persona import (
     EXAMPLE_PERSONAS,
     MACHINE_SPIRIT,
     Persona,

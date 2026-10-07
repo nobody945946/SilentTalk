@@ -3,15 +3,14 @@ from __future__ import annotations
 import argparse
 import asyncio
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 from silenttalk.config import ConfigError, config_defaults, load_settings
 from silenttalk.controller import AppController
-from silenttalk.copilot.persona import PersonaStore
-from silenttalk.copilot.smoke import run_copilot_smoke
-from silenttalk.copilot.stt_check import run_stt_check
-from silenttalk.copilot.types import ConversationTurn, ReplySuggestions
+from silenttalk.conversation import ConversationTurn, ReplySuggestions
 from silenttalk.logging_setup import configure_logging
+from silenttalk.persona import PersonaStore
 from silenttalk.phrases import QuickPhraseStore
 from silenttalk.preferences import PreferenceStore
 from silenttalk.settings_store import SETTINGS_FILE, SettingsStore
@@ -42,10 +41,16 @@ def main() -> int:
         action="store_true",
         help="Real-voice STT: the owner reads fixed sentences in Discord voice, scored by CER",
     )
-    parser.add_argument(
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
         "--character-mode",
         action="store_true",
         help="Start in character mode immediately",
+    )
+    mode.add_argument(
+        "--tts-only",
+        action="store_true",
+        help="Run typed speech without loading AI models or changing saved settings",
     )
     args = parser.parse_args()
 
@@ -56,8 +61,12 @@ def main() -> int:
     except (ConfigError, OSError, ValueError) as exc:
         print(f"SilentTalk 設定錯誤：{exc}", file=sys.stderr)
         return 2
+    if args.tts_only:
+        settings = replace(settings, copilot=replace(settings.copilot, enabled=False))
 
     if args.copilot_smoke:
+        from silenttalk.copilot.smoke import run_copilot_smoke
+
         try:
             passed = asyncio.run(run_copilot_smoke(settings, project_dir))
         except Exception as exc:  # noqa: BLE001 - CLI boundary reports smoke failures.
@@ -66,6 +75,8 @@ def main() -> int:
         return 0 if passed else 5
 
     if args.stt_check:
+        from silenttalk.copilot.stt_check import run_stt_check
+
         try:
             passed = asyncio.run(run_stt_check(settings, project_dir))
         except Exception as exc:  # noqa: BLE001 - CLI boundary reports check failures.
@@ -92,6 +103,10 @@ def main() -> int:
         if ui is not None:
             ui.set_status(state, message)
 
+    def ai_status(message: str) -> None:
+        if ui is not None:
+            ui.set_ai_status(message)
+
     def suggestions(payload: ReplySuggestions) -> None:
         if ui is not None:
             ui.set_suggestions(payload)
@@ -116,6 +131,7 @@ def main() -> int:
         on_turn=conversation_turn,
         on_thinking=thinking,
         on_agenda=agenda,
+        on_ai_status=ai_status,
     )
     quick_phrases = QuickPhraseStore(project_dir / "quick_phrases.json")
     preferences = PreferenceStore(project_dir / "ui_preferences.json")

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import io
 import json
 import os
@@ -11,7 +12,6 @@ from unittest.mock import patch
 import pytest
 
 from silenttalk import agent_lease
-from silenttalk.copilot import llm
 from silenttalk.copilot import smoke as copilot_smoke
 from silenttalk.copilot.llm import LocalReplyModel
 
@@ -31,7 +31,7 @@ def test_silenttalk_sends_character_configuration_through_http_api(
         "load_settings",
         lambda project_dir: SimpleNamespace(copilot=config),
     )
-    monkeypatch.setattr(agent_lease, "ensure_service", dict)
+    monkeypatch.setattr(agent_lease, "ensure_service", lambda **kwargs: {})
     monkeypatch.setattr(
         agent_lease,
         "post_json",
@@ -140,14 +140,14 @@ async def test_silenttalk_always_borrows_and_releases_e4b(
 ) -> None:
     calls: list[tuple[str, int]] = []
     monkeypatch.setattr(
-        llm,
+        agent_lease,
         "acquire_character",
         lambda project_dir, owner_pid: (
             calls.append(("acquire", owner_pid)) or {"port": 18089}
         ),
     )
     monkeypatch.setattr(
-        llm,
+        agent_lease,
         "release_character",
         lambda owner_pid: calls.append(("release", owner_pid)),
     )
@@ -158,13 +158,13 @@ async def test_silenttalk_always_borrows_and_releases_e4b(
     )
 
     await model.start()
-    assert model._lease_active is True
-    assert model._lora_loaded is True
-    assert model._base_url == "http://127.0.0.1:18089"
+    assert model.transport.lease.owned is True
+    assert model.transport.adapter_loaded is True
+    assert model.transport.base_url == "http://127.0.0.1:18089"
     await model.stop()
 
     assert calls == [("acquire", os.getpid()), ("release", os.getpid())]
-    assert model._lease_active is False
+    assert model.transport.lease.owned is False
 
 
 def test_edge_client_starts_global_e4b_without_importing_core(
@@ -222,3 +222,80 @@ def test_silenttalk_source_has_no_edge_agent_import_or_local_server_builder() ->
     assert "from edge_agent" not in sources
     assert "import edge_agent" not in sources
     assert "build_server_args" not in sources
+
+
+def test_character_acquisition_does_not_require_a_healthy_previous_model(monkeypatch):
+    monkeypatch.setattr(
+        agent_lease, "service_status", lambda: {"ready": False, "error": "model crash"}
+    )
+    assert agent_lease.ensure_service(require_ready=False)["ready"] is False
+
+
+@pytest.mark.asyncio
+async def test_lease_retries_initial_failure_and_recovers_a_lost_service(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(agent_lease, "_LEASE_CHECK_SECONDS", 0.01)
+    monkeypatch.setattr(agent_lease, "_LEASE_RETRY_SECONDS", 0.01)
+    acquired = []
+    connected = []
+    released = []
+    status = {"ready": True, "mode": "character", "owner_pid": 123}
+
+    def acquire(project_dir, owner_pid):
+        acquired.append(owner_pid)
+        if len(acquired) == 1:
+            raise agent_lease.AgentLeaseError("synthetic unavailable service")
+        status["ready"] = True
+        return {"port": 18089 + len(acquired) - 2}
+
+    monkeypatch.setattr(agent_lease, "acquire_character", acquire)
+    monkeypatch.setattr(agent_lease, "service_status", lambda: dict(status))
+    monkeypatch.setattr(agent_lease, "release_character", released.append)
+    lease = agent_lease.CharacterLease(tmp_path, 123, connected.append)
+    try:
+        await asyncio.wait_for(lease.start(), timeout=1)
+        assert acquired == [123, 123]
+        assert connected == [{"port": 18089}]
+        status["ready"] = False
+        async with asyncio.timeout(1):
+            while len(connected) < 2:
+                await asyncio.sleep(0.01)
+        assert connected[-1] == {"port": 18090}
+        assert not released
+    finally:
+        await lease.stop()
+    assert released == [123]
+
+
+@pytest.mark.asyncio
+async def test_stopping_an_unavailable_lease_cancels_retries(tmp_path, monkeypatch):
+    attempts = []
+
+    def fail(*args):
+        attempts.append(1)
+        raise agent_lease.AgentLeaseError("synthetic unavailable service")
+
+    monkeypatch.setattr(agent_lease, "acquire_character", fail)
+    lease = agent_lease.CharacterLease(tmp_path, 123, lambda _: None)
+    waiting = asyncio.create_task(lease.start())
+    async with asyncio.timeout(1):
+        while not attempts:
+            await asyncio.sleep(0.01)
+    await lease.stop()
+    waiting.cancel()
+    await asyncio.gather(waiting, return_exceptions=True)
+    assert lease._task is None
+    assert not lease.owned
+    assert attempts == [1]
+
+
+def test_a_late_http_response_returns_the_closed_lease(tmp_path, monkeypatch):
+    returned = []
+    lease = agent_lease.CharacterLease(tmp_path, 123, lambda _: None)
+    monkeypatch.setattr(agent_lease, "acquire_character", lambda *_: {"port": 18089})
+    monkeypatch.setattr(agent_lease, "release_character", returned.append)
+    lease._closed.set()
+    with pytest.raises(agent_lease.AgentLeaseError, match="closed"):
+        lease._acquire(lease._closed)
+    assert returned == [123]

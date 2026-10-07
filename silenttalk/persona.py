@@ -195,7 +195,9 @@ class Persona:
             lines.append(f"現在的心情：{self.mood}（語氣要帶出來）")
         return "\n".join(lines)
 
-    def reminder_line(self, what: str = "四句都要是", *, list_catchphrases: bool = True) -> str:
+    def reminder_line(
+        self, what: str = "四句都要是", *, list_catchphrases: bool = True
+    ) -> str:
         """One line restating who is talking, placed right before the answer.
 
         Character mode speaks one line after another, so listing catchphrases
@@ -210,8 +212,12 @@ class Persona:
 
     def signature_phrases(self) -> list[str]:
         """Catchphrases and sample lines: what a small model over-repeats."""
-        phrases = [p.strip() for p in self.catchphrases.split("、") if len(p.strip()) >= 2]
-        phrases += [line.strip() for line in self.sample_lines.splitlines() if line.strip()]
+        phrases = [
+            p.strip() for p in self.catchphrases.split("、") if len(p.strip()) >= 2
+        ]
+        phrases += [
+            line.strip() for line in self.sample_lines.splitlines() if line.strip()
+        ]
         return phrases
 
     def length_rule(self) -> str:

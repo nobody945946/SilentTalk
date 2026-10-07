@@ -14,7 +14,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
-from silenttalk.copilot.persona import Persona
+from silenttalk.persona import Persona
 
 # When the character opens its mouth at all.
 #   called  - only when a line calls it: its name (by sound, in voice and
@@ -23,16 +23,6 @@ from silenttalk.copilot.persona import Persona
 # Asked "are you an AI?", the character either stays in the fiction or steps
 # out of it. In a private channel among friends this is a storytelling
 # choice, like an NPC never admitting it is scripted.
-AI_HONESTY_MODES: tuple[tuple[str, str], ...] = (
-    ("in_character", "照角色演（不承認）"),
-    ("admit", "承認自己是 AI"),
-    ("machine", "機器角色（自認是機器，不說是 AI）"),
-)
-
-ENGAGEMENT_MODES: tuple[tuple[str, str], ...] = (
-    ("called", "被叫到才回"),
-    ("active", "會主動加入"),
-)
 
 
 @dataclass(frozen=True, slots=True)

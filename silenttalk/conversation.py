@@ -1,5 +1,11 @@
+"""Conversation data shared by the UI, transport, records, and optional AI.
+
+This module has no dependency on a model, speech recognizer, or Discord.
+"""
+
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from time import time
 
@@ -99,3 +105,38 @@ class ReplySuggestions:
 
     def has_any(self) -> bool:
         return any(text for _, text in self.items())
+
+
+TurnCallback = Callable[[ConversationTurn], None]
+ThinkingCallback = Callable[[str, str], None]
+
+
+Attachment = tuple[str, Callable[[], Awaitable[bytes]]]
+
+
+@dataclass(frozen=True, slots=True)
+class Trigger:
+    speaker_name: str
+    text: str
+    # Position in the conversation, to notice when the chat moved on.
+    seq: int = 0
+    # Discord's own signal: an @mention of the bot or a reply to it.
+    addressed: bool = False
+    via: str = "voice"
+    # time.monotonic() when the line came in, to log how long an answer took
+    # including any wait behind the previous generation.
+    heard_at: float = 0.0
+    speaker_id: int = 0
+    # Where it was said (VOICE_ROOM or a thread) and the Discord message it
+    # came in, which gets the task marks when it hands over work.
+    place: int = VOICE_ROOM
+    channel_id: int = 0
+    message_id: int = 0
+    # Files posted with the line, read only if the line hands work over.
+    attachments: tuple[Attachment, ...] = ()
+
+
+AGENT_NAME = "思考機"
+AGENT_SPEAKER_ID = 0
+AGENT_RESULT_CONTEXT_CHARS = 800
+SPOKEN_RESULT_CHARS = 600

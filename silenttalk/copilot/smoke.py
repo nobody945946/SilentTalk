@@ -17,12 +17,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from silenttalk.config import CopilotConfig, Settings
+from silenttalk.conversation import REPLY_LANES, ConversationTurn, ReplySuggestions
 from silenttalk.copilot.context import ConversationStore
 from silenttalk.copilot.llm import LocalReplyModel
 from silenttalk.copilot.script import to_taiwan_traditional
 from silenttalk.copilot.stt import StreamingTranscriber
 from silenttalk.copilot.stt_offline import OfflineTranscriber
-from silenttalk.copilot.types import REPLY_LANES, ConversationTurn, ReplySuggestions
 from silenttalk.tts.edge import EdgeTTSEngine
 
 DISCORD_FRAME_BYTES = 3840  # 20 ms of 48 kHz stereo s16le, what voice_recv delivers

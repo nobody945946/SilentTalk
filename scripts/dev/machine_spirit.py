@@ -23,7 +23,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
-from silenttalk.copilot.persona import (  # noqa: E402
+from silenttalk.persona import (  # noqa: E402
     MACHINE_SPIRIT,
     REPLY_LENGTHS,
     TEXT_FIELDS,

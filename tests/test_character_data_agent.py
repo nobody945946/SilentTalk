@@ -20,12 +20,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts" / "dev"))
 import character_data  # noqa: E402
 import machine_spirit  # noqa: E402
 
-from silenttalk.copilot.llm import (  # noqa: E402
-    _CHAT_TASK_ASK,
-    TASK_HINTS,
-    LocalReplyModel,
-)
-from silenttalk.copilot.persona import MACHINE_SPIRIT, persona_to_dict  # noqa: E402
+from silenttalk.copilot.llm import LocalReplyModel
+from silenttalk.copilot.reply_templates import _CHAT_TASK_ASK, TASK_HINTS
+from silenttalk.persona import MACHINE_SPIRIT, persona_to_dict  # noqa: E402
 
 NAME = MACHINE_SPIRIT.name
 OWNER = "阿測"
@@ -144,14 +141,22 @@ def test_render_asks_only_what_the_app_asks_the_machine_spirit(chardata: Path) -
     assert all(r["owner"] == OWNER for r in rows)
 
 
-def _app_requests(script: dict[str, Any], turns: list, persona) -> dict[tuple[int, str], list]:
+def _app_requests(
+    script: dict[str, Any], turns: list, persona
+) -> dict[tuple[int, str], list]:
     """The requests LocalReplyModel itself sends, replaying the chat as the
     app does (runtime: chat_task on a call, then the ack or the answer; the
     report after the Agent's result; the lull; task_from_owner in a thread),
     with the model's replies stubbed to the script's own lines."""
     spec = script["spec"]
-    model = LocalReplyModel(Path("unused.gguf"), can_type=True, ai_honesty="machine",
-                            agent_dispatch=True, owner_id=1, owner_name=OWNER)
+    model = LocalReplyModel(
+        Path("unused.gguf"),
+        can_type=True,
+        ai_honesty="machine",
+        agent_dispatch=True,
+        owner_id=1,
+        owner_name=OWNER,
+    )
     model.set_persona(persona)
     model.set_agenda(script["concerns"])
     sent: dict[tuple[int, str], list] = {}
@@ -161,40 +166,68 @@ def _app_requests(script: dict[str, Any], turns: list, persona) -> dict[tuple[in
         sent[reply["gate_key"]] = messages
         return reply["gate"]
 
-    def request(messages, on_lines=None, max_tokens=240, character=False, temperature=0.65):
+    def request(
+        messages, on_lines=None, max_tokens=240, character=False, temperature=0.65
+    ):
         sent[reply["key"]] = messages
         return reply["text"]
 
-    model._request_gate = gate
-    model._request_messages = request
+    model.transport.request_gate = gate
+    model.transport.request_messages = request
     lines = script["lines"]
     for index, line in enumerate(lines):
         history = turns[: index + 1]
         if "ask" in line:
             work = line["ask"] == "work"
-            reply.update(gate_key=(index, "gate_chat_task"), gate="是" if work else "否",
-                         key=(index, "task_text"), text=line.get("task", ""))
+            reply.update(
+                gate_key=(index, "gate_chat_task"),
+                gate="是" if work else "否",
+                key=(index, "task_text"),
+                text=line.get("task", ""),
+            )
             if work:
                 task = asyncio.run(model.chat_task(turns=history, engagement="called"))
                 reply.update(key=(index, "ack"), text=lines[index + 1]["t"])
-                asyncio.run(model.character_turn(turns=history, engagement="called",
-                                                 task_hint=("ack", task.text)))
+                asyncio.run(
+                    model.character_turn(
+                        turns=history, engagement="called", task_hint=("ack", task.text)
+                    )
+                )
             else:
-                assert asyncio.run(model.chat_task(turns=history, engagement="called")) is None
+                assert (
+                    asyncio.run(model.chat_task(turns=history, engagement="called"))
+                    is None
+                )
                 reply.update(key=(index, "line"), text=lines[index + 1]["t"])
-                asyncio.run(model.character_turn(turns=history, addressed=True,
-                                                 engagement="called"))
+                asyncio.run(
+                    model.character_turn(
+                        turns=history, addressed=True, engagement="called"
+                    )
+                )
         elif line.get("report"):
             reply.update(key=(index, "report"), text=line["t"])
-            asyncio.run(model.character_turn(turns=turns[:index], engagement="called",
-                                             task_hint=("report", line["report"])))
+            asyncio.run(
+                model.character_turn(
+                    turns=turns[:index],
+                    engagement="called",
+                    task_hint=("report", line["report"]),
+                )
+            )
         elif line.get("quiet"):
             reply.update(key=(index, "lull"), text=line["t"])
-            asyncio.run(model.character_turn(turns=turns[:index], engagement="called", lull=True))
+            asyncio.run(
+                model.character_turn(
+                    turns=turns[:index], engagement="called", lull=True
+                )
+            )
         elif "changes" in line:
-            reply.update(gate_key=(index, "gate_task_scope"),
-                         gate="是" if line["changes"] else "否")
-            asyncio.run(model.task_from_owner(turns=history, engagement=spec["engagement"]))
+            reply.update(
+                gate_key=(index, "gate_task_scope"),
+                gate="是" if line["changes"] else "否",
+            )
+            asyncio.run(
+                model.task_from_owner(turns=history, engagement=spec["engagement"])
+            )
     return sent
 
 

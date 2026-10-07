@@ -9,12 +9,9 @@ from types import SimpleNamespace
 import discord
 
 from silenttalk.config import DiscordConfig
-from silenttalk.discord_voice import (
-    BOT_PERMISSIONS,
-    TASK_MARKS,
-    DiscordVoiceClient,
-    invite_url,
-)
+from silenttalk.discord_channels import TASK_MARKS
+from silenttalk.discord_invite import BOT_PERMISSIONS, invite_url
+from silenttalk.discord_voice import DiscordVoiceClient
 
 
 @dataclass
@@ -102,14 +99,14 @@ def test_message_content_intent_is_only_requested_when_text_chat_is_on() -> None
 
 def test_sending_reports_failure_instead_of_raising() -> None:
     client, _, channel = _client()
-    assert asyncio.run(client.send_text("欸我在")) is True
+    assert asyncio.run(client.channels.send_text("欸我在")) is True
     assert channel.sent == ["欸我在"]
 
     channel.fail = discord.Forbidden(_Response(403), "no permission")
-    assert asyncio.run(client.send_text("再試一次")) is False
+    assert asyncio.run(client.channels.send_text("再試一次")) is False
 
     client.active_voice = lambda: None  # type: ignore[assignment,method-assign]
-    assert asyncio.run(client.send_text("沒連語音")) is False
+    assert asyncio.run(client.channels.send_text("沒連語音")) is False
 
 
 @dataclass
@@ -221,7 +218,7 @@ def test_answers_go_to_the_thread_they_belong_to() -> None:
     client, _, _ = _thread_client()
     thread_channel = FakeChannel(42)
     client.get_channel = lambda channel_id: thread_channel if channel_id == 42 else None  # type: ignore[method-assign]
-    assert asyncio.run(client.send_text("在串裡回", 42)) is True
+    assert asyncio.run(client.channels.send_text("在串裡回", 42)) is True
     assert thread_channel.sent == ["在串裡回"]
 
 
@@ -240,14 +237,19 @@ class _Partial:
 def test_the_gear_marks_accepted_work_and_turns_into_a_check_or_a_cross() -> None:
     client, _, _ = _thread_client()
     partials: dict[int, _Partial] = {}
-    channel = SimpleNamespace(get_partial_message=lambda mid: partials.setdefault(mid, _Partial()))
+    channel = SimpleNamespace(
+        get_partial_message=lambda mid: partials.setdefault(mid, _Partial())
+    )
     client.get_channel = lambda channel_id: channel if channel_id == 900 else None  # type: ignore[method-assign]
-    assert asyncio.run(client.mark_task(900, 42, "accepted")) is True
-    assert asyncio.run(client.mark_task(900, 42, "done")) is True
-    assert partials[42].ops == [("add", TASK_MARKS["accepted"]), ("add", TASK_MARKS["done"]),
-                                ("remove", TASK_MARKS["accepted"])]
-    asyncio.run(client.mark_task(900, 43, "accepted"))
-    asyncio.run(client.mark_task(900, 43, "failed"))
+    assert asyncio.run(client.channels.mark_task(900, 42, "accepted")) is True
+    assert asyncio.run(client.channels.mark_task(900, 42, "done")) is True
+    assert partials[42].ops == [
+        ("add", TASK_MARKS["accepted"]),
+        ("add", TASK_MARKS["done"]),
+        ("remove", TASK_MARKS["accepted"]),
+    ]
+    asyncio.run(client.channels.mark_task(900, 43, "accepted"))
+    asyncio.run(client.channels.mark_task(900, 43, "failed"))
     assert partials[43].ops[1] == ("add", TASK_MARKS["failed"])
     assert TASK_MARKS == {"accepted": "⚙️", "done": "✅", "failed": "❌"}
 
@@ -276,13 +278,23 @@ def test_the_readme_carries_the_invite_link_for_the_current_permissions() -> Non
 
 def test_naming_the_character_in_a_text_channel_is_a_chat_right_there() -> None:
     client, typed, _ = _thread_client()
-    client._names = lambda text: "機魂" in text
-    named = ThreadableMessage(FakeAuthor(789, "Alice"), _text_channel(900), "機魂 今天天氣如何", id=60)
-    plain = ThreadableMessage(FakeAuthor(789, "Alice"), _text_channel(900), "今天天氣如何", id=61)
+    client.messages.name_matches = lambda text: "機魂" in text
+    named = ThreadableMessage(
+        FakeAuthor(789, "Alice"), _text_channel(900), "機魂 今天天氣如何", id=60
+    )
+    plain = ThreadableMessage(
+        FakeAuthor(789, "Alice"), _text_channel(900), "今天天氣如何", id=61
+    )
     for message in (named, plain):
         asyncio.run(client.on_message(message))  # type: ignore[arg-type]
-    assert typed == [(789, "機魂 今天天氣如何", True,
-                      {"place": 900, "channel_id": 900, "message_id": 60, "agent": False})]
+    assert typed == [
+        (
+            789,
+            "機魂 今天天氣如何",
+            True,
+            {"place": 900, "channel_id": 900, "message_id": 60, "agent": False},
+        )
+    ]
     assert not named.opened
 
 
@@ -304,18 +316,26 @@ def test_a_reply_to_an_image_offers_that_image_and_nothing_else() -> None:
     the calling message and the replied one are offered (readable kinds and
     sizes only); the line says what came with it."""
     client, typed, _ = _thread_client()
-    client._names = lambda text: "機魂" in text
+    client.messages.name_matches = lambda text: "機魂" in text
 
     def file(name, size):
         async def read():
             return b"fixture"
+
         return SimpleNamespace(filename=name, size=size, read=read)
 
-    image_post = SimpleNamespace(author=FakeAuthor(789, "Alice"),
-                                 attachments=[file("menu.png", 300_000), file("clip.mp4", 3_000)])
-    line = ThreadableMessage(FakeAuthor(321, "Bob"), _text_channel(900), "機魂 這張寫什麼", id=80,
-                             reference=SimpleNamespace(resolved=image_post),
-                             attachments=[file("huge.png", 9_000_000), file("notes.txt", 1_000)])
+    image_post = SimpleNamespace(
+        author=FakeAuthor(789, "Alice"),
+        attachments=[file("menu.png", 300_000), file("clip.mp4", 3_000)],
+    )
+    line = ThreadableMessage(
+        FakeAuthor(321, "Bob"),
+        _text_channel(900),
+        "機魂 這張寫什麼",
+        id=80,
+        reference=SimpleNamespace(resolved=image_post),
+        attachments=[file("huge.png", 9_000_000), file("notes.txt", 1_000)],
+    )
     asyncio.run(client.on_message(line))  # type: ignore[arg-type]
     [(user, content, addressed, where)] = typed
     assert content == "機魂 這張寫什麼（附件：notes.txt、menu.png）"

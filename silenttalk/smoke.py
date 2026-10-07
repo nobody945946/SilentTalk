@@ -8,11 +8,8 @@ import wave
 from pathlib import Path
 
 from silenttalk.config import Settings
-from silenttalk.discord_voice import (
-    DiscordAudioPlayer,
-    DiscordVoiceClient,
-    play_smoke_tone,
-)
+from silenttalk.discord_playback import DiscordAudioPlayer, play_smoke_tone
+from silenttalk.discord_voice import DiscordVoiceClient
 from silenttalk.state import AppState
 from silenttalk.tts.edge import EdgeTTSEngine
 

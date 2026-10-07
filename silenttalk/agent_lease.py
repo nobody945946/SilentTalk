@@ -1,19 +1,26 @@
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 import os
 import shutil
 import socket
 import subprocess
+import threading
 import time
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from pathlib import Path
 
 from silenttalk.config import load_settings
 
 # SilentTalk is an EdgeAgent API client. It never owns or launches llama-server.
 CONTROL_PORT = 18_087
+_LOG = logging.getLogger(__name__)
+_LEASE_CHECK_SECONDS = 5.0
+_LEASE_RETRY_SECONDS = 5.0
 
 
 class AgentLeaseError(RuntimeError):
@@ -55,7 +62,9 @@ def _global_agent_command() -> str:
     return command
 
 
-def ensure_service(timeout: float = 360.0) -> dict[str, object]:
+def ensure_service(
+    timeout: float = 360.0, *, require_ready: bool = True
+) -> dict[str, object]:
     status = service_status()
     if status is None and not _control_service_present():
         flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
@@ -97,7 +106,7 @@ def ensure_service(timeout: float = 360.0) -> dict[str, object]:
     last: dict[str, object] | None = None
     while time.monotonic() < deadline:
         last = service_status()
-        if last is not None and last.get("ready") is True:
+        if last is not None and (not require_ready or last.get("ready") is True):
             return last
         if last is not None and last.get("error"):
             raise AgentLeaseError(str(last["error"]))
@@ -135,7 +144,9 @@ def post_json(
 
 def acquire_character(project_dir: Path, owner_pid: int) -> dict[str, object]:
     settings = load_settings(project_dir).copilot
-    ensure_service()
+    # A lease asks the service owner to load the requested model. Requiring
+    # its previous model to be healthy first would prevent crash recovery.
+    ensure_service(require_ready=False)
     return post_json(
         "/character",
         {
@@ -159,3 +170,85 @@ def release_character(owner_pid: int) -> dict[str, object]:
 
 def hold_restart_handoff() -> dict[str, object]:
     return post_json("/handoff", {}, timeout=5)
+
+
+class CharacterLease:
+    """Maintain an HTTP lease without owning the model or the speech gateway."""
+
+    def __init__(
+        self,
+        project_dir: Path,
+        owner_pid: int,
+        on_connected: Callable[[dict[str, object]], None],
+    ) -> None:
+        self._project_dir = project_dir
+        self._owner_pid = owner_pid
+        self._on_connected = on_connected
+        self._ready = asyncio.Event()
+        self._closed = threading.Event()
+        self._task: asyncio.Task[None] | None = None
+        self.owned = False
+
+    async def start(self) -> None:
+        if self._task is None or self._task.done():
+            self._closed = threading.Event()
+            self._task = asyncio.create_task(self._maintain(), name="character-lease")
+        await self._ready.wait()
+
+    def _acquire(self, closed: threading.Event) -> dict[str, object]:
+        lease = acquire_character(self._project_dir, self._owner_pid)
+        # Cancelling an asyncio waiter cannot stop its HTTP thread. A response
+        # arriving after shutdown must return that lease instead of orphaning it.
+        if closed.is_set():
+            release_character(self._owner_pid)
+            raise AgentLeaseError("Character lease closed")
+        return lease
+
+    async def _maintain(self) -> None:
+        delay = _LEASE_RETRY_SECONDS
+        while not self._closed.is_set():
+            try:
+                if not self._ready.is_set():
+                    lease = await asyncio.to_thread(self._acquire, self._closed)
+                    self.owned = True
+                    self._on_connected(lease)
+                    self._ready.set()
+                    delay = _LEASE_RETRY_SECONDS
+                    _LOG.info("character_lease_connected")
+                await asyncio.sleep(_LEASE_CHECK_SECONDS)
+                status = await asyncio.to_thread(service_status)
+                if (
+                    status is None
+                    or status.get("ready") is not True
+                    or status.get("mode") != "character"
+                    or status.get("owner_pid") != self._owner_pid
+                ):
+                    self._ready.clear()
+                    _LOG.warning("character_lease_disconnected")
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                self._ready.clear()
+                _LOG.warning(
+                    "character_lease_retry error_type=%s delay_seconds=%.1f",
+                    type(exc).__name__,
+                    delay,
+                )
+                await asyncio.sleep(delay)
+                delay = min(30.0, delay * 2)
+
+    async def stop(self) -> None:
+        self._closed.set()
+        task = self._task
+        self._task = None
+        if task is not None:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        self._ready.clear()
+        if self.owned:
+            try:
+                await asyncio.to_thread(release_character, self._owner_pid)
+            except AgentLeaseError:
+                _LOG.warning("agent_lease_return_failed")
+            finally:
+                self.owned = False

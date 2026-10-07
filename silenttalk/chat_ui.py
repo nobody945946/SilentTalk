@@ -12,8 +12,8 @@ import tkinter as tk
 from collections.abc import Callable, Sequence
 
 from silenttalk import theme
-from silenttalk.copilot.persona import MOODS
-from silenttalk.copilot.types import ConversationTurn
+from silenttalk.conversation import ConversationTurn
+from silenttalk.persona import MOODS
 from silenttalk.widgets import Avatar, Button, Segmented, card, wrap_to_width
 
 MAX_TRANSCRIPT_TURNS = 80

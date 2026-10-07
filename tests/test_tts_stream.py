@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from silenttalk.config import AudioConfig, TTSConfig
-from silenttalk.discord_voice import STREAM_INPUT_OPTIONS, DiscordAudioPlayer
+from silenttalk.discord_playback import DiscordAudioPlayer
 from silenttalk.speech_queue import JobState, SpeechQueue
 from silenttalk.tts import edge
 from silenttalk.tts.base import AudioResult
@@ -166,8 +166,8 @@ async def test_player_pipes_a_stream_into_ffmpeg_as_mp3(
 ) -> None:
     calls: list[tuple[tuple, dict]] = []
     monkeypatch.setattr(
-        "silenttalk.discord_voice.discord.FFmpegOpusAudio",
-        lambda *args, **kwargs: calls.append((args, kwargs)) or object(),
+        "silenttalk.discord_playback.OpusSource",
+        lambda *args, **kwargs: calls.append((args, kwargs)) or type("Source", (), {"cleanup": lambda self: None})(),
     )
 
     class Voice:
@@ -191,6 +191,7 @@ async def test_player_pipes_a_stream_into_ffmpeg_as_mp3(
     await DiscordAudioPlayer(Client(), AudioConfig()).play(audio)  # type: ignore[arg-type]
 
     args, kwargs = calls[0]
-    assert args == (stream,) and kwargs["pipe"] is True
-    assert kwargs["before_options"] == STREAM_INPUT_OPTIONS
-    assert "aecho=" in kwargs["options"]
+    assert args == (audio,)
+    assert args[0].stream is stream
+    assert "aecho=" in args[0].ffmpeg_filter
+    assert kwargs["executable"] == AudioConfig().ffmpeg_path
