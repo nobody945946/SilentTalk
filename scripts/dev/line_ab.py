@@ -1,16 +1,22 @@
-"""The machine spirit's lines, base E4B against an adapter, for a blind
-comparison on chats no training ever saw.
+"""The machine spirit's lines, an adapter against the base E4B or against
+another adapter, for a blind comparison on chats no training ever saw.
 
 For every line row of a data folder (render's train.jsonl: the app's own
 line requests), both models answer the request as the student step does
-(temperature 0.65, top_p 0.85, 90 tokens, as LocalReplyModel): first the base E4B, then the same server
-started with the adapter. The pairs are written in random order to
+(temperature 0.65, top_p 0.85, 90 tokens, as LocalReplyModel): first the
+baseline (the base E4B, or the adapter --against names), then the same
+server started with the adapter. The pairs are written in random order to
 <out>.pairs.json (what the judge reads: the chat and A/B) and the key to
-<out>.key.json; `score` joins the judge's verdicts to the key.
+<out>.key.json; the judge is EdgeAgent's bench/pair_judge.py (Gemma 4 31B,
+each pair twice with A and B swapped), and `score` joins its verdicts to
+the key.
 
     CHARDATA_DIR=.runtime/dev/chardata-ms-eval .venv/bin/python scripts/dev/line_ab.py lines \\
-        --lora .runtime/models/llm/machine-spirit-v1.q8_0.gguf --out .runtime/dev/line-ab/ms1
-    .venv/bin/python scripts/dev/line_ab.py score --out .runtime/dev/line-ab/ms1 --verdicts verdicts.json
+        --lora .runtime/models/llm/machine-spirit-fw3.q8_0.gguf \\
+        --against .runtime/models/llm/machine-spirit-char-v1.q8_0.gguf --out .runtime/dev/line-ab/fw3
+    (EdgeAgent) python bench/pair_judge.py .runtime/dev/line-ab/fw3.pairs.json --config judge-gemma
+    .venv/bin/python scripts/dev/line_ab.py score --out .runtime/dev/line-ab/fw3 \\
+        --verdicts .runtime/dev/line-ab/fw3.verdicts.json
 """
 
 from __future__ import annotations
@@ -58,7 +64,7 @@ def lines(args: argparse.Namespace) -> None:
     rows = [r for r in chardata_store.read_rows(chardata_store.OUT_DIR / "train.jsonl")
             if r["kind"] in chardata_requests.LINE_KINDS]
     persona = chardata_store.persona_of(next(iter(chardata_store.read_rows(chardata_store.OUT_DIR / "personas.jsonl"))))
-    base, tuned = answers(rows, None), answers(rows, args.lora)
+    base, tuned = answers(rows, args.against), answers(rows, args.lora)
     rng = random.Random(7)
     pairs, key = [], {}
     for n, row in enumerate(rows, 1):
@@ -79,7 +85,7 @@ def score(args: argparse.Namespace) -> None:
     wins = sum(v == key[n] for n, v in judged)
     ties = sum(v == "tie" for _, v in judged)
     losses = len(judged) - wins - ties
-    print(json.dumps({"pairs": len(judged), "adapter_wins": wins, "ties": ties, "base_wins": losses,
+    print(json.dumps({"pairs": len(judged), "adapter_wins": wins, "ties": ties, "baseline_wins": losses,
                       "same_line": sum(v == "same" for v in key.values())}))
 
 
@@ -87,6 +93,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("step", choices=("lines", "score"))
     parser.add_argument("--lora", type=Path)
+    parser.add_argument("--against", type=Path, help="lines: the baseline adapter (default: the base E4B)")
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--verdicts", type=Path)
     args = parser.parse_args()
