@@ -35,7 +35,7 @@
 3. **凍結規格 v2**：`spec-v2` 併入 `copilot-story-mode`。之後只修模型看不到的 bug。
 4. **重錄**（草稿 `EdgeAgent/.runtime/fw/record-v2.draft.sh`）：情境卡、工具題、Python 題 → 評審 → 轉列 → 訓 `agent-fw3` 和 `machine-spirit-fw3` → 兩者各自考（off／high／卡／Python）→ 角色關卡 → `gate-fw3`、`gate-ms3`（對筆電現在跑的，使用者的規則）、`gate-*-vs-v2f`（對凍結規格上的基底：adapter 不能輸給只換規格）、`gate-ms3-vs-fw3`。
 5. **筆電**：雙管路實測（`tests/lanes_check.py`）的結果決定推論設計是否成立；出貨回合再做 v2 部署、介面（`reversible` 選項、還原按鈕、API 登錄頁）。v2 部署會裝 PowerShell 7.6.6（`deploy.install_powershell`，和考場同版；筆電原本只有 5.1），要請筆電確認 Agent 的指令真的由 `pwsh.exe` 執行。
-6. 之後：沙盒的 Windows 外觀（Linux 版 PowerShell 沒有的 `Get-CimInstance`、`Get-PhysicalDisk`、`nvidia-smi` 等回筆電的數值，CPU、溫度、磁碟每張卡隨機），只重錄電腦雜事卡（例 F-019 查 C 槽是不是 NVMe）。現在讀機器的對話一律不當資料（8/40，多數本來就是老師做錯）。
+6. **沙盒的 Windows 外觀**（EdgeAgent 分支 `bench-laptop`，worktree `/home/clawd/worktrees/ea-laptop`，`40a8239`，測過）：每張卡一台筆電（`bench/laptop.py`：GPU、8 GB 固定，CPU、磁碟、溫度隨卡變），Linux 版 PowerShell 沒有的 Windows 指令（`Get-CimInstance`、`Get-PhysicalDisk`、`nvidia-smi`、`systeminfo`…）回筆電的數值；`BENCH_SPEC` 讀完就移出 Agent 的環境（模擬使用者的劇本原本看得到）。改到即時掛載的 `agent_runner.py`，所以**等佇列跑完老師 Python 題比較再合併**進 `copilot-story-mode`，凍結前併入。
 7. 之後：coding agent（Qwen3.8 軌跡）。
 
 ## 4. 開發機規則（通用規則在 AGENTS.md）
