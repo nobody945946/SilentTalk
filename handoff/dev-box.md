@@ -34,7 +34,7 @@
 2. **錄製的每輪時間**：老師設定的 `time_scale` 0.5（每輪 15 分鐘）會切掉大任務：1024 輪 7/40 逾時，使用者自己的卡 4 張逾時 3 張（例：俄羅斯方塊一步寫 1.4 萬字，光生成 352 秒）。錄製前調大（比較期間兩邊同為 0.5，不動）。
 3. **凍結規格 v2**：`spec-v2` 併入 `copilot-story-mode`。之後只修模型看不到的 bug。
 4. **重錄**（草稿 `EdgeAgent/.runtime/fw/record-v2.draft.sh`）：情境卡、工具題、Python 題 → 評審 → 轉列 → 訓 `agent-fw3` 和 `machine-spirit-fw3` → 兩者各自考（off／high／卡／Python）→ 角色關卡 → `gate-fw3`、`gate-ms3`、`gate-ms3-vs-fw3`。
-5. **筆電**：雙管路實測（`tests/lanes_check.py`）的結果決定推論設計是否成立；出貨回合再做 v2 部署、介面（`reversible` 選項、還原按鈕、API 登錄頁）。
+5. **筆電**：雙管路實測（`tests/lanes_check.py`）的結果決定推論設計是否成立；出貨回合再做 v2 部署、介面（`reversible` 選項、還原按鈕、API 登錄頁）。v2 部署會裝 PowerShell 7.6.6（`deploy.install_powershell`，和考場同版；筆電原本只有 5.1），要請筆電確認 Agent 的指令真的由 `pwsh.exe` 執行。
 6. 之後：沙盒的 Windows 外觀（Linux 版 PowerShell 沒有的 `Get-CimInstance`、`Get-PhysicalDisk`、`nvidia-smi` 等回筆電的數值，CPU、溫度、磁碟每張卡隨機），只重錄電腦雜事卡（例 F-019 查 C 槽是不是 NVMe）。現在讀機器的對話一律不當資料（8/40，多數本來就是老師做錯）。
 7. 之後：coding agent（Qwen3.8 軌跡）。
 
