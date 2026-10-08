@@ -1,6 +1,6 @@
 # Windows 工作檔：第 8 回合（雙管路實機量測）
 
-更新：2026-10-08 晚｜SilentTalk `copilot-story-mode`｜EdgeAgent 量測程式在分支 `spec-v2`（`6b8c393`）｜回報 `laptop-report`｜上一版：開發機 `archive/laptop-2026-10-07-round7a.md`（不必讀）
+更新：2026-10-08 晚｜SilentTalk `copilot-story-mode`｜EdgeAgent 量測程式在分支 `spec-v2`（`9b173ff`）｜回報 `laptop-report`｜上一版：開發機 `archive/laptop-2026-10-07-round7a.md`（不必讀）
 
 ## 這回合只做一件事
 
@@ -17,11 +17,11 @@
 
    ```powershell
    git -C C:\Users\A8fm0\EdgeAgent fetch origin spec-v2
-   git -C C:\Users\A8fm0\EdgeAgent worktree add --detach C:\Users\A8fm0\ea-lanes 6b8c393
+   git -C C:\Users\A8fm0\EdgeAgent worktree add --detach C:\Users\A8fm0\ea-lanes 9b173ff
    git -C C:\Users\A8fm0\ea-lanes log --oneline -1
    ```
 
-   預期：最後一行是 `6b8c393 lanes_check: --memory-only ...`。不是就停下回報。
+   預期：最後一行是 `9b173ff lanes_check: the full-window prompt counted whole ...`。不是就停下回報。
 
 3. **對照組**（現行版本照平常運作時，SilentTalk 和 EdgeAgent 都開著）：
 
