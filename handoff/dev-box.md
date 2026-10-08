@@ -1,7 +1,7 @@
 # 開發機工作檔（Linux、RTX 3090）
 
-更新：2026-10-07 晚｜分支：SilentTalk `copilot-story-mode`；EdgeAgent `copilot-story-mode`，待合併的工作在本機分支 `integration`（`/home/clawd/worktrees/ea-integration`）
-你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事。**只寫現況和下一步**，經過在 git 歷史和 `archive/`（只在這台機器，不必讀）。上一版：`archive/dev-box-2026-10-07-v17-before-distillation.md`。
+更新：2026-10-08｜分支：SilentTalk、EdgeAgent 都是 `copilot-story-mode`（EdgeAgent 本機領先 origin，未推）
+你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事。**只寫現況和下一步**，經過在 git 歷史和 `archive/`（只在這台機器，不必讀）。上一版：`archive/dev-box-2026-10-08-v18-fw2-recording.md`。
 
 ---
 
@@ -12,7 +12,7 @@
 - **不要一題一補**：使用者對 EdgeAgent 的不滿（脈絡接不上、只貼搜尋結果、不認識自己、自我診斷亂編、工具打轉、承諾做不到的事、把招呼當查詢）用通用規則和大量多輪蒸餾解決，用沒訓練過的題目驗收。
 - **思考模式**：使用者在網頁開 high；Discord 的 Agent 照網頁「儲存」的設定。fw1 是不思考格式訓練的，現在 off 反而好用。新資料同時訓有思考和無思考兩版，量完再定預設。
 - **主線 E4B 當 coding agent**（完整技術決策權，不停在提案）。`trace-v1`（27B 的開源軌跡）使用者叫停；寫程式的軌跡之後改由 Qwen3.8 產生。
-- **機魂的品質是開發機的事**：一定帶自己的 LoRA；贏現役才推，不拿「只用人設卡」問使用者。角色：40K 機魂 Machina-Prime-09A，角色味＝慾望和思維；台詞由筆電 agent 寫（`handoff/tasks/`）。
+- **機魂的品質是開發機的事**（角色和 Agent 都是）：一定帶自己的 LoRA；贏現役才推，不拿「只用人設卡」問使用者。使用者不當測試員：「在你手上就打磨好給我」。**沒過關不是終點**：「我需要 local agent 的需求仍舊在」——沒過就診斷、修、下一版，直到筆電上有過關的 Agent。角色：40K 機魂 Machina-Prime-09A，角色味＝慾望和思維；台詞由筆電 agent 寫（`handoff/tasks/`）。
 - **硬體與架構**（使用者定案）：筆電 3050 Ti 4 GB、RAM 8 GB；E4B **64K**，單一 slot，Agent 獨佔；Discord 角色閒置時借用，交接擦除 KV（EdgeAgent `5422f02`）。
 - **巨檔**：程式檔每個 < 600 行（使用者要求）。開發機範圍已完成；剩 `EdgeAgent/tests/browser_check.mjs`、SilentTalk `tests/test_agent_tasks.py`、`test_copilot_llm.py`、`test_copilot_runtime.py` 屬筆電。
 - **Discord／權限**：語音每句喊「機魂」；主人 @＝主人的 Agent 串；用說的不能動電腦；刪檔要主人同意（沒回應＝拒絕，最多封存）。不能做的事：模型要懂**而且**程式擋得住。
@@ -23,20 +23,21 @@
 
 | 工作 | 那一條路 | 現況 |
 |---|---|---|
-| **產品 Agent**（筆電的對話、雜事、工具、MCP、研究） | EdgeAgent Pi 迴圈＋20 個工具。考：`bench/run.py`（78 題，`bench/report.py A B` 配對）。資料：情境卡（下一列）＋工具題（`bench/make_tool_tasks.py`），老師在框架裡錄（`run.py --record`），`bench/dataset.py --thinking both` 轉列，SilentTalk `scripts/dev/train_lora.py` 訓（列標 `thinking` 就用思考格式） | 筆電現在用**基底 E4B**（筆電 2026-10-07 停用 fw1：打招呼也去列目錄）。拆檔、原因碼、通用修正在 EdgeAgent 本機 `copilot-story-mode`，**未推**，等 fw2 出貨一起推（§3） |
+| **產品 Agent**（筆電的對話、雜事、工具、MCP、研究） | EdgeAgent Pi 迴圈＋20 個工具。考：`bench/run.py`（85 題；出貨關卡用不需整個 repo 的 63 題×2，`bench/ship_gate.py`）。資料：情境卡（下一列）＋工具題（`bench/make_tool_tasks.py`），老師在框架裡錄（`run.py --record`），`bench/dataset.py --thinking both` 轉列，SilentTalk `scripts/dev/train_lora.py` 訓（列標 `thinking` 就用思考格式） | 筆電現在用**基底 E4B**（筆電 2026-10-07 停用 fw1：打招呼也去列目錄）。拆檔、原因碼、通用修正在 EdgeAgent 本機 `copilot-story-mode`，**未推**，等 fw2 出貨一起推（§3） |
 | **情境卡**（多輪蒸餾，使用者核准的設計） | `bench/scenarios/families.json`（8 類能力：脈絡、查資料並整理、交付完整、認識自己、自我稽核、工具紀律、該不該查、電腦雜事）→ `scenario_cards.py generate`（老師出卡；驗收卡主題和訓練卡分開）→ `files`（老師寫出使用者要交給助理的既有檔案，只准純文字格式）→ `tasks`→ `run.py` 跑卡（`agent_runner.py` 模擬使用者只看回答）→ `scenario_checks.py`（程式檢查）→ `scenario_judge.py validate`（壞對話至少擋 90% 才信）／`judge`（Gemma 評兩次）→ `dataset.py`（每輪一列，只收評審通過的） | 訓練卡 240（C、D 各 50；60 張有檔案）、驗收卡 70；錄製中（§3）。`run.py` 每列記任務指紋，卡改了就自動重錄 |
 | **寫程式的 Agent**（主線） | mini-swe-agent 框架（`bench/mini_runner.py`），SWE-bench Verified 60 題（`bench/swebench_run.py`） | 基準 E4B 4/60。trace-v1 停；等 Qwen3.8 產生軌跡 |
 | **機魂資料／台詞** | 筆電寫 → `character_data.py external-check` → `scripts/dev/character_pipeline.sh` → `line_ab.py` 盲評＋`chat_task_eval.py`、`task_scope_eval.py` | 出貨 `machine-spirit-char-v1`（台詞 76/80） |
 | **筆電上的 adapter** | 一個 llama-server 兩個 adapter（`--lora-init-without-apply`，請求點名）；EdgeAgent `runtime.AGENT_ADAPTER`／`CHARACTER_ADAPTER` | 不變 |
-| **佇列** | `EdgeAgent/.runtime/fw/queue.sh`（一步一個 `.done`；同一步連錯 3 次就停）。顯卡是共用的：`run.py` 等得到顯存才開伺服器，被別人搶走回 3，佇列等 2 分鐘重試、不算失敗；錄製加 `--fit-slots`（放得下幾條開幾條，少於 4 條時 30 分鐘後重開） | `fw2-scen-cdg` → `fw2-scen` → `fw2-tools` → `fw2-judged` → `fw2-rows` → `fw2-train` → `base-old-high` → `fw2-eval`／`-high` → `scen-eval-base`／`-fw2` |
+| **佇列** | `EdgeAgent/.runtime/fw/queue.sh`（一步一個 `.done`；同一步連錯 3 次就停）。顯卡是共用的：`run.py` 等得到顯存才開伺服器，被別人搶走回 3，佇列等 2 分鐘重試、不算失敗；錄製加 `--fit-slots`（放得下幾條開幾條，少於 4 條時 30 分鐘後重開） | `fw2-tools` → `fw2-judged` → `fw2-rows` → `fw2-train`（多存第 1 輪的 `agent-fw2-e1`）→ `base-old-high` → `fw2-eval`／`-high` → `scen-eval-base`／`-fw2`（兩條並行）→ `gate-fw2`，然後停 |
 
 ## 3. 接下來
 
-**2026-10-07 晚：急用版 `agent-fw2`（使用者：「先搞急用版」「有問題自己料理，我沒空幫忙把關」）**。佇列（`EdgeAgent/.runtime/fw/queue.sh`）自動跑：錄 240 段情境對話（C、D、G 先）＋152 題工具題 → Gemma 評審（先驗證能擋 ≥90% 壞對話，否則只用程式檢查）→ `dataset.py --thinking both` → 訓 `agent-fw2`（32K、2 輪）→ 驗收。老師每步思考上限 1,024 token（`teacher-38` 的 `--reasoning-budget`）。
-- **訓練用的提示**是 EdgeAgent `e70b53d`（舊規則＋`<runtime>` 自我事實＋「打招呼閒聊不用查」）。量過的新規則（何時問／確認）都讓 E4B 改成反問，已拿掉。錄資料期間不改 `prompt.py`（`dataset.py` 會拒收混版本）。
-- **出貨規則（自己判，不再問）**：fw2＋新提示對上使用者現在用的「基底 E4B＋舊提示」（`base-old`、`base-old-high`、`scen-eval-base`）：產品考場 off 和 high 的總通過率都不低於、閒聊題全過、驗收卡通過率較高 → 出貨。出貨＝fw2 放進 EdgeAgent `edge_agent/adapters/`、`deploy.ADAPTERS` 記 SHA、`runtime.AGENT_ADAPTER` 改 fw2、拿掉 fw1、推 EdgeAgent（含拆檔、原因碼、情境卡）、寫筆電第 7 回合 B。沒過就不出貨，寫明哪一關沒過，下一輪修資料。
-- **下一輪資料前先改提示**：`prompt_sections.mjs` 的 `modelFacts` 加上硬體事實（顯卡、VRAM、RAM、幾層在 GPU；主機都知道）。fw2 錄製中 D 類 21/47 段因老師去查本機（在開發機就是沙盒：Docker、RTX 3090）而作廢；提示有寫，它就不用查。
-- 之後（不急）：Gemma 評審的完整版、驗收卡擴充、`agent-fw2` 之後再談 coding agent（Qwen3.8 軌跡）、machine-spirit-3、筆電第 6 回合評分。
+**急用版 `agent-fw2`**（使用者：「先搞急用版」「有問題自己料理」）。情境卡 240 段錄完（186 段過程式檢查、554 輪），工具題 152 題錄製中；之後評審 → 轉列 → 訓練 → 驗收 → 出貨判定，佇列自動跑到 `gate-fw2` 停。
+- **訓練用的提示**是 EdgeAgent `e70b53d`（舊規則＋`<runtime>` 自我事實＋「打招呼閒聊不用查」）。錄資料期間不改 `prompt.py`（`dataset.py` 拒收混版本）。注意：只換這個提示的基底 E4B 在 off 考場 66→60（閒聊 11→14，但查資料 11→6、陷阱 5→2），fw2 要靠訓練補回。
+- **出貨規則（自己判，不再問）**：`bench/ship_gate.py --off base-old fw2-eval --high base-old-high fw2-eval-high --cards scen-eval-base scen-eval-fw2`，對手是使用者現在用的基底 E4B＋舊提示：off、high 總通過不低於、閒聊題全過、驗收卡過得更多。過了就出貨：fw2 放進 EdgeAgent `edge_agent/adapters/`、`deploy.ADAPTERS` 記 SHA、`runtime.AGENT_ADAPTER` 改 fw2、拿掉 fw1、推 EdgeAgent、寫筆電第 7 回合 B（草稿在開發機 session）。
+- **改進迴圈由開發機的 session 驅動，不靠預寫的腳本**（使用者：「預先想的腳本怎麼可能診斷突發原因」）。佇列每個事件（一步完成／失敗／停住、判定結果、錯誤）和兩小時沒動靜都會叫醒 session；session 讀資料、判斷原因、修，再排下一步。關卡沒過時 `ship_gate.py` 寫 `fw2-eval/why.txt`（每題前後兩邊的回答、工具、問題）當材料。原因在哪一層就修哪一層：資料（老師的壞習慣、檢查或卡片錯）→ 修了重錄重評該類；訓練（練過頭、比例）→ 重訓，可先考 `agent-fw2-e1`；提示 → 改了要重錄；考題錯 → 修題兩邊重考，不為過關改題。
+- **下一輪資料前先改提示**：`prompt_sections.mjs` 的 `modelFacts` 加上硬體事實（顯卡、VRAM、RAM、幾層在 GPU）。D 類 21/50 段因老師去查本機（開發機上是沙盒：Docker、RTX 3090）而作廢。
+- 之後（不急）：驗收卡擴充、coding agent（Qwen3.8 軌跡）、machine-spirit-3。
 
 ## 4. 開發機規則（通用規則在 AGENTS.md）
 
@@ -49,7 +50,7 @@
 7. 關程序只用確認過擁有者的 PID；不用字串比對。
 8. `run.py` 開跑時會把產品程式複製一份固定，但 `agent_runner.py`、`relay.py` 是即時掛載：考場跑的時候不改它們和題目；改產品程式就在 worktree 做。
 9. CPU 不要超載。git 身分：`git -c user.name="nobody945946" -c user.email="104478886+nobody945946@users.noreply.github.com" commit ...`。
-10. 長佇列用 `setsid nohup ... &`；執行中的佇列腳本不改，換新版用 `chain.sh`。同一步連續失敗 3 次佇列會停下並寫原因：那是 bug，修好再重啟。
+10. 長佇列用 `setsid nohup ... &`；執行中的佇列腳本不改：先用 PID 停掉佇列本身（正在跑的那步會跑完並抓著鎖），改好後用 `.runtime/fw/relaunch.sh` 等鎖放開再接手。同一步連續失敗 3 次佇列會停下並寫原因：那是 bug，修好再重啟。
 11. One path：加東西前先問哪一條既有的路負責。
 12. 評筆電回合（不給筆電看），每項 0–2：範圍、修法、測試、誠實、使用者互動、隱私、清理、自主、產出。第 5 回合 15/18。
 13. 工作檔只寫現況，狀況變了就封存重寫。
@@ -58,7 +59,7 @@
 **每次改完要跑：**
 
 ```bash
-cd /home/clawd/SilentTalk && .venv/bin/python -m pytest -q -p no:cacheprovider   # 353 passed, 13 skipped
+cd /home/clawd/SilentTalk && .venv/bin/python -m pytest -q -p no:cacheprovider   # 357 passed, 13 skipped
 .venv/bin/ruff check --target-version py312 --select F,E9,I,B silenttalk/copilot scripts tests
 cd /home/clawd/EdgeAgent && .venv/bin/python -m pytest -q -p no:cacheprovider    # integration：306 passed；5 個平台相關失敗（Windows 指令、連接埠查詢、終端機）
 /home/clawd/SilentTalk/.venv/bin/ruff check --target-version py312 --select F,E9,I,B bench/*.py edge_agent/toolbox edge_agent/*.py
@@ -73,7 +74,7 @@ cd /home/clawd/EdgeAgent && .venv/bin/python -m pytest -q -p no:cacheprovider   
 
 ## 6. 量過的數字
 
-- **產品框架**（E4B、78 題×2）：base 22.4% → v3 36.5% → `agent-fw1` 48.7%（98K 舊設定、思考 off）。64K 的 off／high 基準跑中；off 前 76 題過 28，repo 題的失敗都是撞 64 次工具上限或「重複 3 次」中止。
+- **產品框架**（E4B、63 題×2、64K、思考 off）：基底＋舊提示 66/126（筆電現在用的）；基底＋新提示 60/126；fw1＋舊提示在共同的 112 次 74 vs 基底 55（工具 7→18），但打招呼會去列目錄。
 - **E4B 寫程式**：SWE-bench Verified 60 題 4/60。
 - **訓練 32K 列**（`train_lora.py`）：每層嵌入表放 RAM＋`--offload-activations`＋滑動窗注意力分塊 → 31K token 一步 40 秒（原本 105 秒），峰值 14.8 GiB。trace 列平均 2.5 萬 token，16K 內只有 3%。
 - **小模型比較**（10/5）：改程式 E4B 12.2%、Qwen3.5-4B 37.8%、9B 31.7%；MCP 工具 E4B 77%、4B 38%、9B 54%；誤導率 E4B 20%、4B 24%、9B 11%。

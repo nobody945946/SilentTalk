@@ -47,6 +47,9 @@ def main() -> int:
     parser.add_argument("--grad-accum", type=int, default=4)
     parser.add_argument("--holdout", type=float, default=0.03)
     parser.add_argument("--max-steps", type=int, default=-1, help="dry runs only")
+    parser.add_argument("--epoch-copies", action="store_true",
+                        help="also keep the adapter after each earlier epoch (<out>-e1, ...): a less trained "
+                             "candidate for the same gate, at no extra training")
     parser.add_argument(
         "--max-length", type=int, default=2048, help="tokens; longer rows are dropped, never cut"
     )
@@ -200,12 +203,28 @@ def main() -> int:
     )
     if args.check:
         return check(trainer, tokenizer)
+    if args.epoch_copies:
+        trainer.add_callback(epoch_copies(args.out, args.epochs))
     trainer.train()
     if torch.cuda.is_available():
         print(f"peak GPU memory {torch.cuda.max_memory_allocated() / 2**30:.1f} GiB")
     trainer.save_model(args.out)
     print(f"saved adapter to {args.out}")
     return 0
+
+
+def epoch_copies(out: str, epochs: float):
+    """A callback saving the adapter at the end of every epoch but the last, next to the final one."""
+    from transformers import TrainerCallback
+
+    class EpochCopies(TrainerCallback):
+        def on_epoch_end(self, args, state, control, model=None, **kwargs):
+            epoch = round(state.epoch)
+            if epoch < epochs and model is not None:
+                model.save_pretrained(f"{out}-e{epoch}")
+                print(f"saved the epoch-{epoch} adapter to {out}-e{epoch}", flush=True)
+
+    return EpochCopies()
 
 
 def window_attention(module, query, key, value, attention_mask, dropout=0.0, scaling=None,
