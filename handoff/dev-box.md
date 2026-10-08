@@ -35,7 +35,7 @@
 3. **凍結規格 v2**：`spec-v2` 併入 `copilot-story-mode`。之後只修模型看不到的 bug。
 4. **重錄**（草稿 `EdgeAgent/.runtime/fw/record-v2.draft.sh`）：情境卡、工具題、Python 題 → 評審 → 轉列 → 訓 `agent-fw3` 和 `machine-spirit-fw3` → 兩者各自考（off／high／卡／Python）→ 角色關卡 → `gate-fw3`、`gate-ms3`（對筆電現在跑的，使用者的規則）、`gate-*-vs-v2f`（對凍結規格上的基底：adapter 不能輸給只換規格）、`gate-ms3-vs-fw3`。
 5. **筆電**：雙管路實測（`tests/lanes_check.py`）的結果決定推論設計是否成立；出貨回合再做 v2 部署、介面（`reversible` 選項、還原按鈕、API 登錄頁）。v2 部署會裝 PowerShell 7.6.6（`deploy.install_powershell`，和考場同版；筆電原本只有 5.1），要請筆電確認 Agent 的指令真的由 `pwsh.exe` 執行。
-6. **沙盒的 Windows 外觀**（EdgeAgent 分支 `bench-laptop`，worktree `/home/clawd/worktrees/ea-laptop`，`40a8239`，測過）：每張卡一台筆電（`bench/laptop.py`：GPU、8 GB 固定，CPU、磁碟、溫度隨卡變），Linux 版 PowerShell 沒有的 Windows 指令（`Get-CimInstance`、`Get-PhysicalDisk`、`nvidia-smi`、`systeminfo`…）回筆電的數值；`BENCH_SPEC` 讀完就移出 Agent 的環境（模擬使用者的劇本原本看得到）。改到即時掛載的 `agent_runner.py`，所以**等佇列跑完老師 Python 題比較再合併**進 `copilot-story-mode`，凍結前併入。
+6. **沙盒的 Windows 外觀**（EdgeAgent 分支 `bench-laptop`，worktree `/home/clawd/worktrees/ea-laptop`，`40a8239`，測過）：每張卡一台筆電（`bench/laptop.py`：GPU、8 GB 固定，CPU、磁碟、溫度隨卡變），Linux 版 PowerShell 沒有的 Windows 指令（`Get-CimInstance`、`Get-PhysicalDisk`、`nvidia-smi`、`systeminfo`…）回筆電的數值；`BENCH_SPEC` 讀完就移出 Agent 的環境（模擬使用者的劇本原本看得到）。改到即時掛載的 `agent_runner.py`，所以**等佇列跑完老師 Python 題比較再合併**進 `copilot-story-mode`，凍結前併入；合併後跑 §4 的 ruff 和 pytest（它的測試讀寫檔案要寫明 UTF-8，Windows CI 預設 cp1252）。
 7. **卡片修正**（`f1cfe90`、`f8bd073`，測過；卡片檔已改，任務資料夾已重建）：J 卡的文件要和模擬網站一致（9 張不一致，13 個金鑰帶「Bearer 」已去掉）；規定不能要求角色語氣或 40K 用語（`must_not` 也算；16 張老師寫的卡淘汰，使用者的 5 張 A-o 卡只拿掉語氣那半句）；「不准簡體」的規定全部拿掉（`dataset.py` 本來就把每列轉成台灣繁體，卡片轉繁體時還把簡體例子轉壞）。重錄草稿第一步 `cards`：`recheck` 淘汰 → 補卡（訓練 G、J 補到 30；驗收 D、G 到 10、J 到 11）→ 檔案 → 任務資料夾。
 8. 之後：coding agent（Qwen3.8 軌跡）。
 
@@ -51,13 +51,15 @@
 8. 執行中的佇列腳本不改：先用 PID 停佇列本身（正在跑的那步會跑完並抓著鎖），再用 `relaunch.sh` 接手。
 9. 開發機不改介面（`edge_agent/web.py`、SilentTalk 設定頁）。git 身分：`git -c user.name="nobody945946" -c user.email="104478886+nobody945946@users.noreply.github.com" commit ...`。
 10. 工作檔只寫現況，狀況變了就封存重寫。
+11. **push 完要等 GitHub CI 的結果**（`gh run watch <id> --exit-status`；EdgeAgent 是 Windows 上的 ruff＋pytest），紅的就修到綠才算完成。本機的檢查要和 CI 同一個指令。session 的喚醒腳本也盯兩個 repo 的 CI，有新的失敗就叫醒（2026-10-08：EdgeAgent 的 CI 從 10/6 起紅了 41 次，是使用者先看到的）。
 
 **每次改完要跑：**
 
 ```bash
 cd /home/clawd/SilentTalk && .venv/bin/python -m pytest -q -p no:cacheprovider
-cd /home/clawd/worktrees/ea-spec2 && /home/clawd/EdgeAgent/.venv/bin/python -m pytest -q -p no:cacheprovider   # 385 passed；4 個只在 Windows 過（行程、終端機、搜尋工具）
-/home/clawd/SilentTalk/.venv/bin/ruff check --target-version py312 --select F,E9,I,B edge_agent/*.py bench/*.py
+cd /home/clawd/EdgeAgent && .venv/bin/python -m ruff check edge_agent tests   # 和 CI 同一個指令（ruff 釘在 0.16.10）
+cd /home/clawd/EdgeAgent && .venv/bin/python -m pytest -q -p no:cacheprovider   # 345 passed；4 個只在 Windows 過（行程、終端機、搜尋工具）
+# spec-v2、bench-laptop 的 worktree 一樣兩行；spec-v2 是 386 passed
 ```
 
 ## 5. 考場細節

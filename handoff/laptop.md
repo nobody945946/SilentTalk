@@ -76,3 +76,4 @@
 - 不動 `.env`、`settings.json`、`personas.json`、`character_state.json`；EdgeAgent 的 `config.json` 只讀。紀錄只用 `C:\Users\A8fm0\AgentRecords`，只查數量、大小、時間。
 - 對話內容和角色狀態不進回報。使用者只負責講話、聽和做決定，不做雜事。
 - 關程式只用核對過的 PID。
+- 推 commit 到 EdgeAgent 或 SilentTalk 之後，等那次 push 的 GitHub 檢查跑完（`gh run list --limit 3`，或到 repo 的 Actions 頁）；失敗就修好再結束回合，修不了寫進回報。
