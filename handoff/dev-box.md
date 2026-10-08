@@ -51,7 +51,7 @@
 8. 執行中的佇列腳本不改：先用 PID 停佇列本身（正在跑的那步會跑完並抓著鎖），再用 `relaunch.sh` 接手。
 9. 開發機不改介面（`edge_agent/web.py`、SilentTalk 設定頁）。git 身分：`git -c user.name="nobody945946" -c user.email="104478886+nobody945946@users.noreply.github.com" commit ...`。
 10. 工作檔只寫現況，狀況變了就封存重寫。
-11. **push 完要等 GitHub CI 的結果**（`gh run watch <id> --exit-status`；EdgeAgent 是 Windows 上的 ruff＋pytest），紅的就修到綠才算完成。本機的檢查要和 CI 同一個指令。session 的喚醒腳本也盯兩個 repo 的 CI，有新的失敗就叫醒（2026-10-08：EdgeAgent 的 CI 從 10/6 起紅了 41 次，是使用者先看到的）。
+11. **push 完要等 GitHub CI 的結果**（`gh run watch <id> --exit-status`；EdgeAgent 是 Windows 上的 ruff＋pytest），紅的就修到綠才算完成。本機的檢查要和 CI 同一個指令。問題要由 session 自己發現，不能等使用者看到（使用者 2026-10-09）：喚醒腳本盯佇列的每個步驟事件和錯誤、每一步的產出比例（每一步都要印出留下和丟掉的數量）、兩個 repo 的 CI、筆電的新回報，兩小時沒動靜也叫醒；醒來先看資料、找出錯在檢查、資料、程式還是模型，修好、重排受影響的步驟，再掛回去。不要盲目重試，也不要預先寫好的備案（2026-10-08：EdgeAgent 的 CI 紅了 41 次是使用者先看到的；10-09：Python 題被丟 56% 是醒來後才查到的）。
 
 **每次改完要跑：**
 
