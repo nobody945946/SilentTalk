@@ -1,7 +1,7 @@
 # 開發機工作檔（Linux、RTX 3090）
 
-更新：2026-10-08 晚｜SilentTalk、EdgeAgent 都在 `copilot-story-mode`；規格 v2 在 EdgeAgent 分支 `spec-v2`（worktree `/home/clawd/worktrees/ea-spec2`）
-你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事。**只寫現況和下一步**，經過在 git 歷史和 `archive/`（只在這台機器，不必讀）。上一版：`archive/dev-box-2026-10-08-v20-before-lanes.md`。
+更新：2026-10-08 深夜｜SilentTalk、EdgeAgent 都在 `copilot-story-mode`；規格 v2 在 EdgeAgent 分支 `spec-v2`（worktree `/home/clawd/worktrees/ea-spec2`）
+你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事。**只寫現況和下一步**，經過在 git 歷史和 `archive/`（只在這台機器，不必讀）。上一版：`archive/dev-box-2026-10-08-v21-before-teacher-pilot.md`。
 
 ---
 
@@ -20,22 +20,23 @@
 
 | 工作 | 那一條路 | 現況 |
 |---|---|---|
-| **產品 Agent** | EdgeAgent Pi 迴圈，規格 v2。考：`bench/run.py`（63 題×2，`ship_gate.py`）、情境卡驗收、Python 題（`py_tasks.py`）。資料：情境卡＋工具題＋Python 題，老師在框架裡錄，`dataset.py --thinking both`，SilentTalk `train_lora.py` 訓 | v2c 提示已提交；量思考長度和老師預算中，量完凍結、併入、重錄 |
-| **推論（角色和 Agent 共用一顆模型）** | `edge_agent/inference.py`：租用時兩個槽共用同一個池（`--kv-unified --no-cache-idle-slots --batch-size 512`），角色 0 號、Agent 1 號；用位元組上限記帳，接近滿池才請伺服器數 token；Agent 永遠拿得到整個池（需要時清角色的快取）；角色開口時 Agent 的新請求先等，還在讀提示的請求被切斷（等 1.2 秒讓 llama-server 看到）後重送 | `spec-v2`（已推）；開發機 CPU／GPU 驗過（§6）；**筆電第 8 回合實測**（`tests/lanes_check.py`） |
+| **產品 Agent** | EdgeAgent Pi 迴圈，規格 v2。考：`bench/run.py`（63 題×2，`ship_gate.py`）、情境卡驗收、Python 題（`py_tasks.py`）。資料：情境卡＋工具題＋Python 題，老師在框架裡錄，`dataset.py --thinking both`，SilentTalk `train_lora.py` 訓 | v2c 提示＋執行環境段寫筆電的作業系統（`e76787c`）；產品預設思考 high、不設上限；老師預算比較中（§3），比完凍結、併入、重錄 |
+| **推論（角色和 Agent 共用一顆模型）** | `edge_agent/inference.py`：租用時兩個槽共用同一個池（`--kv-unified --no-cache-idle-slots --batch-size 512`），角色 0 號、Agent 1 號；用位元組上限記帳，接近滿池才請伺服器數 token；Agent 永遠拿得到整個池（需要時清角色的快取）；角色開口時 Agent 的新請求先等，還在讀提示的請求被切斷（等 1.2 秒讓 llama-server 看到）後重送 | `spec-v2`（已推）；開發機 CPU／GPU 驗過（§6）；**筆電第 8 回合實測**（`tests/lanes_check.py`，釘在 `9b173ff`） |
 | **adapter** | 現在兩個（`agent-fw1`、`machine-spirit-char-v1`）。不同 adapter 不能同批算，角色得等 Agent 整個請求 → 重錄後同一份資料訓兩個：`agent-fw3`（只有 Agent）和 `machine-spirit-fw3`（Agent＋角色合一） | 合一版要在 Agent 關卡（對 `agent-fw3`）和角色關卡（台詞盲評對 `char-v1`、`chat_task`）都不輸才出貨 |
-| **情境卡** | `families.json`（A–J）→ `scenario_cards.py` → `run.py` → `scenario_checks.py` → `scenario_judge.py`（Gemma，先驗證）→ `dataset.py` | 訓練 317 張、驗收 91 張（含使用者對話 21 張） |
+| **情境卡** | `families.json`（A–J）→ `scenario_cards.py` → `run.py` → `scenario_checks.py` → `scenario_judge.py`（Gemma；每張卡多一條「每則回答都完整回應當時那則訊息」；驗證只算它放行的原對話，壞對話＝最後一則斷句／換成別卡的／全部換掉，至少放行 10 段、擋 ≥90%）→ `dataset.py`（被思考預算截斷的思考不當目標） | 訓練 317 張、驗收 91 張（含使用者對話 21 張）。驗收輪一律用錄製時驗證過的評審（同一把尺） |
 | **角色台詞關卡** | SilentTalk `line_ab.py lines --against char-v1` → EdgeAgent `bench/pair_judge.py`（Gemma 31B，A/B 對調判兩次，先用壞台詞驗證）→ `line_ab.py score`；`chat_task_eval.py` | 新寫，第一次用在合一版 |
 | **寫程式的 Agent** | mini-swe-agent（`bench/mini_runner.py`），SWE-bench Verified 60 題 | 老師 36/60、E4B 4/60 |
-| **佇列** | `EdgeAgent/.runtime/fw/queue.sh`（一步一個 `.done`；連錯 3 次停；顯存被搶回 3 不算失敗）。插空檔量測：停佇列本身，等鎖放開跑完再 `relaunch.sh` | think2048 → 老師 1024／4096（卡、Python）→ `py-eval`／`py-train` |
+| **佇列** | `EdgeAgent/.runtime/fw/queue.sh`（一步一個 `.done`；連錯 3 次停；顯存被搶回 3 不算失敗）。插空檔量測：停佇列本身，等鎖放開跑完再 `relaunch.sh` | 老師 4096 錄卡中 → 空檔腳本（session scratchpad `between5.sh`：新評審重評 1024、`lanes_check` 試跑）→ `relaunch` → 評 4096 → `py-eval`／`py-train` → 老師 1024／4096 Python 題 |
 
 ## 3. 接下來
 
-1. **思考長度**：off、512、1024、2048、不設上限比完（§6），定產品預設和錄製設定。
-2. **老師預算**：同 40 張卡、40 題 Python，`teacher-38-iq3` 1024 對 4096（通過率、時間）。定錄製用哪個；寫程式考慮多錄幾次留過的。
+1. **老師預算**：同 40 張卡、40 題 Python，`teacher-38-iq3` 1024 對 4096。兩輪都用新評審評完再比：評審通過率、思考被截斷的比例、時間；也要想到學生會學老師的思考長度（筆電每秒約 22 token）。寫程式考慮多錄幾次留過的。
+2. **錄製的每輪時間**：老師設定的 `time_scale` 0.5（每輪 15 分鐘）會切掉大任務：1024 輪 7/40 逾時，使用者自己的卡 4 張逾時 3 張（例：俄羅斯方塊一步寫 1.4 萬字，光生成 352 秒）。錄製前調大（比較期間兩邊同為 0.5，不動）。
 3. **凍結規格 v2**：`spec-v2` 併入 `copilot-story-mode`。之後只修模型看不到的 bug。
-4. **重錄**（草稿在 session scratchpad `queue-v2-record.txt`）：情境卡、工具題、Python 題 → 評審 → 轉列 → 訓 `agent-fw3` 和 `machine-spirit-fw3` → 兩者各自考（off／high／卡／Python）→ 角色關卡 → `gate-fw3`、`gate-ms3`、`gate-ms3-vs-fw3`。
+4. **重錄**（草稿 `EdgeAgent/.runtime/fw/record-v2.draft.sh`）：情境卡、工具題、Python 題 → 評審 → 轉列 → 訓 `agent-fw3` 和 `machine-spirit-fw3` → 兩者各自考（off／high／卡／Python）→ 角色關卡 → `gate-fw3`、`gate-ms3`、`gate-ms3-vs-fw3`。
 5. **筆電**：雙管路實測（`tests/lanes_check.py`）的結果決定推論設計是否成立；出貨回合再做 v2 部署、介面（`reversible` 選項、還原按鈕、API 登錄頁）。
-6. 之後：coding agent（Qwen3.8 軌跡）。
+6. 之後：沙盒的 Windows 外觀（Linux 版 PowerShell 沒有的 `Get-CimInstance`、`Get-PhysicalDisk`、`nvidia-smi` 等回筆電的數值，CPU、溫度、磁碟每張卡隨機），只重錄電腦雜事卡（例 F-019 查 C 槽是不是 NVMe）。現在讀機器的對話一律不當資料（8/40，多數本來就是老師做錯）。
+7. 之後：coding agent（Qwen3.8 軌跡）。
 
 ## 4. 開發機規則（通用規則在 AGENTS.md）
 
@@ -54,7 +55,7 @@
 
 ```bash
 cd /home/clawd/SilentTalk && .venv/bin/python -m pytest -q -p no:cacheprovider
-cd /home/clawd/worktrees/ea-spec2 && /home/clawd/EdgeAgent/.venv/bin/python -m pytest -q -p no:cacheprovider   # 383 passed；4 個只在 Windows 過（行程、終端機、搜尋工具）
+cd /home/clawd/worktrees/ea-spec2 && /home/clawd/EdgeAgent/.venv/bin/python -m pytest -q -p no:cacheprovider   # 385 passed；4 個只在 Windows 過（行程、終端機、搜尋工具）
 /home/clawd/SilentTalk/.venv/bin/ruff check --target-version py312 --select F,E9,I,B edge_agent/*.py bench/*.py
 ```
 
@@ -71,12 +72,14 @@ cd /home/clawd/worktrees/ea-spec2 && /home/clawd/EdgeAgent/.venv/bin/python -m p
 - **雙管路**（開發機 3090、64K、兩槽一池）：第二個槽只多 10.6 MiB（滑動窗快取），全域快取 544 MiB 共用。Agent 生成時角色開口：同一個 adapter 0.8 秒，兩個 adapter 12.7 秒（等 Agent 生完）；Agent 讀 36K 提示時：改前 19.6 秒。每步 512 token 不影響讀提示速度（18.84 對 18.78 秒）。CPU 驗證（切斷＋保留閒置槽）：角色沿用快取只新算 16 token，Agent 重送沿用已讀的 1,025 token；沒有 `--no-cache-idle-slots` 時角色每次 Agent 動過就整段重算（1,180 對 35）。
 - **筆電**：64K、GPU41 層時剩 398 MiB 顯存、可用 RAM 約 478 MiB；角色短句 12.7 token/s、Agent 22.5 token/s。
 - **老師**：SWE-bench Verified 60 題 36/60（IQ3、預算 1024）；E4B 4/60。
+- **老師試錄 40 張卡**（規格 v2、預算 1024、每輪 15 分鐘，2 小時 8 分）：修正檢查後 23/40 過程式檢查（讀機器 8、逾時 7、同一網址重抓 3、沒附來源 1）；舊評審驗證沒過（壞對話只擋 75%）。思考 21% 卡在預算、斷在半句。預算 4096：同卡慢 2–2.3 倍，每步思考 2–3 倍長。
 - **機魂**：char-v1 台詞贏基底 76/80、`chat_task` 39/40。
 - **訓練 32K 列**：31K token 一步 40 秒，峰值 14.8 GiB。
 
 ## 7. 踩過的雷
 
 - 會必然重現的失敗重試沒用；佇列連續 3 次就停。
+- 試錄抓到的：執行環境段的作業系統原本用 node 自己的平台（沙盒是 Linux），D 類回答因此被擋；「同一呼叫重複」把改完重跑測試也算錯；`Get-Process -Id`（查自己開的程式）被當成讀機器；評審驗證只改最後一則，多輪對話的規定多半在檢查過程，改壞的仍可能全部符合；llama.cpp 思考預算用完是硬切（現在用 `--reasoning-budget-message` 標記）。
 - 先前「合一 adapter 讓 Agent 變差」（44.2% 對 48.7%）混了資料版本（fw2 對 fw1），不是乾淨比較；這次同資料比。
 - `--fit` 會偷偷把模型放到 CPU（考場固定 `--fit off`）。OpenCC `s2twp` 會改已是繁體的詞：只轉含簡體字的文字。
 - `cd a && x &` 整串會在背景子殼跑。`hf download repo 檔名 --include` 會忽略 include。
