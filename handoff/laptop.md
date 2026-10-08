@@ -17,7 +17,7 @@
 
    ```powershell
    git -C C:\Users\A8fm0\EdgeAgent fetch origin spec-v2
-   git -C C:\Users\A8fm0\EdgeAgent worktree add --detach C:\Users\A8fm0\ea-lanes origin/spec-v2
+   git -C C:\Users\A8fm0\EdgeAgent worktree add --detach C:\Users\A8fm0\ea-lanes 6b8c393
    git -C C:\Users\A8fm0\ea-lanes log --oneline -1
    ```
 
