@@ -36,7 +36,8 @@
 - **訓練用的提示**是 EdgeAgent `e70b53d`（舊規則＋`<runtime>` 自我事實＋「打招呼閒聊不用查」）。錄資料期間不改 `prompt.py`（`dataset.py` 拒收混版本）。注意：只換這個提示的基底 E4B 在 off 考場 66→60（閒聊 11→14，但查資料 11→6、陷阱 5→2），fw2 要靠訓練補回。
 - **出貨規則（自己判，不再問）**：`bench/ship_gate.py --off base-old fw2-eval --high base-old-high fw2-eval-high --cards scen-eval-base scen-eval-fw2`，對手是使用者現在用的基底 E4B＋舊提示：off、high 總通過不低於、閒聊題全過、驗收卡過得更多。過了就出貨：fw2 放進 EdgeAgent `edge_agent/adapters/`、`deploy.ADAPTERS` 記 SHA、`runtime.AGENT_ADAPTER` 改 fw2、拿掉 fw1、推 EdgeAgent、寫筆電第 7 回合 B（草稿在開發機 session）。
 - **改進迴圈由開發機的 session 驅動，不靠預寫的腳本**（使用者：「預先想的腳本怎麼可能診斷突發原因」）。佇列每個事件（一步完成／失敗／停住、判定結果、錯誤）和兩小時沒動靜都會叫醒 session；session 讀資料、判斷原因、修，再排下一步。關卡沒過時 `ship_gate.py` 寫 `fw2-eval/why.txt`（每題前後兩邊的回答、工具、問題）當材料。原因在哪一層就修哪一層：資料（老師的壞習慣、檢查或卡片錯）→ 修了重錄重評該類；訓練（練過頭、比例）→ 重訓，可先考 `agent-fw2-e1`；提示 → 改了要重錄；考題錯 → 修題兩邊重考，不為過關改題。
-- **下一輪資料前先改提示**：`prompt_sections.mjs` 的 `modelFacts` 加上硬體事實（顯卡、VRAM、RAM、幾層在 GPU）。D 類 21/50 段因老師去查本機（開發機上是沙盒：Docker、RTX 3090）而作廢。
+- **一版模型＝一套凍結的規格**（使用者：「我擔心你搞太多 version 模型會分心，只要定好最萬用最成熟的規格、工具就好」）：提示、工具清單、工具說明在錄資料前定好，訓練、考試、出貨都用同一套；兩版之間只修模型看不到的 bug（例：`run_checks` 不再等它開的程式關掉）。fw2 的規格＝`fw2-scen/edge_agent`（和 HEAD 只差那個修正）。
+- **下一版規格（一次定好再錄）**：以 SDK 原生標準工具為核心（read、write、edit、grep、find、ls、powershell、web_research、web_fetch）；自訂工具量過贏原生才留，功能重疊的刪（例：`run_checks` 的 `command` 和 powershell 重疊，基底 E4B 因「測試」兩字拿它開 VS Code）；`modelFacts` 加硬體事實（D 類 21/50 段因老師去查本機而作廢）。
 - 之後（不急）：驗收卡擴充、coding agent（Qwen3.8 軌跡）、machine-spirit-3。
 
 ## 4. 開發機規則（通用規則在 AGENTS.md）
