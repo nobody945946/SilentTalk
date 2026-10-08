@@ -26,7 +26,7 @@
 | **情境卡** | `families.json`（A–J）→ `scenario_cards.py`（`recheck` 用當天的規則淘汰：API 卡要和文件一致、規定不能要求角色語氣或「不准簡體」）→ `run.py` → `scenario_checks.py` → `scenario_judge.py`（Gemma 48K；先單獨判「每輪最後的回答有沒有回應那則訊息、話有沒有講完」，過了才逐條判卡片規定兩次；工具呼叫和結果各給到 8,000 字；驗證只算它放行的原對話，壞對話＝最後一則斷在句中／換成別卡的／全部換掉，至少放行 10 段、擋 ≥90%）→ `dataset.py`（被思考預算截斷的思考不當目標） | 訓練 317 張、驗收 91 張（含使用者對話 21 張）；重錄前 `cards` 步淘汰 25 張、補 22 張。驗收輪一律用錄製時驗證過的評審（同一把尺） |
 | **角色台詞關卡** | SilentTalk `line_ab.py lines --against char-v1` → EdgeAgent `bench/pair_judge.py`（Gemma 31B，A/B 對調判兩次，先用壞台詞驗證）→ `line_ab.py score`；`chat_task_eval.py` | 新寫，第一次用在合一版 |
 | **寫程式的 Agent** | mini-swe-agent（`bench/mini_runner.py`），SWE-bench Verified 60 題 | 老師 36/60、E4B 4/60 |
-| **佇列** | `EdgeAgent/.runtime/fw/queue.sh`（一步一個 `.done`；連錯 3 次停；顯存被搶回 3 不算失敗）。插空檔量測：停佇列本身，等鎖放開跑完再 `relaunch.sh` | `py-eval` → `py-train` → 老師 1024／4096 Python 題 → `queue finished`；之後 session scratchpad 的 `after6.sh`（已在背景等）拿鎖，用 `f8bd073` 的評審重評兩輪老師試錄 |
+| **佇列** | `EdgeAgent/.runtime/fw/queue.sh`（一步一個 `.done`；連錯 3 次停；顯存被搶回 3 不算失敗）。插空檔量測：停佇列本身，等鎖放開跑完再 `relaunch.sh` | `py-eval` → `py-train` → 老師 1024／4096 Python 題 → `queue finished`；之後 session scratchpad 的 `after6.sh`（已在背景等）拿鎖，用當時的評審（現在 `7f0c088`：先抄每則回答的結尾再判有沒有講完；最後一則訊息沒正常結束的輪由程式擋）重評兩輪老師試錄 |
 
 ## 3. 接下來
 
