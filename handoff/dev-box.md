@@ -45,7 +45,7 @@
 7. `run.py` 開跑時複製產品程式；`agent_runner.py`、`relay.py` 是即時掛載，考試中不改。改產品程式在 worktree 做。
 8. 執行中的佇列腳本不改：先用 PID 停佇列本身（正在跑的那步會跑完並抓著鎖），再用 `relaunch.sh` 接手。
 9. 開發機不改介面（`edge_agent/web.py`、SilentTalk 設定頁）。git 身分：`git -c user.name="nobody945946" -c user.email="104478886+nobody945946@users.noreply.github.com" commit ...`。
-10. 工作檔只寫現況，狀況變了就封存重寫。
+10. 工作檔只寫現況，狀況變了就封存重寫。筆電會自己 fetch：SilentTalk `copilot-story-mode` 的 `laptop.md` 一改就 pull 來做，而它的額度少（使用者 2026-10-09）。交辦一回合＝整份重寫一次 `laptop.md`（不要一改再改），開發機那邊真的準備好（驗過、CI 綠）才推；commit 可以先留在本機，有真實進展的階段才 push。
 11. **push 完要等 GitHub CI 的結果**（`gh run watch <id> --exit-status`；EdgeAgent 是 Windows 上的 ruff＋pytest），紅的就修到綠才算完成。本機的檢查要和 CI 同一個指令。問題要由 session 自己發現，不能等使用者看到（使用者 2026-10-09）：喚醒腳本盯佇列的每個步驟事件和錯誤、每一步的產出比例（每一步都要印出留下和丟掉的數量）、兩個 repo 的 CI、筆電的新回報，兩小時沒動靜也叫醒；醒來先看資料、找出錯在檢查、資料、程式還是模型，修好、重排受影響的步驟，再掛回去。不要盲目重試，也不要預先寫好的備案（2026-10-08：EdgeAgent 的 CI 紅了 41 次是使用者先看到的；10-09：Python 題被丟 56% 是醒來後才查到的）。
 
 **每次改完要跑：**
