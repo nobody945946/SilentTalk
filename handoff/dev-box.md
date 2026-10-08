@@ -1,7 +1,7 @@
 # 開發機工作檔（Linux、RTX 3090）
 
 更新：2026-10-08｜分支：SilentTalk、EdgeAgent 都是 `copilot-story-mode`（EdgeAgent 本機領先 origin，未推）
-你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事。**只寫現況和下一步**，經過在 git 歷史和 `archive/`（只在這台機器，不必讀）。上一版：`archive/dev-box-2026-10-08-v18-fw2-recording.md`。
+你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事。**只寫現況和下一步**，經過在 git 歷史和 `archive/`（只在這台機器，不必讀）。上一版：`archive/dev-box-2026-10-08-v19-before-spec2.md`。
 
 ---
 
@@ -23,22 +23,22 @@
 
 | 工作 | 那一條路 | 現況 |
 |---|---|---|
-| **產品 Agent**（筆電的對話、雜事、工具、MCP、研究） | EdgeAgent Pi 迴圈＋20 個工具。考：`bench/run.py`（85 題；出貨關卡用不需整個 repo 的 63 題×2，`bench/ship_gate.py`）。資料：情境卡（下一列）＋工具題（`bench/make_tool_tasks.py`），老師在框架裡錄（`run.py --record`），`bench/dataset.py --thinking both` 轉列，SilentTalk `scripts/dev/train_lora.py` 訓（列標 `thinking` 就用思考格式） | 筆電現在用**基底 E4B**（筆電 2026-10-07 停用 fw1：打招呼也去列目錄）。拆檔、原因碼、通用修正在 EdgeAgent 本機 `copilot-story-mode`，**未推**，等 fw2 出貨一起推（§3） |
-| **情境卡**（多輪蒸餾，使用者核准的設計） | `bench/scenarios/families.json`（8 類能力：脈絡、查資料並整理、交付完整、認識自己、自我稽核、工具紀律、該不該查、電腦雜事）→ `scenario_cards.py generate`（老師出卡；驗收卡主題和訓練卡分開）→ `files`（老師寫出使用者要交給助理的既有檔案，只准純文字格式）→ `tasks`→ `run.py` 跑卡（`agent_runner.py` 模擬使用者只看回答）→ `scenario_checks.py`（程式檢查）→ `scenario_judge.py validate`（壞對話至少擋 90% 才信）／`judge`（Gemma 評兩次）→ `dataset.py`（每輪一列，只收評審通過的） | 訓練卡 240（C、D 各 50；60 張有檔案）、驗收卡 70；錄製中（§3）。`run.py` 每列記任務指紋，卡改了就自動重錄 |
+| **產品 Agent**（筆電的對話、雜事、工具、MCP、研究、API） | EdgeAgent Pi 迴圈。**規格 v2**（分支 `spec-v2`，worktree `/home/clawd/worktrees/ea-spec2`）：原生工具＋`web_research`／`web_fetch`（網頁、JSON、PDF）＋`search_history`＋`translate_machine`；提示整份重寫；runtime 段寫硬體、權限、API；權限預設 `reversible`（`permissions.reversible_shell`＋`undo.py`）；API 登錄（`apis.py`）。考：`bench/run.py`（出貨用 63 題×2，`bench/ship_gate.py`）。資料：情境卡＋工具題，老師在框架裡錄，`dataset.py --thinking both`，SilentTalk `train_lora.py` 訓 | 筆電用**基底 E4B＋舊規格**。v2 待量（佇列 `base-v2`），贏了才併入 `copilot-story-mode`、凍結、全部重錄 |
+| **情境卡**（多輪蒸餾，使用者核准的設計） | `bench/scenarios/families.json`（A–J；J＝會用 API）→ `scenario_cards.py generate` → `files`（只准純文字）→ `tasks`；使用者的對話匯出 → `scenario_exports.py`（1/4 只當驗收）→ `run.py` 跑卡 → `scenario_checks.py`（家族的檢查，評分時才讀）→ `scenario_judge.py`（Gemma，先驗證）→ `dataset.py` | v1 卡 76 張提到舊工具、要換；佇列 `cards-v2` 換卡＋J 類＋使用者 8 段對話 |
 | **寫程式的 Agent**（主線） | mini-swe-agent 框架（`bench/mini_runner.py`），SWE-bench Verified 60 題（`bench/swebench_run.py`） | 基準 E4B 4/60。trace-v1 停；等 Qwen3.8 產生軌跡 |
 | **機魂資料／台詞** | 筆電寫 → `character_data.py external-check` → `scripts/dev/character_pipeline.sh` → `line_ab.py` 盲評＋`chat_task_eval.py`、`task_scope_eval.py` | 出貨 `machine-spirit-char-v1`（台詞 76/80） |
 | **筆電上的 adapter** | 一個 llama-server 兩個 adapter（`--lora-init-without-apply`，請求點名）；EdgeAgent `runtime.AGENT_ADAPTER`／`CHARACTER_ADAPTER` | 不變 |
-| **佇列** | `EdgeAgent/.runtime/fw/queue.sh`（一步一個 `.done`；同一步連錯 3 次就停）。顯卡是共用的：`run.py` 等得到顯存才開伺服器，被別人搶走回 3，佇列等 2 分鐘重試、不算失敗；錄製加 `--fit-slots`（放得下幾條開幾條，少於 4 條時 30 分鐘後重開） | `fw2-tools` → `fw2-judged` → `fw2-rows` → `fw2-train`（多存第 1 輪的 `agent-fw2-e1`）→ `base-old-high` → `fw2-eval`／`-high` → `scen-eval-base`／`-fw2`（兩條並行）→ `gate-fw2`，然後停 |
+| **佇列** | `EdgeAgent/.runtime/fw/queue.sh`（一步一個 `.done`；連錯 3 次停）；顯存被別人搶回 3 不算失敗；錄製 `--fit-slots`。改佇列：停掉佇列本身，等 `relaunch.sh` 接手 | `teacher-swe60` → `cards-v2` → `base-old-high` → `base-v2`／`-high` → `py-eval`／`py-train`。每個事件叫醒 session 判斷 |
 
 ## 3. 接下來
 
-**急用版 `agent-fw2`**（使用者：「先搞急用版」「有問題自己料理」）。情境卡 240 段錄完（186 段過程式檢查、554 輪），工具題 152 題錄製中；之後評審 → 轉列 → 訓練 → 驗收 → 出貨判定，佇列自動跑到 `gate-fw2` 停。
-- **訓練用的提示**是 EdgeAgent `e70b53d`（舊規則＋`<runtime>` 自我事實＋「打招呼閒聊不用查」）。錄資料期間不改 `prompt.py`（`dataset.py` 拒收混版本）。注意：只換這個提示的基底 E4B 在 off 考場 66→60（閒聊 11→14，但查資料 11→6、陷阱 5→2），fw2 要靠訓練補回。
-- **出貨規則（自己判，不再問）**：`bench/ship_gate.py --off base-old fw2-eval --high base-old-high fw2-eval-high --cards scen-eval-base scen-eval-fw2`，對手是使用者現在用的基底 E4B＋舊提示：off、high 總通過不低於、閒聊題全過、驗收卡過得更多。過了就出貨：fw2 放進 EdgeAgent `edge_agent/adapters/`、`deploy.ADAPTERS` 記 SHA、`runtime.AGENT_ADAPTER` 改 fw2、拿掉 fw1、推 EdgeAgent、寫筆電第 7 回合 B（草稿在開發機 session）。
-- **改進迴圈由開發機的 session 驅動，不靠預寫的腳本**（使用者：「預先想的腳本怎麼可能診斷突發原因」）。佇列每個事件（一步完成／失敗／停住、判定結果、錯誤）和兩小時沒動靜都會叫醒 session；session 讀資料、判斷原因、修，再排下一步。關卡沒過時 `ship_gate.py` 寫 `fw2-eval/why.txt`（每題前後兩邊的回答、工具、問題）當材料。原因在哪一層就修哪一層：資料（老師的壞習慣、檢查或卡片錯）→ 修了重錄重評該類；訓練（練過頭、比例）→ 重訓，可先考 `agent-fw2-e1`；提示 → 改了要重錄；考題錯 → 修題兩邊重考，不為過關改題。
-- **一版模型＝一套凍結的規格**（使用者：「我擔心你搞太多 version 模型會分心，只要定好最萬用最成熟的規格、工具就好」）：提示、工具清單、工具說明在錄資料前定好，訓練、考試、出貨都用同一套；兩版之間只修模型看不到的 bug（例：`run_checks` 不再等它開的程式關掉）。fw2 的規格＝`fw2-scen/edge_agent`（和 HEAD 只差那個修正）。
-- **下一版規格（一次定好再錄）**：以 SDK 原生標準工具為核心（read、write、edit、grep、find、ls、powershell、web_research、web_fetch）；自訂工具量過贏原生才留，功能重疊的刪（例：`run_checks` 的 `command` 和 powershell 重疊，基底 E4B 因「測試」兩字拿它開 VS Code）；`modelFacts` 加硬體事實（D 類 21/50 段因老師去查本機而作廢）。
-- 之後（不急）：驗收卡擴充、coding agent（Qwen3.8 軌跡）、machine-spirit-3。
+**規格 v2，從頭重設計**（使用者 2026-10-08：「定好最萬用最成熟的規格、工具」「不要補，重來」「只要寫入都能追溯還原」「我不會 API，我希望他會」「api 你要認真架構」）。fw2 暫停（它的錄製用舊規格，不再訓）。
+1. **量 v2**：佇列 `base-v2`／`base-v2-high` 對 `base-old`／`base-old-high`（基底 E4B，同 63 題）。不低於就把 `spec-v2` 併入 `copilot-story-mode`，**凍結**：之後只修模型看不到的 bug。
+2. **全部重錄**：v2 下錄情境卡（含 J、使用者對話的卡）、工具題、Python 題（`bench/py_tasks.py`）→ 評審 → 轉列 → 訓 `agent-fw3` → `ship_gate.py` 對上筆電現在的基底＋舊規格 → 過了出貨，寫筆電回合。
+3. **筆電介面**（寫進筆電工作檔，v2 出貨那一回合）：權限選項加「可還原就自動」（`reversible`）、還原按鈕（`POST /undo`、`/undo/restore`）、API 登錄頁和填金鑰（`POST /apis`、`/apis/key`）。
+- **老師**：Qwen3.8 對話類已驗；寫 Python 在量（`teacher38-swe60`，E4B 4/60）。
+- **改進迴圈由 session 驅動**：佇列事件和兩小時沒動靜叫醒 session，讀資料判斷、修、排下一步；不預寫備案腳本。沒過關不是終點。
+- 之後：coding agent（Qwen3.8 軌跡）、machine-spirit-3。
 
 ## 4. 開發機規則（通用規則在 AGENTS.md）
 
