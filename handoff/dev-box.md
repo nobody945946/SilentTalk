@@ -26,14 +26,14 @@
 | **情境卡** | `families.json`（A–J）→ `scenario_cards.py`（`recheck` 用當天的規則淘汰：API 卡要和文件一致、規定不能要求角色語氣或「不准簡體」）→ `run.py` → `scenario_checks.py` → `scenario_judge.py`（Gemma 48K；先單獨判「每輪最後的回答有沒有回應那則訊息、話有沒有講完」，過了才逐條判卡片規定兩次；工具呼叫和結果各給到 8,000 字；驗證只算它放行的原對話，壞對話＝最後一則斷在句中／換成別卡的／全部換掉，至少放行 10 段、擋 ≥90%）→ `dataset.py`（被思考預算截斷的思考不當目標） | 訓練 317 張、驗收 91 張（含使用者對話 21 張）；重錄前 `cards` 步淘汰 25 張、補 22 張。驗收輪一律用錄製時驗證過的評審（同一把尺） |
 | **角色台詞關卡** | SilentTalk `line_ab.py lines --against char-v1` → EdgeAgent `bench/pair_judge.py`（Gemma 31B，A/B 對調判兩次，先用壞台詞驗證）→ `line_ab.py score`；`chat_task_eval.py` | 新寫，第一次用在合一版 |
 | **寫程式的 Agent** | mini-swe-agent（`bench/mini_runner.py`），SWE-bench Verified 60 題 | 老師 36/60、E4B 4/60 |
-| **佇列** | `EdgeAgent/.runtime/fw/queue.sh`（一步一個 `.done`；連錯 3 次停；顯存被搶回 3 不算失敗）。插空檔量測：停佇列本身，等鎖放開跑完再 `relaunch.sh` | `py-eval` → `py-train` → 老師 1024／4096 Python 題 → `queue finished`；之後 session scratchpad 的 `after6.sh`（已在背景等）拿鎖，用當時的評審（現在 `7f0c088`：先抄每則回答的結尾再判有沒有講完；最後一則訊息沒正常結束的輪由程式擋）重評兩輪老師試錄 |
+| **佇列** | `EdgeAgent/.runtime/fw/queue.sh`（一步一個 `.done`；連錯 3 次停；顯存被搶回 3 不算失敗）。插空檔量測：停佇列本身，等鎖放開跑完再 `relaunch.sh` | `py-eval` → `py-train` → 老師 1024／4096 Python 題 → `queue finished`；之後 session scratchpad 的 `after6.sh`（已在背景等）拿鎖，用當時的評審（現在 `7f0c088`：先抄每則回答的結尾再判有沒有講完；最後一則訊息沒正常結束的輪由程式擋）重評兩輪老師試錄；接著 `after7.sh`（也在背景等）把老師的 Python 比較從 16 題補到前 40 題（`5a1afd9` 前，老師包在 Markdown 程式碼框裡的檔案讓自檢失敗，前 41 號只過 16 題） |
 
 ## 3. 接下來
 
 1. **老師預算**：同 40 張卡、40 題 Python，`teacher-38-iq3` 1024 對 4096。`after6.sh` 重評完兩輪後跑 scratchpad 的 `teacher_compare.py`（會排除要淘汰的卡）比：評審通過率（兩邊都正常結束的卡配對）、思考被截斷的比例、時間；也要想到學生會學老師的思考長度（筆電每秒約 22 token）。評審若沒過驗證，先看它擋掉的原對話是評審錯還是老師錯，修好再比。寫程式考慮多錄幾次留過的。
 2. **錄製的每輪時間**：老師設定的 `time_scale` 0.5（每輪 15 分鐘）會切掉大任務：1024 輪 7/40 逾時，使用者自己的卡 4 張逾時 3 張（例：俄羅斯方塊一步寫 1.4 萬字，光生成 352 秒）。錄製前調大（比較期間兩邊同為 0.5，不動）。
 3. **凍結規格 v2**：`spec-v2` 併入 `copilot-story-mode`。之後只修模型看不到的 bug。
-4. **重錄**（草稿 `EdgeAgent/.runtime/fw/record-v2.draft.sh`）：情境卡、工具題、Python 題 → 評審 → 轉列 → 訓 `agent-fw3` 和 `machine-spirit-fw3` → 兩者各自考（off／high／卡／Python）→ 角色關卡 → `gate-fw3`、`gate-ms3`（對筆電現在跑的，使用者的規則）、`gate-*-vs-v2f`（對凍結規格上的基底：adapter 不能輸給只換規格）、`gate-ms3-vs-fw3`。
+4. **重錄**（草稿 `EdgeAgent/.runtime/fw/record-v2.draft.sh`）：情境卡、補 Python 題（現在訓練 159、驗收 38 題過自檢；補寫到 240、60 題）、工具題、Python 題 → 評審 → 轉列 → 訓 `agent-fw3` 和 `machine-spirit-fw3` → 兩者各自考（off／high／卡／Python）→ 角色關卡 → `gate-fw3`、`gate-ms3`（對筆電現在跑的，使用者的規則）、`gate-*-vs-v2f`（對凍結規格上的基底：adapter 不能輸給只換規格）、`gate-ms3-vs-fw3`。
 5. **筆電**：雙管路實測（`tests/lanes_check.py`）的結果決定推論設計是否成立；出貨回合再做 v2 部署、介面（`reversible` 選項、還原按鈕、API 登錄頁）。v2 部署會裝 PowerShell 7.6.6（`deploy.install_powershell`，和考場同版；筆電原本只有 5.1），要請筆電確認 Agent 的指令真的由 `pwsh.exe` 執行。
 6. **沙盒的 Windows 外觀**（EdgeAgent 分支 `bench-laptop`，worktree `/home/clawd/worktrees/ea-laptop`，`40a8239`，測過）：每張卡一台筆電（`bench/laptop.py`：GPU、8 GB 固定，CPU、磁碟、溫度隨卡變），Linux 版 PowerShell 沒有的 Windows 指令（`Get-CimInstance`、`Get-PhysicalDisk`、`nvidia-smi`、`systeminfo`…）回筆電的數值；`BENCH_SPEC` 讀完就移出 Agent 的環境（模擬使用者的劇本原本看得到）。改到即時掛載的 `agent_runner.py`，所以**等佇列跑完老師 Python 題比較再合併**進 `copilot-story-mode`，凍結前併入；合併後跑 §4 的 ruff 和 pytest（它的測試讀寫檔案要寫明 UTF-8，Windows CI 預設 cp1252）。
 7. **卡片修正**（`f1cfe90`、`f8bd073`，測過；卡片檔已改，任務資料夾已重建）：J 卡的文件要和模擬網站一致（9 張不一致，13 個金鑰帶「Bearer 」已去掉）；規定不能要求角色語氣或 40K 用語（`must_not` 也算；16 張老師寫的卡淘汰，使用者的 5 張 A-o 卡只拿掉語氣那半句）；「不准簡體」的規定全部拿掉（`dataset.py` 本來就把每列轉成台灣繁體，卡片轉繁體時還把簡體例子轉壞）。重錄草稿第一步 `cards`：`recheck` 淘汰 → 補卡（訓練 G、J 補到 30；驗收 D、G 到 10、J 到 11）→ 檔案 → 任務資料夾。
