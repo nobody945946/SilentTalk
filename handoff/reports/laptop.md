@@ -1,93 +1,138 @@
-﻿# 筆電回報：第 7 回合 A（語音修正部署；取消掛機驗收）
+# 筆電回報：第 8 回合（雙管路量測啟動失敗；服務已恢復）
 
 ## 1. 機魂劇本
 
-本回合無。沒有建立測試對話，也沒有要求使用者講話。
+本回合無。
 
 ## 2. 時間與額度
 
-日期 2026-10-07，Asia/Taipei（UTC+08:00）。
-
-- 開工 git pull --ff-only 成功，當時 HEAD 為 431ff1369ad35628f3ef3aba13b1f7c8ff5c113f，包含語音修正 87578a9。
-- 重啟於 16:02:58：launcher PID 9512，建立時間 16:02:58.477287；app PID 21632，建立時間 16:02:58.490676。
-- 使用者取消掛機驗收後，16:04:38.070 一次性摘要已存在的 log；切點為 launcher 建立時間，跨度 99.6 秒。沒有继续監控，也沒有安排背景監控。
-- 依使用者「! git pull」執行 git pull，fast-forward 到 99fb229；只更新 handoff/laptop.md。新版已取消掛機驗收，既有測試和重啟無須重做。
-- 帳戶額度與 token 用量不可見，未估算。
+- 日期：2026-10-09，時區 Asia/Taipei（UTC+08:00）。
+- 00:57 開始準備；01:00:04 開始唯一一次量測；01:00:57 已確認恢復並清除量測 worktree。
+- SilentTalk 起始版本 `9b7e6ca`；已部署 EdgeAgent `5422f02`；獨立量測版本 `spec-v2` 的 `9b173ff`。
+- 開工 `git pull --ff-only` 成功，Already up to date。量測程式 fetch、獨立 worktree 與版本核對成功。
+- 本次沒有可靠的帳戶額度或 token 用量資料，不估算。
 
 ## 3. 目標完成度
 
-V1：完整回歸測試通過，語音修正已經由重啟部署。
+V1 未完成：對照組與恢復成功，但量測在啟動臨時模型時 exit code 1，未產生兩組結果與 `lanes_check_done`。
 
-使用者取消原工作檔的 30 分鐘掛機測試，認為這項測試沒有用、浪費時間。依最新指示停止；新版工作檔也已移除這項要求，不以等待時間作為驗收成果。
+開始時 SilentTalk 與 EdgeAgent 均未執行；以現行部署及正常啟動器啟動後，等待角色租約就緒再取得正式對照組。啟動過渡期間另一次記憶體讀值不作正式對照。
 
-沒有語音使用，未觀察：本次摘要 RTP 封包為 0，不能用這段空閒 session 證明正常使用時的語音穩定性。實際使用時的被踢次數仍待有使用事件才可判定，不要求使用者特別測試。
+01:00 前檢查操作 log 的最近十分鐘事件統計：8 行 INFO，沒有匹配語音活動、轉錄或 STT 處理事件。log 時間為 UTC，已換算後檢查；未輸出對話內容。
 
-本回合沒有測 Agent 派工；新版仍指示等待開發機下一回合發布。
+停止前核對 SilentTalk app 命令列，只依 PID 停程序；`edge-agent stop` 回報記憶體釋放；18087、18089 的 listener 數為 0。量測失敗後直接執行恢復，沒有修改程式、沒有第二次量測。
 
 ## 4. 測試執行結果
 
-本回合只有一次 pytest：
+正式對照組（`lanes_check.py --memory-only`，exit code 0；角色已就緒）：
 
-| 命令 | 結果 | exit code |
-|---|---|---:|
-| .venv/Scripts/python.exe -m pytest -q -p no:cacheprovider --basetemp TEMP/silenttalk-round7a-本次GUID | 365 passed、1 skipped、1 warning，14.63 秒 | 0 |
+```json
+{"event": "memory_baseline", "vram_used_mib": 3471, "vram_free_mib": 492, "dedicated_mib": 3471.0, "shared_mib": 176.0, "ram_free_mib": 253.6}
+```
 
-完整測試涵蓋 tests/test_voice_lifecycle.py。警告為 discord/player.py 的 audioop DeprecationWarning。
+緊接的 status：
 
-scripts/restart_silenttalk.ps1 成功，exit code 0；先核對 app.py 命令列，僅用 PID 停止舊程序 5604、4704，再啟動新程序。
+```json
+{
+    "mode":  "character",
+    "ready":  true,
+    "context_size":  65536,
+    "inference_slots":  1,
+    "model":  "gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf",
+    "lora":  "",
+    "character_lora":  "machine-spirit-char-v1.q8_0.gguf"
+}
+```
 
-摘要使用 scripts/dev/log_summary.py 的 generate_summary，先在記憶體按本次程序建立時間過濾，再以 all_sessions=True 統計，沒有將 log 內容另存到暫存檔。
+唯一一次量測（`lanes_check.py --install C:\Users\A8fm0\EdgeAgent`，exit code 1）；輸出原樣如下，保留完整 traceback（包含最後 20 行）：
+
+```text
+[OK] mmproj-gemma-4-E4B-it-Q8_0.gguf
+[OK] mmproj-gemma-4-E4B-it-Q8_0.gguf
+Traceback (most recent call last):
+  File "C:\Users\A8fm0\ea-lanes\tests\lanes_check.py", line 198, in <module>
+    raise SystemExit(main())
+                     ^^^^^^
+  File "C:\Users\A8fm0\ea-lanes\tests\lanes_check.py", line 186, in main
+    results.append(run(core, lease_lora, core.config))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\A8fm0\ea-lanes\tests\lanes_check.py", line 96, in run
+    status = core.switch("character", os.getpid(), {"model": DEFAULT_MODEL, "lora": lease_lora,
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\A8fm0\ea-lanes\edge_agent\core.py", line 259, in switch
+    self._start_child(mode, owner_pid, character)
+  File "C:\Users\A8fm0\ea-lanes\edge_agent\core.py", line 279, in _start_child
+    self._load_child(mode, owner_pid, character)
+  File "C:\Users\A8fm0\ea-lanes\edge_agent\core.py", line 289, in _load_child
+    self.router.load(plan.args)
+  File "C:\Users\A8fm0\ea-lanes\edge_agent\router.py", line 86, in load
+    self.process = subprocess.Popen(
+                   ^^^^^^^^^^^^^^^^^
+  File "C:\Users\A8fm0\AppData\Local\Programs\Python\Python312\Lib\subprocess.py", line 1026, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+  File "C:\Users\A8fm0\AppData\Local\Programs\Python\Python312\Lib\subprocess.py", line 1462, in _execute_child
+    args = list2cmdline(args)
+           ^^^^^^^^^^^^^^^^^
+  File "C:\Users\A8fm0\AppData\Local\Programs\Python\Python312\Lib\subprocess.py", line 608, in list2cmdline
+    for arg in map(os.fsdecode, seq):
+               ^^^^^^^^^^^^^^^^^^^^^
+  File "<frozen os>", line 859, in fsdecode
+TypeError: expected str, bytes or os.PathLike object, not ExclusiveHTTPServer
+```
+
+失敗後、恢復前的可用 RAM（01:00:22，Win32_OperatingSystem）：
+
+```json
+{"event":"memory_at_failure","ram_free_mib":3196,"time":"2026-10-09T01:00:22.1638840+08:00"}
+```
+
+恢復命令 `from edge_agent.api import ensure_service; ensure_service()` exit code 0；正常啟動 `啟動 SilentTalk.cmd` 後，01:00:57 核對 status：
+
+```json
+{
+    "mode":  "character",
+    "ready":  true,
+    "context_size":  65536,
+    "inference_slots":  1,
+    "model":  "gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf",
+    "lora":  "",
+    "character_lora":  "machine-spirit-char-v1.q8_0.gguf"
+}
+```
+
+量測 worktree 移除 exit code 0；兩個部署 repo 的 `git status --short` 均乾淨。
+
+文件檢查：既有 report 分支未包含 `tests/test_handoff_docs.py`，在該 worktree 嘗試執行時 exit code 1、沒有測試執行。改在最新 SilentTalk 工作樹執行指定文件測試，結果 4 passed、exit code 0；pytest cache 寫入權限警告 1 項，不影響測試結果。該測試檢查主工作樹的入口與工作檔，不檢查本回報。另已核對本回報 UTF-8、固定十節、四個 JSON 區塊可解析，`git diff --check` 通過；Git 提示日後會轉為 CRLF。
 
 ## 5. 修改檔案與 commit
 
-- 程式碼無修改；工作區 HEAD 更新到 99fb229，這次 pull 只有工作檔變更。
-- 沒有改動 .env、settings.json、personas.json、character_state.json，也沒有改動 EdgeAgent 設定。
-- 本回合僅整份改寫 handoff/reports/laptop.md，提交並推到 laptop-report；提交識別碼以該分支 Git 紀錄為準。
-- 暫存摘要工具只有程式碼，不包含對話、log 副本或角色狀態；交付前移除。
+沒有修改程式、模型、部署分支或使用者設定。唯一交付檔案為 `handoff/reports/laptop.md`，於既有 `SilentTalk-laptop-report` worktree 提交並推至 `laptop-report`；提交識別以該分支 Git 歷史為準。
 
 ## 6. 記憶體與速度
 
-- app PID 21632 兩次離散 working set：411852800、411791360 bytes；非連續測量的峰值。
-- launcher PID 9512 working set：5660672 bytes。
-- 沒有語音輸入、STT 或 TTS 工作，不報相關延遲。沒有量 GPU。
+| 階段 | 顯存使用 MiB | 共用記憶體 MiB | 可用 RAM MiB |
+|---|---:|---:|---:|
+| 正式對照組，角色就緒 | 3471.0 | 176.0 | 253.6 |
+| 唯一量測失敗後、恢復前 | 未取得 | 未取得 | 3196.0 |
+
+尚未取得雙槽顯存增量、雙槽共用記憶體、角色回話延遲或完整 64K 視窗驗證。不能從本回合推論雙槽可行性或記憶體不足；實際失敗是啟動參數型別錯誤。Windows 記憶體不足通知沒有取得可核對的觀測資料，狀態未知。
 
 ## 7. Discord 數字表
 
-以下僅為 16:02:58.477 至 16:04:38.070 的既存事件摘要，沒有繼續掛機：
-
-| 事件／項目 | 次數／數字 |
-|---|---:|
-| discord_ready / discord_gateway_resumed | 1 / 0 |
-| Disconnected from voice by force | 0 |
-| Reconnect was unsuccessful | 0 |
-| 4006 / ConnectionClosed | 0 / 0 |
-| voice_receive_started | 1，dave_version=1 |
-| voice_receive_started 間隔中位數 | 不適用，只有 1 次 |
-| 15–25 秒的接收啟動間隔 | 0 |
-| voice_reconnect_backoff / voice_reconcile_failed | 0 / 0 |
-| voice_receive_stats / RTP 封包 | 2 / 0 |
-| STT 句子 / 角色判斷 / TTS 工作 | 0 / 0 / 0 |
-| 打字訊息 / Agent 派工 | 0 / 0 |
-| WARNING / ERROR / CRITICAL | 0 / 0 / 0 |
-
-沒有語音使用，未觀察。短時間事件為 0 不代表實際使用已通過。
+本回合無 Discord 語音實測；不將服務恢復等同於語音驗收。
 
 ## 8. 紀錄目錄
 
-只查 C:/Users/A8fm0/AgentRecords metadata，沒有讀取內容。
-
-- 本回合兩次取樣均為 18 個檔案、641581 bytes。
-- 最新檔案修改時間 2026-10-07T15:20:09.2658055+08:00，早於本回合重啟。
-- 不記錄檔名或對話內容。
+本回合未檢查或修改 `C:\Users\A8fm0\AgentRecords`，未讀取對話紀錄或角色狀態。對話內容未進回報。
 
 ## 9. 使用者回饋
 
-「我不要這種廢物測試，剛剛沒發現，做點重要的，你可以回報說這題沒用，浪費時間而已」
+本回合使用者指令：「開工」。沒有新增使用體驗回饋。
 
 ## 10. 給接手模型的交接指示
 
-1. 使用者已取消掛機測試；最新工作檔 99fb229 也取消此項。不要重新安排 30 分鐘監控，不要求使用者做測試雜事。
-2. 語音修正已部署，完整回歸測試 exit code 0。正常使用的語音穩定性尚無觀察，不把空閒 session 的零事件算成通過。
-3. SilentTalk launcher PID 9512、app PID 21632；此次沒有停止 app。日後事件應按有效程序建立時間切分，不混入舊 session。
-4. 本回合沒有改動先前 @bot 修復涉及的模型選擇。上一回合已回報 Agent LoRA 留空可有效回覆；本回合未重新驗證此行為，不要擅自復原設定。
-5. 使用者要求轉做重要工作；尚未指定具體故障或功能。本回合沒有憑空挑選介面改動，也沒有提前測尚待發布的 Agent 改動。
+現行 SilentTalk 與 EdgeAgent 已恢復角色模式，ready=true、context_size=65536、inference_slots=1，既有角色 adapter 正常掛載。量測 worktree 已清除。
+
+請開發機檢查量測版本 `9b173ff` 的啟動參數來源：在 `core.py:289` 交給 `router.load(plan.args)` 的參數，經 `router.py:86` 送進 Windows `subprocess.Popen`，含有 `ExclusiveHTTPServer` 物件。這是觀察到的型別錯誤；尚未定位該物件如何進入參數，沒有宣稱根因已確定。
+
+本工作檔明定「不改任何程式」與「不要重試第二次」，因此本回合不修復、不再跑。開發機提供修正版本並更新自足工作檔後，再由筆電執行新回合；Agent 的 64K 底線照舊。
