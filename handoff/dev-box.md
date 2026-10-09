@@ -45,9 +45,9 @@
 
 1. **重錄 v2（佇列正在跑）：**
    - 已完成：補卡、Python 題補寫。
-   - 進行中：`fw3-scen`，老師錄 314 張情境卡，04:53 開始，13:40 錄到 199 張。正常結束約 90%，其餘是逾時或中途出錯；預計 21 點左右錄完。
+   - 錄完：`fw3-scen` 314 張過 277；`fw3-tools` 152 題過 127（產品程式取開錄當下的版本，已含網頁修正）。
+   - 進行中：`fw3-py`，10/10 00:00 錄到 171/210，過 140；沒過的是動到使用者的輸入檔，或隱藏測試沒過（有些是題目沒講清楚介面）。
    - 接著依序：
-     - `fw3-tools`、`fw3-py`（產品程式取開錄當下的版本，已含網頁修正）；
      - 評審 → 轉成訓練資料；
      - 訓練 `agent-fw3`、`machine-spirit-fw3`；
      - 兩者各自考試（off／high／情境卡／Python）；
@@ -63,9 +63,14 @@
      - Discord 實測；
      - **網頁實測**：用 `node bench/web_live.mjs` 和開發機的數字比；Edge 無頭讀頁要成功；記下每頁秒數，以及讀頁時角色回話的延遲和可用 RAM（兩條管路都在跑時）；
      - **唯讀任務查本機**：問「記憶體多大」「C 碟還剩多少」，要答出實際數字（`Get-CimInstance`、`Get-Volume` 不再被擋）；`Get-CimInstance Win32_Process` 仍要被擋；
+     - **唯讀任務算資料**：問「app.log 最常見的錯誤是什麼、幾次」，要用 `Where-Object`／`Group-Object` 算出來，不是一直重讀檔案；`Get-Process | Format-List *`、`Get-Process | Select-Object Name, CommandLine`、`Write-Output C:\Users | Get-ChildItem` 要被擋；
      - Windows 上要過：`test_real_sdk_stops_fetching_the_same_dead_address`、`tests/test_lingua_powershell.py`（新加的 Windows 指令和參數）。
 4. **EdgeAgent 分支 `next-world`（worktree `ea-web`，都有測試）：** 這一輪關卡結束後才合併，讓這一輪的考試全程用同一套評分和產品程式。
-   - **產品（隨 v2 出貨）：** 唯讀任務可以讀本機（記憶體、磁碟、服務、開機程式），只認 Windows 內建模組（`CimCmdlets`、`Storage`、核心模組），`Get-CimInstance` 只准固定的類別清單（不含程序命令列、帳號、環境變數）。`Select-Object Name, Length` 這種逗號列表也算固定值。工具題 `sysinfo` 8 題都因為唯讀擋掉 `Get-CimInstance` 而只能照提示詞答。
+   - **產品（隨 v2 出貨）：**
+     - 唯讀任務可以讀本機（記憶體、磁碟、服務），只認 Windows 內建模組（`CimCmdlets`、`Storage`、核心模組），`Get-CimInstance` 只准固定的類別清單（不含程序、開機程式、帳號、環境變數）。工具題 `sysinfo` 8 題原本都因為唯讀擋掉 `Get-CimInstance` 而只能照提示詞答。
+     - 唯讀任務可以在讀到的東西上計算：變數、運算、`{ }` 區塊、`if`／`foreach`、純計算的方法（`[math]::Round`、`.Trim()`）、`2>$null`。只能讀這段指令自己設的變數（`$env:` 和 session 裡之前的變數都不行）。工具題 log 3 題原本都因為不能統計而重讀檔案到逾時；這一輪錄製被擋的 190 條指令有 95 條改判可以跑，其餘是讀工作區外、跑程式或 .NET 讀檔。
+     - 補兩個漏洞：字串經管線傳給 `Get-ChildItem` 會被當成路徑，能列出任何資料夾；`Get-Process` 的 `CommandLine` 屬性看得到其他程式的命令列。現在管線傳來的路徑只接受證明看過的（`Get-Item` 指名的檔案、`Get-Content` 的來源檔，`Get-ChildItem` 後面只能算雜湊）；命令列和一次顯示全部屬性的寫法（`*`、`PSObject`）都擋。
+     - `Select-Object Name, Length` 這種逗號列表算固定值；`git -C 工作區`、`git --no-pager`、`-ErrorAction` 可以用。
    - **測試環境（下一輪錄製和考試用）：**
      - 假 API 照真的 API 回應：分頁、格式參數不影響資料；沒有資料的值回 404 並說它有哪一天的資料；缺參數回 400；不存在的端點回 JSON 404。J 組（主人的 API）26 張只過 15 張，多半是 Agent 把日期換成今天、拿到空的 404 就一直換寫法重試。
      - 工作區比原本多出 100 MB 以上，判 `bloat` 失敗，評分程式不複製、不崩潰。`train-I-028` 留下約 2.4 GB 測試檔，塞爆評分用的 2 GB /tmp。
