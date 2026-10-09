@@ -8,7 +8,7 @@
 # - The queue, while it runs: the kernel wakes the wait when queue.log grows
 #   (tail -F uses inotify); a step event, a yield or an error wakes the session.
 #   A long step logs only progress lines, so the harness's 2 h limit with fresh
-#   lines is a quiet re-arm (ALIVE); an hour without any line is a hang (SILENCE).
+#   lines is a quiet re-arm (ALIVE); an hour without the log growing is a hang (SILENCE).
 # - CI: only the pushes recorded with `wake.sh ci`, every 5 minutes until their
 #   runs finish; a failure wakes the session, a success is dropped.
 # - The laptop: only while a round handed over with `wake.sh handoff` is not
@@ -127,6 +127,8 @@ while [ -z "$found" ]; do
       wait_s=$(until_s); [ "$wait_s" -lt 1 ] && break
     done
     [ -n "$found" ] && break
+    # A progress bar rewrites its line with \r: the log grows, no line ends.
+    grown=$(stat -c %Y "$LOG" 2>/dev/null || echo 0); [ "$grown" -gt "$last" ] && last=$grown
   else
     sleep "$wait_s"
   fi
@@ -135,7 +137,7 @@ while [ -z "$found" ]; do
     [ -n "$out" ] && { found="$out"; break; }
   fi
   if [ "$mode" = awake ] && [ $(( $(date +%s) - last )) -ge "$QUIET" ]; then
-    found="SILENCE: no log line for $(( ($(date +%s) - last) / 60 )) min"
+    found="SILENCE: the log has not grown for $(( ($(date +%s) - last) / 60 )) min"
   elif [ "$(date +%s)" -ge "$deadline" ]; then
     [ "$mode" = awake ] && found="ALIVE: $lines progress lines, no step event; re-arm" || found="ASLEEP: nothing happened; re-arm"
   fi
