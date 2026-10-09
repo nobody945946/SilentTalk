@@ -64,9 +64,10 @@
      - **網頁實測**：用 `node bench/web_live.mjs` 和開發機的數字比；Edge 無頭讀頁要成功；記下每頁秒數，以及讀頁時角色回話的延遲和可用 RAM（兩條管路都在跑時）；
      - `test_real_sdk_stops_fetching_the_same_dead_address` 在 Windows 上要過。
 4. **下一輪錄製前：** 改假網路。沙盒裡讓每個網域都解析得到；卡片網頁用原本的 https 網址服務（本地 CA＋443）；卡片沒有的頁面回 404。這樣訓練資料不會再出現 `:8081` 和「網路可能斷了」（`EAI_AGAIN`）。
-   - 假 API 照真的 API 回應（`bench/web_fixture.py`）：同一路徑換日期區間或筆數也回卡片的資料，現在查詢值要一字不差；不存在的端點回 JSON 錯誤。J 組（主人的 API）26 張只過 15 張，失敗的幾乎都是 Agent 把日期換成今天、拿到 404，然後換寫法一直重試，直到被重複防護或時間停下。
-   - 同一批改評分（`bench/grade.py`，錄製中會被掛載，現在不能改）：工作區比原本多出 100 MB 以上就判失敗（`bloat:`）。`train-I-028` 建了約 2.4 GB 的測試檔、只移到 `_archive`，評分時塞爆 2 GB 的 /tmp 才成了 `grader-crash`。通過的軌跡沒有這種情形，資料不受影響。
-5. **之後：** coding agent（Qwen3.8 軌跡）；清掉不用的 worktree（`ea-laptop`、`ea-spec2`、`ea-freeze`、`ea-web`）。
+   - **已做好，在 EdgeAgent 分支 `next-world`（worktree `ea-web`，cb1ada1，測試過，也在真的評分沙盒跑過）；這一輪關卡結束後才合併，讓這一輪的考試用同一個評分程式：**
+     - 假 API 照真的 API 回應：分頁、格式參數不影響資料；沒有資料的值回 404 並說它有哪一天的資料；缺參數回 400，不存在的端點回 JSON 404。J 組（主人的 API）26 張只過 15 張，多半是 Agent 把日期換成今天、拿到空的 404，就換寫法一直重試。
+     - 工作區比原本多出 100 MB 以上，判 `bloat` 失敗，不複製也不崩潰。`train-I-028` 留下約 2.4 GB 的測試檔（只移到 `_archive`），塞爆評分用的 2 GB /tmp，才出現 `grader-crash`。通過的軌跡沒有這種情形。
+5. **之後：** coding agent（Qwen3.8 軌跡）；清掉不用的 worktree（`ea-laptop`、`ea-spec2`、`ea-freeze`；`ea-web` 等 `next-world` 合併後）。
 
 ## 4. 開發機規則（通用規則在 AGENTS.md）
 
