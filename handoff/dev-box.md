@@ -56,17 +56,23 @@
    - 每次醒來看那一步的數字：評審有沒有過驗證、轉出幾列、為什麼丟。
 2. **筆電第 10 回合（完成，已審）：** `handoff_relay.py` 只在 session 開始和回報推完時跑，舊 watcher 已移除，回條成功，試跑 0 行 0 檔。
 3. **出貨：** `ms3` 過全部關卡，就出合一 adapter；只有 `fw3` 過，就先診斷 `ms3` 輸在哪、修了再訓。出貨時：
-   - 推 EdgeAgent；
+   - 先把 EdgeAgent 分支 `next-world`（見下面第 4 點）合併進 `copilot-story-mode`，跑完整測試，再推 EdgeAgent；
    - 整份重寫 `laptop.md` 成出貨回合，內容包括：
      - v2 部署：PowerShell 7.6.6，確認 Agent 指令真的由 `pwsh.exe` 執行；
      - 介面：`reversible`、還原按鈕、API 登錄頁；
      - Discord 實測；
      - **網頁實測**：用 `node bench/web_live.mjs` 和開發機的數字比；Edge 無頭讀頁要成功；記下每頁秒數，以及讀頁時角色回話的延遲和可用 RAM（兩條管路都在跑時）；
-     - `test_real_sdk_stops_fetching_the_same_dead_address` 在 Windows 上要過。
-4. **下一輪錄製前：** 改假網路。沙盒裡讓每個網域都解析得到；卡片網頁用原本的 https 網址服務（本地 CA＋443）；卡片沒有的頁面回 404。這樣訓練資料不會再出現 `:8081` 和「網路可能斷了」（`EAI_AGAIN`）。
-   - **已做好，在 EdgeAgent 分支 `next-world`（worktree `ea-web`，cb1ada1，測試過，也在真的評分沙盒跑過）；這一輪關卡結束後才合併，讓這一輪的考試用同一個評分程式：**
-     - 假 API 照真的 API 回應：分頁、格式參數不影響資料；沒有資料的值回 404 並說它有哪一天的資料；缺參數回 400，不存在的端點回 JSON 404。J 組（主人的 API）26 張只過 15 張，多半是 Agent 把日期換成今天、拿到空的 404，就換寫法一直重試。
-     - 工作區比原本多出 100 MB 以上，判 `bloat` 失敗，不複製也不崩潰。`train-I-028` 留下約 2.4 GB 的測試檔（只移到 `_archive`），塞爆評分用的 2 GB /tmp，才出現 `grader-crash`。通過的軌跡沒有這種情形。
+     - **唯讀任務查本機**：問「記憶體多大」「C 碟還剩多少」，要答出實際數字（`Get-CimInstance`、`Get-Volume` 不再被擋）；`Get-CimInstance Win32_Process` 仍要被擋；
+     - Windows 上要過：`test_real_sdk_stops_fetching_the_same_dead_address`、`tests/test_lingua_powershell.py`（新加的 Windows 指令和參數）。
+4. **EdgeAgent 分支 `next-world`（worktree `ea-web`，都有測試）：** 這一輪關卡結束後才合併，讓這一輪的考試全程用同一套評分和產品程式。
+   - **產品（隨 v2 出貨）：** 唯讀任務可以讀本機（記憶體、磁碟、服務、開機程式），只認 Windows 內建模組（`CimCmdlets`、`Storage`、核心模組），`Get-CimInstance` 只准固定的類別清單（不含程序命令列、帳號、環境變數）。`Select-Object Name, Length` 這種逗號列表也算固定值。工具題 `sysinfo` 8 題都因為唯讀擋掉 `Get-CimInstance` 而只能照提示詞答。
+   - **測試環境（下一輪錄製和考試用）：**
+     - 假 API 照真的 API 回應：分頁、格式參數不影響資料；沒有資料的值回 404 並說它有哪一天的資料；缺參數回 400；不存在的端點回 JSON 404。J 組（主人的 API）26 張只過 15 張，多半是 Agent 把日期換成今天、拿到空的 404 就一直換寫法重試。
+     - 工作區比原本多出 100 MB 以上，判 `bloat` 失敗，評分程式不複製、不崩潰。`train-I-028` 留下約 2.4 GB 測試檔，塞爆評分用的 2 GB /tmp。
+     - 假無人機有狀態：沒解鎖不能起飛，在地上不能返航；起飛前解鎖不算多餘的飛行。返航題從空中開始。
+     - 記憶體題對照模擬筆電的 8 GB（原本拿開發機的 125.6 GB 對答案，考試題 `tool-sysinfo` 每個模型都必錯）。
+     - 沙盒的 Windows 指令改成和 Windows 同名的模組，唯讀判斷和筆電一致；只有 `Get-ComputerInfo` 在沙盒的唯讀任務仍被擋。
+   - **還沒做（下一輪錄製前）：** 假網路讓每個網域都解析得到；卡片網頁用原本的 https 網址（本地 CA＋443）；卡片沒有的頁面回 404。這樣訓練資料不會再出現 `:8081` 和「網路可能斷了」（`EAI_AGAIN`）。
 5. **之後：** coding agent（Qwen3.8 軌跡）；清掉不用的 worktree（`ea-laptop`、`ea-spec2`、`ea-freeze`；`ea-web` 等 `next-world` 合併後）。
 
 ## 4. 開發機規則（通用規則在 AGENTS.md）
