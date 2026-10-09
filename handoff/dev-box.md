@@ -80,7 +80,7 @@
      - C 組（交付完整）：52 張訓練卡有 22 張禁止補漏時重貼整張表（補一欄就得重貼），評審因此退掉老師完整的修正表，`train-C-028` 卻規定要貼。題型定義改成「原本對的一字不改，使用者明說才只給缺的部分」，出卡規則淘汰這種卡（訓練 22、考試 2 張，下一輪錄製前 `recheck` 再 `generate` 補回）。
      - 沙盒的 Windows 指令改成和 Windows 同名的模組，唯讀判斷和筆電一致；只有 `Get-ComputerInfo` 在沙盒的唯讀任務仍被擋。
    - **還沒做（下一輪錄製前）：** 假網路讓每個網域都解析得到；卡片網頁用原本的 https 網址（本地 CA＋443）；卡片沒有的頁面回 404。這樣訓練資料不會再出現 `:8081` 和「網路可能斷了」（`EAI_AGAIN`）。另外，沙盒的 `Get-Process`、`Get-PSDrive`、`$PSVersionTable`、`[Environment]` 還是開發機的答案（核心模組，不能像 `CimCmdlets` 那樣換），D 組「認識自己」因此丟最多。
-5. **之後：** coding agent（Qwen3.8 軌跡）；清掉不用的 worktree（`ea-laptop`、`ea-spec2`、`ea-freeze`；`ea-web` 等 `next-world` 合併後）。
+5. **之後：** 從學生自己的錯學（使用者 10/10 問「先解釋錯誤再示範標準解」）：學生先做訓練卡和題目，沒過的由老師在同一個情境示範做對，再加上「學生錯的、老師對的」成對訓練；coding agent（Qwen3.8 軌跡）；清掉不用的 worktree（`ea-laptop`、`ea-spec2`、`ea-freeze`；`ea-web` 等 `next-world` 合併後）。
 
 ## 4. 開發機規則（通用規則在 AGENTS.md）
 
