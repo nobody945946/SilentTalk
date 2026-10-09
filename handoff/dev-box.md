@@ -54,7 +54,7 @@
      - 角色關卡；
      - 出貨關卡：`gate-fw3`、`gate-ms3`（對筆電現在跑的）、`gate-*-vs-v2f`（對凍結規格上的基底）、`gate-ms3-vs-fw3`。
    - 每次醒來看那一步的數字：評審有沒有過驗證、轉出幾列、為什麼丟。
-2. **筆電第 10 回合（已交辦）：** 只做接力協定的筆電端，收件回條加上兩個節點。交辦後執行 `scripts/dev/wake.sh handoff 2`，回報來了就審。
+2. **筆電第 10 回合（完成，已審）：** `handoff_relay.py` 只在 session 開始和回報推完時跑，舊 watcher 已移除，回條成功，試跑 0 行 0 檔。
 3. **出貨：** `ms3` 過全部關卡，就出合一 adapter；只有 `fw3` 過，就先診斷 `ms3` 輸在哪、修了再訓。出貨時：
    - 推 EdgeAgent；
    - 整份重寫 `laptop.md` 成出貨回合，內容包括：
@@ -64,6 +64,7 @@
      - **網頁實測**：用 `node bench/web_live.mjs` 和開發機的數字比；Edge 無頭讀頁要成功；記下每頁秒數，以及讀頁時角色回話的延遲和可用 RAM（兩條管路都在跑時）；
      - `test_real_sdk_stops_fetching_the_same_dead_address` 在 Windows 上要過。
 4. **下一輪錄製前：** 改假網路。沙盒裡讓每個網域都解析得到；卡片網頁用原本的 https 網址服務（本地 CA＋443）；卡片沒有的頁面回 404。這樣訓練資料不會再出現 `:8081` 和「網路可能斷了」（`EAI_AGAIN`）。
+   - 同一批改評分（`bench/grade.py`，錄製中會被掛載，現在不能改）：工作區比原本多出 100 MB 以上就判失敗（`bloat:`）。`train-I-028` 建了約 2.4 GB 的測試檔、只移到 `_archive`，評分時塞爆 2 GB 的 /tmp 才成了 `grader-crash`。通過的軌跡沒有這種情形，資料不受影響。
 5. **之後：** coding agent（Qwen3.8 軌跡）；清掉不用的 worktree（`ea-laptop`、`ea-spec2`、`ea-freeze`、`ea-web`）。
 
 ## 4. 開發機規則（通用規則在 AGENTS.md）
@@ -79,7 +80,7 @@
 9. **開發機不改介面**（`edge_agent/web.py`、SilentTalk 設定頁）。git 身分：`git -c user.name="nobody945946" -c user.email="104478886+nobody945946@users.noreply.github.com" commit ...`。
 10. **工作檔：** 只寫現況，狀況變了就封存重寫。
 11. **喚醒只在必要節點：** `scripts/dev/wake.sh` 在背景跑，醒來處理完就重新掛上。它只等真的在等的東西，用它能發出訊號的方式等：
-    - **佇列 log：** 等核心的檔案通知，不輪詢。步驟事件、產出數字、錯誤都會叫醒；兩小時沒有步驟事件也叫醒。
+    - **佇列 log：** 等核心的檔案通知，不輪詢。步驟事件、產出數字、錯誤都會叫醒；一小時沒有任何一行是卡住（SILENCE）。長步驟只印進度行，兩小時到時 log 還在長就是 ALIVE，看一眼數字再掛回。
     - **CI：** push 完執行 `wake.sh ci <repo> <完整 sha>`，跑完就不再問。
     - **筆電：** 交辦後執行 `wake.sh handoff <小時>`，只在回合可能做完時和兩小時到時各問一次 GitHub。沒有回條＝筆電沒開；收件後超時沒回報，只叫醒一次。
     - **什麼都沒在等：** 腳本直接結束，不掛回去。狀態只放在 `.runtime/wake/` 的兩個小檔，不寫 log。

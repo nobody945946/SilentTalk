@@ -6,8 +6,9 @@
 #
 # It waits only for what is pending, the way that thing can signal:
 # - The queue, while it runs: the kernel wakes the wait when queue.log grows
-#   (tail -F uses inotify); a step event, a yield or an error wakes the session,
-#   and so do 2 h without a step event (a hang looks like progress from outside).
+#   (tail -F uses inotify); a step event, a yield or an error wakes the session.
+#   A long step logs only progress lines, so the harness's 2 h limit with fresh
+#   lines is a quiet re-arm (ALIVE); an hour without any line is a hang (SILENCE).
 # - CI: only the pushes recorded with `wake.sh ci`, every 5 minutes until their
 #   runs finish; a failure wakes the session, a success is dropped.
 # - The laptop: only while a round handed over with `wake.sh handoff` is not
@@ -31,6 +32,7 @@ STATE=$DIR/laptop    # pending= hours= report0= received_at= alarmed=
 CIWATCH=$DIR/ci      # "owner/repo sha" per line
 RE='^== |^relaunch|queue finished|^Traceback|^SystemExit|stopped|OOM|out of memory|judge rejected|"trusted"|containment FAILED|did not become ready|llama-server exited|server exited|saved adapter|saved the epoch|peak GPU|skipped \{|tasks hold in|cards retired|[0-9]+ tasks -> |rows; skipped|rows -> '
 LIMIT=${WAKE_LIMIT:-7000}  # the harness ends a background job at 2 h
+QUIET=${WAKE_QUIET:-3600}  # a running queue that logs nothing this long is hung
 mkdir -p "$DIR"
 
 ref() { git ls-remote https://github.com/nobody945946/SilentTalk "refs/heads/$1" 2>/dev/null | cut -c1-40; }
@@ -106,7 +108,7 @@ load_state
 if ! queue_running && ! ci_pending && [ -z "$pending" ]; then
   echo "NOTHING PENDING: not re-armed"; exit 0
 fi
-found="" mode=asleep
+found="" mode=asleep lines=0 last=$start
 if queue_running; then
   mode=awake
   coproc TAIL { exec tail -n 0 -F "$LOG" 2>/dev/null; }
@@ -115,10 +117,14 @@ while [ -z "$found" ]; do
   ask=$(next_ask)
   wait_s=$((ask - $(date +%s))); [ "$wait_s" -lt 1 ] && wait_s=1
   if [ "$mode" = awake ]; then
-    # Blocks in the kernel until the log grows or the time is up.
+    # Blocks in the kernel until the log grows, GitHub is due or the log has
+    # been quiet for an hour.
+    until_s() { local t=$ask; [ $((last + QUIET)) -lt "$t" ] && t=$((last + QUIET)); echo $((t - $(date +%s))); }
+    wait_s=$(until_s); [ "$wait_s" -lt 1 ] && wait_s=1
     while IFS= read -r -t "$wait_s" line <&"${TAIL[0]}"; do
+      lines=$((lines + 1)) last=$(date +%s)
       [[ $line =~ $RE ]] && { found="$line"; break; }
-      wait_s=$((ask - $(date +%s))); [ "$wait_s" -lt 1 ] && break
+      wait_s=$(until_s); [ "$wait_s" -lt 1 ] && break
     done
     [ -n "$found" ] && break
   else
@@ -128,8 +134,10 @@ while [ -z "$found" ]; do
     out=$( { ci_pending && ci_check; }; laptop_check )
     [ -n "$out" ] && { found="$out"; break; }
   fi
-  if [ "$(date +%s)" -ge "$deadline" ]; then
-    [ "$mode" = awake ] && found="SILENCE: no step event for 2 h" || found="ASLEEP: nothing happened; re-arm"
+  if [ "$mode" = awake ] && [ $(( $(date +%s) - last )) -ge "$QUIET" ]; then
+    found="SILENCE: no log line for $(( ($(date +%s) - last) / 60 )) min"
+  elif [ "$(date +%s)" -ge "$deadline" ]; then
+    [ "$mode" = awake ] && found="ALIVE: $lines progress lines, no step event; re-arm" || found="ASLEEP: nothing happened; re-arm"
   fi
 done
 [ -n "${TAIL_PID:-}" ] && kill "$TAIL_PID" 2>/dev/null
