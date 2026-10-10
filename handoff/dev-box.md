@@ -1,7 +1,7 @@
 # 開發機工作檔（Linux、RTX 3090）
 
 更新：2026-10-10 下午｜SilentTalk、EdgeAgent 都在 `copilot-story-mode`，commit 先留本機，出貨時才推；規格 v2 已凍結（`92a1961`）
-你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事，**只寫現況和下一步**。上一版：`archive/dev-box-2026-10-10-before-v3-merge.md`（只在這台機器，不必讀）。
+你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事，**只寫現況和下一步**。上一版：`archive/dev-box-2026-10-10-before-v3-ready.md`（只在這台機器，不必讀）。
 
 ---
 
@@ -24,7 +24,7 @@
 | 工作 | 那一條路 |
 |---|---|
 | **產品 Agent** | EdgeAgent Pi 迴圈＋規格 v2。考試 `bench/run.py`（63 題×2，`ship_gate.py`）、情境卡驗收、Python 題。資料：老師在框架裡錄 → `dataset.py --thinking both` → SilentTalk `train_lora.py` |
-| **取樣** | 橋接器（`agent_bridge.mjs`）是 owner。最佳溫度隨模型和模式不同（§3 第 1 點），所以出貨時要做成「每個 adapter 帶自己 off／high 的取樣」，基底 0.2／0.2。分支 `model-sampling`（worktree `ea-sample`）ce8810a 寫死的是 fw3 的規則（high 0.2、off 照模型檔），出貨前照實際出貨的 adapter 改寫；`ea-t1`（04c3885）是兩種都照模型檔的考試用產品 |
+| **取樣** | 橋接器（`agent_bridge.mjs`）是 owner：Agent adapter 檔案裡的 `edgeagent.sampling.off.temp`／`.thinking.temp`（`edge_agent/models.py` 讀，SilentTalk `scripts/dev/stamp_adapter_sampling.py` 蓋上，量完才蓋）；沒蓋的用 0.2（基底兩種模式都 0.2 最好）。在 `spec-v3`（c6bc244）。`ea-t1`（04c3885）是兩種都照模型檔的考試用產品，佇列用完就刪 |
 | **網頁工具** | `edge_agent/web_tools.mjs`（錯誤講原因；空殼頁交給本機無頭瀏覽器；meta refresh、Big5）。量測 `bench/web_live.mjs`：開發機 27/30、6/6 搜尋 |
 | **推論** | `edge_agent/inference.py`：兩槽一池，角色 0 號、Agent 1 號，角色開口時 Agent 讓路；共用一個 adapter 才成立（§6） |
 | **adapter** | 同一份資料訓兩個：`agent-fw3`（只有 Agent）、`machine-spirit-fw3`（Agent＋角色）；合一版在 Agent 和角色關卡都不輸才出 |
@@ -57,10 +57,10 @@
    - **記憶（完成，在 `spec-v3`）：** 見第 7 點。
    - **聊天會動工具：** v2 的 Agent 資料沒有任何純聊天；`spec-v3` 加了 `chat` 訓練題（不准用工具），老師錄。
    - **雜事：** 評分都對，是模型真的做錯；三題評分遇到格式錯的答案不再崩潰（`next-world` 2b3eed1）。
-   - **重複鬼打牆：** 每個 adapter 帶自己的取樣（§2）；剩下的交給「從自己的錯學」。
+   - **重複鬼打牆：** 每個 adapter 帶自己的取樣（§2，完成）；剩下的交給「從自己的錯學」。
 3. **佇列：** 情境卡、Python（基底 0.2、ms3 1.0）、ms3 角色台詞 → 訓練 `machine-spirit-fw3n` → 它的四場考試。預計清晨跑完。
 4. **筆電：** 第 10 回合已審；這一輪不出貨，下一回合等有 adapter 過關再排。
-5. **出貨（有 adapter 過全部關卡時）：** 優先合一版。取樣做成每個 adapter 帶自己的（§2）。合併 `model-sampling`、`next-world` 進 `copilot-story-mode`，跑完整測試，推 EdgeAgent，等 CI 綠。整份重寫 `laptop.md`：
+5. **出貨（有 adapter 過全部關卡時）：** 優先合一版。取樣做成每個 adapter 帶自己的（§2）。合併 `spec-v3`（含 `next-world`）進 `copilot-story-mode`，蓋好出貨 adapter 的取樣，跑完整測試，推 EdgeAgent，等 CI 綠。整份重寫 `laptop.md`：
    - PowerShell 7.6.6 部署，確認 Agent 指令由 `pwsh.exe` 執行；介面：`reversible`、還原、API 登錄頁；Discord 實測；
    - 網頁實測：`node bench/web_live.mjs` 和開發機比，Edge 無頭讀頁，記下秒數、角色回話延遲、可用 RAM；
    - 唯讀查本機：「記憶體多大」「C 碟還剩多少」要答出實數；`Get-CimInstance Win32_Process`、`Get-Process | Format-List *`、`... CommandLine`、`Write-Output C:\Users | Get-ChildItem` 要被擋；唯讀算資料要用 `Group-Object` 算出來；
@@ -68,11 +68,15 @@
 6. **EdgeAgent `next-world`（worktree `ea-web`，都有測試）：** 這一輪考試跑完才合併。
    - **產品：** 唯讀任務可讀本機（只認 Windows 內建模組，`Get-CimInstance` 只准固定類別），可在讀到的東西上計算；補兩個漏洞（管線傳路徑給 `Get-ChildItem`、`Get-Process` 的 `CommandLine`）。
    - **測試環境：** 假 API 照真的回應；工作區多出 100 MB 判 `bloat`；假無人機有狀態、起飛前解鎖不算多餘；記憶體題對 8 GB；工具題出題錯修好；C 組淘汰「禁止重貼整張表」的卡；三題雜事評分不再崩潰；沙盒的 `Get-Process`、`Get-PSDrive`、`Get-ComputerInfo` 是 `Microsoft.PowerShell.Management` 自己的 cmdlet（`bench/pshome`），回筆電的程序和磁碟。
-7. **下一版規格 v3（分支 `spec-v3`，worktree `ea-v3`，從 `next-world`，已合 `mcp-variety`，b4cd081；測試只剩 4 個 Windows 專用的失敗）：**
-   - **記憶：** `prompt_sections.mjs` 說主人的全域 `AGENTS.md`（`.runtime/pi-state`）是唯一跨對話的記憶、主人說記住就用 edit 加進去（主機會請他確認），公開聊天沒有；橋接器開出這個檔（只有標題）；`run.py` 每個工作給一份可寫的、由題目的 `memory/AGENTS.md` 開頭，讀回給評分（answer 的 `memory`）。考試 `memory-recall`、`memory-project`、`memory-save`、`memory-not-from-files`，`chat-memory` 改成 v3 的要求；訓練 `tool_tasks_memory.py`（memory、chat）。
-   - **還要做：** 假網路讓每個網域都解析得到、卡片網頁用原本的 https 網址、沒有的頁面回 404；`$PSVersionTable`、`[Environment]` 換不了，查本機檢查改看工具輸出有沒有 Linux 字樣；每個 adapter 帶自己的取樣；C 組 `recheck` 再 `generate`；新切題前刪掉 `.runtime/agentdata/tool-tasks` 裡舊的 `mcp-00..13`（`Task.write` 遇到已有的資料夾會跳過）。
+7. **下一版規格 v3（分支 `spec-v3`，worktree `ea-v3`，從 `next-world`；測試只剩 4 個 Windows 專用的失敗；沙盒逃脫檢查通過）：**
+   - **記憶：** `prompt_sections.mjs` 說主人的全域 `AGENTS.md`（`.runtime/pi-state`）是唯一跨對話的記憶，主人說記住就用 edit 加進去（主機會請他確認），公開聊天沒有；橋接器開出這個檔；`run.py` 每個工作給一份可寫的、由題目的 `memory/AGENTS.md` 開頭，讀回給評分（answer 的 `memory`）。考試 `memory-*` 4 題、`chat-memory` 改成 v3；訓練 `tool_tasks_memory.py`（memory、chat）。
+   - **MCP：** 見第 2 點；考試 27 題（`bench/mcp_exam.py`），行事曆不進訓練。
+   - **假網路：** 每個名字都解析到沙盒自己（迴環上的 DNS），443 用 bench 自己的 CA 為每個名字簽憑證，Node、Python、PowerShell 都信任；網址照卡片原樣（`scenario_cards.py` 不再改寫成 `:8081`，研究題的 pages.json 也改回來）；卡片沒有的頁面或網站回 404。
+   - **查本機：** Linux 自己的指令照舊算失敗；`$PSVersionTable`、`[Environment]` 改成工具輸出出現沙盒系統（GNU/Linux、Unix 6.8、/home/bench…）才算。
+   - **取樣：** 見 §2。
+   - **還要做（要 GPU）：** 老師思考預算試錄（30 張卡，挑切斷率 <2% 的預算）；C 組 `recheck` 再 `generate`；新切題前刪掉 `.runtime/agentdata/tool-tasks` 裡舊的 `mcp-00..13`（`Task.write` 遇到已有的資料夾會跳過）；然後整份重錄（情境、工具、Python、記憶、聊天、MCP）。
    - **第一輪「從自己的錯學」：** 學生是合一版，在它的最佳溫度、在訓練卡和訓練題上收集失敗（考試的卡和題不碰）。
-8. **之後：** coding agent（Qwen3.8 軌跡；E4B 在 SWE-bench 4/60 對老師 36/60，是蒸餾補不滿的天花板）；清掉不用的 worktree（`ea-laptop`、`ea-spec2`、`ea-freeze`；`ea-web`、`ea-sample`、`ea-t1`、`ea-mcp`、`ea-v3` 合併或用完後）。
+8. **之後：** coding agent（Qwen3.8 軌跡；E4B 在 SWE-bench 4/60 對老師 36/60，是蒸餾補不滿的天花板）；清掉不用的 worktree（`ea-laptop`、`ea-spec2`、`ea-freeze`；`ea-web`、`ea-t1`、`ea-v3` 合併或用完後）。
 
 ## 4. 開發機規則（通用規則在 AGENTS.md）
 
@@ -120,5 +124,6 @@ cd /home/clawd/EdgeAgent && .venv/bin/python -m pytest -q -p no:cacheprovider   
 - **評審看不到就當沒發生：** 工具結果要給足字數。
 - **Node 的錯誤：** 只說「fetch failed」，原因在 `cause`；模型聽不懂就重抓同一個網址到逾時。
 - **被殺的 `run.py`：** 它的 relay 會變孤兒留著，停佇列後要清。
+- **llama-server b11193 當過一次（-11）：** 一個槽生成到 8192 token、清掉上下文檢查點後；佇列接手續跑沒丟結果。再發生就查 llama.cpp 版本（筆電用同一版）。
 - **這台的 `gh`：** 太舊，沒有 `run list --commit`，用 API 的 `head_sha` 查。
 - **試跑要走對方的實際路徑。** `cd a && x &` 整串會在背景子殼跑。
