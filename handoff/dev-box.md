@@ -1,7 +1,7 @@
 # 開發機工作檔（Linux、RTX 3090）
 
-更新：2026-10-10 上午｜SilentTalk、EdgeAgent 都在 `copilot-story-mode`，commit 先留本機，出貨時才推；規格 v2 已凍結（`92a1961`）
-你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事，**只寫現況和下一步**。上一版：`archive/dev-box-2026-10-10-fw3-evals.md`（只在這台機器，不必讀）。
+更新：2026-10-10 中午｜SilentTalk、EdgeAgent 都在 `copilot-story-mode`，commit 先留本機，出貨時才推；規格 v2 已凍結（`92a1961`）
+你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事，**只寫現況和下一步**。上一版：`archive/dev-box-2026-10-10-before-rule-cleanup.md`（只在這台機器，不必讀）。
 
 ---
 
@@ -17,7 +17,7 @@
 - **不降規：** Agent 的 64K 是底線；角色在 Agent 工作時照常即時回話。Agent 品質優先、可以慢；角色速度優先。
 - **Discord／權限：** 語音每句喊「機魂」；用說的不能動電腦；刪檔要主人同意。不能做的事兩層都擋：模型懂，程式也擋。
 - **紀錄：** 對話只寫進使用者指定的紀錄資料夾（AGENTS.md 規則 1）。
-- **接力只在必要節點：** 不准有常駐迴圈、心跳、定時輪詢、log 垃圾（§4 第 11 條）。筆電額度少：一回合＝整份重寫一次 `laptop.md`；有真實進展才 push。
+- **接力只在必要節點：** 不准有常駐迴圈、心跳、定時輪詢、log 垃圾（§4 第 10 條）。筆電額度少：一回合＝整份重寫一次 `laptop.md`；有真實進展才 push。
 
 ## 2. 每件工作的那一條路
 
@@ -69,8 +69,7 @@
 7. **考試中別動：** `agent_runner.py`、`relay.py`、`bench/web_fixture.py`、`bench/grade.py` 是即時掛載。改產品程式在 worktree 做。
 8. **執行中的佇列腳本不改：** 新檔 `mv` 蓋過去，用 PID 停佇列本身（不停 `run.py`），再背景跑 `relaunch.sh >> queue.log`。
 9. **開發機不改介面**（`edge_agent/web.py`、SilentTalk 設定頁）。git 身分：`git -c user.name="nobody945946" -c user.email="104478886+nobody945946@users.noreply.github.com" commit ...`。
-10. **工作檔：** 只寫現況，狀況變了就封存重寫。
-11. **喚醒只在必要節點：** `scripts/dev/wake.sh` 在背景跑，醒來先重新掛上再處理。佇列 log 用核心的檔案通知；一小時 log 沒長是 SILENCE，兩小時到時還在長是 ALIVE。push 完 `wake.sh ci <repo> <sha>`；交辦筆電後 `wake.sh handoff <小時>`。什麼都沒在等就不掛。醒來先看資料，判斷錯在檢查、資料、程式還是模型；不盲目重試、不預寫備案。push 完要等 CI 綠才算完成。
+10. **喚醒只在必要節點：** `scripts/dev/wake.sh` 在背景跑，醒來先重新掛上再處理。佇列 log 用核心的檔案通知；一小時 log 沒長是 SILENCE，兩小時到時還在長是 ALIVE。push 完 `wake.sh ci <repo> <sha>`；交辦筆電後 `wake.sh handoff <小時>`。什麼都沒在等就不掛。醒來先看資料，判斷錯在檢查、資料、程式還是模型；不盲目重試、不預寫備案。push 完要等 CI 綠才算完成。
 
 **每次改完要跑**（看 pytest 自己的 exit code）：
 
