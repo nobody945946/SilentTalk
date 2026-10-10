@@ -1,7 +1,7 @@
 # 開發機工作檔（Linux、RTX 3090）
 
 更新：2026-10-10 下午｜SilentTalk、EdgeAgent 都在 `copilot-story-mode`，commit 先留本機，出貨時才推；規格 v2 已凍結（`92a1961`）
-你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事，**只寫現況和下一步**。上一版：`archive/dev-box-2026-10-10-before-fixes-started.md`（只在這台機器，不必讀）。
+你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事，**只寫現況和下一步**。上一版：`archive/dev-box-2026-10-10-before-v3-merge.md`（只在這台機器，不必讀）。
 
 ---
 
@@ -49,13 +49,14 @@
      粗體是各自較好的溫度。ms3 off 平手取 0.2（聊天題全過、MCP 22），但 0.2 被重複上限停 33 次、程式 0/14。
    - **最佳對最佳：** off 兩個都贏基底（79、73 對 60–64）；high 都輸（82、77 對 86–89），MCP high 都輸（20、19 對 24）。兩條硬規則已輸，關卡不跑。
    - **要優化的是合一版**（產品的形狀）和它的資料。輸在 high、MCP、雜事、查資料、陷阱；贏在 off、工具、權限。
-2. **弱點和修法（進行中）：**
-   - **high 弱＝老師的思考被篩短：** 錄製預算 1024 切斷了情境 25%、工具 9%、Python 15% 的思考（被切的中位 3,575 字，留下的 797 字）；被切的列不帶思考訓練，所以學生只學到短的，每步只想基底的一半（310 對 610–750 字）。
+2. **弱點和修法：**
+   - **high 弱＝老師的思考被篩短：** 錄製預算 1024 切斷了情境 25%、工具 9%、Python 15% 的思考（被切的中位 3,575 字，留下的 797 字）；被切的列不帶思考訓練，學生只學到短的，每步只想基底的一半（310 對 610–750 字）。
      - 今晚實驗（佇列尾端）：`machine-spirit-fw3n`，同樣 595 段對話完全不帶思考（`dataset.py --thinking none`，a1d9280），考 off／high × 兩種溫度。
      - v3 錄製：老師預算放寬到幾乎不切（切斷率 <2%），思考長度至少和基底一樣；先試錄 30 張卡挑預算（錄製約慢 3 倍，使用者接受）。之後「完整長思考」對「不帶思考」各練一版，留贏的。
-   - **MCP：** 子代理在 worktree `ea-mcp`（分支 `mcp-variety`，從 `next-world`）做 6–8 個假 MCP 伺服器（不同領域、參數名、必填、錯誤訊息點名參數），訓練題和考試題；回來後審 diff、跑 selftest 和全部測試再合併。
-   - **聊天會動工具：** Agent 的訓練資料沒有任何純聊天（考試的聊天題在訓練裡沒對應）；角色台詞資料不帶工具。v3 加 Agent 情境下的純聊天題（和考試題不同），老師錄。
-   - **雜事：** 評分都對，是模型真的做錯；三題評分遇到格式錯的答案會崩潰，已改成說清楚（`next-world` 2b3eed1）。
+   - **MCP（完成，在 `spec-v3`）：** 一半是考場冤枉：真的 `get_stock_daily_trading` 有 `name` 參數，假伺服器卻不認，回了沒點名參數的錯誤；另一半是模型真的錯（「台積電 OR 鴻海」、日期和代號對調）。`mcp-variety`（1455b99、1930a2f）：股票假伺服器完全照真實 schema（`strict.mjs` 錯誤點名參數和格式），7 個日常假伺服器（天氣、交通、圖書館、家電、網購、行事曆、包裹），訓練 42 題（查、先查編號再查、改狀態含做不到），考試 27 題由 `bench/mcp_exam.py` 產生（舊 13 題的分數不能和之後比）；行事曆整個不進訓練，量沒見過的伺服器。
+   - **記憶（完成，在 `spec-v3`）：** 見第 7 點。
+   - **聊天會動工具：** v2 的 Agent 資料沒有任何純聊天；`spec-v3` 加了 `chat` 訓練題（不准用工具），老師錄。
+   - **雜事：** 評分都對，是模型真的做錯；三題評分遇到格式錯的答案不再崩潰（`next-world` 2b3eed1）。
    - **重複鬼打牆：** 每個 adapter 帶自己的取樣（§2）；剩下的交給「從自己的錯學」。
 3. **佇列：** 情境卡、Python（基底 0.2、ms3 1.0）、ms3 角色台詞 → 訓練 `machine-spirit-fw3n` → 它的四場考試。預計清晨跑完。
 4. **筆電：** 第 10 回合已審；這一輪不出貨，下一回合等有 adapter 過關再排。
@@ -67,12 +68,11 @@
 6. **EdgeAgent `next-world`（worktree `ea-web`，都有測試）：** 這一輪考試跑完才合併。
    - **產品：** 唯讀任務可讀本機（只認 Windows 內建模組，`Get-CimInstance` 只准固定類別），可在讀到的東西上計算；補兩個漏洞（管線傳路徑給 `Get-ChildItem`、`Get-Process` 的 `CommandLine`）。
    - **測試環境：** 假 API 照真的回應；工作區多出 100 MB 判 `bloat`；假無人機有狀態、起飛前解鎖不算多餘；記憶體題對 8 GB；工具題出題錯修好；C 組淘汰「禁止重貼整張表」的卡；三題雜事評分不再崩潰；沙盒的 `Get-Process`、`Get-PSDrive`、`Get-ComputerInfo` 是 `Microsoft.PowerShell.Management` 自己的 cmdlet（`bench/pshome`），回筆電的程序和磁碟。
-7. **下一版規格 v3（一起決定、一起錄、一起訓）：** 上面第 2 點的思考、MCP、純聊天，加上：
-   - **記憶（§1）：** 提示詞（`edge_agent/prompt_sections.mjs`）拿掉「你沒有跨對話的記憶」，改成長期的交代在 `AGENTS.md`、主人說記住就寫進全域那份。v2 已經會讀 `AGENTS.md`（Pi 預設），但考場從沒有過：加有 `AGENTS.md` 的題目、「記住」的題目和檢查。
-   - **取樣：** 每個新 adapter 考 off／high 各兩種溫度，取較好的寫進 adapter 的設定。
+7. **下一版規格 v3（分支 `spec-v3`，worktree `ea-v3`，從 `next-world`，已合 `mcp-variety`，b4cd081；測試只剩 4 個 Windows 專用的失敗）：**
+   - **記憶：** `prompt_sections.mjs` 說主人的全域 `AGENTS.md`（`.runtime/pi-state`）是唯一跨對話的記憶、主人說記住就用 edit 加進去（主機會請他確認），公開聊天沒有；橋接器開出這個檔（只有標題）；`run.py` 每個工作給一份可寫的、由題目的 `memory/AGENTS.md` 開頭，讀回給評分（answer 的 `memory`）。考試 `memory-recall`、`memory-project`、`memory-save`、`memory-not-from-files`，`chat-memory` 改成 v3 的要求；訓練 `tool_tasks_memory.py`（memory、chat）。
+   - **還要做：** 假網路讓每個網域都解析得到、卡片網頁用原本的 https 網址、沒有的頁面回 404；`$PSVersionTable`、`[Environment]` 換不了，查本機檢查改看工具輸出有沒有 Linux 字樣；每個 adapter 帶自己的取樣；C 組 `recheck` 再 `generate`；新切題前刪掉 `.runtime/agentdata/tool-tasks` 裡舊的 `mcp-00..13`（`Task.write` 遇到已有的資料夾會跳過）。
    - **第一輪「從自己的錯學」：** 學生是合一版，在它的最佳溫度、在訓練卡和訓練題上收集失敗（考試的卡和題不碰）。
-   - **錄製前：** 假網路讓每個網域都解析得到、卡片網頁用原本的 https 網址、沒有的頁面回 404；`$PSVersionTable`、`[Environment]` 換不了，查本機檢查改看工具輸出有沒有 Linux 字樣；C 組 `recheck` 再 `generate`。
-8. **之後：** coding agent（Qwen3.8 軌跡；E4B 在 SWE-bench 4/60 對老師 36/60，是蒸餾補不滿的天花板）；清掉不用的 worktree（`ea-laptop`、`ea-spec2`、`ea-freeze`；`ea-web`、`ea-sample`、`ea-t1`、`ea-mcp` 合併或用完後）。
+8. **之後：** coding agent（Qwen3.8 軌跡；E4B 在 SWE-bench 4/60 對老師 36/60，是蒸餾補不滿的天花板）；清掉不用的 worktree（`ea-laptop`、`ea-spec2`、`ea-freeze`；`ea-web`、`ea-sample`、`ea-t1`、`ea-mcp`、`ea-v3` 合併或用完後）。
 
 ## 4. 開發機規則（通用規則在 AGENTS.md）
 
