@@ -1,7 +1,7 @@
 # 開發機工作檔（Linux、RTX 3090）
 
 更新：2026-10-10 下午｜SilentTalk、EdgeAgent 都在 `copilot-story-mode`，commit 先留本機，出貨時才推；規格 v2 已凍結（`92a1961`）
-你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事，**只寫現況和下一步**。上一版：`archive/dev-box-2026-10-10-before-temperature-split.md`（只在這台機器，不必讀）。
+你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事，**只寫現況和下一步**。上一版：`archive/dev-box-2026-10-10-before-sampling-by-mode.md`（只在這台機器，不必讀）。
 
 ---
 
@@ -24,6 +24,7 @@
 | 工作 | 那一條路 |
 |---|---|
 | **產品 Agent** | EdgeAgent Pi 迴圈＋規格 v2。考試 `bench/run.py`（63 題×2，`ship_gate.py`）、情境卡驗收、Python 題。資料：老師在框架裡錄 → `dataset.py --thinking both` → SilentTalk `train_lora.py` |
+| **取樣** | 橋接器（`agent_bridge.mjs`）是 owner。分支 `model-sampling`（worktree `ea-sample`，ce8810a）：基底模型 off／high 都 0.2；有 Agent adapter 時 high 0.2、off 照模型檔（Gemma 4：1.0、top-k 64、top-p 0.95） |
 | **網頁工具** | `edge_agent/web_tools.mjs`（錯誤講原因；空殼頁交給本機無頭瀏覽器；meta refresh、Big5）。量測 `bench/web_live.mjs`：開發機 27/30、6/6 搜尋 |
 | **推論** | `edge_agent/inference.py`：兩槽一池，角色 0 號、Agent 1 號，角色開口時 Agent 讓路；共用一個 adapter 才成立（§6） |
 | **adapter** | 同一份資料訓兩個：`agent-fw3`（只有 Agent）、`machine-spirit-fw3`（Agent＋角色）；合一版在 Agent 和角色關卡都不輸才出 |
@@ -37,15 +38,15 @@
 
 1. **這一輪的考試（佇列正在跑）：**
    - 資料 881 列（情境 101/314、工具 127/152、Python 171/210）。`agent-fw3` 驗證誤差 0.62；`machine-spirit-fw3` 0.904 → 0.918（第 1 輪 `-e1` 留著）。
-   - **取樣：** 橋接器把 Agent 溫度寫死 0.2，從沒量過。`ea-sample`（分支 `model-sampling` 04c3885）改成照模型檔（1.0、top-k 64、top-p 0.95）。0.2 下 fw3 失敗指令原樣重跑到重複上限 32 次（轉檔沒問題）。
-   - **126 次的成績（溫度 0.2／1.0）：** off：基底 64／57、fw3 73／79、ms3 —／73。high：基底 89／77、fw3 —／73、ms3 —／77。基底在 0.2 好、fw3 off 在 1.0 好，所以每個模型用自己較好的溫度比；產品可以按模式（off／high）設不同溫度（橋接器是取樣的 owner）。
-   - **MCP：** 基底 24（off 0.2、high 兩種溫度），adapter 18–20。參數照舊工具亂填（`name` 而不是 `stock_no`）；881 列只有 8 列 MCP。`mcp-d-takeoff` 是評分錯（`next-world` 已修）。
+   - **126 次的成績（溫度 0.2／1.0）：** off：基底 64、60／57，fw3 73／79，ms3 （考中）／73。high：基底 89、86／77，fw3 82／73，ms3 （排隊）／77。同設定重考差 3–4 分。
+   - **取樣定案（§2）：** 每個模型用各自較好的溫度：基底兩種都 0.2；adapter off 1.0、high 0.2。0.2 下 fw3 off 失敗指令原樣重跑到重複上限 32 次（轉檔沒問題）。ms3 的 off 若 0.2 較好，關卡和 `model-sampling` 要照改。
+   - **目前最佳對最佳：** fw3 off 79 贏基底 60–64；high 82 輸基底 86–89。MCP 基底 21–24，adapter 18–20：參數照舊工具亂填（`name` 而不是 `stock_no`）；881 列只有 8 列 MCP。`mcp-d-takeoff` 是評分錯（`next-world` 已修）。
    - **思考：** adapter 每步想的字數是基底的一半（中位數 310 對 610–750 字），步數多近三倍；老師錄的思考中位數 315 字（錄製預算 1024），學生學到想太短。
-   - **ms3 聊天：** off 時問「你是誰」先跑 `ls`（2/2），聊天關卡不過。
-   - **佇列順序：** `base-v2f`、`base-v2f-high`（0.2）→ `fw3-eval-high`、`ms3-eval`、`ms3-eval-high`（0.2）→ 情境卡（基底 1.0、筆電現行、fw3／ms3 1.0、基底 0.2）→ Python（同上）→ 角色 → 關卡：`gate-fw3`、`gate-ms3`（對筆電現行）、`gate-*-vs-base`（1.0）、`gate-*-vs-v2f`（0.2）、`gate-ms3-vs-fw3`。adapter 的 0.2 成績出來後，決定每個模型 off／high 各用哪個溫度；adapter 若在 high 是 0.2 較好，情境卡、Python 也要補考 0.2。
-   - 照 MCP 那條關卡，這一輪很可能不出貨。關卡沒過就讀 `why.txt` 分類：評分錯、環境錯，還是模型弱點。
+   - **ms3 聊天：** off 1.0 時問「你是誰」先跑 `ls`（2/2），聊天關卡不過。
+   - **佇列順序：** `ms3-eval`、`ms3-eval-high`（0.2）→ 情境卡、Python 全在 0.2（基底凍結規格、筆電現行、fw3、ms3）→ 角色 → 關卡：`gate-fw3`、`gate-ms3`（對筆電現行）、`gate-*-vs-v2f`（對基底 0.2）、`gate-ms3-vs-fw3`；adapter 的 off 用 `-t1`、high 用 0.2。
+   - 照 high 和 MCP，這一輪很可能不出貨。關卡沒過就讀 `why.txt` 分類：評分錯、環境錯，還是模型弱點。
 2. **筆電：** 第 10 回合已審；下一回合是出貨回合。
-3. **出貨（有 adapter 過全部關卡時）：** 優先合一版；只有 `fw3` 過，就先診斷 `ms3`。合併 `model-sampling`（照量到的溫度改）、`next-world` 進 `copilot-story-mode`，跑完整測試，推 EdgeAgent，等 CI 綠。整份重寫 `laptop.md`：
+3. **出貨（有 adapter 過全部關卡時）：** 優先合一版；只有 `fw3` 過，就先診斷 `ms3`。合併 `model-sampling`、`next-world` 進 `copilot-story-mode`，跑完整測試，推 EdgeAgent，等 CI 綠。整份重寫 `laptop.md`：
    - PowerShell 7.6.6 部署，確認 Agent 指令由 `pwsh.exe` 執行；介面：`reversible`、還原、API 登錄頁；Discord 實測；
    - 網頁實測：`node bench/web_live.mjs` 和開發機比，Edge 無頭讀頁，記下秒數、角色回話延遲、可用 RAM；
    - 唯讀查本機：「記憶體多大」「C 碟還剩多少」要答出實數；`Get-CimInstance Win32_Process`、`Get-Process | Format-List *`、`... CommandLine`、`Write-Output C:\Users | Get-ChildItem` 要被擋；唯讀算資料要用 `Group-Object` 算出來；
@@ -64,7 +65,7 @@
 
 ## 4. 開發機規則（通用規則在 AGENTS.md）
 
-1. 改 prompt、模型、設定、外殼前先量，改完再量，變差就退回。修 bug 不用 A/B。
+1. 改 prompt、模型、設定、外殼前先量，改完再量，變差就退回。修 bug 不用 A/B。取樣、上限這類設定每個模型、每個模式各自量。
 2. **Agent 只在沙盒裡跑。** 改了 `sandbox()` 或 `code_mounts()` 先跑 `--containment`。
 3. 題目先過 `--selftest`；比較一律用同一批題目配對。
 4. 只有過硬關卡的資料才能訓練。資料檔帶版本戳記，不混版本。
@@ -88,8 +89,8 @@ cd /home/clawd/EdgeAgent && .venv/bin/python -m pytest -q -p no:cacheprovider   
 ## 5. 考場細節
 
 - **沙盒：** 主機只跑模型；容器沒網路、root 唯讀、非 root；沒有瀏覽器。Windows 指令回每張卡那台筆電的數值（`bench/laptop.py`）。
-- **情境題：** 過不過由評審決定（`<run>/verdicts.jsonl`）。Gemma 4 範本只在最後一則使用者訊息後顯示思考，所以每輪切成一列。
-- **llama-server（b11193）：** 不同 LoRA 的槽不能同批；共用池加 `--no-cache-idle-slots`；考場固定 `--fit off`。取樣預設讀模型檔（Gemma 4：1.0／64／0.95，min-p 0.05）。
+- **情境題、Python 題：** 都是開思考考的。情境題過不過由評審決定（`<run>/verdicts.jsonl`）。Gemma 4 範本只在最後一則使用者訊息後顯示思考，所以每輪切成一列。
+- **llama-server（b11193）：** 不同 LoRA 的槽不能同批；共用池加 `--no-cache-idle-slots`；考場固定 `--fit off`。請求沒給溫度時讀模型檔（Gemma 4：1.0／64／0.95，min-p 0.05）。
 
 ## 6. 量過的數字
 
@@ -101,7 +102,7 @@ cd /home/clawd/EdgeAgent && .venv/bin/python -m pytest -q -p no:cacheprovider   
 
 ## 7. 踩過的雷
 
-- **沒量過的預設值：** Agent 溫度 0.2 從改寫起就在，基底不受影響，訓練後的模型才鬼打牆；但改成 1.0 基底又變差。每個寫死的取樣、上限都要每個模型各自量。
+- **沒量過的預設值：** Agent 溫度 0.2 從改寫起就在，對基底剛好，訓練後的模型 off 時才鬼打牆；改成 1.0 基底又變差。
 - **錄製省下的預算會被學走：** 老師思考上限 1024 讓學生學到想太短；省時間的錄製設定要量對學生的影響。
 - **重試沒用：** 必然重現的失敗重試沒用；佇列失敗就停下，由 session 診斷。
 - **老師出題：** 常把檔案包在 Markdown 程式碼框裡（`py_tasks.unfenced`）。
