@@ -1,7 +1,7 @@
 # 開發機工作檔（Linux、RTX 3090）
 
 更新：2026-10-10 夜｜SilentTalk、EdgeAgent 都在 `copilot-story-mode`，commit 先留本機，有真實進展才推；規格 v2 凍結（`92a1961`），v3 在分支 `spec-v3`（worktree `/home/clawd/worktrees/ea-v3`）
-你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事，**只寫現況和下一步**。上一版：`archive/dev-box-2026-10-10-before-short-teacher.md`（只在這台機器，不必讀）。
+你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事，**只寫現況和下一步**。上一版：`archive/dev-box-2026-10-10-before-long-thoughts.md`（只在這台機器，不必讀）。
 
 ---
 
@@ -9,7 +9,7 @@
 
 - **One path：** 每件工作一條路（§2），比完刪掉輸的（程式、設定、測試、佇列、文件一起）；同時只有一支佇列。**有原生的就用原生的**，不另立名目。
 - **蒸餾：** 老師只用 Qwen3.8-27B（出卡、寫題目、錄對話都用 IQ3 的 `teacher-38-iq3`）；評審 Gemma 4 31B（`judge-gemma`）。不用付費 API、不下載別的老師。Claude 的輸出永遠不當訓練目標、不挑資料、不當出貨評審。使用者的對話只由 Qwen3.8 抽成情境卡。
-- **老師的思考不能被切：** 老師起碼要想得跟基底 E4B 一樣長，學生才學得到完整的思考；預算切掉的比例要 ≤2%。
+- **長思考內化（DeepSeek 的做法）：** 學生學老師完整的長思考，只用過關的軌跡；錄得久、筆電上想得久都接受（2026-10-10）。老師起碼要想得跟基底 E4B 一樣長，預算切掉的比例要 ≤2%。
 - **一個模型版本一份凍結規格（提示＋工具）：** 規格變動集中到下一版；但下一版的修改立刻在 worktree 做，不等這一輪考完。
 - **品質是開發機的事：** 使用者不當測試員；沒過關要診斷、修好、出下一版。被資料關卡擋掉的失敗還是產品的問題。
 - **使用者不在時不等回答：** 自己判斷、修好、測過，結果寫進這份。
@@ -55,7 +55,7 @@
    - **原因（都在資料）：** 錄製預算 1024 切掉老師的思考（`thought_stats.py` 重算：情境 25%、工具 9%、Python 15%，切掉的是最長的）。**就算不切，老師也想得比基底短：** 老師已是最高思考等級（xhigh），工具每步中位數 288 字、Python 245 字，基底 650 字（只有情境 1252 字比較長）。學生每步只有 181–225 字、步數近三倍。另外 MCP 只有 8 列；Agent 資料沒有純聊天；假股票伺服器不認真實 schema 的 `name`。
 2. **佇列正在跑的（`queue.sh` 已換成含 v3 的新檔，正在跑的 shell 還讀舊內容）：** 訓練 `machine-spirit-fw3n`（不帶思考，約 21:40 完）→ 它 off／high × 0.2／1.0 四場 → `v3-think-pilot`（30 張訓練卡，v3＋預算 12288）→ `ms3-lines`。
    - **舊佇列停下（`queue finished` 或失敗）時：** 背景跑 `setsid nohup bash .runtime/fw/relaunch.sh >> .runtime/fw/queue.log 2>&1 &`（在 EdgeAgent 裡），新檔跳過做完的步驟接著跑 v3。`ms3-lines` 失敗就照下面診斷；當下修不好，把它移到佇列最後再重啟。
-   - **看 fw3n，並當晚決定 v3 怎麼教思考：** high 有沒有回到基底水準，截斷和重複有沒有變少。回到了，就是「學了短思考」害的：v3 只在老師想得不比基底短的資料（目前只有情境題）保留思考，工具題、Python 題不帶思考訓練，讓模型保留自己的思考習慣；沒回到，就再找原因（步數、截斷），不要把短思考當成答案。決定寫進這份和佇列。
+   - **看 fw3n（對照組）：** high 有沒有回到基底水準，截斷和重複有沒有變少。v3 照使用者選的做法保留老師完整的思考，fw3n 只用來分辨「學了被切短的思考」和其他原因（步數、截斷）。v3 訓練時同一份資料再訓一個不帶思考的當對照，關卡選贏的。
    - **看 `ms3-lines`：** `pair_judge` 上次自我檢查只過 26/40（要 36）。結果檔 `SilentTalk/.runtime/dev/line-ab/ms3.judge-validation.json` 的 `by_kind`、`missed` 會說是哪種壞法沒判對（評審每次只輸出 29–38 個 token，不是被截）。若是「另一段對話的台詞」錯：評估集同一情境有好幾段對話，改用主題不同的對話的台詞。若兩種壞法都錯、多半判平手：是位置偏誤，改成用兩種順序下 A／B 的機率平均來判。
 3. **v3 的佇列步驟（在 `ea-v3`，依序）：**
    1. `v3-pilot-check`：`thought_stats.py --base`（基底 `base-v2f-high`）看試錄，印出每類思考是基底的幾倍；任何一類切掉 >2% 就停下。停下時把 `ea-v3/bench/configs.json` 兩個老師的 `--reasoning-budget` 加大並 commit，刪掉 `ea-v3/.runtime/bench/v3-think-pilot`，重跑試錄。
@@ -63,9 +63,9 @@
    3. `v3-cards`：C 組照新規則淘汰（訓練 22、考試 2 張，含試錄的 C-001、C-003），補回 55／10 張，寫檔案、重建題目。
    4. `v3-describe`：322 題工具題（23 類×14，CPU 已切好；自我檢查沒有一題不做事就過）由老師寫請求。
    5. `v3-base`、`v3-base-high`：基底先考 v3（含記憶、MCP、https 假網路）。**要看：** 新題有沒有考場本身的錯（兩次都 0 分或都滿分的題各看一次）。
-   6. `v3-tools`、`v3-py`、`v3-scen`：整份錄製。試錄的對話直接併入，淘汰卡的紀錄續跑時自動丟掉。情境題 v2 花 15 小時，這次會更久。
+   6. `v3-tools`、`v3-py`（各錄兩次，每題兩條獨立過關的軌跡）、`v3-scen`（一次；之後要更多資料就用 `--repeats 2` 續跑，只補第二次）：整份錄製。試錄的對話直接併入，淘汰卡的紀錄續跑時自動丟掉。情境題 v2 花 15 小時，這次會更久。
    7. `v3-judged`、`v3-thoughts`（只報數字）、基底的 v3 情境卡和 Python 題。
-4. **v3 之後（錄製期間寫進佇列）：** `dataset.py`（帶思考；依 fw3n 結果決定要不要再訓一個不帶思考的）→ 訓練合一版 → 每個 adapter 考 off／high 各兩種溫度，蓋上較好的（`stamp_adapter_sampling.py`）→ 情境卡、Python、台詞、`chat_task` → 關卡 → 第一輪「從自己的錯學」（學生是合一版，在它的最佳溫度、只用訓練卡和訓練題）。
+4. **v3 之後（錄製期間寫進佇列）：** `dataset.py`（帶完整思考，和不帶思考的對照）→ 先數每列的 token 數，長思考的列超過 `--max-length 32768` 的多就加大（看 VRAM）→ 訓練合一版 → 每個 adapter 考 off／high 各兩種溫度，蓋上較好的（`stamp_adapter_sampling.py`）→ 情境卡、Python、台詞、`chat_task` → 關卡 → 第一輪「從自己的錯學」（學生是合一版，在它的最佳溫度、只用訓練卡和訓練題）。
 5. **出貨（有 adapter 過全部關卡時）：** 合併 `spec-v3`（含 `next-world`）進 `copilot-story-mode`，跑完整測試，推 EdgeAgent，等 CI 綠；整份重寫 `laptop.md`：部署 PowerShell 7.6.6、介面（`reversible`、還原、API 登錄頁、記憶的檢視和編輯）、Discord 實測、網頁實測（`web_live.mjs`）、唯讀查本機和唯讀算資料的檢查、Windows 上要過 `test_real_sdk_stops_fetching_the_same_dead_address` 和 `tests/test_lingua_powershell.py`。
 6. **筆電：** 第 10 回合已審；下一回合等有 adapter 過關。
 7. **之後：** coding agent（Qwen3.8 軌跡）；清掉不用的 worktree（`ea-laptop`、`ea-spec2`、`ea-freeze`；`ea-web`、`ea-t1`、`ea-v3` 合併或用完後）；v3 的 `configs.json` 還留著 v2 實驗的 `think512/1024/2048`，合併前刪。
