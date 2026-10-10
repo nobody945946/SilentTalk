@@ -1,7 +1,7 @@
 # 開發機工作檔（Linux、RTX 3090）
 
 更新：2026-10-10 夜｜SilentTalk、EdgeAgent 都在 `copilot-story-mode`，commit 先留本機，有真實進展才推；規格 v2 凍結（`92a1961`），v3 在分支 `spec-v3`（worktree `/home/clawd/worktrees/ea-v3`）
-你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事，**只寫現況和下一步**。上一版：`archive/dev-box-2026-10-10-before-night.md`（只在這台機器，不必讀）。
+你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事，**只寫現況和下一步**。上一版：`archive/dev-box-2026-10-10-before-short-teacher.md`（只在這台機器，不必讀）。
 
 ---
 
@@ -52,13 +52,13 @@
    | 角色 chat_task（40） | char-v1 39 | — | 36 |
 
    - ms3 情境卡輸在對話中途壞掉：12 段生成到上限被截、7 段重複上限、22 段重複搜尋。同設定重考差 3–4 分。
-   - **原因（都在資料）：** 錄製預算 1024 切掉老師的思考（`thought_stats.py` 重算：情境 25%、工具 9%、Python 15%，切掉的是最長的），學生每步只想基底的一半（310 對 610–750 字）、步數近三倍；MCP 只有 8 列；Agent 資料沒有純聊天；假股票伺服器不認真實 schema 的 `name`。
+   - **原因（都在資料）：** 錄製預算 1024 切掉老師的思考（`thought_stats.py` 重算：情境 25%、工具 9%、Python 15%，切掉的是最長的）。**就算不切，老師也想得比基底短：** 老師已是最高思考等級（xhigh），工具每步中位數 288 字、Python 245 字，基底 650 字（只有情境 1252 字比較長）。學生每步只有 181–225 字、步數近三倍。另外 MCP 只有 8 列；Agent 資料沒有純聊天；假股票伺服器不認真實 schema 的 `name`。
 2. **佇列正在跑的（`queue.sh` 已換成含 v3 的新檔，正在跑的 shell 還讀舊內容）：** 訓練 `machine-spirit-fw3n`（不帶思考，約 21:40 完）→ 它 off／high × 0.2／1.0 四場 → `v3-think-pilot`（30 張訓練卡，v3＋預算 12288）→ `ms3-lines`。
    - **舊佇列停下（`queue finished` 或失敗）時：** 背景跑 `setsid nohup bash .runtime/fw/relaunch.sh >> .runtime/fw/queue.log 2>&1 &`（在 EdgeAgent 裡），新檔跳過做完的步驟接著跑 v3。`ms3-lines` 失敗就照下面診斷；當下修不好，把它移到佇列最後再重啟。
-   - **看 fw3n：** high 有沒有回到基底水準，截斷和重複有沒有變少。回到了，就是「學了被切短的思考」害的；v3 訓練時再比「完整長思考」對「不帶思考」。
+   - **看 fw3n，並當晚決定 v3 怎麼教思考：** high 有沒有回到基底水準，截斷和重複有沒有變少。回到了，就是「學了短思考」害的：v3 只在老師想得不比基底短的資料（目前只有情境題）保留思考，工具題、Python 題不帶思考訓練，讓模型保留自己的思考習慣；沒回到，就再找原因（步數、截斷），不要把短思考當成答案。決定寫進這份和佇列。
    - **看 `ms3-lines`：** `pair_judge` 上次自我檢查只過 26/40（要 36）。結果檔 `SilentTalk/.runtime/dev/line-ab/ms3.judge-validation.json` 的 `by_kind`、`missed` 會說是哪種壞法沒判對（評審每次只輸出 29–38 個 token，不是被截）。若是「另一段對話的台詞」錯：評估集同一情境有好幾段對話，改用主題不同的對話的台詞。若兩種壞法都錯、多半判平手：是位置偏誤，改成用兩種順序下 A／B 的機率平均來判。
 3. **v3 的佇列步驟（在 `ea-v3`，依序）：**
-   1. `v3-pilot-check`：`thought_stats.py` 看試錄，任何一類切掉 >2% 就停下。停下時把 `ea-v3/bench/configs.json` 兩個老師的 `--reasoning-budget` 加大並 commit，刪掉 `ea-v3/.runtime/bench/v3-think-pilot`，重跑試錄。
+   1. `v3-pilot-check`：`thought_stats.py --base`（基底 `base-v2f-high`）看試錄，印出每類思考是基底的幾倍；任何一類切掉 >2% 就停下。停下時把 `ea-v3/bench/configs.json` 兩個老師的 `--reasoning-budget` 加大並 commit，刪掉 `ea-v3/.runtime/bench/v3-think-pilot`，重跑試錄。
    2. `v3-py-pilot`：20 題 Python 用同預算錄，同樣檢查。
    3. `v3-cards`：C 組照新規則淘汰（訓練 22、考試 2 張，含試錄的 C-001、C-003），補回 55／10 張，寫檔案、重建題目。
    4. `v3-describe`：322 題工具題（23 類×14，CPU 已切好；自我檢查沒有一題不做事就過）由老師寫請求。
@@ -110,6 +110,7 @@ cd /home/clawd/EdgeAgent && .venv/bin/python -m pytest -q -p no:cacheprovider   
 - **沒量過的預設值：** Agent 溫度 0.2 從改寫起就在，對基底剛好，對 adapter 不一定，兩個 adapter 方向還相反。
 - **錄製省下的預算會被學走：** 預算切掉的正好是最深入的思考。
 - **考場不忠實會冤枉模型：** 假伺服器不認真實參數、評分把起飛前解鎖當多餘，都算到模型頭上。
+- **已知的副作用要追到學生身上：** 10/08 就知道預算切掉 21% 的思考，只做了「被切的不訓練」，結果丟掉的正好是最長的；只看分數的里程碑檢查抓不到。每個里程碑都要拿資料和基底比（思考長度、切斷、步數）。
 - **自我檢查的題目也要檢查：** 評審沒過自我檢查時，先看是評審錯，還是「壞的那一句」其實也說得通。
 - **重試沒用：** 必然重現的失敗重試沒用；佇列失敗就停下，由 session 診斷。
 - **評審看不到就當沒發生：** 工具結果要給足字數。
