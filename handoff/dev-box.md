@@ -1,7 +1,7 @@
 # 開發機工作檔（Linux、RTX 3090）
 
 更新：2026-10-10 下午｜SilentTalk、EdgeAgent 都在 `copilot-story-mode`，commit 先留本機，出貨時才推；規格 v2 已凍結（`92a1961`）
-你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事，**只寫現況和下一步**。上一版：`archive/dev-box-2026-10-10-before-v3-ready.md`（只在這台機器，不必讀）。
+你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事，**只寫現況和下一步**。上一版：`archive/dev-box-2026-10-10-before-loop-guard.md`（只在這台機器，不必讀）。
 
 ---
 
@@ -74,7 +74,9 @@
    - **假網路：** 每個名字都解析到沙盒自己（迴環上的 DNS），443 用 bench 自己的 CA 為每個名字簽憑證，Node、Python、PowerShell 都信任；網址照卡片原樣（`scenario_cards.py` 不再改寫成 `:8081`，研究題的 pages.json 也改回來）；卡片沒有的頁面或網站回 404。
    - **查本機：** Linux 自己的指令照舊算失敗；`$PSVersionTable`、`[Environment]` 改成工具輸出出現沙盒系統（GNU/Linux、Unix 6.8、/home/bench…）才算。
    - **取樣：** 見 §2。
-   - **還要做（要 GPU）：** 老師思考預算試錄（30 張卡，挑切斷率 <2% 的預算）；C 組 `recheck` 再 `generate`；新切題前刪掉 `.runtime/agentdata/tool-tasks` 裡舊的 `mcp-00..13`（`Task.write` 遇到已有的資料夾會跳過）；然後整份重錄（情境、工具、Python、記憶、聊天、MCP）。
+   - **輸出長度：** Agent 不再有輸出上限（使用者 2026-10-10：「只要不失控，輸出可以沒上限」）。橋接器邊收邊看（`loop_guard.mjs`）：最後一段是同一個單位（≤400 字）連續重複 ≥2000 字且 ≥20 次就停，使用者看到「輸出一直重複同一段，已停止」。8192 的上限原本只剪到鬼打牆和長檔案；`max_output_tokens` 只剩給整理上下文留空間用。
+   - **老師思考預算：** `teacher-38`、`teacher-38-iq3` 改成 12288（ae6b982；4096 仍切掉 7% 的 Python 思考）。佇列最後一步 `v3-think-pilot`：30 張訓練卡（每組 3 張）用 v3 錄，量還有多少被切、多長；v3 的訓練卡任務在 `ea-v3/.runtime/agentdata/scenarios/train-tasks`（網址是原樣 https）。
+   - **還要做（要 GPU）：** 看試錄的切斷率（<2% 才整份錄，否則再放寬）；C 組 `recheck` 再 `generate`；新切題前刪掉 `.runtime/agentdata/tool-tasks` 裡舊的 `mcp-00..13`（`Task.write` 遇到已有的資料夾會跳過）；然後整份重錄（情境、工具、Python、記憶、聊天、MCP）。
    - **第一輪「從自己的錯學」：** 學生是合一版，在它的最佳溫度、在訓練卡和訓練題上收集失敗（考試的卡和題不碰）。
 8. **之後：** coding agent（Qwen3.8 軌跡；E4B 在 SWE-bench 4/60 對老師 36/60，是蒸餾補不滿的天花板）；清掉不用的 worktree（`ea-laptop`、`ea-spec2`、`ea-freeze`；`ea-web`、`ea-t1`、`ea-v3` 合併或用完後）。
 
