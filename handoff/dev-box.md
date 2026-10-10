@@ -1,7 +1,7 @@
 # 開發機工作檔（Linux、RTX 3090）
 
 更新：2026-10-10 夜｜SilentTalk、EdgeAgent 都在 `copilot-story-mode`，commit 先留本機，有真實進展才推；規格 v2 凍結（`92a1961`），v3 在分支 `spec-v3`（worktree `/home/clawd/worktrees/ea-v3`）
-你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事，**只寫現況和下一步**。上一版：`archive/dev-box-2026-10-10-before-long-thoughts.md`（只在這台機器，不必讀）。
+你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事，**只寫現況和下一步**。上一版：`archive/dev-box-2026-10-10-before-chat-split.md`（只在這台機器，不必讀）。
 
 ---
 
@@ -9,7 +9,7 @@
 
 - **One path：** 每件工作一條路（§2），比完刪掉輸的（程式、設定、測試、佇列、文件一起）；同時只有一支佇列。**有原生的就用原生的**，不另立名目。
 - **蒸餾：** 老師只用 Qwen3.8-27B（出卡、寫題目、錄對話都用 IQ3 的 `teacher-38-iq3`）；評審 Gemma 4 31B（`judge-gemma`）。不用付費 API、不下載別的老師。Claude 的輸出永遠不當訓練目標、不挑資料、不當出貨評審。使用者的對話只由 Qwen3.8 抽成情境卡。
-- **長思考內化（DeepSeek 的做法）：** 學生學老師完整的長思考，只用過關的軌跡；錄得久、筆電上想得久都接受（2026-10-10）。老師起碼要想得跟基底 E4B 一樣長，預算切掉的比例要 ≤2%。
+- **長思考內化（DeepSeek 的做法）：** 學生學老師完整的長思考，只用過關的軌跡；錄得久、筆電上想得久都接受（2026-10-10）。老師起碼要想得跟基底 E4B 一樣長，預算切掉的比例要 ≤2%。**長思考只給 Agent 的工作；聊天是另一回事：** 純聊天在任何模式都直接回答（`dataset.py` 的聊天題不帶思考，開關兩種都訓）；角色的回話一律不開思考（SilentTalk `reply_transport.py` 送 `enable_thinking: false`）。
 - **一個模型版本一份凍結規格（提示＋工具）：** 規格變動集中到下一版；但下一版的修改立刻在 worktree 做，不等這一輪考完。
 - **品質是開發機的事：** 使用者不當測試員；沒過關要診斷、修好、出下一版。被資料關卡擋掉的失敗還是產品的問題。
 - **使用者不在時不等回答：** 自己判斷、修好、測過，結果寫進這份。
@@ -65,7 +65,7 @@
    5. `v3-base`、`v3-base-high`：基底先考 v3（含記憶、MCP、https 假網路）。**要看：** 新題有沒有考場本身的錯（兩次都 0 分或都滿分的題各看一次）。
    6. `v3-tools`、`v3-py`（各錄兩次，每題兩條獨立過關的軌跡）、`v3-scen`（一次；之後要更多資料就用 `--repeats 2` 續跑，只補第二次）：整份錄製。試錄的對話直接併入，淘汰卡的紀錄續跑時自動丟掉。情境題 v2 花 15 小時，這次會更久。
    7. `v3-judged`、`v3-thoughts`（只報數字）、基底的 v3 情境卡和 Python 題。
-4. **v3 之後（錄製期間寫進佇列）：** `dataset.py`（帶完整思考，和不帶思考的對照）→ 先數每列的 token 數，長思考的列超過 `--max-length 32768` 的多就加大（看 VRAM）→ 訓練合一版 → 每個 adapter 考 off／high 各兩種溫度，蓋上較好的（`stamp_adapter_sampling.py`）→ 情境卡、Python、台詞、`chat_task` → 關卡 → 第一輪「從自己的錯學」（學生是合一版，在它的最佳溫度、只用訓練卡和訓練題）。
+4. **v3 之後（錄製期間寫進佇列）：** `dataset.py`（帶完整思考，和不帶思考的對照）→ 先數每列的 token 數，長思考的列超過 `--max-length 32768` 的多就加大（看 VRAM）→ 訓練合一版 → 每個 adapter 考 off／high 各兩種溫度，蓋上較好的（`stamp_adapter_sampling.py`）→ 情境卡、Python、台詞、`chat_task`（合一版的角色回話不能出現思考、不能變慢：和 char-v1 比第一句出來的時間）→ 關卡 → 第一輪「從自己的錯學」（學生是合一版，在它的最佳溫度、只用訓練卡和訓練題）。
 5. **出貨（有 adapter 過全部關卡時）：** 合併 `spec-v3`（含 `next-world`）進 `copilot-story-mode`，跑完整測試，推 EdgeAgent，等 CI 綠；整份重寫 `laptop.md`：部署 PowerShell 7.6.6、介面（`reversible`、還原、API 登錄頁、記憶的檢視和編輯）、Discord 實測、網頁實測（`web_live.mjs`）、唯讀查本機和唯讀算資料的檢查、Windows 上要過 `test_real_sdk_stops_fetching_the_same_dead_address` 和 `tests/test_lingua_powershell.py`。
 6. **筆電：** 第 10 回合已審；下一回合等有 adapter 過關。
 7. **之後：** coding agent（Qwen3.8 軌跡）；清掉不用的 worktree（`ea-laptop`、`ea-spec2`、`ea-freeze`；`ea-web`、`ea-t1`、`ea-v3` 合併或用完後）；v3 的 `configs.json` 還留著 v2 實驗的 `think512/1024/2048`，合併前刪。
