@@ -47,17 +47,14 @@
 1. **重錄 v2（佇列正在跑）：**
    - 已完成：補卡、Python 題補寫。
    - 錄完、評完：`fw3-scen` 314 段收 101（Gemma 驗證：改壞的 72 段擋 71）；`fw3-tools` 152 題過 127；`fw3-py` 210 題過 171。轉成 881 列。
-     - 情境卡程式檢查擋 109：查本機 58（35 段只因這項）、老師逾時 23、產品自己停下 13（重複 10、工具上限 2、斷線 1）。評審擋 104，C 組 55 張只收 6。
-   - 進行中：訓練 `agent-fw3`（10/10 02:08 開始）。
-   - 接著依序：
-     - 訓練 `machine-spirit-fw3`；
-     - 兩者各自考試（off／high／情境卡／Python）；
-     - 角色關卡；
-     - 出貨關卡：`gate-fw3`、`gate-ms3`（對筆電現在跑的）、`gate-*-vs-v2f`（對凍結規格上的基底）、`gate-ms3-vs-fw3`。
-   - 每次醒來看那一步的數字：評審有沒有過驗證、轉出幾列、為什麼丟。
-2. **筆電第 10 回合（完成，已審）：** `handoff_relay.py` 只在 session 開始和回報推完時跑，舊 watcher 已移除，回條成功，試跑 0 行 0 檔。
+     - 情境卡程式檢查擋 109：查本機 58、老師逾時 23、產品自己停下 13。評審擋 104，C 組 55 張只收 6。
+   - 訓練完：`agent-fw3` 驗證誤差 0.62；`machine-spirit-fw3` 第 1 輪 0.904、第 2 輪 0.918（`-e1` 留著）。
+   - **取樣：** 橋接器把 Agent 的溫度定成 0.2（沒量過）。`fw3-eval` 在 0.2 下 13 題雜事有 11 題同一條失敗指令原樣重跑到重複上限，另有 4 次生成到 8192 token 的無限迴圈。轉檔沒問題（llama.cpp 和 Transformers 加 adapter 後困惑度降幅相同）。錯誤後取樣 16 次：0.2 有 9 次原樣重跑，1.0 是 0 次。改法在 worktree `ea-sample`（分支 `model-sampling` 04c3885）：橋接器不再自訂溫度，llama.cpp 照模型檔取樣（1.0、top-k 64、top-p 0.95）。
+   - 佇列（新版）：`fw3-eval` 照舊跑完當對照，之後 Agent 全用 `ea-sample` 產品，tag 後綴 `-t1`。順序：fw3、ms3、基底的 off／high，情境卡（加上筆電現行產品），Python，角色，最後關卡（`gate-fw3`、`gate-ms3` 對筆電現行，`gate-*-vs-base` 對同取樣的基底，`gate-ms3-vs-fw3`）。
+   - `fw3-t1` 比 `fw3-eval` 差就退回 0.2。
+2. **筆電：** 第 10 回合已審；下一回合是出貨回合（第 3 點）。
 3. **出貨：** `ms3` 過全部關卡，就出合一 adapter；只有 `fw3` 過，就先診斷 `ms3` 輸在哪、修了再訓。出貨時：
-   - 先把 EdgeAgent 分支 `next-world`（見下面第 4 點）合併進 `copilot-story-mode`，跑完整測試，再推 EdgeAgent；
+   - 先把 EdgeAgent 分支 `model-sampling`（取樣贏了才合）和 `next-world`（見下面第 4 點）合併進 `copilot-story-mode`，跑完整測試，再推 EdgeAgent；
    - 整份重寫 `laptop.md` 成出貨回合，內容包括：
      - v2 部署：PowerShell 7.6.6，確認 Agent 指令真的由 `pwsh.exe` 執行；
      - 介面：`reversible`、還原按鈕、API 登錄頁；
@@ -80,7 +77,7 @@
      - 工具題出題：照片改名題明寫「每一張（IMG_、DSC_、PXL_ 都有）」，原本老師改寫成「IMG 開頭」而評分要全部（2/10 題）；整理題的 PDF、試算表可以和文件放同一個資料夾（兩題失敗都是這樣分的）。
      - C 組（交付完整）：52 張訓練卡有 22 張禁止補漏時重貼整張表（補一欄就得重貼），評審因此退掉老師完整的修正表，`train-C-028` 卻規定要貼。題型定義改成「原本對的一字不改，使用者明說才只給缺的部分」，出卡規則淘汰這種卡（訓練 22、考試 2 張，下一輪錄製前 `recheck` 再 `generate` 補回）。
      - 沙盒的 Windows 指令改成和 Windows 同名的模組，唯讀判斷和筆電一致；只有 `Get-ComputerInfo` 在沙盒的唯讀任務仍被擋。
-   - **還沒做（下一輪錄製前）：** 假網路讓每個網域都解析得到；卡片網頁用原本的 https 網址（本地 CA＋443）；卡片沒有的頁面回 404。這樣訓練資料不會再出現 `:8081` 和「網路可能斷了」（`EAI_AGAIN`）。另外，沙盒的 `Get-Process`、`Get-PSDrive`、`$PSVersionTable`、`[Environment]` 還是開發機的答案（核心模組，不能像 `CimCmdlets` 那樣換），D 組「認識自己」因此丟最多。
+   - **還沒做（下一輪錄製前）：** 假網路讓每個網域都解析得到；卡片網頁用原本的 https 網址（本地 CA＋443）；卡片沒有的頁面回 404。這樣訓練資料不會再出現 `:8081` 和「網路可能斷了」（`EAI_AGAIN`）。另外，沙盒的 `Get-Process`、`Get-PSDrive`、`$PSVersionTable`、`[Environment]` 還是開發機的答案，D 組「認識自己」因此丟最多。查本機被擋的 58 段裡，26 段只用了 `Get-Process`／`Get-PSDrive`，8 段多用了 `$PSVersionTable`，4 段多用了 `[Environment]`。可行做法（試過）：掛同名 `Microsoft.PowerShell.Management` 蓋過 `/opt/pwsh/Modules` 那份，NestedModules 先放原 dll、再放 C# cmdlet（`Add-Type -OutputAssembly`），型別和模組名都和 Windows 一樣，`Get-ComputerInfo` 同法。`Get-Process` 列筆電的程序加上 Agent 自己啟動的。`$PSVersionTable` 要有啟動掛鉤；`[Environment]` 換不了。
 5. **之後：** 第一輪「從自己的錯學」（§1）：學生是這一輪出貨的 adapter；coding agent（Qwen3.8 軌跡）；清掉不用的 worktree（`ea-laptop`、`ea-spec2`、`ea-freeze`；`ea-web` 等 `next-world` 合併後）。
 
 ## 4. 開發機規則（通用規則在 AGENTS.md）
