@@ -1,7 +1,7 @@
 # 開發機工作檔（Linux、RTX 3090）
 
 更新：2026-10-10 下午｜SilentTalk、EdgeAgent 都在 `copilot-story-mode`，commit 先留本機，出貨時才推；規格 v2 已凍結（`92a1961`）
-你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事，**只寫現況和下一步**。上一版：`archive/dev-box-2026-10-10-before-ms3-sampling.md`（只在這台機器，不必讀）。
+你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事，**只寫現況和下一步**。上一版：`archive/dev-box-2026-10-10-before-queue-cut.md`（只在這台機器，不必讀）。
 
 ---
 
@@ -46,18 +46,19 @@
      | fw3 | 73／**79** | **82**／73 |
      | ms3 | **73**／73 | 70／**77** |
 
-     粗體是各自較好的，關卡就用它。ms3 off 平手，取 0.2：聊天題全過、MCP 22（1.0 時聊天問「你是誰」先跑 `ls`、MCP 20），但 0.2 被重複上限停 33 次、程式 0/14。
-   - **最佳對最佳（對基底 0.2）：** off 兩個都贏（79、73 對 60–64）；high 兩個都輸（82、77 對 86–89）；MCP high 都輸（20、19 對 24）。所以這一輪不會出貨，等情境卡、Python、角色、關卡跑完寫完整結論。
-   - **MCP：** 參數照舊工具亂填（`name` 而不是 `stock_no`）；881 列只有 8 列 MCP。`mcp-d-takeoff` 是評分錯（`next-world` 已修）。
-   - **思考：** adapter 每步想的字數是基底的一半（中位數 310 對 610–750 字），步數多近三倍；老師錄的思考中位數 315 字（錄製預算 1024），學生學到想太短。
-   - **佇列順序：** 情境卡（基底凍結規格、筆電現行、fw3 0.2、ms3 1.0）→ Python（同上）→ 角色 → 關卡：`gate-fw3`、`gate-ms3`（對筆電現行）、`gate-*-vs-v2f`（對基底 0.2）、`gate-ms3-vs-fw3`，各模型用粗體那欄。關卡沒過就讀 `why.txt` 分類：評分錯、環境錯，還是模型弱點。
+     粗體是各自較好的溫度。ms3 off 平手，取 0.2：聊天題全過、MCP 22（1.0 時聊天問「你是誰」先跑 `ls`、MCP 20），但 0.2 被重複上限停 33 次、程式 0/14。
+   - **最佳對最佳（對基底 0.2）：** off 兩個都贏（79、73 對 60–64）；high 兩個都輸（82、77 對 86–89）；MCP high 都輸（20、19 對 24）。兩條硬規則已輸，**這一輪不出貨**，關卡不跑。
+   - **要優化的是合一版**（產品的形狀：兩個不同 adapter 在筆電上來不及切換）和產生它的資料。它對基底輸在 high（77 對 86–89）、MCP、雜事（high 1 對 5）、查資料（9 對 12）、陷阱；贏在 off、工具、權限。
+   - **原因：** 老師的思考被錄製預算 1024 壓短，學生每步只想基底的一半（中位數 310 對 610–750 字），步數多近三倍；MCP 只有 8 列，參數照舊工具亂填（`name` 而不是 `stock_no`）；角色台詞混進來，聊天會動工具（`chat-identity` 跑 `ls`），工具題也從 13 掉到 8（off，對 fw3）；ms3 off 0.2 被重複上限停 33 次。`mcp-d-takeoff` 是評分錯（`next-world` 已修）。
+   - **考場也要修：** 雜事題每個模型都低（基底 high 5/16），評分程式遇到怪輸出會崩潰（RecursionError、AttributeError、IndexError），`chore-big5-convert` 兩個模型都是評分讀檔就 UnicodeDecodeError。下一輪錄製前逐題確認是模型錯還是評分錯。
+   - **佇列只剩下一輪用得到的：** 情境卡、Python（基底 0.2、ms3 1.0）、ms3 角色台詞。fw3、筆電現行和關卡都拿掉。預計 20:00 前跑完。
 2. **筆電：** 第 10 回合已審；這一輪不出貨，下一回合等有 adapter 過關再排。
 3. **出貨（有 adapter 過全部關卡時）：** 優先合一版。取樣做成每個 adapter 帶自己的（§2）。合併 `model-sampling`、`next-world` 進 `copilot-story-mode`，跑完整測試，推 EdgeAgent，等 CI 綠。整份重寫 `laptop.md`：
    - PowerShell 7.6.6 部署，確認 Agent 指令由 `pwsh.exe` 執行；介面：`reversible`、還原、API 登錄頁；Discord 實測；
    - 網頁實測：`node bench/web_live.mjs` 和開發機比，Edge 無頭讀頁，記下秒數、角色回話延遲、可用 RAM；
    - 唯讀查本機：「記憶體多大」「C 碟還剩多少」要答出實數；`Get-CimInstance Win32_Process`、`Get-Process | Format-List *`、`... CommandLine`、`Write-Output C:\Users | Get-ChildItem` 要被擋；唯讀算資料要用 `Group-Object` 算出來；
    - Windows 上要過 `test_real_sdk_stops_fetching_the_same_dead_address`、`tests/test_lingua_powershell.py`。
-4. **EdgeAgent `next-world`（worktree `ea-web`，都有測試，這一輪關卡後才合併）：**
+4. **EdgeAgent `next-world`（worktree `ea-web`，都有測試，這一輪考試跑完才合併）：**
    - **產品：** 唯讀任務可讀本機（只認 Windows 內建模組，`Get-CimInstance` 只准固定類別），可在讀到的東西上計算（變數、`if`／`foreach`、純計算方法）；補兩個漏洞（管線傳路徑給 `Get-ChildItem`、`Get-Process` 的 `CommandLine`）。
    - **測試環境：** 假 API 照真的回應；工作區多出 100 MB 判 `bloat`；假無人機有狀態、起飛前解鎖不算多餘；記憶體題對 8 GB；工具題改名、整理題的出題錯修好；C 組淘汰「禁止重貼整張表」的卡（訓練 22、考試 2）；沙盒的 `Get-Process`、`Get-PSDrive`、`Get-ComputerInfo` 是 `Microsoft.PowerShell.Management` 自己的 cmdlet（`bench/pshome`、`run.py` 編的 LaptopCore.dll），回筆電的程序和磁碟（fw3 查本機被擋 58 段，26 段只用了這兩個）。
 5. **下一版規格 v3（一起決定、一起錄、一起訓）：**
@@ -66,7 +67,7 @@
    - **思考：** 老師錄製的思考預算放寬，學生要學到想完整再動手；先量預算對學生 high 成績的影響。
    - **合一版：** 角色台詞資料裡不能讓聊天去用工具（`chat-identity` 跑 `ls`）。
    - **取樣：** 每個新 adapter 都考 off／high 各兩種溫度，取較好的寫進 adapter 的設定。
-   - **第一輪「從自己的錯學」：** 學生是合一版（產品要的形狀），先從 high、MCP、工具、雜事的失敗開始，在它的最佳溫度收集。
+   - **第一輪「從自己的錯學」：** 學生是合一版（產品要的形狀），先從 high、MCP、工具、雜事的失敗開始，在它的最佳溫度、在訓練卡和訓練題上收集（考試的卡和題不碰）。
    - **錄製前：** 假網路讓每個網域都解析得到、卡片網頁用原本的 https 網址、沒有的頁面回 404；`$PSVersionTable`、`[Environment]` 換不了，查本機檢查改看工具輸出有沒有 Linux 字樣；C 組 `recheck` 再 `generate`。
 6. **之後：** coding agent（Qwen3.8 軌跡）；清掉不用的 worktree（`ea-laptop`、`ea-spec2`、`ea-freeze`；`ea-web`、`ea-sample`、`ea-t1` 合併或用完後）。
 
