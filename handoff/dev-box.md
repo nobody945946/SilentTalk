@@ -1,7 +1,7 @@
 # 開發機工作檔（Linux、RTX 3090）
 
-更新：2026-10-12 深夜｜SilentTalk、EdgeAgent 都在 `copilot-story-mode`；規格 v2 凍結（`92a1961`），v3 在分支 `spec-v3`（worktree `/home/clawd/worktrees/ea-v3`）
-你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事，**只寫現況和下一步**。上一版：`archive/dev-box-2026-10-12-before-ship.md`（只在這台機器，不必讀）。
+更新：2026-10-13 凌晨｜SilentTalk、EdgeAgent 都在 `copilot-story-mode`；規格 v2 凍結（`92a1961`），v3 在分支 `spec-v3`（worktree `/home/clawd/worktrees/ea-v3`）
+你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事，**只寫現況和下一步**。上一版：`archive/dev-box-2026-10-13-before-teacher-temp.md`（只在這台機器，不必讀）。
 
 ---
 
@@ -28,8 +28,8 @@
 |---|---|
 | **產品 Agent** | EdgeAgent Pi 迴圈。考試 `bench/run.py`、情境卡驗收、Python 題、`ship_gate.py`。資料：老師在框架裡錄（`--record`）→ `thought_stats.py`（切斷 ≤2%）→ `dataset.py` → SilentTalk `train_lora.py` |
 | **adapter** | 一個給 Agent 和機魂共用（`runtime.AGENT_ADAPTER`＝`CHARACTER_ADAPTER`，SilentTalk `BUNDLED_ADAPTERS` 同名），放 `edge_agent/adapters`，`deploy.ADAPTERS` 記 SHA256 |
-| **取樣** | adapter 檔案裡的 `edgeagent.sampling.off.temp`／`.thinking.temp`（`edge_agent/models.py` 讀；SilentTalk `scripts/dev/stamp_adapter_sampling.py` 量完才蓋，蓋在產品那份複本上）；沒蓋的用 0.2 |
-| **輸出長度** | Agent 不送上限；`loop_guard.mjs` 邊收邊看（思考、正文、工具參數都看），同一個 ≤400 字的單位連續重複 ≥2000 字且 ≥20 次就停 |
+| **取樣** | adapter 檔案裡的 `edgeagent.sampling.off.temp`／`.thinking.temp`（`edge_agent/models.py` 讀；SilentTalk `scripts/dev/stamp_adapter_sampling.py` 量完才蓋，蓋在產品那份複本上）；沒蓋的用 0.2。老師錄製另用只改這個預設的產品複本（`--product`） |
+| **輸出長度** | Agent 不送上限；`loop_guard.mjs` 邊收邊看（思考、正文、工具參數都看），同一個單位連續重複就停：≤400 字的 ≥2000 字且 ≥20 次；分支 `loop-long-units` 擴到 8000 字的整段（≥8000 字且 ≥4 次），出貨後併入 |
 | **網頁工具** | `edge_agent/web_tools.mjs`。量測 `bench/web_live.mjs`：開發機 27/30、6/6 搜尋 |
 | **推論** | `edge_agent/inference.py`：兩槽一池，角色開口時 Agent 讓路；同一個 adapter 才能同批 |
 | **情境卡** | `families.json`（A–J）→ `scenario_cards.py`（`recheck`、`generate`、`files`、`tasks`）→ `run.py` → `scenario_checks.py` → `scenario_judge.py`（先驗證自己）→ `dataset.py` |
@@ -40,31 +40,40 @@
 
 ## 3. 接下來
 
-1. **ms3n 過關，出貨中（2026-10-12）：** `machine-spirit-fw3n`（和 ms3 同樣的對話，不帶老師被切短的思考）對基底 E4B，各用自己最好的溫度：
+1. **ms3n 出貨中：** `machine-spirit-fw3n`（和 ms3 同樣的對話，不帶老師的思考）對基底 E4B，各用自己最好的溫度：
 
    | | 基底（0.2） | **ms3n** |
    |---|---|---|
-   | off（126 次） | 60、64 | **78**（1.0；0.2 是 77、鬼打牆 26 場；0.6 是 72） |
-   | high（126 次） | 86、89 | **91**（0.2；0.6 是 87；1.0 是 84） |
+   | off（126 次） | 60、64 | **78**（1.0） |
+   | high（126 次） | 86、89 | **91**（0.2） |
    | 情境卡（91）／Python（57） | 35／21 | **39／36** |
    | 機魂台詞（對 char-v1）／聊天工作 | char-v1 39/40 | 31 比 33、12 平手／**37/40** |
 
-   - `ship_gate.py` 五項全過，工具、MCP 都沒變差。
-   - **退步：** 聊天工作漏了「查最新消息」三題（今天新聞、遊戲上市日、油價），char-v1 只漏一題；v3 要補（第 4 項）。
-   - **失控：** ms3n 思考開時 217 場有 3 場在思考裡重複到 8192 上限（基底 0 場）。v3 的 `loop_guard` 已搬進出貨版（`327269f`），測試補上思考（`f56ca16`）。7.3 萬則歷次輸出重播：停的 200 則全是迴圈，這三場會在 2,000–5,500 字停下。
-   - **出貨步驟：** 分支 `ship-ms3n`（worktree `ea-ship`、`st-ship`）→ 快轉進 `copilot-story-mode` → 推 EdgeAgent、SilentTalk，等 CI 綠 → 整份重寫 `laptop.md`（第 11 回合，草稿在 scratchpad 的 `laptop-r11.md`：部署、Windows 測試、雙管路實量、Discord 實測含機魂用語音回答）→ `wake.sh handoff 48`。
-   - **筆電回報 D1 過、兩個 repo 測試全過：** `release_windows.py --edge-agent ../EdgeAgent --notes <筆電驗證摘要> --publish` 發公開版（玩家的語音也壞了），刪 `ea-ship`、`st-ship`。
-2. **2026-10-12 修好的（都已在 `copilot-story-mode`）：**
-   - EdgeAgent：每個 adapter 依模式取樣（`5eeb610`）；模型程序當掉會自己重新載入（`81a50bd`）；評審先想再答（`d2cc7ab`）；迴圈停止（上面）。
-   - SilentTalk：Edge 朗讀改走 `api.msedgeservices.com`（`8b0e317`；10/10 起舊位址 403，edge-tts 7.2.8 還在用舊的；忙線 429／503 再試一次）。上游出新版時 `test_edge_styles.py` 會失敗，提醒拿掉覆寫。
-3. **v3 的佇列步驟（在 `ea-v3`，正在跑 `v3-think-pilot`）：** `v3-pilot-check`（`thought_stats.py --base base-v2f-high`；任一類切掉 >2% 就停：加大老師的 `--reasoning-budget`、刪 `ea-v3/.runtime/bench/v3-think-pilot` 重跑）→ `v3-py-pilot` → `v3-cards`（C 組補回 55／10）→ `v3-describe`（322 題工具題的請求）→ `v3-base`、`-high`（先看新題有沒有考場錯）→ `v3-tools`、`v3-py`（各兩次）、`v3-scen`（一次，試錄併入）→ `v3-judged` → `v3-thoughts` → 基底的 v3 情境卡、Python。
+   - `ship_gate.py` 五項全過。退步：聊天工作漏了三題「查最新消息」，v3 補（第 4 項）。思考開 217 場有 3 場在思考裡失控，出貨版的 `loop_guard` 會在 2,000–5,500 字停下。
+   - EdgeAgent `b73f0ff`、SilentTalk `e337c8c` 已推，CI 綠。筆電第 11 回合已交辦（`wake.sh handoff 4`）。
+   - **筆電回報 D1 過、兩個 repo 測試全過：** 先 `release_windows.py --edge-agent ../EdgeAgent --notes <筆電驗證摘要>` 乾跑，再加 `--publish`（玩家的語音也壞了），然後刪 `ea-ship`、`st-ship`。沒過就診斷、修好。
+   - 上游 edge-tts 改用新位址時，`test_edge_styles.py` 會失敗，提醒拿掉 `8b0e317` 的覆寫。
+2. **迴圈停止擴大（分支 `loop-long-units`，worktree `ea-guard`，`3e6bb97`，還沒推）：**
+   - 老師試錄時在思考裡把 715–6,051 字的整段重複 7–48 次，直到思考預算用完。出貨版只找 ≤400 字的單位，所以沒抓到；產品沒有輸出上限，這種迴圈會一路跑到上下文用完。
+   - 現在單位可到 8,000 字（長單位要 ≥8000 字、≥4 次）。7.3 萬則歷次輸出重播：原本的 201 次停止都沒變，多停的 99 次全是跑到上限的迴圈。
+   - 公開版發完後，快轉進 `copilot-story-mode`、推、等 CI，排進第 12 回合。`ea-v3` 的凍結規格不動。
+3. **v3 佇列（在 `ea-v3`）：**
+   - 30 張卡的試錄（0.2）過了：切掉 1.56%，思考中位數 1,134 字（基底 650）。但丟了 6 場：4 場超時，2 場被當成迴圈停下；另有 4 段思考是整段重複到預算用完。
+   - **老師的溫度從沒量過**：一直用產品預設的 0.2，Qwen3.8 自己的建議是思考用 1.0（top_k 20、top_p 0.95，模型檔也這樣寫）。
+   - 佇列現在：`v3-py-pilot`（0.2）→ `v3-think-pilot-t1`、`v3-py-pilot-t1`（同一批卡和題目，用 1.0；產品複本 `ea-v3-t1` 的 `568f23d` 只改預設溫度）→ `v3-teacher-judged`（評審判兩個情境試錄）。
+   - **選溫度的規則：** 可用場數 = 情境 done 且評審過，加上 Python done 且乾淨通過。多的那個贏；差 2 場以內，選被預算切掉、或被停下的迴圈較少的；再平手選 0.2。選中的那個任一類切掉 >2% 時，加大預算重錄那個試錄。結果寫進 `ea-v3/.runtime/teacher-choice`（`t02` 或 `t1`），錄製步驟（`v3-tools`、`v3-py`、`v3-scen`）讀它；沒有這個檔就停。
+   - 之後：`v3-cards`（C 組補回 55／10）→ `v3-describe`（322 題工具題的請求）→ `v3-base`、`-high`（先看新題有沒有考場錯）→ `v3-tools`、`v3-py`（各兩次）、`v3-scen`（一次，選中的試錄併入）→ `v3-judged` → `v3-thoughts` → 基底的 v3 情境卡、Python。
 4. **v3 之後：**
-   - `dataset.py` 帶完整思考（聊天題不帶）和不帶思考兩份，各訓一個合一版；數 token，超過 `--max-length 32768` 的多就加大。
+   - `dataset.py` 做兩份：帶完整思考的（聊天題不帶）和不帶思考的，各訓一個合一版。數 token，超過 `--max-length 32768` 的多就加大。
    - 角色資料補「要查最新消息的就交給 Agent」：Qwen3.8 寫，不用 `chat_task_eval.jsonl`（那份只考試）。目標聊天工作 ≥39/40。
-   - off／high × 0.2、0.6、1.0（基底也補 0.6）→ 蓋最佳溫度 → 情境卡、Python、台詞、`chat_task`（角色回話不能有思考、不能比 char-v1 慢）→ 關卡選贏的，對手是 ms3n。
-   - 「從自己的錯學」：含重複關卡提醒之後的那一步、思考裡的迴圈。
-   - 出貨時合併 `spec-v3`（含 `next-world`）；`laptop.md` 加記憶的檢視和編輯、PowerShell 7.6.6、唯讀查本機、`test_real_sdk_stops_fetching_the_same_dead_address`、`tests/test_lingua_powershell.py`。
-5. **之後：** coding agent（Qwen3.8 軌跡）；清 worktree（`ea-laptop`、`ea-spec2`、`ea-freeze`；`ea-web`、`ea-t1`、`ea-v3` 用完後）；v3 `configs.json` 的 `think512/1024/2048` 合併前刪。使用者問過 AirLLM：每個字都從硬碟讀整個模型，筆電上一步要幾分鐘，不做；要大模型得先加 RAM，再用 llama.cpp 把 MoE 專家放 RAM 實測。
+   - off／high 各掃 0.2、0.6、1.0（基底也補 0.6），蓋上最佳溫度。接著考情境卡、Python、台詞、`chat_task`（角色回話不能有思考、不能比 char-v1 慢），最後過關卡，選贏的，對手是 ms3n。
+   - 「從自己的錯學」：包含重複關卡提醒之後的那一步，以及思考裡的迴圈。
+   - 出貨時合併 `spec-v3`（含 `next-world`）。`laptop.md` 要加：記憶的檢視和編輯、PowerShell 7.6.6、唯讀查本機、`test_real_sdk_stops_fetching_the_same_dead_address`、`tests/test_lingua_powershell.py`。
+5. **之後：**
+   - coding agent（Qwen3.8 軌跡）。
+   - 清 worktree：`ea-laptop`、`ea-spec2`、`ea-freeze`；`ea-web`、`ea-t1`、`ea-v3`、`ea-v3-t1` 用完後清。
+   - v3 `configs.json` 的 `think512/1024/2048` 合併前刪。
+   - 使用者問過 AirLLM：每個字都從硬碟讀整個模型，筆電上一步要幾分鐘，不做。要跑大模型得先加 RAM，再用 llama.cpp 把 MoE 專家放 RAM 實測。
 
 ## 4. 開發機規則（通用規則在 AGENTS.md）
 
@@ -103,7 +112,7 @@ cd /home/clawd/EdgeAgent && .venv/bin/python -m pytest -q -p no:cacheprovider   
 
 ## 7. 踩過的雷
 
-- **沒量過的預設值：** Agent 溫度 0.2 從改寫起就在，對基底剛好，對 adapter 不一定。溫度要每個模型、每個模式各自掃，至少 0.2、0.6、1.0。
+- **沒量過的預設值：** Agent 溫度 0.2 從改寫起就在，對基底剛好，對 adapter 不一定，對老師也是：v2 和 v3 試錄都在 0.2 錄，老師把整段思考重複到預算用完。溫度要每個模型（老師也算）、每個模式各自掃，至少 0.2、0.6、1.0；先讀模型卡的建議值。
 - **蒸餾的學生低溫會鬼打牆：** adapter 在 0.2 一字不差重跑失敗的指令，思考裡也會重複到上限；基底不會。
 - **錄製省下的預算會被學走：** 預算切掉的正好是最深入的思考。
 - **只看分數的關卡會漏掉失控：** 分數贏了，失控照樣出貨；每個里程碑都看結束原因（`reason`）和基底比。
