@@ -1,7 +1,7 @@
 # 開發機工作檔（Linux、RTX 3090）
 
-更新：2026-10-10 夜｜SilentTalk、EdgeAgent 都在 `copilot-story-mode`，commit 先留本機，有真實進展才推；規格 v2 凍結（`92a1961`），v3 在分支 `spec-v3`（worktree `/home/clawd/worktrees/ea-v3`）
-你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事，**只寫現況和下一步**。上一版：`archive/dev-box-2026-10-10-before-ms3n-gate.md`（只在這台機器，不必讀）。
+更新：2026-10-12 晚上｜SilentTalk、EdgeAgent 都在 `copilot-story-mode`，commit 先留本機，有真實進展才推；規格 v2 凍結（`92a1961`），v3 在分支 `spec-v3`（worktree `/home/clawd/worktrees/ea-v3`）
+你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事，**只寫現況和下一步**。上一版：`archive/dev-box-2026-10-12-before-restart.md`（只在這台機器，不必讀）。
 
 ---
 
@@ -34,32 +34,33 @@
 | **adapter** | 產品要合一版（Agent＋角色，`machine-spirit-fw*`）；只有 Agent 的（`agent-fw*`）只在要分辨角色資料有沒有拖累時才訓 |
 | **情境卡** | `families.json`（A–J）→ `scenario_cards.py`（`recheck`、`generate`、`files`、`tasks`）→ `run.py` → `scenario_checks.py` → `scenario_judge.py`（先驗證自己）→ `dataset.py` |
 | **工具題** | `make_tool_tasks.py cut`（CPU）→ `describe --config teacher-38-iq3`（老師寫請求，自己開伺服器） |
-| **角色台詞** | `line_ab.py` → `bench/pair_judge.py`（Gemma，對調判兩次，先過自我檢查）→ `line_ab.py score`；`chat_task_eval.py` |
+| **角色台詞** | `line_ab.py`（每組帶資料自己的台詞 `ref`）→ `bench/pair_judge.py`（Gemma 先想再答，對調判兩次都贏才算；自我檢查用 `ref` 對另一段的 `ref`、對切成 4 字，要 36/40）→ `line_ab.py score`；`chat_task_eval.py` |
 | **寫程式的 Agent** | mini-swe-agent，SWE-bench Verified 60 題：老師 36、E4B 4 |
 | **佇列** | `EdgeAgent/.runtime/fw/queue.sh`：一步一個 `.done`；失敗就停下印一行，修好再 `relaunch.sh`；被擋的步驟移到最後。v3 的步驟在 `ea-v3` 裡跑，資料在它自己的 `.runtime/agentdata` |
 
 ## 3. 接下來
 
-1. **結果（v2 產品，126 次，各自溫度）：**
+1. **結果（v2 產品，126 次）：**
 
-   | | 基底 0.2 | fw3 | ms3 | **ms3n 0.2** |
-   |---|---|---|---|---|
-   | off | 64、60 | 79（1.0） | 73（0.2） | **77** |
-   | high | 89、86 | 82（0.2） | 77（1.0） | **91** |
-   | MCP off／high | 21／24 | — | —／19 | **19**／25 |
-   | 情境卡（91 張） | 35 | — | 21 | 排隊中 |
-   | Python（57 題） | 21 | — | 30 | 排隊中 |
+   | | 基底 0.2 | ms3（帶被切的思考） | **ms3n（不帶思考）** |
+   |---|---|---|---|
+   | off | 64、60（MCP 21） | 73 | **78（1.0，MCP 22）**；0.2 是 77、MCP 19、鬼打牆 26 場 |
+   | high | 89、86（MCP 24） | 77 | **91（0.2，MCP 25）**；1.0 是 84 |
+   | 情境卡（91）／Python（57） | 35／21 | 21／30 | 排隊中 |
 
-   - **ms3n（同樣 595 段對話、完全不帶老師思考）贏了：** high 91 對 86–89，出錯 4 場（ms3 43 場），每步思考 488 字（基底 650、ms3 181）。上一輪輸在學了被切短的思考。off 的 MCP 19 低於基底 21，若最佳溫度下還是低就過不了第 4 條。
-   - **低溫鬼打牆：** off、0.2 時 adapter 有 26–33 場一字不差重跑失敗的指令被停下（code、chore、tool；不理「已經跑兩次了」的提醒），基底 0 場。DeepSeek 對蒸餾學生建議 0.6。
-   - **老師本來就想得短：** 不切的話，老師（已是 xhigh）工具每步 288 字、Python 245 字，基底 650（`thought_stats.py`）；只有情境 1252 字。
-2. **佇列（23:00 換成新順序；`relaunch.sh` 等 `ms3n-t1` 考完就接上）：** `ms3n-t1`、`-t1-high`（1.0）→ `ms3n-lines` → `ms3n-t06`、`-t06-high`（0.6，`worktrees/ea-t06`：凍結 v2 產品只改橋接器溫度，量完刪）→ ms3n 出貨關卡：`scen-eval-ms3n`、`py-eval-ms3n`、`ms3n-chat-task`、`ms3n-gate` → `v3-think-pilot` → v3。
-   - **溫度：** 關卡用產品現在的 0.2。若 1.0 或 0.6 在 off 或 high 明顯較好（>4 分），把關卡步驟改成那個產品再跑（佇列照 §4 第 8 條換）。
-   - **`ms3n-lines` 失敗時：** 看 `SilentTalk/.runtime/dev/line-ab/ms3n.judge-validation.json` 的 `by_kind`、`same_slot`、`missed[].answers`。兩種順序答同一個字母多＝位置偏誤：改成兩種順序下 A／B 的機率平均來判。「另一段對話的台詞」錯多：評估集同一情境有好幾段對話，改用主題不同的對話。修好重跑；當下修不好就把它移到佇列最後。
-   - **ms3n 過全部關卡（含 Python 不輸、台詞不輸 char-v1、`chat_task` ≥ 39）就出貨：** 產品是現在的 `copilot-story-mode`（v2）加 `machine-spirit-fw3n.q8_0.gguf`，不等 v3。整份重寫 `laptop.md`（部署 adapter、Discord 和網頁實測），推，等 CI 綠，`wake.sh handoff`。
-3. **v3 的佇列步驟（在 `ea-v3`，依序）：** `v3-pilot-check`（`thought_stats.py --base base-v2f-high`；任一類切掉 >2% 就停：加大 `ea-v3/bench/configs.json` 老師的 `--reasoning-budget`、刪 `ea-v3/.runtime/bench/v3-think-pilot` 重跑）→ `v3-py-pilot`（20 題 Python）→ `v3-cards`（C 組淘汰訓練 22、考試 2 張，補回 55／10）→ `v3-describe`（322 題工具題的請求）→ `v3-base`、`-high`（基底先考 v3，看新題有沒有考場本身的錯）→ `v3-tools`、`v3-py`（各錄兩次）、`v3-scen`（一次，試錄併入）→ `v3-judged` → `v3-thoughts` → 基底的 v3 情境卡和 Python。
-4. **v3 之後（錄製期間寫進佇列）：** `dataset.py` 兩份：帶完整思考（使用者選的 DeepSeek 做法）和不帶思考（ms3n 的做法），各訓一個合一版 → 先數每列 token，長思考超過 `--max-length 32768` 的多就加大 → 每個 adapter 考 off／high × 0.2、0.6、1.0（基底也補 0.6），蓋上最好的（`stamp_adapter_sampling.py`）→ 情境卡、Python、台詞、`chat_task`（角色回話不能出現思考、不能比 char-v1 慢）→ 關卡選贏的 → 「從自己的錯學」（含重複關卡提醒之後的那一步）。v3 出貨時合併 `spec-v3`（含 `next-world`），`laptop.md` 加記憶的檢視和編輯、PowerShell 7.6.6、唯讀查本機的檢查、`test_real_sdk_stops_fetching_the_same_dead_address`、`tests/test_lingua_powershell.py`。
-5. **之後：** coding agent（Qwen3.8 軌跡）；清掉不用的 worktree（`ea-laptop`、`ea-spec2`、`ea-freeze`；`ea-web`、`ea-t1`、`ea-t06`、`ea-v3` 用完後）；v3 `configs.json` 的 `think512/1024/2048` 合併前刪。
+   - 上一輪輸在學了被切短的思考；ms3n 每步想 488 字（基底 650、ms3 181），出錯 4 場（ms3 43）。
+   - **低溫鬼打牆：** adapter 在 0.2 一字不差重跑失敗的指令（基底不會），1.0 少很多；DeepSeek 對蒸餾學生建議 0.6（`ms3n-t06*` 在量）。
+   - 老師（xhigh）本來就想得短：工具每步 288 字、Python 245，基底 650；只有情境 1252。
+2. **2026-10-12 補上的（都已 commit，未推）：**
+   - EdgeAgent 主線：每個 adapter 依模式取樣（c6bc244 搬進 `5eeb610`，沒蓋的仍是 0.2）；**模型程序當掉會自動重新載入**（`81a50bd`：實測 b11193 的 worker 當掉後 router 還在、模型 unloaded、每個請求都「model is not loaded」，沒有人重載）；評審先想再答（`d2cc7ab`）。
+   - SilentTalk：**角色的語音壞了已修**（`8b0e317`：微軟 10/10 起把 Edge 朗讀換到 `api.msedgeservices.com`，舊位址一律 403，edge-tts 7.2.8 是最新版仍用舊的；新位址用舊的 token 和版本可用；忙線 429／503 在出聲前再試一次）。上游出新版時 `test_edge_styles.py` 會失敗提醒拿掉覆寫。
+   - **佇列停了 42 小時沒人知道：** 10/10 22:56 醒來處理當機後沒重新掛 `wake.sh`，23:45 `ms3n-lines` 失敗就一直停著。每次醒來第一件事就是重新掛上。
+3. **佇列（重啟後的順序）：** `ms3n-lines`（評審已在手動跑 ms3n 的 80 組；有 `ms3n.verdicts.json` 就跑 `line_ab.py score --out .runtime/dev/line-ab/ms3n --verdicts ...ms3n.verdicts.json | tee EdgeAgent/.runtime/fw/ms3n.lines.txt` 再 `touch EdgeAgent/.runtime/fw/ms3n-lines.done`）→ `ms3n-t06`、`-t06-high`（`worktrees/ea-t06`，量完刪）→ `scen-eval-ms3n`、`py-eval-ms3n`、`ms3n-chat-task`、`ms3n-gate`（off 用 `ms3n-t1`）→ `v3-think-pilot` → v3。
+   - **ms3n 過全部關卡就出貨（不等 v3）：** `stamp_adapter_sampling.py` 蓋 off／thinking 的最佳溫度（目前 1.0／0.2；0.6 若較好就用 0.6）→ 推 EdgeAgent、SilentTalk，等 CI 綠 → 整份重寫 `laptop.md` 一回合：部署新版 EdgeAgent 和蓋過溫度的 `machine-spirit-fw3n.q8_0.gguf`、SilentTalk 新版（語音修正）、Discord 實測角色說話、Agent 實測；`release_windows.py` 發公開版（玩家的語音也壞了）→ `wake.sh handoff`。
+   - **沒過：** 看 `why.txt`，修資料或考場，v3 照常。
+4. **v3 的佇列步驟（在 `ea-v3`）：** `v3-pilot-check`（`thought_stats.py --base base-v2f-high`；任一類切掉 >2% 就停：加大老師的 `--reasoning-budget`、刪 `ea-v3/.runtime/bench/v3-think-pilot` 重跑）→ `v3-py-pilot` → `v3-cards`（C 組補回 55／10）→ `v3-describe`（322 題工具題的請求）→ `v3-base`、`-high`（先看新題有沒有考場錯）→ `v3-tools`、`v3-py`（各兩次）、`v3-scen`（一次，試錄併入）→ `v3-judged` → `v3-thoughts` → 基底的 v3 情境卡、Python。
+5. **v3 之後：** `dataset.py` 帶完整思考（使用者選的 DeepSeek 做法；聊天題不帶思考）和不帶思考兩份，各訓一個合一版 → 數 token，超過 `--max-length 32768` 的多就加大 → off／high × 0.2、0.6、1.0（基底也補 0.6）→ 蓋最佳溫度 → 情境卡、Python、台詞、`chat_task`（角色回話不能有思考、不能比 char-v1 慢）→ 關卡選贏的 → 「從自己的錯學」（含重複關卡提醒之後的那一步）。出貨時合併 `spec-v3`（含 `next-world`），`laptop.md` 加記憶的檢視和編輯、PowerShell 7.6.6、唯讀查本機、`test_real_sdk_stops_fetching_the_same_dead_address`、`tests/test_lingua_powershell.py`。
+6. **之後：** coding agent（Qwen3.8 軌跡）；清 worktree（`ea-laptop`、`ea-spec2`、`ea-freeze`；`ea-web`、`ea-t1`、`ea-t06`、`ea-v3` 用完後）；v3 `configs.json` 的 `think512/1024/2048` 合併前刪。使用者問過 AirLLM：每個字都從硬碟讀整個模型，筆電上一步要幾分鐘，不做；要大模型得先加 RAM，再用 llama.cpp 把 MoE 專家放 RAM 實測。
 
 ## 4. 開發機規則（通用規則在 AGENTS.md）
 
@@ -72,7 +73,7 @@
 7. **考試中別動：** `agent_runner.py`、`relay.py`、`bench/web_fixture.py`、`bench/grade.py` 是即時掛載（主工作區和 `ea-v3` 都是）。`ea-v3` 的 `edge_agent` 從試錄到錄完都不能改（同一份凍結規格）。
 8. **執行中的佇列腳本不改：** 新檔 `mv` 蓋過去，用 PID 停佇列本身（不停 `run.py`），再背景跑 `relaunch.sh >> queue.log`。**訓練中別停佇列**：`train_lora.py` 不能接續，重啟會從頭訓。
 9. **開發機不改介面**（`edge_agent/web.py`、SilentTalk 設定頁）。git 身分：`git -c user.name="nobody945946" -c user.email="104478886+nobody945946@users.noreply.github.com" commit ...`。
-10. **喚醒只在必要節點：** `scripts/dev/wake.sh` 在背景跑，醒來先重新掛上再處理；佇列停了它會說 NOTHING PENDING，修好重啟佇列後再掛。push 完 `wake.sh ci <repo> <sha>`；交辦筆電後 `wake.sh handoff <小時>`。不盲目重試、不預寫備案。push 完要等 CI 綠才算完成。
+10. **喚醒只在必要節點：** `scripts/dev/wake.sh` 在背景跑，**醒來第一件事就是重新掛上**（漏一次，佇列停了 42 小時沒人知道），再處理；佇列停了它會說 NOTHING PENDING，修好重啟佇列後再掛。push 完 `wake.sh ci <repo> <sha>`；交辦筆電後 `wake.sh handoff <小時>`。不盲目重試、不預寫備案。push 完要等 CI 綠才算完成。
 
 **每次改完要跑**（看 pytest 自己的 exit code）：
 
