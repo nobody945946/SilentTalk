@@ -70,7 +70,10 @@ def lines(args: argparse.Namespace) -> None:
     for n, row in enumerate(rows, 1):
         k = chardata_store.row_key(row)
         a, b = (base[k], tuned[k]) if rng.random() < 0.5 else (tuned[k], base[k])
-        pairs.append({"n": n, "chat": chardata_check.chat_text(row, persona.name), "A": a, "B": b})
+        # ref: the data's own line (the teacher's, through the character gate),
+        # which the judge never sees as a candidate; its self-check breaks it.
+        pairs.append({"n": n, "chat": chardata_check.chat_text(row, persona.name), "A": a, "B": b,
+                      "ref": chardata_check.clean_line(row["messages"][-1]["content"] or "")})
         key[str(n)] = "A" if a == tuned[k] and a != base[k] else "B" if b == tuned[k] and b != base[k] else "same"
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.with_suffix(".pairs.json").write_text(json.dumps(pairs, ensure_ascii=False, indent=1), encoding="utf-8")
