@@ -1,7 +1,7 @@
 # 開發機工作檔（Linux、RTX 3090）
 
 更新：2026-10-13 凌晨｜SilentTalk、EdgeAgent 都在 `copilot-story-mode`；規格 v2 凍結（`92a1961`），v3 在分支 `spec-v3`（worktree `/home/clawd/worktrees/ea-v3`）
-你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事，**只寫現況和下一步**。上一版：`archive/dev-box-2026-10-13-before-linux-leak.md`（只在這台機器，不必讀）。
+你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事，**只寫現況和下一步**。上一版：`archive/dev-box-2026-10-13-before-d-topup.md`（只在這台機器，不必讀）。
 
 ---
 
@@ -65,9 +65,10 @@
    - **D 類卡（認識自己）改成 v3 的記憶**（`spec-v3` `239e22f`）：舊卡要 Agent 否認跨對話記憶，但 v3 的主人記憶檔是真的，評審因此把老師寫進記憶的回答判錯。
      - 家族說明改成 v3 的說法。
      - 條目或目標提到跨對話記憶、卻沒提記憶檔的卡要淘汰：訓練 51 張 D 加 `train-E-008`，考試 10 張 D。
-     - `v3-cards` 會重抽使用者那段對話的卡（`scenario_exports.py`），D 補回 51 和 10 張，E 補回 25 張。
+     - `v3-cards` 已重抽使用者那段對話的卡（`train-A-o021`–`o024`），E 補回 25 張。
+     - 新 D 卡都講到記憶檔，但 173 張有 129 張被規則擋下（條目提到記憶卻沒寫「記憶檔」），只留 37 張和 7 張；`v3-cards-d` 再補到 51 和 10。
    - 試錄 30 場只有三成多可用。被擋的原因：考場露出 Linux（`$PSVersionTable.OS` 回 Debian，真筆電不會）、老師掃整顆 C 槽、評審照卡片判。`train-A-002` 要 Agent 記得沒給過的上次對話，是卡片寫錯，只有一張。
-   - 佇列：`v3-cards`（重跑：淘汰 → C → 使用者對話 → D、E → files、tasks）→ `v3-describe` → `v3-base`、`-high` → `v3-tools`、`v3-py`（各兩次）、`v3-scen`（一次，併入 1.0 的試錄；試錄的評審結果不帶過去）→ `v3-judged` → `v3-thoughts` → 基底的 v3 情境卡、Python。
+   - 佇列：`v3-describe` → `v3-cards-d` → `v3-base`、`-high` → `v3-tools`、`v3-py`（各兩次）、`v3-scen`（一次，併入 1.0 的試錄；試錄的評審結果不帶過去）→ `v3-judged` → `v3-thoughts` → 基底的 v3 情境卡、Python。
    - 考場露出 Linux 不修：產品用 `pwsh -NoProfile` 開 PowerShell，沒有地方能先改掉 `$PSVersionTable.OS`；`$PSHOME`、`[Environment]` 本來就改不了。要改得另外包一層 `pwsh`，等於多一條路徑。`system_probe` 會把這種對話擋在資料外，每 30 場少 1–2 場。
 4. **v3 之後：**
    - `dataset.py` 做兩份：帶完整思考的（聊天題不帶）和不帶思考的，各訓一個合一版。數 token，超過 `--max-length 32768` 的多就加大。
