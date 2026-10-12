@@ -1,7 +1,7 @@
 # 開發機工作檔（Linux、RTX 3090）
 
 更新：2026-10-13 凌晨｜SilentTalk、EdgeAgent 都在 `copilot-story-mode`；規格 v2 凍結（`92a1961`），v3 在分支 `spec-v3`（worktree `/home/clawd/worktrees/ea-v3`）
-你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事，**只寫現況和下一步**。上一版：`archive/dev-box-2026-10-13-before-teacher-temp.md`（只在這台機器，不必讀）。
+你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事，**只寫現況和下一步**。上一版：`archive/dev-box-2026-10-13-before-guard-merge.md`（只在這台機器，不必讀）。
 
 ---
 
@@ -29,7 +29,7 @@
 | **產品 Agent** | EdgeAgent Pi 迴圈。考試 `bench/run.py`、情境卡驗收、Python 題、`ship_gate.py`。資料：老師在框架裡錄（`--record`）→ `thought_stats.py`（切斷 ≤2%）→ `dataset.py` → SilentTalk `train_lora.py` |
 | **adapter** | 一個給 Agent 和機魂共用（`runtime.AGENT_ADAPTER`＝`CHARACTER_ADAPTER`，SilentTalk `BUNDLED_ADAPTERS` 同名），放 `edge_agent/adapters`，`deploy.ADAPTERS` 記 SHA256 |
 | **取樣** | adapter 檔案裡的 `edgeagent.sampling.off.temp`／`.thinking.temp`（`edge_agent/models.py` 讀；SilentTalk `scripts/dev/stamp_adapter_sampling.py` 量完才蓋，蓋在產品那份複本上）；沒蓋的用 0.2。老師錄製另用只改這個預設的產品複本（`--product`） |
-| **輸出長度** | Agent 不送上限；`loop_guard.mjs` 邊收邊看（思考、正文、工具參數都看），同一個單位連續重複就停：≤400 字的 ≥2000 字且 ≥20 次；分支 `loop-long-units` 擴到 8000 字的整段（≥8000 字且 ≥4 次），出貨後併入 |
+| **輸出長度** | Agent 不送上限；`loop_guard.mjs` 邊收邊看（思考、正文、工具參數都看），同一個單位連續重複就停：≤400 字的 ≥2000 字且 ≥20 次，到 8000 字的整段 ≥8000 字且 ≥4 次 |
 | **網頁工具** | `edge_agent/web_tools.mjs`。量測 `bench/web_live.mjs`：開發機 27/30、6/6 搜尋 |
 | **推論** | `edge_agent/inference.py`：兩槽一池，角色開口時 Agent 讓路；同一個 adapter 才能同批 |
 | **情境卡** | `families.json`（A–J）→ `scenario_cards.py`（`recheck`、`generate`、`files`、`tasks`）→ `run.py` → `scenario_checks.py` → `scenario_judge.py`（先驗證自己）→ `dataset.py` |
@@ -50,13 +50,12 @@
    | 機魂台詞（對 char-v1）／聊天工作 | char-v1 39/40 | 31 比 33、12 平手／**37/40** |
 
    - `ship_gate.py` 五項全過。退步：聊天工作漏了三題「查最新消息」，v3 補（第 4 項）。思考開 217 場有 3 場在思考裡失控，出貨版的 `loop_guard` 會在 2,000–5,500 字停下。
-   - EdgeAgent `b73f0ff`、SilentTalk `e337c8c` 已推，CI 綠。筆電第 11 回合已交辦（`wake.sh handoff 4`）。
+   - EdgeAgent `b73f0ff`（加上第 2 項 `3e6bb97`）、SilentTalk `e337c8c` 已推。筆電第 11 回合已交辦（`wake.sh handoff 4`）。
    - **筆電回報 D1 過、兩個 repo 測試全過：** 先 `release_windows.py --edge-agent ../EdgeAgent --notes <筆電驗證摘要>` 乾跑，再加 `--publish`（玩家的語音也壞了），然後刪 `ea-ship`、`st-ship`。沒過就診斷、修好。
    - 上游 edge-tts 改用新位址時，`test_edge_styles.py` 會失敗，提醒拿掉 `8b0e317` 的覆寫。
-2. **迴圈停止擴大（分支 `loop-long-units`，worktree `ea-guard`，`3e6bb97`，還沒推）：**
-   - 老師試錄時在思考裡把 715–6,051 字的整段重複 7–48 次，直到思考預算用完。出貨版只找 ≤400 字的單位，所以沒抓到；產品沒有輸出上限，這種迴圈會一路跑到上下文用完。
-   - 現在單位可到 8,000 字（長單位要 ≥8000 字、≥4 次）。7.3 萬則歷次輸出重播：原本的 201 次停止都沒變，多停的 99 次全是跑到上限的迴圈。
-   - 公開版發完後，快轉進 `copilot-story-mode`、推、等 CI，排進第 12 回合。`ea-v3` 的凍結規格不動。
+2. **迴圈停止擴大（`3e6bb97`，已推，筆電第 11 回合一起驗）：**
+   - 老師試錄時在思考裡把 715–6,051 字的整段重複 7–48 次，直到預算用完；ms3n 自己的考試裡也有（463、1,103 字的單位）。舊版只找 ≤400 字的單位，產品又沒有輸出上限，這種迴圈會跑到上下文用完。
+   - 現在單位可到 8,000 字。7.3 萬則歷次輸出重播：原本的 201 次停止都沒變，多停的 99 次全是跑到上限的迴圈。`ea-v3` 的凍結規格不動。
 3. **v3 佇列（在 `ea-v3`）：**
    - 30 張卡的試錄（0.2）過了：切掉 1.56%，思考中位數 1,134 字（基底 650）。但丟了 6 場：4 場超時，2 場被當成迴圈停下；另有 4 段思考是整段重複到預算用完。
    - **老師的溫度從沒量過**：一直用產品預設的 0.2，Qwen3.8 自己的建議是思考用 1.0（top_k 20、top_p 0.95，模型檔也這樣寫）。
