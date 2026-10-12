@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import tempfile
+from collections.abc import AsyncIterator, Callable
 from pathlib import Path
 
 import aiohttp
@@ -15,6 +16,39 @@ from silenttalk.tts.stream import AudioStream
 from silenttalk.voice_styles import VOICE_STYLES, VoiceStyle
 
 _LOG = logging.getLogger(__name__)
+
+# Microsoft moved Edge's read-aloud synthesis to api.msedgeservices.com: from
+# 2026-10-10 the old address answers every handshake with 403, region by
+# region (rany2/edge-tts#490), and edge-tts 7.2.8, the latest, still uses it.
+# The new address takes the same client token and Sec-MS-GEC (the newer
+# Sec-MS-GEC-Version is refused there). Voices still list at the old one.
+# tests/test_tts_edge.py fails once edge-tts ships the new address itself.
+SYNTHESIS_URL = (
+    "wss://api.msedgeservices.com/tts/cognitiveservices/websocket/v1"
+    f"?Ocp-Apim-Subscription-Key={edge_tts.constants.TRUSTED_CLIENT_TOKEN}"
+)
+edge_tts.communicate.WSS_URL = SYNTHESIS_URL
+
+# The service turning a handshake away as busy (2026-10-12: the new address
+# answered 429 to 1 of 3 requests in a burst) costs the line unless it is
+# asked again; nothing has played yet, so one more try is safe.
+_BUSY_STATUS = {429, 503}
+_BUSY_RETRY_SECONDS = 0.3
+
+
+async def _audio(make: Callable[[], edge_tts.Communicate]) -> AsyncIterator[bytes]:
+    """One request's MP3 chunks; a busy handshake is tried once more."""
+    for attempt in (0, 1):
+        try:
+            async for chunk in make().stream():
+                if chunk["type"] == "audio":
+                    yield chunk["data"]
+            return
+        except aiohttp.WSServerHandshakeError as exc:
+            if attempt or exc.status not in _BUSY_STATUS:
+                raise
+            _LOG.warning("edge_tts_busy status=%s retrying", exc.status)
+            await asyncio.sleep(_BUSY_RETRY_SECONDS)
 
 # speech.platform.bing.com resolves to IPv6 first; where IPv6 does not get
 # through, aiohttp's default 250 ms happy-eyeballs delay was added to 5 of 12
@@ -117,15 +151,14 @@ class EdgeTTSEngine:
         spoken_text, voice, rate, pitch, volume, audio_filter = await self._settings(
             text, voice_style, rate_multiplier
         )
-        communicate = edge_tts.Communicate(
-            spoken_text, voice, rate=rate, volume=volume, pitch=pitch,
-            connector=_connector(),
-        )
+        def make() -> edge_tts.Communicate:
+            return edge_tts.Communicate(
+                spoken_text, voice, rate=rate, volume=volume, pitch=pitch,
+                connector=_connector(),
+            )
 
-        async def chunks():
-            async for chunk in communicate.stream():
-                if chunk["type"] == "audio":
-                    yield chunk["data"]
+        def chunks() -> AsyncIterator[bytes]:
+            return _audio(make)
 
         stream = AudioStream()
         await stream.start(chunks, first_chunk_timeout=self._config.timeout_seconds)
@@ -170,18 +203,19 @@ class EdgeTTSEngine:
 
         os.close(fd)
         path = Path(raw_path)
-        try:
-            communicate = edge_tts.Communicate(
-                spoken_text,
-                voice,
-                rate=rate,
-                volume=volume,
-                pitch=pitch,
+        def make() -> edge_tts.Communicate:
+            return edge_tts.Communicate(
+                spoken_text, voice, rate=rate, volume=volume, pitch=pitch,
                 connector=_connector(),
             )
-            await asyncio.wait_for(
-                communicate.save(str(path)), timeout=self._config.timeout_seconds
-            )
+
+        async def write() -> None:
+            with path.open("wb") as handle:
+                async for data in _audio(make):
+                    handle.write(data)
+
+        try:
+            await asyncio.wait_for(write(), timeout=self._config.timeout_seconds)
             if path.stat().st_size == 0:
                 raise RuntimeError("EdgeTTS 產生空白音訊。")
             return AudioResult(

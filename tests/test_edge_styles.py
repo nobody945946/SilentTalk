@@ -107,3 +107,41 @@ def test_rate_combination_and_bounds() -> None:
     assert combine_edge_rate("-20%", 1.25) == "+0%"
     with pytest.raises(ValueError, match="語速倍率"):
         combine_edge_rate("+0%", 0.50)
+
+
+def test_synthesis_goes_to_the_address_microsoft_answers() -> None:
+    import edge_tts
+
+    from silenttalk.tts import edge
+
+    assert edge_tts.communicate.WSS_URL == edge.SYNTHESIS_URL
+    # When edge-tts ships the new address itself, drop SYNTHESIS_URL.
+    assert "msedgeservices" not in edge_tts.constants.WSS_URL
+
+
+@pytest.mark.asyncio
+async def test_a_busy_handshake_is_asked_once_more(monkeypatch) -> None:
+    import aiohttp
+
+    from silenttalk.tts import edge
+
+    calls = []
+
+    class Busy:
+        async def stream(self):
+            calls.append("busy")
+            raise aiohttp.WSServerHandshakeError(None, (), status=429)
+            yield  # an async generator
+
+    class Speaks:
+        async def stream(self):
+            calls.append("ok")
+            yield {"type": "audio", "data": b"mp3"}
+
+    monkeypatch.setattr(edge, "_BUSY_RETRY_SECONDS", 0)
+    makers = iter([Busy, Speaks])
+    assert [d async for d in edge._audio(lambda: next(makers)())] == [b"mp3"]
+    assert calls == ["busy", "ok"]
+    makers = iter([Busy, Busy])
+    with pytest.raises(aiohttp.WSServerHandshakeError):
+        [d async for d in edge._audio(lambda: next(makers)())]
