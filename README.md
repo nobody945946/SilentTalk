@@ -83,9 +83,9 @@ Agent 預設為 `gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf`（和角色同一個模型�
 
 「設定 → 本機模型」設定下次租借的角色基底，改完需重開。模型先放進 EdgeAgent 的 `models`，可透過 Agent 介面下載。首次部署只準備預設編程 4B 與公開 Gemma 4 E4B，不會下載下拉選單內所有替代模型。自訂角色模型可在 `config.toml` 的 `[copilot]` 以 `llm_model` 指定已安裝檔名，仍受使用者設定覆蓋。
 
-租借時 EdgeAgent 同時載入角色的 adapter（這裡設定的）和 Agent 自己的 adapter，預設都不套用：Agent 的請求只點名它自己的，角色的請求只在 `character_lora_uses` 列出的部分點名角色的。
+租借時 EdgeAgent 同時載入角色的 adapter（這裡設定的）和 Agent 自己的 adapter（同一個檔只載一次），預設都不套用：Agent 的請求只點名它自己的，角色的請求只在 `character_lora_uses` 列出的部分點名角色的。兩邊用同一個 adapter 時，Agent 做事中角色也能即時回話；用不同的就得等 Agent 讓出模型。
 
-- **預設（附帶）：**基底是預設的 E4B 時，帶上 EdgeAgent 附帶的機魂 adapter `machine-spirit-char-v1.q8_0.gguf`（EdgeAgent 部署時放進 `models`），套用在它訓練過的部分：台詞和聊天級工作（`line,task`）。80 組沒訓練過的台詞盲評贏不套的 E4B 76 組，聊天工作判斷 34/40→39/40（2026-10-07）。換別的基底就不帶（adapter 只配得上它訓練的基底）。
+- **預設（附帶）：**基底是預設的 E4B 時，帶上 EdgeAgent 附帶的 `machine-spirit-fw3n.q8_0.gguf`（EdgeAgent 部署時放進 `models`）。它同時是 Agent 的 adapter，所以 Agent 做事時機魂照樣即時回話（筆電 0.62 秒）。套用在它訓練過的部分：台詞和聊天級工作（`line,task`）。台詞盲評和上一版 `machine-spirit-char-v1` 打平（76 組：31 比 33，12 組平手）；聊天工作判斷 37/40（上一版 39/40，不套的 E4B 34/40），漏的三題都是「查最新消息」（2026-10-12）。換別的基底就不帶（adapter 只配得上它訓練的基底）。
 - **自己的 adapter：**放入 EdgeAgent 的 `models`，在 SilentTalk `config.toml` 的 `[copilot]` 設定 `character_lora` 為檔名，確認 `llm_model` 是訓練基底，重開後生效；設為空字串就不用任何 adapter。`settings.json` 的同名項目仍優先。
 
 `character_lora_uses` 指定角色的哪些請求套用：`called`（被叫到判斷）、`active`（主動插話判斷）、`line`（角色回覆）、`options`（回覆選項）、`task`（聊天級工作：要不要交給思考機、交辦的指示）、`scope`（主人串裡的工作要不要改動）。單獨用 EdgeAgent 時，adapter 在它的「模型模組」選。

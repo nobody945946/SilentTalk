@@ -23,12 +23,14 @@ from silenttalk.settings_store import SETTINGS_FILE, SettingsStore, merge
 DEFAULT_LLM_MODEL = "gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf"
 # The machine spirit's adapter EdgeAgent installs next to the base it was
 # trained on (EdgeAgent adapters/; the owner, 2026-10-06: ship it in the
-# repo), and the character's requests it was trained for. The lease brings it
-# for the character; the Agent keeps its own (EdgeAgent loads both, each
-# request names its own). An adapter only fits its own base, so it follows the
-# model: another model gets none unless copilot.character_lora names one,
-# applied to the parts copilot.character_lora_uses names (none by default).
-BUNDLED_ADAPTERS = {DEFAULT_LLM_MODEL: ("machine-spirit-char-v1.q8_0.gguf", ("line", "task"))}
+# repo), and the character's requests it was trained for. It is also the
+# Agent's (one adapter for both, trained on both): the two slots run together
+# only on one adapter, so the character answers in voice while the Agent works
+# (EdgeAgent's runtime.ADAPTER). An adapter only fits its own base, so it
+# follows the model: another model gets none unless copilot.character_lora
+# names one, applied to the parts copilot.character_lora_uses names (none by
+# default).
+BUNDLED_ADAPTERS = {DEFAULT_LLM_MODEL: ("machine-spirit-fw3n.q8_0.gguf", ("line", "task"))}
 STT_ENGINES = ("paraformer", "sensevoice")
 
 
