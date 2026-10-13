@@ -536,7 +536,7 @@ async def test_light_memory_carries_its_life_and_updates_only_when_quiet(
     runtime.set_persona(EXAMPLE_PERSONAS[0])
     await _settle()
     # Last time's concern is back, topped up to four.
-    assert [c.text for c in llm.state.active_concerns()][0] == "想揪大家週六打通宵"  # type: ignore[attr-defined]
+    assert next(c.text for c in llm.state.active_concerns()) == "想揪大家週六打通宵"  # type: ignore[attr-defined]
 
     for n in range(5):
         runtime._handle_turn(2, "A", f"聊天中第{n}句")
@@ -639,7 +639,9 @@ async def test_a_lull_line_is_dropped_if_someone_speaks_meanwhile(
     thinking = asyncio.Event()
 
     async def character_turn(*, turns, summary, engagement, addressed=False, lull=False) -> str:
-        if not lull:
+        # Only the first lull is the reply interrupted by the new speaker.
+        # A later lull may become due before the assertion on Windows.
+        if not lull or thinking.is_set():
             return ""
         thinking.set()
         await llm.release.wait()
