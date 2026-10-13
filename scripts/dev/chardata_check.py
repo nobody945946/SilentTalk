@@ -10,7 +10,6 @@ import json
 import math
 import random
 import re
-import time
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
@@ -85,7 +84,9 @@ def chat(
     n: int = 1,
     grammar: str | None = None,
 ) -> list[str]:
-    """The teacher. Retries while the pipeline supervisor restarts it."""
+    """The model on this step's server. A request that fails fails the step:
+    nothing restarts the server any more (character_pipeline.sh), so waiting
+    for it would only hide why."""
     body: dict[str, Any] = {
         "messages": messages,
         "temperature": temperature,
@@ -105,26 +106,9 @@ def chat(
     # One request per sample (not every llama-server build honours "n"); the
     # shared prompt is cached after the first.
     for _ in range(n):
-        deadline = time.monotonic() + 20 * 60
-        while True:
-            try:
-                with urllib.request.urlopen(request, timeout=900) as response:
-                    texts.append(
-                        str(
-                            json.load(response)["choices"][0]["message"]["content"]
-                            or ""
-                        )
-                    )
-                break
-            except (OSError, json.JSONDecodeError) as exc:
-                if time.monotonic() >= deadline:
-                    raise TeacherUnavailable(str(exc)) from exc
-                time.sleep(3)
+        with urllib.request.urlopen(request, timeout=900) as response:
+            texts.append(str(json.load(response)["choices"][0]["message"]["content"] or ""))
     return [re.sub(r"<think>.*?</think>", "", t, flags=re.S).strip() for t in texts]
-
-
-class TeacherUnavailable(RuntimeError):
-    pass
 
 
 def chat_text(row: dict[str, Any], name: str, last: int = 10) -> str:

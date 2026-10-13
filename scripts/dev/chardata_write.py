@@ -40,7 +40,7 @@ from chardata_scripts import check_script, held_out
 
 from silenttalk.copilot.reply_templates import _CHAT_TASK_ASK
 from silenttalk.copilot.script import to_taiwan_traditional
-from silenttalk.copilot.task_runner import _FAILED, _MAX_WAITING, _STOPPED
+from silenttalk.copilot.task_runner import _FAILED, _STOPPED
 from silenttalk.persona import Persona
 
 NAMES = (

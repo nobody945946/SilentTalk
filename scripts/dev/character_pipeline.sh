@@ -11,7 +11,9 @@
 #             answers every gate question and compares lines blind, both
 #             orders
 #   filter    the whole set or nothing (chardata_filter.HARD_CHECK);
-#             LINES_BY_RULES=1: lines need only the app's rules (no ranking)
+#             LINES_BY_RULES=1: lines need only the app's rules (no ranking);
+#             FILTER_ARGS are passed on (a pilot too small for the line count:
+#             --min-lines 0)
 #
 # The rows train together with the Agent's, one adapter for both (the
 # product loads one); this script stops at the checked rows.
@@ -222,6 +224,7 @@ stage render step render
 stage student served "$E4B_MODELS/$STUDENT_GGUF" "$SLOTS" "$SLOT_CTX" student \
     --student-url "http://127.0.0.1:$PORT"
 stage check served "$CHECKER" "$CHECKER_SLOTS" "$SLOT_CTX" check ${LINES_BY_RULES:+--lines-by-rules}
-stage filter step filter ${LINES_BY_RULES:+--lines-by-rules}
+# shellcheck disable=SC2086  # FILTER_ARGS: more arguments for the hard check (a pilot: --min-lines 0)
+stage filter step filter ${LINES_BY_RULES:+--lines-by-rules} ${FILTER_ARGS:-}
 touch "$STATE/done"
 log "character rows ready: $DIR/train-checked.jsonl"
