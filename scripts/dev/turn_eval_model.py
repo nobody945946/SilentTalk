@@ -9,10 +9,12 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
 import time
 import tomllib
 import types
 import urllib.request
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -187,12 +189,29 @@ class LeaseStandIn:
         lease_module.acquire_character = lambda *_args, **_kw: {"port": EVAL_PORT}
         lease_module.release_character = lambda *_args, **_kw: None
         if lease_class:
-            lease_module.service_status = lambda: {
-                "ready": self.process.poll() is None,
-                "mode": "character",
-                "owner_pid": os.getpid(),
-            }
+            lease_module.StatusStream = HeldLeaseStatus
 
     def close(self) -> None:
         self.process.terminate()
         self.process.wait(timeout=60)
+
+
+class HeldLeaseStatus:
+    """EdgeAgent's status stream (agent_lease.StatusStream) as it reads while
+    the lease is held: one status, then nothing until it is closed. The eval
+    server is llama-server itself, with no gateway to turn a request away."""
+
+    def __init__(self, deadline: float | None = None) -> None:
+        self._closed = threading.Event()
+
+    def __iter__(self) -> Iterator[dict[str, object]]:
+        yield {
+            "ready": True,
+            "mode": "character",
+            "owner_pid": os.getpid(),
+            "character_admitted": True,
+        }
+        self._closed.wait()
+
+    def close(self) -> None:
+        self._closed.set()

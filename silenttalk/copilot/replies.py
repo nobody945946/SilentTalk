@@ -191,6 +191,7 @@ class CharacterReplies:
                 lull=True,
             )
         except InferenceDeferred:
+            self.lull_spoken = False  # not said: the lull is still due
             raise
         except asyncio.CancelledError:
             raise

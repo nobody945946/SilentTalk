@@ -40,7 +40,7 @@ router 最多載入一個完整模型。租借角色與 Agent 設定使用相同
 | 角色請求與回覆選項 | `copilot/llm.py` | 租借推論端點、LoRA 請求分流 |
 | 角色模式排程 | `copilot/runtime.py` | 時機、冷場、過期回覆、取消 |
 | 人設與角色狀態 | `copilot/persona.py`、`copilot/character_state.py` | 使用者檔案；不保存對話原文 |
-| 推論租借與重啟交接 | `agent_lease.py` | localhost client；無引擎所有權 |
+| 推論租借與重啟交接 | `agent_lease.py` | localhost client；跟著 EdgeAgent 的狀態串流，無引擎所有權 |
 | Discord Agent 任務傳輸 | `agent_tasks.py` | Controller 擁有；SSE、單次批准、取消；權限由 EdgeAgent 執行 |
 | 設定載入與驗證 | `config.py` | TOML＋使用者差異 |
 | 設定頁項目與保存 | `settings_schema.py`、`settings_store.py`、`settings_ui.py` | schema 驅動 UI |
@@ -91,7 +91,9 @@ receive callback 不做推理，只複製 PCM 到 queue。生成期間新句子�
 
 ### 租借生命週期
 
-`agent_lease.py` 查詢／啟動 EdgeAgent 控制服務，提交包含 owner PID 與角色配置的 `/character` 請求；LLM client 使用租借回傳的推論端點。結束或切回時呼叫 `/base` 歸還。重啟交接沿用同一租借協定，不能另開模型子程序。
+`agent_lease.py` 查詢／啟動 EdgeAgent 控制服務（沒在跑就執行它的啟動器 `edge-agent start`，等啟動器結束），提交包含 owner PID 與角色配置的 `/character` 請求；LLM client 使用租借回傳的推論端點。結束或切回時呼叫 `/base` 歸還。重啟交接沿用同一租借協定，不能另開模型子程序。
+
+租借期間一直開著 EdgeAgent 的狀態串流 `GET /status/events`：連上立刻收到目前狀態，之後狀態一變就推一則，不靠計時器，也沒有心跳（本機對方一死，socket 就關）。狀態的模式或 owner 不再是自己，或串流斷了，就是租借沒了，立刻重新租借；租借失敗才依退避重試。EdgeAgent 自己重新載入模型（模式和 owner 不變）不算租借沒了。角色請求被推論閘道以 423 `inference_busy` 擋下（`InferenceDeferred`）時不定時重試：等請求送出後的狀態說閘道現在會收（`character_admitted`）才再送（`CharacterLease.turn`）。等待期間新的一句照樣取代同一位置的待答，最新優先。
 
 原 Agent 模型與配置由 EdgeAgent 保管，歸還後恢復；切換失敗由它回報與恢復。控制與推論回應都不能以「有程序」取代 ready 驗證。
 
@@ -140,7 +142,7 @@ Bot Token 與 Owner ID 優先沿用既有 `.env`，缺少時讀 Windows 認證�
 | `test_voice_receive.py` | Owner 與真人接收、排除 Bot、DAVE |
 | `test_copilot_context.py`、`test_copilot_llm.py` | RAM context、回覆選項、角色請求與 LoRA 分流 |
 | `test_copilot_runtime.py` | 角色時機、冷場與過期回覆 |
-| `test_agent_lease.py` | API client、租借／歸還與重啟交接 |
+| `test_agent_lease.py` | API client、租借／歸還、狀態串流（遺失、被擋下後何時再送）與重啟交接 |
 | `test_agent_tasks.py` | 離線 SSE、Owner 批准、拒絕／逾時、背景派工及失敗回報、只認 Owner ID、批准與結果只走私訊 |
 | `test_package_windows.py` | Git 來源、雜湊、拒絕個人／不安全檔案 |
 | `app.py --voice-smoke`／`--tts-smoke` | 真實 Discord 播放；需要授權與頻道 |

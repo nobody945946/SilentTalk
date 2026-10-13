@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from dataclasses import replace
 from pathlib import Path
 
@@ -28,6 +29,12 @@ class SlowFakeLLM:
         self.agenda = ()
         # The conversation each character_turn was given.
         self.turns_seen: list[list[str]] = []
+        # Set when EdgeAgent's status says it would take a request it
+        # deferred (LocalReplyModel.turn).
+        self.free = asyncio.Event()
+
+    async def turn(self, deferred) -> None:
+        await self.free.wait()
 
     def set_agent_dispatch(self, enabled: bool) -> None:
         self.agent_dispatch = enabled
@@ -123,18 +130,21 @@ async def _settle() -> None:
 
 
 @pytest.mark.asyncio
-async def test_borrower_waits_for_idle_and_then_answers_only_latest_trigger(tmp_path, monkeypatch):
-    from silenttalk.copilot import reply_worker
+async def test_a_deferred_line_waits_for_the_owner_then_the_newest_goes_at_once(tmp_path):
+    """EdgeAgent turned the request away: nothing is sent again until its
+    status says the model would take one (no retry on a timer or per line),
+    then the newest line of that place goes at once (latest wins)."""
     from silenttalk.copilot.reply_transport import InferenceDeferred
 
-    monkeypatch.setattr(reply_worker, "_RETRY_SECONDS", 0.01)
     runtime, llm, delivered = await _runtime(tmp_path)
     busy_seen, answered = asyncio.Event(), asyncio.Event()
     owner_busy = True
+    asked = []
     errors = []
     runtime.replies._on_error = errors.append
 
     async def suggest(**kwargs):
+        asked.append(kwargs["trigger_text"])
         if owner_busy:
             busy_seen.set()
             raise InferenceDeferred("fixture owner busy")
@@ -146,15 +156,91 @@ async def test_borrower_waits_for_idle_and_then_answers_only_latest_trigger(tmp_
         runtime._handle_turn(2, "A", "第一句話")
         await asyncio.wait_for(busy_seen.wait(), 1)
         runtime._handle_turn(2, "A", "第二句話")
+        runtime._handle_turn(2, "A", "第三句話")
+        await asyncio.sleep(1.2)  # longer than any retry interval would be
+        assert asked == ["第一句話"]
         assert not runtime._worker.done() and not errors
         owner_busy = False
+        freed = time.monotonic()
+        llm.free.set()
         await asyncio.wait_for(answered.wait(), 1)
+        assert time.monotonic() - freed < 0.1
         await _settle()
         replies = [r for r in delivered if isinstance(r, ReplySuggestions)]
-        assert [r.trigger_text for r in replies] == ["第二句話"]
+        assert [r.trigger_text for r in replies] == ["第三句話"]
+        assert asked == ["第一句話", "第三句話"]
         assert not errors and not runtime._worker.done()
     finally:
         await _stop(runtime)
+
+
+@pytest.mark.asyncio
+async def test_a_deferred_life_update_waits_for_the_owner_instead_of_asking_again(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A due update the owner turned away stays due, and the worker waits
+    for the owner's turn rather than sending it again and again."""
+    from silenttalk.copilot import character_life as life_module
+    from silenttalk.copilot.reply_transport import InferenceDeferred
+
+    monkeypatch.setattr(life_module, "_QUIET_UPDATE_SECONDS", 0.05)
+    runtime, llm, _ = await _runtime(
+        tmp_path,
+        config=CopilotConfig(character_memory="light", character_lull_seconds=0),
+    )
+    asked = _with_life(llm)
+    update_state = llm.update_state  # type: ignore[attr-defined]
+
+    async def busy_then_free(turns):
+        if not llm.free.is_set():
+            asked.append("deferred")
+            raise InferenceDeferred("fixture owner busy")
+        return await update_state(turns)
+
+    llm.update_state = busy_then_free  # type: ignore[attr-defined]
+    runtime.set_persona(EXAMPLE_PERSONAS[0])
+    await _settle()
+    for n in range(5):
+        runtime._handle_turn(2, "A", f"聊天中第{n}句")
+        llm.release.set()
+        await asyncio.sleep(0.02)
+    await asyncio.sleep(0.5)
+    assert asked.count("deferred") == 1
+    llm.free.set()
+    await asyncio.sleep(0.1)
+    assert asked.count("update") == 1
+    await _stop(runtime)
+
+
+@pytest.mark.asyncio
+async def test_a_deferred_lull_topic_waits_for_the_owner_and_is_said_once(
+    tmp_path: Path,
+) -> None:
+    from silenttalk.copilot.reply_transport import InferenceDeferred
+
+    runtime, llm, delivered = await _runtime(
+        tmp_path, config=CopilotConfig(character_lull_seconds=0.05)
+    )
+    asked: list[bool] = []
+
+    async def character_turn(*, turns, summary, engagement, addressed=False, lull=False) -> str:
+        asked.append(lull)
+        if not llm.free.is_set():
+            raise InferenceDeferred("fixture owner busy")
+        return "我今天烤了草莓蛋糕" if lull else ""
+
+    llm.character_turn = character_turn  # type: ignore[method-assign]
+    runtime.set_character_mode(True)
+    runtime._handle_turn(2, "A", "欸大家好")  # not for the character: no reply
+    await asyncio.sleep(0.5)
+    assert asked == [True]  # turned away once, then waiting: not asked again
+    llm.free.set()
+    await asyncio.sleep(0.2)
+    assert asked == [True, True]
+    assert [item for item in delivered if isinstance(item, tuple)] == [
+        ("spoke", "我今天烤了草莓蛋糕")
+    ]
+    await _stop(runtime)
 
 
 @pytest.mark.asyncio
