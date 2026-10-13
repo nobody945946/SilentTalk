@@ -12,13 +12,13 @@
 
 ## 3. 目標完成度
 
-8/14：第 1–8 步完成；V1、V2、D3、V4、V5、D4 都等使用者，沒有把合成探測算真人通過。第 9 步為本次中間回報；服務已恢復。第 10 步全部通過前不得出貨。
+8/14：第 1–8 步完成；V1、V2、D3、V4、V5、D4 都等使用者，沒有把合成探測算真人通過。第 9 步中間回報已推送，report a7c83b2 訊息送達開發機；服務已恢復。第 10 步全部通過前不得出貨。
 
 SilentTalk 真正 repo：`C:\Users\A8fm0\Downloads\SilentTalk`，origin 為 nobody945946/SilentTalk；首次 pull 到 `bcbbff5409b54a2bbc7241c2f4bfdd15e0b36c62`，8497135 祖先檢查 exit 0。Windows fixture 修正後 HEAD `4b257f59b7037875b0073e80001c2bb5992842ba`，已推 copilot-story-mode。
 
 EdgeAgent pull 到 `fb9dd50bf75e191081db1f17287b9fb145abebce`，fb9dd50 祖先檢查 exit 0。沒有改開發機的模型、角色或工具邏輯。
 
-通道取代 laptop-received 和定時查 Git。使用既有本次 session 解鎖的 Git SSH client，不轉送 agent。received 發送成功；收到 round 12 訊息、開發機的通道檢查，已送 pong。SSH wait 在核心 FIFO/select 等待，有訊息才返回；無本機 sleep／重試／Git 輪詢。CLI 未停止，暫時 SSH 授權繼續有效。
+通道取代 laptop-received 和定時查 Git。使用既有本次 session 解鎖的 Git SSH client，不轉送 agent。received 發送成功；收到 round 12 訊息、開發機的通道檢查，已送 pong。SSH wait 在核心 FIFO/select 等待，有訊息才返回；無本機 sleep／重試／Git 輪詢。CLI 未停止，暫時 SSH 授權繼續有效。一則帶分號的 note 在 Windows SSH 遠端 shell 引用上 exit 127，只送達前半 metadata；改成整段 remote command 內單引號包住固定 metadata 後後續 send 全 exit 0，未執行任何非預期有效命令或讀機敏資料。
 
 ## 4. 測試執行結果
 
