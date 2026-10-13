@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import http.client
 import json
 import logging
 import os
@@ -190,7 +189,9 @@ class StatusStream:
     changes, whether the inference gateway would take a character request
     now among it. No heartbeat: on localhost a peer that dies closes the
     socket, which ends the stream. Reading blocks; close() from another
-    thread ends it (the socket is shut down)."""
+    thread ends it. Read from the socket itself: a blocked read wakes on
+    shutdown() on Linux but only on a real close on Windows, and a socket
+    wrapped in a file object (http.client) cannot be closed under it."""
 
     def __init__(self, deadline: float | None = None) -> None:
         # time.monotonic() by which the next status must have come, or None.
@@ -207,51 +208,61 @@ class StatusStream:
             raise TimeoutError("no status from EdgeAgent in time")
         return left
 
+    def _lines(self, sock: socket.socket) -> Iterator[bytes]:
+        """The response's lines as they come; ends when EdgeAgent closes it."""
+        pending = b""
+        while True:
+            sock.settimeout(self._timeout())
+            chunk = sock.recv(65536)
+            if not chunk:
+                return  # EdgeAgent closed it: stopped or restarted
+            pending += chunk
+            *lines, pending = pending.split(b"\n")
+            yield from lines
+
     def __iter__(self) -> Iterator[dict[str, object]]:
-        connection = http.client.HTTPConnection(
-            "127.0.0.1", CONTROL_PORT, timeout=self._timeout()
-        )
         try:
-            connection.connect()
+            sock = socket.create_connection(("127.0.0.1", CONTROL_PORT), timeout=self._timeout())
             with self._lock:
                 if self._closed:
+                    sock.close()
                     return
-                # The socket itself: http.client drops the connection's
-                # reference once a response owns it.
-                sock = self._socket = connection.sock
-            connection.request(
-                "GET", "/status/events", headers={"Accept": "text/event-stream"}
+                self._socket = sock
+            sock.sendall(
+                b"GET /status/events HTTP/1.1\r\nHost: 127.0.0.1\r\n"
+                b"Accept: text/event-stream\r\nConnection: close\r\n\r\n"
             )
-            response = connection.getresponse()
-            if response.status != 200:
+            lines = self._lines(sock)
+            head = next(lines, b"").decode("latin-1").split()
+            if len(head) < 2 or not head[0].startswith("HTTP/") or head[1] != "200":
                 raise AgentLeaseError(
-                    f"EdgeAgent status stream failed (HTTP {response.status})"
+                    f"EdgeAgent status stream failed ({' '.join(head[:3]) or 'no answer'})"
                 )
-            while True:
-                sock.settimeout(self._timeout())
-                raw = response.readline()
-                if not raw:
-                    return  # EdgeAgent closed it: stopped or restarted
+            for raw in lines:  # the headers, up to the blank line
+                if not raw.strip():
+                    break
+            for raw in lines:
                 line = raw.decode("utf-8").strip()
                 if line.startswith("data:"):
                     status = json.loads(line[5:])
                     if isinstance(status, dict):
                         yield status
-        except (OSError, http.client.HTTPException, ValueError) as exc:
+        except (OSError, ValueError) as exc:
             if not self._closed:
                 raise AgentLeaseError(f"EdgeAgent status stream failed: {exc}") from exc
         finally:
-            connection.close()
+            self.close()
 
     def close(self) -> None:
         with self._lock:
             self._closed = True
-            sock = self._socket
+            sock, self._socket = self._socket, None
         if sock is not None:
             try:
-                sock.shutdown(socket.SHUT_RDWR)
+                sock.shutdown(socket.SHUT_RDWR)  # wakes a blocked read on Linux
             except OSError:
                 pass
+            sock.close()  # and on Windows
 
 
 class CharacterLease:

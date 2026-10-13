@@ -4,7 +4,6 @@ import asyncio
 import io
 import json
 import os
-import socket
 import subprocess
 import threading
 import time
@@ -40,7 +39,10 @@ class FakeEdgeAgent:
         self.requests: list[str] = []
         self._changes = threading.Condition()
         self._version = 0
-        self._streams: list[socket.socket] = []
+        # Streams end when this changes (drop): their handlers return and the
+        # server closes the sockets, as EdgeAgent's exit closes them. A
+        # shutdown() alone does not end a client's read on Windows.
+        self._generation = 0
         self._closed = False
         fake = self
 
@@ -53,15 +55,15 @@ class FakeEdgeAgent:
                 self.send_response(200)
                 self.send_header("Content-Type", "text/event-stream")
                 self.end_headers()
-                fake._streams.append(self.connection)
-                seen = -1
+                seen, generation = -1, fake._generation
                 try:
                     while True:
                         with fake._changes:
                             fake._changes.wait_for(
-                                lambda last=seen: fake._version != last or fake._closed
+                                lambda last=seen: fake._version != last
+                                or fake._closed or fake._generation != generation
                             )
-                            if fake._closed:
+                            if fake._closed or fake._generation != generation:
                                 return
                             seen, status = fake._version, dict(fake.status)
                         self.wfile.write(
@@ -105,12 +107,9 @@ class FakeEdgeAgent:
 
     def drop(self) -> None:
         """EdgeAgent went away: every open stream ends."""
-        streams, self._streams = self._streams, []
-        for stream in streams:
-            try:
-                stream.shutdown(socket.SHUT_RDWR)
-            except OSError:
-                pass
+        with self._changes:
+            self._generation += 1
+            self._changes.notify_all()
 
     def close(self) -> None:
         with self._changes:
