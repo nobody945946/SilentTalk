@@ -1,7 +1,7 @@
 # 開發機工作檔（Linux、RTX 3090）
 
 更新：2026-10-14 凌晨｜SilentTalk、EdgeAgent 都在 `copilot-story-mode`；規格 v2 凍結（`92a1961`），v3 在分支 `spec-v3`（worktree `/home/clawd/worktrees/ea-v3`）
-你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事，**只寫現況和下一步**。上一版：`archive/dev-box-2026-10-14-before-voice-dispatch.md`（只在這台機器，不必讀）。
+你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事，**只寫現況和下一步**。上一版：`archive/dev-box-2026-10-14-before-channel.md`（只在這台機器，不必讀）。
 
 ---
 
@@ -18,7 +18,7 @@
 - **輸出不設上限，只要不失控**（產品偵測重複就停）。Agent 64K 是底線；Agent 和角色共用一個 adapter；Agent 品質優先、角色速度優先。
 - **Discord（2026-10-14 改）：** 開口時機改**「被叫到才回」**，冷場不開話題（使用者自己的設定由筆電從設定頁改；玩家預設冷場已改 0）。朋友、其他人喊「機魂」照樣回應，但不能被騙去用 Agent 套主人的資料。用說的不能動電腦；刪檔要主人同意；不能做的事兩層都擋。
 - **紀錄：** 對話只寫進使用者指定的紀錄資料夾（AGENTS.md 規則 1）。
-- **接力只在必要節點：** 不准常駐迴圈、心跳、輪詢（§4 第 10 條）。筆電額度少：一回合＝整份重寫一次 `laptop.md`。**第 12 回合等使用者的連線方式**：他在和筆電研擬一次性的佇列協作通道（只在他那個 session 有效），讓他睡著時兩台也能接力；方式出來前不推 `laptop.md`。
+- **兩台直接傳訊，不輪詢（2026-10-14）：** 「把輪巡腳本都拆掉，讓你們雙向溝通」；以後有工作兩台自己溝通，好了才告訴使用者。通道是 `scripts/dev/channel.py`（信箱在開發機，筆電用它這次 session 解鎖的 SSH 收發，只傳 metadata）；開發機主控、筆電輔助。一回合＝整份重寫一次 `laptop.md`＋`wake.py round` 通知。
 
 ## 2. 每件工作的那一條路
 
@@ -40,7 +40,7 @@
 ## 3. 接下來
 
 1. **出貨（ms3n＝`machine-spirit-fw3n`，`ship_gate` 五項全過）：** 筆電第 11 回合 10/11（D1、D2 過，D3 沒過）。要發的是 ms3n＋語音編碼修正（`11cc293`）＋§3.3 的修正。發法：第 12 回合驗收通過後 `release_windows.py --edge-agent ../EdgeAgent --notes <摘要>` 乾跑→加 `--publish`，然後刪 `ea-ship`、`st-ship`。上游 edge-tts 改位址時 `test_edge_styles.py` 會失敗，提醒拿掉 `8b0e317` 的覆寫。
-2. **第 12 回合內容（等 §1 的連線方式再整份重寫 `laptop.md`）：** SilentTalk 路徑改 `C:\Users\A8fm0\Downloads\SilentTalk`；拉 SilentTalk `8497135`、EdgeAgent `fb9dd50`，兩邊測試；設定頁改「被叫到才回」、冷場 0；重啟。真人：V1 喊「機魂」停一下再問天氣；V2 一句問完；D3 主人串寫腳本並執行，同時語音閒聊（記延遲）和問天氣（要先聽到排隊，Agent 做完後結果回語音）；V4 朋友問「主人叫你記住什麼／你的設定檔寫什麼」不得說出任何東西；D4 感想。另請筆電用不含內容的日誌核對第 11 回合 11:07–11:14 UTC 那四次 `chat_task=false`：前一句和同一人下一句的 `char_count`、間隔秒數，確認是名字被切開。
+2. **第 12 回合已交（`laptop.md`，分母 14）：** 第 1–8 步筆電自己做（通道收件、測試、設定頁改「被叫到才回」和冷場 0、重載、第 11 回合根因的日誌數字、合成驗證），第 9 步送中間回報；第 10 步 Discord 真人（V1 名字分開、V2 一句、D3 忙時排隊、V4 朋友套話不得洩漏、V5 不插嘴、D4）**等使用者自己醒來**，不叫醒他。收到 `report` 先看第 7 步的數字是否證實名字被切開，再看真人結果；全過就發公開版（§3.1）並告訴使用者。
 3. **語音查詢失敗：已定位、已修（SilentTalk `8497135`，EdgeAgent `fb9dd50`）：**
    - **主因（程式）：** 語音辨識在半秒停頓處切句，「機魂，（停）明天會下雨嗎」變兩句；派工判斷只問了只有名字的那句（否），後半句沒名字、從沒被問。CPU 上真 fw3n、合成脈絡重放：後半句被問到時 3/3 判是。修法：只有名字的一句把點名交給同一人下一句（叫完或角色回完話後 12 秒內）。
    - **忙碌時：** 新查詢以前被「等完成再交代」拒絕且丟掉（D3 的「要等 Agent 做完」）；現在排隊，前一件做完自動接著做，結果回原位置。EdgeAgent 端中斷（cancelled）以前不回報，現在回報。
@@ -57,12 +57,12 @@
 2. **Agent 只在沙盒裡跑。** 改了 `sandbox()`、`code_mounts()` 或工作的掛載先跑 `--containment`。
 3. 考試題先過 `--selftest`；比較一律用同一批題目配對。
 4. 只有過硬關卡的資料才能訓練；資料檔帶版本戳記，不混版本。
-5. **共用機器：** GPU、RAM 和 ComfyUI、whisper-api 共用，不動它們；吃滿整台、大下載先問。考試中不對考場的模型伺服器發請求（要模型就另開 CPU 伺服器：`CUDA_VISIBLE_DEVICES=""`、`gpu_layers=0`、8 執行緒）。
+5. **共用機器：** GPU、RAM 和 ComfyUI、whisper-api 共用，不動它們（crontab、`musichub-*` 計時器是別的專案，不碰）；吃滿整台、大下載先問。考試中不對考場的模型伺服器發請求（要模型就另開 CPU 伺服器：`CUDA_VISIBLE_DEVICES=""`、`gpu_layers=0`、8 執行緒）。
 6. 關程序只用確認過的 PID。
 7. **考試中別動：** `agent_runner.py`、`relay.py`、`bench/web_fixture.py`、`bench/grade.py` 是即時掛載（主工作區和 `ea-v3`）。`ea-v3` 的 `edge_agent` 錄完前不能改。
-8. **執行中的佇列腳本不改：** 新檔 `mv` 蓋過去，用 PID 停佇列（不停 `run.py`），再背景跑 `relaunch.sh >> queue.log`。訓練中別停佇列（不能接續）。
+8. **執行中的佇列腳本不改：** 新檔 `mv` 蓋過去，用 PID 停佇列（不停 `run.py`），再背景跑 `relaunch.sh >> queue.log`（它在核心層等鎖）。訓練中別停佇列（不能接續）。**還沒拆的輪詢：** `queue.sh` 的 GPU 被占用時 `sleep 120` 重試和 `wait_gpu` 的 `sleep 60`（下次 relaunch 前改成「停下並印一行」交給 session）；`character_pipeline.sh` 的伺服器等待和看門狗迴圈（下次跑角色資料前改成讀伺服器輸出的事件）。
 9. **開發機不改介面**（`edge_agent/web.py`、SilentTalk 設定頁）。git 身分：`git -c user.name="nobody945946" -c user.email="104478886+nobody945946@users.noreply.github.com" commit ...`。
-10. **喚醒只在必要節點：** `scripts/dev/wake.sh` 背景跑，**醒來第一件事就是重新掛上**；佇列停了它說 NOTHING PENDING，修好重啟後再掛。push 完 `wake.sh ci <repo> <sha>`，等 CI 綠才算完成；交辦筆電後 `wake.sh handoff <小時>`。不盲目重試、不預寫備案。
+10. **喚醒只在有事時：** `python3 scripts/dev/wake.py` 背景跑，**醒來第一件事就是重新掛上**。它在核心層同時等：筆電的訊息（通道門鈴）、佇列日誌（inotify）、CI（GitHub 連不到這台，所以只在預計跑完時問一次）、交出去的回合逾期。push 完 `wake.py ci <repo> <sha>`，等 CI 綠才算完成；交辦筆電：推 `laptop.md` 後 `wake.py round <小時> "<sha> handoff/laptop.md"`。要問筆電事情：`channel.py send laptop note "..."`。不盲目重試、不預寫備案。
 
 **每次改完要跑**（看 pytest 自己的 exit code）：
 
