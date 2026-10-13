@@ -152,11 +152,18 @@ def transcribe_pcm(
 
 
 class TurnCollector:
-    """Collects on_turn callbacks; one utterance may be split by endpoint rules."""
+    """Collects on_turn callbacks; one utterance may be split by endpoint
+    rules. The transcriber's on_closed says the speaker's stream closed, so
+    every turn of the utterance is in."""
+
+    # A stream that never closes (an open microphone keeps sending noise,
+    # like stt_check's local microphone) ends this long after its first turn.
+    TRAILING_TURN_SECONDS = 1.0
 
     def __init__(self) -> None:
         self._texts: list[str] = []
         self._event = threading.Event()
+        self._closed = threading.Event()
         self._lock = threading.Lock()
 
     def on_turn(self, _speaker_id: int, _speaker_name: str, text: str) -> None:
@@ -164,14 +171,20 @@ class TurnCollector:
             self._texts.append(text)
             self._event.set()
 
+    def on_closed(self, _speaker_id: int) -> None:
+        self._closed.set()
+
     def reset(self) -> None:
         with self._lock:
             self._texts.clear()
             self._event.clear()
+            self._closed.clear()
 
     def wait(self, timeout: float) -> str:
+        """Up to `timeout` for the first turn, then until the stream closes
+        (at most TRAILING_TURN_SECONDS) for the turns split off after it."""
         self._event.wait(timeout)
-        time.sleep(1.0)  # let a trailing split segment land
+        self._closed.wait(self.TRAILING_TURN_SECONDS)
         with self._lock:
             return " ".join(self._texts)
 
@@ -191,6 +204,7 @@ def build_transcriber(
         on_turn=collector.on_turn,
         on_error=lambda message: print(f"  STT error: {message}"),
         endpoint_silence_ms=config.endpoint_silence_ms,
+        on_closed=collector.on_closed,
     )
     return transcriber, collector
 

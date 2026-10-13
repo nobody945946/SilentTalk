@@ -13,6 +13,8 @@ from silenttalk.discord_voice import DiscordVoiceClient
 from silenttalk.state import AppState
 from silenttalk.tts.edge import EdgeTTSEngine
 
+OWNER_VOICE_TIMEOUT = 20.0
+
 
 def create_test_tone(path: Path, duration_seconds: float = 1.0) -> None:
     sample_rate = 48_000
@@ -31,6 +33,20 @@ def create_test_tone(path: Path, duration_seconds: float = 1.0) -> None:
         output.writeframes(frames)
 
 
+async def wait_for_owner_voice(
+    client: DiscordVoiceClient, timeout: float = OWNER_VOICE_TIMEOUT
+) -> None:
+    """Until the client's own reconcile has followed the owner into voice;
+    at the deadline, what the bot can see of the owner."""
+    if not await client.wait_until_connected(timeout):
+        guild_count, voice_count, owner_visible = client.voice_diagnostics()
+        raise RuntimeError(
+            "Owner voice state 不可見；"
+            f"Bot 可見伺服器={guild_count}、可見語音頻道={voice_count}、"
+            f"Owner 可見={owner_visible}。"
+        )
+
+
 async def run_voice_smoke(settings: Settings, tts_text: str | None = None) -> None:
     def status(state: AppState, message: str) -> None:
         print(f"{state.value}: {message}")
@@ -41,16 +57,7 @@ async def run_voice_smoke(settings: Settings, tts_text: str | None = None) -> No
         connect_task = asyncio.create_task(client.connect(reconnect=False))
         try:
             await asyncio.wait_for(client.wait_until_ready(), timeout=30)
-            deadline = asyncio.get_running_loop().time() + 20
-            while client.active_voice() is None:
-                if asyncio.get_running_loop().time() >= deadline:
-                    guild_count, voice_count, owner_visible = client.voice_diagnostics()
-                    raise RuntimeError(
-                        "Owner voice state 不可見；"
-                        f"Bot 可見伺服器={guild_count}、可見語音頻道={voice_count}、"
-                        f"Owner 可見={owner_visible}。"
-                    )
-                await asyncio.sleep(0.2)
+            await wait_for_owner_voice(client)
             with tempfile.TemporaryDirectory(prefix="silenttalk-smoke-") as temp_dir:
                 if tts_text is None:
                     tone = Path(temp_dir) / "gate1-tone.wav"

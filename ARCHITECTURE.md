@@ -35,7 +35,7 @@ router 最多載入一個完整模型。租借角色與 Agent 設定使用相同
 | 播放排序、取消、暫存清理 | `speech_queue.py` | TTSEngine／AudioPlayer 契約 |
 | TTS 抽象與目前實作 | `tts/base.py`、`tts/edge.py` | EdgeTTS 外部服務 |
 | Discord 跟隨、播放與接收 | `discord_voice.py` | Owner routing、DAVE、文字聊天 |
-| STT | `copilot/stt.py`、`copilot/stt_offline.py` | 每位真人獨立 stream／VAD |
+| STT | `copilot/stt_worker.py`（佇列、執行緒、每人的結束期限）、`copilot/stt.py`、`copilot/stt_offline.py` | 每位真人獨立 stream／VAD；等封包或最近的期限，不定時醒 |
 | 會話 context | `copilot/context.py` | RAM、候選不進歷史 |
 | 角色請求與回覆選項 | `copilot/llm.py` | 租借推論端點、LoRA 請求分流 |
 | 角色模式排程 | `copilot/runtime.py` | 時機、冷場、過期回覆、取消 |

@@ -78,7 +78,10 @@ class DiscordVoiceClient(discord.Client):
         self._owner_missing_since: float | None = None
         self._next_reconnect_at = 0.0
         self._reconnect_delay = config.voice_reconnect_cooldown_seconds
+        # Set where a voice connection comes up / where receive starts; the
+        # waiters (wait_until_connected/receiving) look again only then.
         self._voice_ready = asyncio.Event()
+        self._receive_started = asyncio.Event()
         self._listen_retries = 0
         self._receive = ReceiveStats(time.monotonic())
         self.channels = DiscordChannels(self, config, lambda: self.active_voice())
@@ -337,22 +340,45 @@ class DiscordVoiceClient(discord.Client):
 
         self._voice_ready.clear()
         await self.sync_owner_voice()
-        if self.active_voice() is not None:
-            return
-
         timeout = (
             self._config.voice_ready_timeout_seconds
             if timeout_seconds is None
             else max(0.1, timeout_seconds)
         )
-        try:
-            await asyncio.wait_for(self._voice_ready.wait(), timeout=timeout)
-        except TimeoutError as exc:
-            raise RuntimeError("Discord Voice 尚未恢復連線，請稍後再試。") from exc
-
-        if self.active_voice() is None:
-            self._voice_ready.clear()
+        if not await self.wait_until_connected(timeout):
             raise RuntimeError("Discord Voice 尚未恢復連線，請稍後再試。")
+
+    async def wait_until_connected(self, timeout: float) -> bool:
+        """True once a voice connection is up, False at the deadline. Woken
+        when this client's own reconcile brings one up; drives no connect."""
+        return await self._wait_until(
+            lambda: self.active_voice() is not None, self._voice_ready, timeout
+        )
+
+    async def wait_until_receiving(self, timeout: float) -> bool:
+        """True once the voice connection is receiving (listening), False at
+        the deadline. Woken where receive starts; drives no connect."""
+        return await self._wait_until(self._receiving, self._receive_started, timeout)
+
+    def _receiving(self) -> bool:
+        voice = self.active_voice()
+        return voice is not None and getattr(voice, "is_listening", lambda: False)()
+
+    @staticmethod
+    async def _wait_until(
+        ready: Callable[[], bool], wake: asyncio.Event, timeout: float
+    ) -> bool:
+        """Sleeps on `wake` (set where that state comes up) and looks again
+        only when it is set; a set that no longer holds is cleared."""
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout
+        while not ready():
+            wake.clear()
+            try:
+                await asyncio.wait_for(wake.wait(), deadline - loop.time())
+            except TimeoutError:
+                return ready()
+        return True
 
     async def recover_voice_transport(self, reason: str) -> bool:
         channel = self._find_owner_channel()
@@ -395,6 +421,7 @@ class DiscordVoiceClient(discord.Client):
             _LOG.warning("voice_receive_unavailable wrong_voice_client=true")
             return
         if voice.is_listening():
+            self._receive_started.set()
             return
         connection = getattr(voice, "_connection", None)
         dave_version = int(getattr(connection, "dave_protocol_version", 0) or 0)
@@ -419,6 +446,7 @@ class DiscordVoiceClient(discord.Client):
             ),
             after=self._on_listen_stopped,
         )
+        self._receive_started.set()
         _LOG.info("voice_receive_started dave_version=%d", dave_version)
 
     def _on_voice_pcm(

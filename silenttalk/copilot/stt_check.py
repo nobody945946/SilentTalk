@@ -44,6 +44,7 @@ CHECK_SENTENCES = STT_SENTENCES + (
     "阿傑你那邊還有幾個人",
 )
 SENTENCE_TIMEOUT = 20.0
+LISTEN_TIMEOUT = 120.0
 
 
 async def run_stt_check(settings: Settings, project_dir: Path) -> bool:
@@ -77,8 +78,14 @@ async def run_stt_check(settings: Settings, project_dir: Path) -> bool:
             try:
                 await asyncio.wait_for(client.wait_until_ready(), timeout=30)
                 print("請先進 Discord 語音頻道；Bot 會跟著進來。")
-                await _wait_listening(client, timeout=120)
-                # Let the DAVE handshake settle before the first sentence.
+                if not await client.wait_until_receiving(LISTEN_TIMEOUT):
+                    raise RuntimeError(
+                        f"{LISTEN_TIMEOUT:.0f} 秒內沒有開始收音（Bot 沒進語音頻道？）"
+                    )
+                # Receive starts once the DAVE session exists; joining its MLS
+                # group (the keys to the others' audio) can take a moment more
+                # and discord.py 2.7.1 has no event for that, so one fixed
+                # pause before the first sentence.
                 await asyncio.sleep(3)
                 print(
                     f"\n接下來一句一句顯示 {len(CHECK_SENTENCES)} 句話，用平常的速度念。"
@@ -222,15 +229,3 @@ def _open_microphone(push: Callable[[bytes], None]) -> _Microphone | None:
         name = "?"
     microphone = _Microphone(stream, name)
     return microphone
-
-
-async def _wait_listening(client: DiscordVoiceClient, timeout: float) -> None:
-    loop = asyncio.get_running_loop()
-    deadline = loop.time() + timeout
-    while True:
-        voice = client.active_voice()
-        if voice is not None and getattr(voice, "is_listening", lambda: False)():
-            return
-        if loop.time() >= deadline:
-            raise RuntimeError(f"{timeout:.0f} 秒內沒有開始收音（Bot 沒進語音頻道？）")
-        await asyncio.sleep(0.5)
