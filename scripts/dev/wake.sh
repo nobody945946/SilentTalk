@@ -36,7 +36,10 @@ QUIET=${WAKE_QUIET:-3600}  # a running queue that logs nothing this long is hung
 mkdir -p "$DIR"
 
 ref() { git ls-remote https://github.com/nobody945946/SilentTalk "refs/heads/$1" 2>/dev/null | cut -c1-40; }
-queue_running() { pgrep -f '^bash \.runtime/fw/queue\.sh$' >/dev/null; }
+# A queue relaunched while its old step still runs waits in relaunch.sh for the
+# lock; that step keeps writing the log, so it counts as running (2026-10-13:
+# the wake exited with NOTHING PENDING through a 7-hour recording).
+queue_running() { pgrep -f '^bash \.runtime/fw/(queue|relaunch)\.sh$' >/dev/null; }
 set_state() { touch "$STATE"; sed -i "/^$1=/d" "$STATE"; echo "$1=$2" >> "$STATE"; }
 load_state() { pending="" hours="" report0="" received_at="" alarmed=""; [ -f "$STATE" ] && . "$STATE"; }
 ci_pending() { [ -s "$CIWATCH" ]; }
