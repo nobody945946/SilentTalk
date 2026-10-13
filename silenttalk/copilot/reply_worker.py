@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from collections.abc import Awaitable, Callable
 
 from silenttalk.conversation import Trigger
@@ -12,7 +13,6 @@ from silenttalk.copilot.reply_transport import InferenceDeferred
 from silenttalk.copilot.sessions import ConversationSessions
 from silenttalk.copilot.task_runner import AgentTaskRunner
 
-_POLL_SECONDS = 1.0
 _RETRY_SECONDS = 1.0
 
 
@@ -29,8 +29,14 @@ async def run_reply_worker(
     agent_enabled: Callable[[], bool],
 ) -> None:
     while True:
+        # Asleep until something happens (a line, a result, a setting: they
+        # set `wake`) or until the next thing falls due: no asking every
+        # second (owner, 2026-10-14: 「輪巡都拆掉」).
+        due = [at for at in (replies.lull_at(), life.update_at(bool(pending))) if at is not None]
         try:
-            await asyncio.wait_for(wake.wait(), timeout=_POLL_SECONDS)
+            await asyncio.wait_for(
+                wake.wait(), timeout=max(0.0, min(due) - time.monotonic()) if due else None
+            )
         except TimeoutError:
             try:
                 if replies.lull_due():

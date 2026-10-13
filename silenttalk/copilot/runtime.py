@@ -305,6 +305,7 @@ class CopilotRuntime:
             for speaker in self._called_by:
                 self._called_by[speaker] = now
         self.life.note_turn()
+        self._wake_worker()
 
     def _self_name(self) -> str:
         if self._character_mode and self.life.persona.name.strip():
@@ -370,6 +371,7 @@ class CopilotRuntime:
         self._llm.set_ai_honesty(
             str(copilot.get("character_ai_honesty", self._config.character_ai_honesty))
         )
+        self._wake_worker()  # a lull's length may have changed
         _LOG.info(
             "copilot_settings_applied engagement=%s compact=%s",
             self.replies.policy.mode,
@@ -387,6 +389,7 @@ class CopilotRuntime:
         if not enabled:
             self.tasks.invalidate()
         self._pending.clear()
+        self._wake_worker()
         _LOG.info("copilot_character_mode enabled=%s", enabled)
 
     def regenerate(self) -> bool:
@@ -440,6 +443,8 @@ class CopilotRuntime:
         if place == VOICE_ROOM:
             self.replies.last_heard_at = activity
             self.replies.lull_spoken = False
+        # The worker sleeps until its next due time; a line moves those.
+        self._wake_worker()
         if self._wake is not None and not self._pending:
             # Nothing waiting to generate: a good moment to compact.
             self.sessions.maybe_compact(place)

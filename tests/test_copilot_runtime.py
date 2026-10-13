@@ -513,9 +513,6 @@ async def test_light_memory_carries_its_life_and_updates_only_when_quiet(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from silenttalk.copilot import character_life as life_module
-    from silenttalk.copilot import reply_worker as worker_module
-
-    monkeypatch.setattr(worker_module, "_POLL_SECONDS", 0.01)
     monkeypatch.setattr(life_module, "_QUIET_UPDATE_SECONDS", 0.3)
     store = CharacterStateStore(tmp_path / "character_state.json")
     store.save(
@@ -575,9 +572,6 @@ async def test_clearing_forgets_its_life(tmp_path: Path) -> None:
 async def test_a_lull_opens_one_topic_until_someone_speaks_again(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from silenttalk.copilot import reply_worker as worker_module
-
-    monkeypatch.setattr(worker_module, "_POLL_SECONDS", 0.01)
     runtime, llm, delivered = await _runtime(
         tmp_path, config=CopilotConfig(character_lull_seconds=0.05)
     )
@@ -612,9 +606,6 @@ async def test_a_lull_opens_one_topic_until_someone_speaks_again(
 async def test_no_lull_topics_outside_character_mode(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from silenttalk.copilot import reply_worker as worker_module
-
-    monkeypatch.setattr(worker_module, "_POLL_SECONDS", 0.01)
     runtime, llm, delivered = await _runtime(
         tmp_path, config=CopilotConfig(character_lull_seconds=0.05)
     )
@@ -630,9 +621,6 @@ async def test_no_lull_topics_outside_character_mode(
 async def test_a_lull_line_is_dropped_if_someone_speaks_meanwhile(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from silenttalk.copilot import reply_worker as worker_module
-
-    monkeypatch.setattr(worker_module, "_POLL_SECONDS", 0.01)
     runtime, llm, delivered = await _runtime(
         tmp_path, config=CopilotConfig(character_lull_seconds=0.05)
     )
@@ -656,4 +644,30 @@ async def test_a_lull_line_is_dropped_if_someone_speaks_meanwhile(
     await asyncio.sleep(0.05)
 
     assert ("spoke", "我今天烤了草莓蛋糕") not in delivered
+    await _stop(runtime)
+
+
+@pytest.mark.asyncio
+async def test_the_worker_sleeps_until_something_is_due(tmp_path: Path) -> None:
+    """No asking every second (owner, 2026-10-14): idle, the worker waits for
+    a line or the next due time and looks at its timers only then."""
+    runtime, _llm, _ = await _runtime(tmp_path, config=CopilotConfig(character_lull_seconds=60))
+    runtime.set_character_mode(True)
+    looks = 0
+    lull_at = runtime.replies.lull_at
+
+    def counted():
+        nonlocal looks
+        looks += 1
+        return lull_at()
+
+    runtime.replies.lull_at = counted  # type: ignore[method-assign]
+    runtime._wake_worker()
+    await asyncio.sleep(0.05)
+    before = looks
+    await asyncio.sleep(1.5)
+    assert looks == before  # nothing happened, nothing was looked at
+    runtime._handle_turn(2, "A", "欸大家好")
+    await asyncio.sleep(0.05)
+    assert looks > before
     await _stop(runtime)

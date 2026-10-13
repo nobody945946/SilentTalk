@@ -108,16 +108,20 @@ class CharacterLife:
         except OSError as exc:
             _LOG.warning("copilot_state_save_failed error_type=%s", type(exc).__name__)
 
-    def update_due(self, pending: bool) -> bool:
+    def update_at(self, pending: bool) -> float | None:
+        """When its life is next due to move on (time.monotonic; 0 = now), or
+        None until more is said."""
         if self.memory == "off" or self.persona.is_blank or pending:
-            return False
+            return None
         if self.memory == "full" and self.lines_since_update >= _FULL_UPDATE_LINES:
-            return True
-        quiet = time.monotonic() - self.last_activity_at
-        return (
-            self.lines_since_update >= _MIN_UPDATE_LINES
-            and quiet >= _QUIET_UPDATE_SECONDS
-        )
+            return 0.0
+        if self.lines_since_update >= _MIN_UPDATE_LINES:
+            return self.last_activity_at + _QUIET_UPDATE_SECONDS
+        return None
+
+    def update_due(self, pending: bool) -> bool:
+        at = self.update_at(pending)
+        return at is not None and time.monotonic() >= at
 
     async def update(self) -> None:
         """How the chat moved its life on: concerns shared, progressing, done

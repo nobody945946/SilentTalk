@@ -208,15 +208,17 @@ class CharacterReplies:
         if self._on_character_line is not None:
             self._on_character_line(line)
 
-    def lull_due(self) -> bool:
+    def lull_at(self) -> float | None:
+        """When the room will have been quiet long enough to open a topic
+        (time.monotonic), or None when no lull is coming."""
         seconds = self._config.character_lull_seconds
-        return (
-            self.enabled
-            and seconds > 0
-            and not self.lull_spoken
-            and not self._pending()
-            and time.monotonic() - self.last_heard_at >= seconds
-        )
+        if not self.enabled or seconds <= 0 or self.lull_spoken or self._pending():
+            return None
+        return self.last_heard_at + seconds
+
+    def lull_due(self) -> bool:
+        at = self.lull_at()
+        return at is not None and time.monotonic() >= at
 
     def configure(self, config):
         self._config = config
