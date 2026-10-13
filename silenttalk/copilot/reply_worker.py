@@ -50,6 +50,11 @@ async def run_reply_worker(
                 await asyncio.sleep(_RETRY_SECONDS)
             wake.set()
             continue
+        if tasks.has_waiting and not tasks.busy and character_mode():
+            # The Agent is free: the oldest work that waited for it.
+            await tasks.start_waiting()
+            wake.set()
+            continue
         if tasks.has_owner_task and character_mode() and agent_enabled():
             trigger, turns = tasks.take_owner_task()
             try:

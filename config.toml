@@ -66,8 +66,10 @@ record_transcripts = false
 record_folder = ""
 character_engagement = "called"
 # Character mode: after this many seconds of silence the character brings up
-# something on its mind today or asks after someone (0 = never).
-character_lull_seconds = 30
+# something on its mind today or asks after someone (0 = never). Off by
+# default: it speaks when someone calls it, not into a room where friends are
+# talking among themselves (the owner, 2026-10-14).
+character_lull_seconds = 0
 # Its own life between sessions (character_state.json, never the chat):
 # "off" = new concerns every session; "light" = concerns, recent and mood are
 # kept and move on after each chat; "full" = also views and feelings about

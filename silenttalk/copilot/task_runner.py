@@ -28,7 +28,14 @@ from silenttalk.conversation import Attachment
 from silenttalk.conversation import Trigger as _Trigger
 
 _AGENT_RESULT_MAX_CHARS = 6000
-_BUSY = "目前工作仍在進行，請等完成後再交代下一件。"
+# One Agent does one job at a time; work asked meanwhile waits its turn and
+# starts, oldest first, when the running job ends (laptop round 11: a voice
+# lookup asked during the owner's work was turned away with "wait until it is
+# done" and never ran). A few at most: anyone in a chat may ask.
+_MAX_WAITING = 3
+_QUEUED = "前一件工作還在做，這件已經排在後面，做完就接著做。"
+_QUEUE_FULL = "前面已經排了好幾件工作，這件沒有收下，請等前面的做完再交代。"
+_STOPPED = "工作被中斷了，沒有結果。"
 
 
 _FAILURE_CODE = re.compile(r"[a-z][a-z0-9_]{0,39}")
@@ -66,6 +73,7 @@ class AgentTaskRunner:
         self._agent_scope = "read"
         self._task_hints = deque()
         self._owner_tasks = deque()
+        self._waiting = deque()
         self._task_result = ""
         self.epoch = 0
 
@@ -73,6 +81,7 @@ class AgentTaskRunner:
         self.epoch += 1
         self._task_hints.clear()
         self._owner_tasks.clear()
+        self._waiting.clear()
         self._task_result = ""
         if self._agent_job is not None:
             self._agent_job.cancel()
@@ -122,25 +131,47 @@ class AgentTaskRunner:
             await self.dispatch(trigger, task, epoch)
 
     async def dispatch(self, trigger: _Trigger, task: AgentTask, epoch: int) -> None:
-        """Hand one task to the Agent, one at a time: the owner's work in his
-        thread, or a lookup asked in a chat. `epoch`: when it was asked; a
-        task the owner stopped meanwhile (Agent or character turned off and
-        on) never starts."""
+        """Hand one task to the Agent: the owner's work in his thread, or a
+        lookup asked in a chat. While another runs it waits its turn (the
+        place it came from hears so). `epoch`: when it was asked; a task the
+        owner stopped meanwhile (Agent or character turned off and on) never
+        starts."""
+        if epoch != self.epoch or not self.enabled:
+            return
+        if self.busy or self._waiting:
+            full = len(self._waiting) >= _MAX_WAITING
+            if not full:
+                self._waiting.append((trigger, task, epoch))
+            # Said by the worker like any news of the Agent's, so a model
+            # that has to wait cannot ask the line again and queue it twice.
+            self._task_hints.append(
+                ("report", _QUEUE_FULL if full else _QUEUED, trigger.place)
+            )
+            self._wake()
+            return
+        await self._start(trigger, task, epoch, ack=True)
+
+    async def start_waiting(self) -> None:
+        """The oldest task that waited for the Agent; it already heard that it
+        would wait, so nothing is said when it starts."""
+        trigger, task, epoch = self._waiting.popleft()
+        await self._start(trigger, task, epoch, ack=False)
+
+    async def _start(
+        self, trigger: _Trigger, task: AgentTask, epoch: int, *, ack: bool
+    ) -> None:
         assert self._agent_tasks is not None
         try:
-            if epoch != self.epoch or not self.enabled or not self.enabled:
-                return
-            if self._agent_job is not None and not self._agent_job.done():
-                await self._task_line("report", _BUSY, trigger.place)
+            if epoch != self.epoch or not self.enabled:
                 return
             workspace = await self._agent_tasks.workspace()
-            if epoch != self.epoch or not self.enabled or not self.enabled:
+            if epoch != self.epoch or not self.enabled:
                 return
             self._agent_origin, self._agent_scope = trigger, task.scope
             self._mark(trigger, "accepted")
-            if trigger.place == VOICE_ROOM:
+            if ack and trigger.place == VOICE_ROOM:
                 await self._task_line("ack", task.text, VOICE_ROOM)
-            if epoch != self.epoch or not self.enabled or not self.enabled:
+            if epoch != self.epoch or not self.enabled:
                 return
             self._task_result = ""
             self._agent_job = asyncio.create_task(
@@ -149,6 +180,8 @@ class AgentTaskRunner:
                 ),
                 name="discord-agent-task",
             )
+            # The next waiting task starts once this one has fully ended.
+            self._agent_job.add_done_callback(lambda _job: self._wake())
         except InferenceDeferred:
             raise
         except asyncio.CancelledError:
@@ -246,19 +279,19 @@ class AgentTaskRunner:
                     len(payload.get("source_problems") or []),
                     int(payload.get("converted") or 0),
                 )
-            result = (
-                self._task_result
-                if kind == "done"
-                else str(payload.get("message", "工作已取消。"))
-            )
+            if kind == "done":
+                result = self._task_result or "工作完成。"
+            elif kind == "error":
+                result = str(payload.get("message") or "工作失敗了。")
+            else:
+                # Stopped on EdgeAgent's side (its stop button, Pi aborting):
+                # whoever asked still hears it ended, or they wait forever.
+                result = _STOPPED
             self._task_result = ""
             origin, self._agent_origin = self._agent_origin, None
             if origin is not None:
                 self._mark(origin, "done" if kind == "done" else "failed")
-            if kind != "cancelled" and origin is not None:
-                await self._finish(
-                    kind, result or "工作完成。", origin, self._agent_scope
-                )
+                await self._finish(kind, result, origin, self._agent_scope)
         self._wake()
 
     async def _finish(
@@ -326,6 +359,14 @@ class AgentTaskRunner:
     @property
     def available(self):
         return self._agent_tasks is not None
+
+    @property
+    def busy(self):
+        return self._agent_job is not None and not self._agent_job.done()
+
+    @property
+    def has_waiting(self):
+        return bool(self._waiting)
 
     @property
     def has_hint(self):

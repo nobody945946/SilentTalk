@@ -56,6 +56,14 @@ HistoryCallback = Callable[[int, int, int], Awaitable[list[tuple[int, str, str, 
 
 # "嗯", "好", "喔" are context, not something worth four reply options.
 _MIN_TRIGGER_CHARS = 2
+# Speech recognition closes a segment at half a second of silence, so "機魂，
+# (pause) 幫我查明天天氣" arrives as two lines and only the first has the name
+# (laptop round 11: voice lookups that named it never reached the Agent). A
+# spoken line that is nothing but the call ("機魂", "機魂在嗎") passes it on
+# to the same speaker's next spoken line, if that comes this soon (after the
+# call, or after the character's answer to it).
+_BARE_CALL_CHARS = 2
+_CALL_CARRY_SECONDS = 12.0
 # one would slow every later reply there).
 # whole result is typed into the chat).
 
@@ -109,6 +117,8 @@ class CopilotRuntime:
         # twice). Threads have no lulls.
         # Whether a line calls the character (its names, by sound).
         self._names = NameMatcher(persona_names(blank_persona()))
+        # Who just called it with a bare name, and when (_CALL_CARRY_SECONDS).
+        self._called_by: dict[int, float] = {}
         self._character_mode = False
         # Lines heard per place, to notice when a conversation moved on.
         self._turn_seq: dict[int, int] = {}
@@ -289,7 +299,11 @@ class CopilotRuntime:
         self._emit_turn(turn)
         if place == VOICE_ROOM:
             # The silence counts from the last thing anyone said, the bot included.
-            self.replies.last_heard_at = time.monotonic()
+            now = self.replies.last_heard_at = time.monotonic()
+            # Whoever called it with a bare name has heard its answer only now
+            # (a line can take ten seconds while the Agent reads a long input).
+            for speaker in self._called_by:
+                self._called_by[speaker] = now
         self.life.note_turn()
 
     def _self_name(self) -> str:
@@ -436,6 +450,12 @@ class CopilotRuntime:
         # recognition writes 雞魂 for 機魂) or by Discord's @mention or reply:
         # the app decides, not the model.
         addressed = mentioned or (self._character_mode and self._names(text))
+        if via == "voice" and self._character_mode:
+            called_at = self._called_by.pop(speaker_id, None)
+            if called_at is not None and activity - called_at <= _CALL_CARRY_SECONDS:
+                addressed = True
+            if self._names(text) and len(_compact(self._names.rest(text))) <= _BARE_CALL_CHARS:
+                self._called_by[speaker_id] = activity
         trigger = _Trigger(
             speaker_name,
             text,

@@ -103,3 +103,7 @@ class NameMatcher:
 
     def __call__(self, text: str) -> bool:
         return self._pattern is not None and self._pattern.search(text) is not None
+
+    def rest(self, text: str) -> str:
+        """The line without its calls (what was said besides the name)."""
+        return self._pattern.sub("", text) if self._pattern is not None else text

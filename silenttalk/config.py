@@ -112,7 +112,7 @@ class CopilotConfig:
     character_engagement: str = "called"
     # Character mode: after this many seconds with nobody talking, the
     # character opens a topic of its own (0 = never).
-    character_lull_seconds: float = 30.0
+    character_lull_seconds: float = 0.0
     # How much of its own life the character keeps between sessions
     # (copilot.llm.MEMORY_LEVELS: off / light / full).
     character_memory: str = "off"
@@ -354,7 +354,7 @@ def load_settings(project_dir: Path) -> Settings:
                 "character_memory",
             ),
             character_lull_seconds=max(
-                0.0, min(600.0, float(copilot.get("character_lull_seconds", 30.0)))
+                0.0, min(600.0, float(copilot.get("character_lull_seconds", 0.0)))
             ),
             stt_engine=_stt_engine(copilot.get("stt_engine", "paraformer")),
         ),

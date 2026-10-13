@@ -12,7 +12,7 @@ from aiohttp import web
 from silenttalk.agent_lease import AgentLeaseError
 from silenttalk.agent_tasks import AgentTaskClient
 from silenttalk.config import CopilotConfig
-from silenttalk.conversation import VOICE_ROOM, AgentTask, ConversationTurn
+from silenttalk.conversation import VOICE_ROOM, AgentTask
 from silenttalk.conversation import Trigger as _Trigger
 from silenttalk.copilot.reply_templates import PRIVATE_REPORTS
 from silenttalk.copilot.runtime import CopilotRuntime
@@ -361,10 +361,15 @@ def _marked_runtime(
     history=None,
     lookup=None,
     fail_run=None,
+    hold=None,
+    stopped=False,
 ):
     """A character runtime (owner: user 1) whose Agent lists a folder; it
     records the marks on messages, what is typed where, what is spoken, the
-    DMs, the posted results and how the Agent was asked."""
+    DMs, the posted results and how the Agent was asked. `lookup`: the
+    instructions for every line that calls it (or, a function of the line,
+    for the lines it returns them for); `hold`: an event the Agent's first
+    run waits for."""
     seen = SimpleNamespace(
         marks=[],
         typed=[],
@@ -389,9 +394,11 @@ def _marked_runtime(
             return AgentTask(kwargs["turns"][-1].text, scope=scope)
 
         async def chat_task(self, **kwargs):
-            seen.asked.append(("lookup", kwargs["turns"][-1].text))
+            line = kwargs["turns"][-1].text
+            seen.asked.append(("lookup", line))
+            text = lookup(line) if callable(lookup) else lookup
             # Even a model that asks for more gets only the chat's scope.
-            return AgentTask(lookup, scope="change") if lookup else None
+            return AgentTask(text, scope="change") if text else None
 
         def __getattr__(self, name):  # the setters apply_settings calls
             return lambda *args: None
@@ -422,6 +429,11 @@ def _marked_runtime(
             if fail_run:
                 await callback("error", {"message": fail_run})
                 return
+            if stopped:
+                await callback("cancelled", {})
+                return
+            if hold is not None and len(seen.texts) == 1:
+                await hold.wait()
             await callback("delta", {"text": "a.txt c.tmp"})
             await callback("done", {})
 
@@ -549,6 +561,24 @@ async def test_anyone_may_have_it_look_up_public_information_by_voice(tmp_path):
         assert seen.hints == [("ack", "查今天台股收盤，附來源"), ("report", "a.txt c.tmp")]
         assert seen.results == [("a.txt c.tmp", VOICE_ROOM)] and seen.private == []
         assert seen.spoken == ["（角色的話）", "（角色的話）"]
+    finally:
+        await _close(runtime)
+
+
+@pytest.mark.asyncio
+async def test_a_lookup_stopped_on_the_agents_side_is_still_reported_where_it_was_asked(
+    tmp_path,
+):
+    """EdgeAgent's stop button or Pi aborting ends a task "cancelled": the
+    voice room that asked hears it ended without a result instead of waiting."""
+    from silenttalk.copilot.task_runner import _STOPPED
+
+    runtime, seen = _marked_runtime(tmp_path, lookup="查今天台股收盤", stopped=True)
+    try:
+        runtime._handle_turn(5, "路人", "機魂 今天台股收盤多少")
+        await _until(lambda: len(seen.hints) == 2)
+        assert seen.results == [(_STOPPED, VOICE_ROOM)]
+        assert seen.hints == [("ack", "查今天台股收盤"), ("report", _STOPPED)]
     finally:
         await _close(runtime)
 
@@ -843,10 +873,39 @@ async def test_an_unreadable_thread_is_not_pretended_to_be_remembered(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_a_busy_agent_says_so_in_the_thread_and_a_stopped_job_gets_a_cross(
+async def test_work_asked_while_the_agent_is_busy_waits_its_turn_and_still_runs(
     tmp_path,
 ):
-    from silenttalk.copilot.task_runner import _BUSY
+    """Laptop round 11: a lookup asked by voice during the owner's work was
+    told to wait until it was done and never ran. Now it waits its turn: the
+    voice room hears that it is queued, and once the owner's work is done the
+    lookup runs and its result comes back to the voice room."""
+    from silenttalk.copilot.task_runner import _QUEUED
+
+    hold = asyncio.Event()
+    runtime, seen = _marked_runtime(tmp_path, lookup="查明天台北天氣，附來源", hold=hold)
+    try:
+        _in_thread(runtime, 1, "幫我看一下測試資料夾")
+        await _until(lambda: seen.texts == ["幫我看一下測試資料夾"])
+        runtime._handle_turn(5, "路人", "機魂 明天台北會下雨嗎")
+        await _until(lambda: ("report", _QUEUED) in seen.hints)
+        assert seen.texts == ["幫我看一下測試資料夾"] and seen.spoken == ["（角色的話）"]
+        hold.set()
+        await _until(lambda: len(seen.results) == 2 and len(seen.hints) == 2)
+        assert seen.texts == ["幫我看一下測試資料夾", "查明天台北天氣，附來源"]
+        assert seen.scopes == ["read", "public"]
+        assert seen.results == [("a.txt c.tmp", THREAD), ("a.txt c.tmp", VOICE_ROOM)]
+        # It already heard it would wait: no second "on it", just the result.
+        assert seen.hints == [("report", _QUEUED), ("report", "a.txt c.tmp")]
+        assert seen.marks == [(TEXT_CHANNEL, THREAD, "accepted"), (TEXT_CHANNEL, THREAD, "done")]
+    finally:
+        hold.set()
+        await _close(runtime)
+
+
+@pytest.mark.asyncio
+async def test_a_full_queue_says_so_and_a_stopped_job_drops_what_waited(tmp_path):
+    from silenttalk.copilot.task_runner import _MAX_WAITING, _QUEUE_FULL, _QUEUED
 
     runtime, seen = _marked_runtime(tmp_path)
     running = asyncio.get_running_loop().create_future()
@@ -855,22 +914,73 @@ async def test_a_busy_agent_says_so_in_the_thread_and_a_stopped_job_gets_a_cross
         "owner", "上一件", speaker_id=1, place=42, channel_id=900, message_id=41
     )
     try:
-        later = _Trigger(
-            "owner", "再一件", speaker_id=1, place=42, channel_id=900, message_id=43
-        )
-        await runtime.tasks.dispatch_owner(
-            later, (ConversationTurn(1, "owner", "再一件", via="text"),)
-        )
-        assert seen.hints == [("report", _BUSY)] and seen.typed == [
-            ("（角色的話）", 42)
-        ]
-        assert not any(message == 43 for _, message, _ in seen.marks)
-        runtime.apply_settings(
-            {"character_agent": False}
-        )  # the owner turns the Agent off
-        assert seen.marks == [(900, 41, "failed")]
+        for message in range(43, 44 + _MAX_WAITING):
+            await runtime.tasks.dispatch(
+                _Trigger("owner", "再一件", speaker_id=1, place=42, channel_id=900,
+                         message_id=message),
+                AgentTask("再一件"), runtime.tasks.epoch,
+            )
+        await _until(lambda: len(seen.typed) == _MAX_WAITING + 1)
+        assert seen.hints == [("report", _QUEUED)] * _MAX_WAITING + [("report", _QUEUE_FULL)]
+        assert all(place == 42 for _, place in seen.typed)
+        assert not any(message > 41 for _, message, _ in seen.marks)
+        runtime.apply_settings({"character_agent": False})  # the owner turns the Agent off
+        assert seen.marks == [(900, 41, "failed")] and not runtime.tasks.has_waiting
     finally:
         running.cancel()
+        await _close(runtime)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("call", ["機魂", "雞魂 在嗎"])
+async def test_a_lookup_spoken_after_a_pause_behind_the_name_still_reaches_the_agent(
+    tmp_path, call
+):
+    """Speech recognition ends a segment at half a second of silence: "機魂，
+    (pause) 明天台北會下雨嗎" arrives as the bare name, then the request
+    without it. The request still called it and goes to the Agent."""
+    runtime, seen = _marked_runtime(
+        tmp_path, lookup=lambda line: "查明天台北天氣" if "下雨" in line else None
+    )
+    try:
+        runtime._handle_turn(5, "路人", call)
+        await _until(lambda: seen.spoken)  # it answered the bare call first
+        runtime._handle_turn(5, "路人", "明天台北會下雨嗎")
+        await _until(lambda: seen.results)
+        assert ("lookup", "明天台北會下雨嗎") in seen.asked
+        assert seen.texts == ["查明天台北天氣"] and seen.scopes == ["public"]
+        # Only the next line of that speaker: later lines need the name again.
+        runtime._handle_turn(5, "路人", "那後天呢")
+        runtime._handle_turn(6, "別人", "明天會下雨嗎")
+        await asyncio.sleep(0.05)
+        assert seen.texts == ["查明天台北天氣"]
+    finally:
+        await _close(runtime)
+
+
+@pytest.mark.asyncio
+async def test_a_call_with_something_to_say_passes_nothing_on_and_a_late_line_is_not_called(
+    tmp_path, monkeypatch
+):
+    from silenttalk.copilot import runtime as runtime_module
+
+    runtime, _seen = _marked_runtime(tmp_path)
+    try:
+        runtime._handle_turn(5, "路人", "機魂 你喜歡萬機神嗎")
+        runtime._handle_turn(5, "路人", "明天台北會下雨嗎")
+        assert not runtime._latest_trigger.addressed
+        monkeypatch.setattr(runtime_module, "_CALL_CARRY_SECONDS", 0.05)
+        runtime._handle_turn(5, "路人", "機魂")
+        await asyncio.sleep(0.1)
+        runtime._handle_turn(5, "路人", "明天台北會下雨嗎")
+        assert not runtime._latest_trigger.addressed
+        # The time to go on counts from its answer to the call, however late.
+        runtime._handle_turn(5, "路人", "機魂")
+        await asyncio.sleep(0.1)
+        runtime.record_self("在，主人。")
+        runtime._handle_turn(5, "路人", "明天台北會下雨嗎")
+        assert runtime._latest_trigger.addressed
+    finally:
         await _close(runtime)
 
 
