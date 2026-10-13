@@ -1,6 +1,6 @@
-# 第 11 回合：卡在第 9 步（10/11）；筆電接力通知尚待主控對接
+# 第 12 回合：卡在第 10 步（第 1–8 步完成，等使用者自己回來）
 
-更新：2026-10-14T01:26:29.3547465+08:00。開發機主控，筆電輔助；必要服务与既有偏好保持，其他被清理程式不復活。
+更新：2026-10-14T01:55:33.7195363+08:00。開發機主控，筆電輔助。依使用者指示，不叫醒他；需管理員／UAC 的操作等他起床。這次自動驗收未要求提權，其他清理後關閉程式未復活。
 
 ## 1. 機魂劇本
 
@@ -8,93 +8,91 @@
 
 ## 2. 時間與額度
 
-自動補驗從 2026-10-13T17:15:47+08:00 開始；2026-10-13T23:59:50+08:00 必要服務再次恢復就緒，最新檢查點 2026-10-14T00:01:50.7425745+08:00。API token／帳戶額度沒有可用證據，不推算。
+2026-10-14 約 01:36 開工，01:37:55 收件訊息送達開發機；01:39:41 回覆通道檢查。正式 SilentTalk 01:52:30 再次就緒。API token／帳戶額度沒有可用證據，不推算。
 
 ## 3. 目標完成度
 
-第 11 回合仍 10/11：第 1–8 步、D1、D2 完成，D3 未通過。使用者選擇保留 active（主動加入），取代 D1 called 條件；不改使用者設定。語音查詢未交付仍待開發機定位，本機合成探測不算真人通過。
+8/14：第 1–8 步完成；V1、V2、D3、V4、V5、D4 都等使用者，沒有把合成探測算真人通過。第 9 步為本次中間回報；服務已恢復。第 10 步全部通過前不得出貨。
 
-額外授權：開發機是主控，筆電 Codex 僅輔助 Windows 部署、介面及實測。使用者要求接力通知、不許本機輪詢；只允許本次 session 暫時 SSH 金鑰解鎖，正常回合結束不撤銷，不設固定時限。新通知接力屬本次明確授權，取代舊 skill 不使用 native queue 的流程偏好，但不改機器分工。筆電已可經現有 SSH 別名完成無敏感資料的登入探測；自動 push 喚醒尚未接通。
+SilentTalk 真正 repo：`C:\Users\A8fm0\Downloads\SilentTalk`，origin 為 nobody945946/SilentTalk；首次 pull 到 `bcbbff5409b54a2bbc7241c2f4bfdd15e0b36c62`，8497135 祖先檢查 exit 0。Windows fixture 修正後 HEAD `4b257f59b7037875b0073e80001c2bb5992842ba`，已推 copilot-story-mode。
 
-最近 pull 已到 `deb8e72`；無程式碼差異或新的模型部署，不重跑舊驗收。先前已確認的收件回條為語音修正版 `11cc293`。通知試驗不應虛報已接收開發機新回合。
+EdgeAgent pull 到 `fb9dd50bf75e191081db1f17287b9fb145abebce`，fb9dd50 祖先檢查 exit 0。沒有改開發機的模型、角色或工具邏輯。
+
+通道取代 laptop-received 和定時查 Git。使用既有本次 session 解鎖的 Git SSH client，不轉送 agent。received 發送成功；收到 round 12 訊息、開發機的通道檢查，已送 pong。SSH wait 在核心 FIFO/select 等待，有訊息才返回；無本機 sleep／重試／Git 輪詢。CLI 未停止，暫時 SSH 授權繼續有效。
 
 ## 4. 測試執行結果
 
-- SilentTalk 修正後完整 pytest：368 passed、1 skipped、2 warnings，16.15 秒，exit 0；語音相關測試 31 passed。新增原生 FFmpeg 回歸測試先紅（exit 3221225477），再綠。修改檔案 Ruff 與 `git diff --check` exit 0。CI https://github.com/nobody945946/SilentTalk/actions/runs/38385894450 completed／success。
-- D1 初次失敗時 STT segment 2、final turn 2、character line 2；語音 job failed 3，例外類型 FFmpegProcessError。隔離測試確定機魂音效的 aeval 在自帶 Windows FFmpeg 崩潰（3221225477／0xC0000005）；改用原生 tremolo 保留 48 Hz、0.44–1 增益範圍及其他效果。修正後真實 TTS 串流與機魂效果成功輸出 148 個 Opus 音訊包、exit 0、stream_error false；此為本機探測，不能算 D1 通過。
-- EdgeAgent 完整 pytest（`EDGE_AGENT_UI_REGRESSION=1`）：446 passed、6 skipped、1 warning，234.26 秒，exit 0。完整測試後增加的 runtime 路徑案例，連同部署測試補跑 23 passed，exit 0。
-- `ruff check edge_agent tests`、`git diff --check`：exit 0；模型頁對應測試先紅後綠。
-- 先前兩個 Windows 失敗來自舊權限 fixture，已修正，8 項相關測試通過；Unicorn 的原生 access-violation 診斷仍會印出，三項測試通過、pytest exit 0，未宣稱診斷消失。
-- 第 6 步：既有模型頁選上 fw3n，SilentTalk 設定讀回也是 fw3n，無須改設定。停機量測前 SilentTalk 原本未執行、log 最後更新 2026-10-09，無最近十分鐘語音活動。將量測集中在同一次停機內，做完才一次恢復兩個 app。
-- `tests/lanes_check.py --install C:\Users\A8fm0\EdgeAgent`：exit 0、runs 2，所有量測請求 status 200；沒有重試或改記憶體設定。
-- 正常啟動器 exit 0，`app.py --character-mode` 執行；初始 session 的 `discord_ready`、`character_lease_connected`、`copilot_runtime_ready` 各 1，啟動 warning／error 0。修正後只用既有 restart_silenttalk.ps1 重啟 SilentTalk，未重啟 Edge 或遠端連線程式；18:48:46 新 session 的 discord_ready 1、voice_receive_started 1，查核 error 0。
-- 修正後截至 18:56:49 的 job_done 8、job_failed 0；18:57:34 另有一次 job_failed，RuntimeError，不能宣稱整個 session 零錯誤。copilot_character_line 7。被點名的三次生成 latency_ms 688／648／649，since_heard_ms 1421／1390／1375。未點名但生成回覆的三次事件不能當作實際播放的逐句證據。透過 app 既有設定載入器只輸出 character_engagement=active，未輸出其他設定或憑證，也未修改設定。
-- 第 7 步正式 SilentTalk 租用的狀態（修正重啟後再確認）：
+- SilentTalk 首次完整 pytest：372 passed、1 failed、1 skipped、3 warnings，19.33 秒，exit 1。失敗為 test_a_lull_line_is_dropped_if_someone_speaks_meanwhile。開發機透過通道確認 Windows 計時競爭，指示修 fixture：後續冷場不再回傳第一個合成台詞，避免把新冷場誤判成過期回覆。產品邏輯未改。
+- 診斷：合成 probe 原冷場完成 1 次、delivered false、實際 sleep 47 ms；證明原過期回覆可丟棄。沒有因此否定首次測試失敗。
+- 修正後相關 runtime tests：23 passed，2.91 秒，exit 0。完整 pytest：373 passed、1 skipped、2 warnings，15.60 秒，exit 0。變更檔案 Ruff、git diff --check exit 0；原有一處 RUF015 同檔 assert 寫法已修。
+- SilentTalk 本次 push CI https://github.com/nobody945946/SilentTalk/actions/runs/38441098792 completed／success。
+- EdgeAgent 完整 pytest（PYTHONIOENCODING=utf-8，取消 PYTHONUTF8，EDGE_AGENT_UI_REGRESSION=1）：448 passed、6 skipped、1 warning，246.35 秒，exit 0。Unicorn 原生 access-violation 診斷仍會印出，相關測試繼續且整個 pytest exit 0；未宣稱它消失。
+- pytest basetemp 使用 .test-tmp；SilentTalk 修正後完整重跑改用 .test-tmp/st-full-round12，避免重複清空正在使用的產物。舊 temp 只改名保留，不讀內容／改 ACL；報告 worktree 移至 .runtime/laptop-report，避免被 pytest 清掉。
+- 設定經現有 SettingsPanel.show('chat')／set_value 公開介面保存，不手改 settings.json。只允許改兩個指定欄位，實際變更 1 個；lull 原本已是 0。app 設定載入器讀回：
+
+```json
+{"character_engagement":"called","character_lull_seconds":0.0,"changed_fields":1}
+```
+
+- 重載集中在一次停機內：先核對 SilentTalk app PID 8928／14300 並停止，避免它的 lease 自動復活服務；再以既有 edge-agent stop，18087／18089 監聽數 0。ensure_service base ready 後，在正式 app 啟動前完成合成測試，不冒用／搶奪活著的 app lease。探測 lease 正常釋放後以「啟動 SilentTalk.cmd」開正式 app，exit 0。
+- 第 6 步正式狀態（恢復後讀回）：
 
 ```json
 {"mode":"character","ready":true,"context_size":65536,"inference_slots":2,"model":"gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf","lora":"machine-spirit-fw3n.q8_0.gguf","character_lora":"machine-spirit-fw3n.q8_0.gguf"}
 ```
 
-第 8 步原始數字輸出：
+- 新 session 2026-10-13T17:52:30.438698+00:00，discord_ready／character_lease_connected／copilot_runtime_ready 各 1，error 0，agent_busy false，owner PID 9540。
+- 第 7 步：只在記憶體解析數字日誌，查每次 False 前一筆 turn 和同 speaker 下一筆 turn；沒有讀對話內容。四組原始數字：
 
 ```json
-{"lease_lora": "machine-spirit-fw3n.q8_0.gguf", "agent_lora": "machine-spirit-fw3n.q8_0.gguf", "pool": 65536, "gpu_layers": 41, "memory": {"vram_used_mib": 3533, "vram_free_mib": 430, "dedicated_mib": 3533.0, "shared_mib": 176.0, "ram_free_mib": 110.0}, "alone": [{"status": 200, "first_s": 0.66, "seconds": 1.22, "chunks": 16}, {"status": 200, "first_s": 0.45, "seconds": 0.92, "chunks": 14}, {"status": 200, "first_s": 0.44, "seconds": 0.89, "chunks": 14}], "during_decode": {"character": {"status": 200, "first_s": 0.61, "seconds": 1.14, "chunks": 14}, "agent": {"status": 200, "first_s": 0.44, "seconds": 49.36, "chunks": 1496}}, "during_prompt": {"character": {"status": 200, "first_s": 2.81, "seconds": 9.78, "chunks": 14}, "agent": {"status": 200, "first_s": 66.45, "seconds": 68.06, "chunks": 30}}, "full_window": {"prompt_tokens": 65024, "status": 200, "first_s": 80.56, "seconds": 82.78, "chunks": 30}, "after_full_window": {"status": 200, "first_s": 2.38, "seconds": 2.84, "chunks": 14}, "memory_after": {"vram_used_mib": 3569, "vram_free_mib": 394, "dedicated_mib": 3569.0, "shared_mib": 176.0, "ram_free_mib": 698.4}}
-{"lease_lora": "machine-spirit-fw3n.q8_0.gguf", "agent_lora": "machine-spirit-fw3n.q8_0.gguf", "pool": 65536, "gpu_layers": 41, "memory": {"vram_used_mib": 3533, "vram_free_mib": 430, "dedicated_mib": 3533.0, "shared_mib": 176.0, "ram_free_mib": 79.6}, "alone": [{"status": 200, "first_s": 0.66, "seconds": 1.2, "chunks": 15}, {"status": 200, "first_s": 0.48, "seconds": 0.95, "chunks": 14}, {"status": 200, "first_s": 0.5, "seconds": 1.12, "chunks": 19}], "during_decode": {"character": {"status": 200, "first_s": 0.53, "seconds": 1.69, "chunks": 17}, "agent": {"status": 200, "first_s": 0.47, "seconds": 49.66, "chunks": 1496}}, "during_prompt": {"character": {"status": 200, "first_s": 2.98, "seconds": 10.27, "chunks": 14}, "agent": {"status": 200, "first_s": 69.34, "seconds": 70.97, "chunks": 30}}, "full_window": {"prompt_tokens": 65024, "status": 200, "first_s": 83.05, "seconds": 84.75, "chunks": 30}, "after_full_window": {"status": 200, "first_s": 2.42, "seconds": 2.89, "chunks": 14}, "memory_after": {"vram_used_mib": 3569, "vram_free_mib": 394, "dedicated_mib": 3569.0, "shared_mib": 176.0, "ram_free_mib": 849.1}}
-{"event": "lanes_check_done", "runs": 2}
+[{"case":1,"previous_char_count":4,"next_same_speaker_char_count":13,"gap_seconds":20.589},{"case":2,"previous_char_count":20,"next_same_speaker_char_count":19,"gap_seconds":52.711},{"case":3,"previous_char_count":36,"next_same_speaker_char_count":19,"gap_seconds":12.266},{"case":4,"previous_char_count":12,"next_same_speaker_char_count":5,"gap_seconds":45.087}]
 ```
-- D2 的 thread_opened 18:58:43；agent_task_decision 1297 ms／dispatched true；agent_task_ended done 18:59:20，agent_task_finished 35844 ms，agent_result_posted true／text；unverified 0、source_problems 0、converted 0。使用者確認討論串有結果且未要求批准。
-- D3／語音查詢診斷：18:57:05–18:57:06 owner_voice_missing_grace，18:57:34 job_failed RuntimeError；Agent 18:58:44–18:59:20 執行期間 copilot_turn_final 0。不能把沒有語音輸入的時間區間當成實際模型並行測試。指定 D3 產物 file-stats.json 不存在，工作區 .ps1 0、.json 0、.tmp 2；未讀檔案內容。使用者觀察到的等待與程式成功條件尚未有同一段事件證據，沒有將它改標通過，也沒有自行判定模型阻塞根因。
-本次續行的數字證據：
 
-- 原服務已停止，18087 無監聽；18089 殘留 EdgeAgent llama-server。經現有 ensure_service 恢復，未手動硬殺或啟動其他被清理的程式；再用既有 restart_silenttalk.ps1 啟動 SilentTalk。最後狀態與第 7 步 JSON 一致：character、ready true、65536、2 slots、同一 fw3n；agent_busy false。新 session 15:59:50 UTC，discord_ready／character_lease_connected／copilot_runtime_ready 各 1，error 0。
-- 真人重試區間 11:07–11:14 UTC 的四次 agent_chat_task_decision 均 chat_task false（2656／812／781／563 ms），沒有新的 public Agent task 啟動；至少有一條 addressed true、生成及 job_done 成功的路徑。無法在不讀私人內容的情況下把每筆事件精確對應到天氣問句，故只記區間證據，不宣称已鎖定唯一原因。另有 WSServerHandshakeError 1 與離開語音後 RuntimeError 1，不抹去先前錯誤。
-- 使用既有 LocalReplyModel／CharacterLease、真實 fw3n（task adapter 生效）、空白測試人設、memory off、完全合成文字；未使用真人紀錄、personas.json 或 character_state.json。天氣問法兩例均派送 public，2344／1593 ms；問候不派送，313 ms。合成「先前工作忙碌」脈絡後再問天氣也派送，2188 ms。這不是實際私人脈絡的重現，不能據此宣稱修好了語音派送。
-- 經既有 /chat API 的 discord／public 權限，在指定 EdgeAgentTest 工作區測真正網路工具：terminal done、21531 ms、tool 2 events（同一 web_research 的開始／結束）、delta 327、done 1、answer characters 526、沒有等待工作語句。沒有直接提供来源 URL；此探測只證明工具流程完成，不宣稱天氣事實或來源正確，也不等於 Discord 結果交付通過。測試 lease 正常釋放，最後已恢復正式 SilentTalk lease。
-session_scoped_ssh_access：現有 Git ssh-agent 空代理啟動／回應／關閉探測 exit 0；守護程式 py_compile 與無金鑰 lifecycle probe exit 0，代理自然退出後無殘留。正式原生 ssh-add 返回成功，既有 host key 驗證的單次 SSH 探測返回預期固定標記；binding authorized true／owner PID 6044。密碼未進工具輸入、輸出或回報。金鑰無固定時限；實際 CLI 程序結束、解鎖視窗關閉或 close 事件撤銷，其他正常回合回覆不撤銷。
+- 第 8 步：真實 LocalReplyModel／fw3n、空白測試人設、僅合成文字；CopilotRuntime 置於新測試 temp，record_transcripts false、memory off，NameMatcher 測試名字機魂。called 下依序 _handle_turn 名字、查詢；真實推論判定派送。Agent transport 僅為本機派送捕捉器，不做網路工具／Discord 發言，因此不能稱查到天氣或真人交付通過。輸出：
 
-native_handoff_notification_probe：已確認 Codex 0.162.0-alpha.2 提供 queue；一次同 thread 的合成測試訊息入列成功。入列不等於喚醒，閒置自動開始及完整跨機鏈路尚未驗收；一次 app-server proxy 測試未收到 initialize 回應，未重啟後端或啟動第二個 model。此測試提交仍待清除／確認被消費，不能當作正式工作。
+```json
+{"synthetic_case":1,"followup_addressed":true,"decision_events":[{"latency_ms":3141,"chat_task":true}],"dispatch_count":1,"errors":0,"elapsed_ms":3937,"real_agent_execution":false}
+```
 
 ## 5. 修改檔案與 commit
 
-SilentTalk `11cc293`：`silenttalk/voice_styles.py` 原生 tremolo 取代 Windows FFmpeg 崩潰的 aeval，`tests/test_opus_source.py` 回歸；已推 copilot-story-mode，CI success。
+本次僅修改 `tests/test_copilot_runtime.py`，commit `4b257f59b7037875b0073e80001c2bb5992842ba`：開發機指示的 Windows 計時 fixture 修正，另修同檔原有 RUF015 assert。已推 copilot-story-mode，CI success。產品修正由主控提交：SilentTalk 8497135／EdgeAgent fb9dd50；筆電未改那些邏輯。
 
-EdgeAgent `206efdc`：`scripts/bootstrap.ps1`、`edge_agent/runtime.py` 自備 Python／Git／Node／PowerShell並遷移 venv；`edge_agent/web.py`、README 共用 adapter 說明；Windows bootstrap／deploy／UI／SDK fixtures 和測試。已推 copilot-story-mode，CI https://github.com/nobody945946/EdgeAgent/actions/runs/38373694367 success，first-launch 按工作流跳過。
-
-本次增加本機 `C:\Users\A8fm0\AppData\Local\Codex\remote-workspace\dev-session-access.py`（不含金鑰／密碼）：原生 ssh-add 私人提示、SSH 登入探測、隔離 agent、Windows kernel event／process handle 等待與撤銷；不是輪詢，不改 Windows ssh-agent Disabled 設定。binding metadata 位於同目錄 session-access，ACL 限目前使用者和 SYSTEM；不含私鑰或密碼，撤銷時刪除。只讓原生 ssh-add 處理既有私鑰，未複製私鑰至 Git、開發機或模型。
+回報整份換為第 12 回合並推 laptop-report，不保留第 11 回合正文。不讀 dev-box 工作檔。
 
 ## 6. 記憶體與速度
 
-65,536 context、41 GPU 層、省 VRAM 設定均保留。雙管路單獨角色首字 0.44–0.66 秒；Agent 生成中 0.61／0.53 秒，與先前 0.62 秒同一等級；Agent 讀長輸入時 2.81／2.98 秒，角色整句 9.78／10.27 秒，不能稱此情況也在一秒內完成。65,024 token 的全視窗請求兩輪均 status 200；完成後角色仍可回話。數值詳見原輸出。
+合成分句查詢：派工判斷 3141 ms，合成流程到 transport 派送 3937 ms；不包含真人 STT、實际 Agent 查詢、Discord 播放。正式模型仍 65536 context、2 inference slots；GPU 層及省 VRAM 偏好未改。
 
-量測時顯存最高觀察值 3,569 MiB、共享 GPU 176 MiB；可用 RAM 最低觀察值 79.6 MiB。沒有 OOM 或請求失敗，也沒有為騰 RAM 復活或關閉無關程式。早前獨立 Agent 唯讀工具探測通過（fw3n 10,047 ms、零批准），不能算 D2。
+恢復後單次快照：可用 RAM 223.2 MiB；GPU 已用 3481 MiB、可用 482 MiB。未重跑第 11 回合雙管路量測，未重啟其他被清理的程式。
 
 ## 7. Discord 數字表
 
 | 項目 | 狀態 |
 |---|---|
-| D1 真人語音回答 | 通過；使用者選擇保留 active，取代 called 條件 |
-| D2 主人串唯讀計數 | 通過：真人確認有回報且未要求批准，done／posted true |
-| D3 Agent 工作時並行語音 | 未通過；語音工具查詢也尚未交付，不能用合成測試補判通過 |
-| D4 真人感想 | 使用者對聊天滿意；工具查詢沒有結果 |
+| V1 點名停頓後查詢 | 等使用者 |
+| V2 同一句查詢 | 等使用者 |
+| D3 任務、語音並行與排隊查詢 | 等使用者 |
+| V4 朋友不得取得主人資料 | 等使用者 |
+| V5 沒點名／安靜時不說話 | 等使用者 |
+| D4 真人感想 | 等使用者 |
 
-指定 D3 腳本與 file-stats.json 尚無成功產物證據。只用伺服器 729722190857240717、語音頻道 729722190857240721、工作區 `C:\Users\A8fm0\EdgeAgentTest`。批准由使用者自己按。
+只用伺服器 729722190857240717、語音頻道 729722190857240721、工作區 C:\Users\A8fm0\EdgeAgentTest。批准由使用者自己按；本次未送真人測試請求，也未替他按批准。
 
 ## 8. 紀錄目錄
 
-本回合沒改紀錄設定，沒有讀使用者對話紀錄、人設或角色狀態。日誌僅由數字摘要工具在記憶體篩選事件、時間、數字與錯誤類型，沒有輸出對話內容。app 依既有規則只記錄到使用者指定的 `C:\Users\A8fm0\AgentRecords`。舊 `.test-tmp` 改名保留，未讀內容或改 ACL；沒有新增常駐迴圈、排程或對話 log。
+本回合未改紀錄開關／目錄；仍用既有設定的 C:\Users\A8fm0\AgentRecords。不讀其內容、personas.json 或 character_state.json。日誌只在記憶體篩選事件／數字；合成資料不含使用者對話。通道只傳 commit、步驟、測試統計與短 metadata，不傳憑證、對話或使用者檔案。沒有新增 log、輪詢器、排程或開機項目。
 
 ## 9. 使用者回饋
 
-D1「有聽到」；觸控板「不會了」；D2「有回報，沒有要求批准」；回覆模式「保留目前的主動加入」；D3「有回覆，但要等 Agent 做完」。真人確認同句点名仍有查詢未交付。聊天感想原話：「但是聊天我算滿意」。
+本回合指示：先 pull，照 handoff/laptop.md；開發機主控、筆電輔助。使用者在睡覺，管理員／UAC 操作等起床，不叫醒他。這次工作沒有需要提權的步驟。角色開口新決定以工作檔的 called／lull 0 為準，取代第 11 回合保留 active 的偏好；已經設定頁保存。
 
-使用者明確指定開發機為主控、筆電為輔助，要求不用輪詢的通知；提供的憑證種類是 SSH 私鑰解鎖密碼，不提供內容。授權希望持續至本次 session 結束，不因時間到期或普通回覆要求重新輸入。睡覺不等於停止 session。已說明電腦重啟或記憶體代理遺失後仍可能需重新解鎖；沒有承諾跨重啟保存私鑰。
-
-先前觸控板 reset 僅在原 Codex 工作階段真人驗證，未宣稱永久生效。未改 Machinehand 遠端連線、鍵盤助手、開機設定。
+本回合沒有真人試聽感想，不沿用前一回合的感想作 V1–V5 通過證據。
 
 ## 10. 給接手模型的交接指示
 
-開發機是主控：先處理 voice_lookup_dispatch_or_state_failure，在模型／角色邏輯 owner 用合成脈絡驗 task gate、真實任務狀態與結果回原位置；不讀私人紀錄、人設或角色狀態。Windows 僅做部署及真人驗收。D1、D2 不重測，active 是使用者選擇；D3 需腳本／執行與語音實際重疊後驗收。
+第 1–8 步完成，必要測試、CI、設定、正式服務狀態與合成路由均有證據，不重跑。現在只等使用者自己回來做第 10 步；不叫醒他，不擅自出貨。一次一項真人驗收，必要結果回報只放數字和他主動給的感想。
 
-notification_transport_pending：筆電已建立僅本次 CLI 生命周期的 SSH 解鎖入口，登入原 clawd SSH 別名探測成功；不安裝輪詢器、排程、開機項目或其他 model。開發機需決定並實作「成功 push 新 laptop 任務時發送一次通知」的發送端，筆電配合接收。只傳 repo／branch／commit／handoff 路徑等 metadata，不傳私鑰、密碼、機敏內容。不得把單次 queue 入列當作即時喚醒；需同 thread、有效通知、重複通知、失敗通知及閒置喚醒的實測證據。不要擅自開公網端口或修改主控方向。現在尚未接通，收到有效通知仍須 ff-only pull、核對工作檔與回條再做。
+通道已實測 round／received／note(pong) 雙向收發。中間回報推好後 send devbox report 指向 laptop-report commit，再繼續既有 channel.py wait laptop；它在核心等事件，返回後照有效交接做，不增加 sleep、重試或定時 Git 查詢。SSH 斷或撤銷就停止並回報，不自己升權、開公網端口或新增服務。
 
-本次 auth window 可最小化，關閉會撤銷。只有已明確停止／任務授權結束才撤銷這次 key agent；普通 final 回覆不是整個 CLI session 結束。close 入口使用 dev-session-access.py close --thread 當前 thread ID；按事件清理，不輪詢。回報已推 laptop-report 後只 pull 一次，沒有新工作就交付。
+保留這次已解鎖的 session SSH 授權及解鎖視窗；普通 final 不是結束 CLI。使用者睡觉不撤銷。只有明確停止／CLI 退出／關閉授權視窗才清理。需管理員的操作等使用者起床。開發機仍主控，Windows 不改模型、角色或工具邏輯。
