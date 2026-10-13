@@ -45,7 +45,7 @@
 本次續行的數字證據：
 
 - 原服務已停止，18087 無監聽；18089 殘留 EdgeAgent llama-server。經現有 ensure_service 恢復，未手動硬殺或啟動其他被清理的程式；再用既有 restart_silenttalk.ps1 啟動 SilentTalk。最後狀態與第 7 步 JSON 一致：character、ready true、65536、2 slots、同一 fw3n；agent_busy false。新 session 15:59:50 UTC，discord_ready／character_lease_connected／copilot_runtime_ready 各 1，error 0。
-- 真人重試區間 11:07–11:14 UTC 的三次 agent_chat_task_decision 均 chat_task false，沒有新的 public Agent task 啟動；至少有一條 addressed true、生成及 job_done 成功的路徑。無法在不讀私人內容的情況下把每筆事件精確對應到天氣問句，故只記區間證據，不宣称已鎖定唯一原因。另有 WSServerHandshakeError 1 與離開語音後 RuntimeError 1，不抹去先前錯誤。
+- 真人重試區間 11:07–11:14 UTC 的四次 agent_chat_task_decision 均 chat_task false（2656／812／781／563 ms），沒有新的 public Agent task 啟動；至少有一條 addressed true、生成及 job_done 成功的路徑。無法在不讀私人內容的情況下把每筆事件精確對應到天氣問句，故只記區間證據，不宣称已鎖定唯一原因。另有 WSServerHandshakeError 1 與離開語音後 RuntimeError 1，不抹去先前錯誤。
 - 使用既有 LocalReplyModel／CharacterLease、真實 fw3n（task adapter 生效）、空白測試人設、memory off、完全合成文字；未使用真人紀錄、personas.json 或 character_state.json。天氣問法兩例均派送 public，2344／1593 ms；問候不派送，313 ms。合成「先前工作忙碌」脈絡後再問天氣也派送，2188 ms。這不是實際私人脈絡的重現，不能據此宣稱修好了語音派送。
 - 經既有 /chat API 的 discord／public 權限，在指定 EdgeAgentTest 工作區測真正網路工具：terminal done、21531 ms、tool 2 events（同一 web_research 的開始／結束）、delta 327、done 1、answer characters 526、沒有等待工作語句。沒有直接提供来源 URL；此探測只證明工具流程完成，不宣稱天氣事實或來源正確，也不等於 Discord 結果交付通過。測試 lease 正常釋放，最後已恢復正式 SilentTalk lease。
 
