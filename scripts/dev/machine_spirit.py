@@ -15,11 +15,11 @@ from __future__ import annotations
 
 import argparse
 import json
-import subprocess
 import sys
-import time
 import urllib.request
 from pathlib import Path
+
+from serve_wait import start
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
@@ -94,18 +94,6 @@ sample_lines 是 3–5 句代表台詞，用換行分隔的純文字，不要加
 只輸出 JSON 物件，鍵為 name、上面每個欄位鍵、reply_length、traits、relationships、lore。"""
 
 
-def wait_ready() -> None:
-    deadline = time.monotonic() + 900
-    while time.monotonic() < deadline:
-        try:
-            with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/health", timeout=2) as r:
-                if r.status == 200:
-                    return
-        except OSError:
-            time.sleep(3)
-    raise SystemExit("teacher server did not become ready")
-
-
 def ask(messages: list[dict], seed: int) -> dict:
     body = json.dumps({
         "messages": messages,
@@ -157,17 +145,15 @@ def draft(variant: int) -> tuple[dict, Persona] | None:
 
 def drafts(variants: list[int], threads: int, teacher: Path, extra: list[str]) -> None:
     OUT.mkdir(parents=True, exist_ok=True)
-    server = subprocess.Popen(
-        [str(SERVER), "--model", str(teacher), "--host", "127.0.0.1", "--port", str(PORT),
-         "--ctx-size", "8192", "--n-gpu-layers", "99", "--threads", str(threads), "--jinja",
-         "--parallel", "1", "--reasoning-budget", "1024", *extra],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     path = OUT / "drafts.json"
     # Redrafting some variants keeps the others.
     results = {item["variant"]: item for item in
                (json.loads(path.read_text(encoding="utf-8")) if path.is_file() else [])}
+    server = start(
+        [str(SERVER), "--model", str(teacher), "--host", "127.0.0.1", "--port", str(PORT),
+         "--ctx-size", "8192", "--n-gpu-layers", "99", "--threads", str(threads), "--jinja",
+         "--parallel", "1", "--reasoning-budget", "1024", *extra], timeout=900)
     try:
-        wait_ready()
         for variant in variants:
             made = draft(variant)
             if made is None:
@@ -198,13 +184,11 @@ def verify_lore(threads: int, extra: list[str]) -> None:
     the teacher's scripts and the line checks."""
     path = OUT / "drafts.json"
     items = json.loads(path.read_text(encoding="utf-8"))
-    server = subprocess.Popen(
+    server = start(
         [str(SERVER), "--model", str(CHECKER), "--host", "127.0.0.1", "--port", str(PORT),
          "--ctx-size", "4096", "--n-gpu-layers", "0", "--threads", str(threads), "--jinja",
-         "--parallel", "1", *extra],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+         "--parallel", "1", *extra], timeout=900)
     try:
-        wait_ready()
         for item in items:
             kept, dropped = [], []
             for entry in item["lore"]:
