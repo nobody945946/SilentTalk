@@ -1,6 +1,6 @@
-# 第 11 回合：卡在第 6 步
+# 第 11 回合：卡在第 9 步（等待真人 Discord 驗收）
 
-更新：2026-10-13T17:10:51+08:00。使用者在本回合改為要求「保留清理後程式的關閉狀態，修復 EdgeAgent，除瀏覽器外不依賴其他程式」。因此先完成獨立 Agent；沒有啟動 SilentTalk、Discord 或恢復任何自啟動項目。原回合的雙管路與真人語音驗收尚未完成，不能據此發布語音修正版。
+更新：2026-10-13T17:31:44+08:00。使用者已重新授權完成第 11 回合，只做必要部分；因此只啟動本回合必要的 EdgeAgent 與 SilentTalk，其他清理後關閉的程式、自啟動設定保持原狀。
 
 ## 1. 機魂劇本
 
@@ -8,71 +8,70 @@
 
 ## 2. 時間與額度
 
-首個有實際時鐘證據的檢查：2026-10-13T16:45:11+08:00；本次回報檢查：17:09:23+08:00。未取得 API token／帳戶額度資料，不推算。
+自動補驗從 2026-10-13T17:15:47+08:00 開始，17:27:55 角色與 Discord 就緒，17:31:44 重查狀態正常。API token／帳戶額度沒有可用證據，不推算。
 
 ## 3. 目標完成度
 
-原回合 5/11：第 1–5 步完成；第 6 步僅完成 EdgeAgent 獨立重載與 adapter 選擇，SilentTalk 未啟動；第 7、8 步及 D1–D3 未測。第 10 步依使用者最新指示改為只保留 EdgeAgent 運作。
+8/11：第 1–8 步均完成；D1、D2、D3 尚未取得真人驗收結果。第 10 步恢復完成，兩個服務均在執行。不能把本機工具探測、量測中的合成角色請求當作 Discord 真人通過；尚不符合 D1 通過後發布語音修正版的條件。
 
-新增的獨立 Agent 任務：部署、冷啟動、工具執行驗證與 CI 均通過。Python、Git、Node、PowerShell 與模型引擎使用 EdgeAgent 安裝目錄內的檔案；服務不需要 SilentTalk 或其他常駐 app。保留原本的停用自啟動配置。
+兩個 repo 已 pull，指定祖先檢查通過，SilentTalk HEAD／收件回條為 `03070c0798bcf7a4b7a33d544d039ca5fa556793`。SilentTalk 實際路徑為 `C:\Users\A8fm0\Downloads\SilentTalk`，工作檔舊路徑不存在。已通過的完整測試與 CI 直接沿用，沒有為恢復回合重跑。
 
 ## 4. 測試執行結果
 
-- SilentTalk：`PYTHONUTF8=1`，`pytest --basetemp .test-tmp --tb=short`：367 passed、1 skipped、2 warnings，15.77 秒，pytest exit 0。
-- EdgeAgent：`PYTHONIOENCODING=utf-8`、取消 `PYTHONUTF8`、`EDGE_AGENT_UI_REGRESSION=1`，完整測試 `--basetemp .test-tmp/final-full --tb=short`：446 passed、6 skipped、1 warning，234.26 秒，pytest exit 0。
-- 完整測試啟動後新增的 Python／Node PATH 驗證，連同部署測試重跑：23 passed，exit 0。
-- `ruff check edge_agent tests` 與 `git diff --check`：exit 0。
-- 模型頁說明：先紅 1 failed／1 passed，再綠 2 passed。Windows 瀏覽器與權限 fixture 更新後 8 passed；實際批准、寫檔、匯出與停止流程通過。
-- 初次測試因舊 `.test-tmp` 子目錄 WinError 5 而出錯；將整個舊目錄改名 `.test-tmp-prior-round11` 後原指令可執行。兩個 repo 各自保留舊目錄，本機 Git exclude 忽略它；沒有讀舊目錄內容或改 ACL。
-- 初次 EdgeAgent 完整測試：439 passed、6 skipped、2 failed。原因為 fixture 還使用已退役的 `routine` 規則，以及 UI fixture 預設改為可還原自動執行卻仍等待批准。更新測試為現行 `reversible`，UI 的隔離 fixture 明設 `edit=ask`，沒有改使用者權限。
-- Unicorn 的 Windows 原生模擬器仍印出 access-violation 診斷，三項測試通過、pytest exit 0；未把這個診斷當成消失。
-- 第 7 步角色模式／第 8 步雙管路：未測。以下是使用者要求的獨立 Agent 狀態，不能當作角色模式通過：
+- SilentTalk 完整 pytest：367 passed、1 skipped、2 warnings，15.77 秒，exit 0。
+- EdgeAgent 完整 pytest（`EDGE_AGENT_UI_REGRESSION=1`）：446 passed、6 skipped、1 warning，234.26 秒，exit 0。完整測試後增加的 runtime 路徑案例，連同部署測試補跑 23 passed，exit 0。
+- `ruff check edge_agent tests`、`git diff --check`：exit 0；模型頁對應測試先紅後綠。
+- 先前兩個 Windows 失敗來自舊權限 fixture，已修正，8 項相關測試通過；Unicorn 的原生 access-violation 診斷仍會印出，三項測試通過、pytest exit 0，未宣稱診斷消失。
+- 第 6 步：既有模型頁選上 fw3n，SilentTalk 設定讀回也是 fw3n，無須改設定。停機量測前 SilentTalk 原本未執行、log 最後更新 2026-10-09，無最近十分鐘語音活動。將量測集中在同一次停機內，做完才一次恢復兩個 app。
+- `tests/lanes_check.py --install C:\Users\A8fm0\EdgeAgent`：exit 0、runs 2，所有量測請求 status 200；沒有重試或改記憶體設定。
+- 正常啟動器 exit 0，`app.py --character-mode` 執行；新 session 的 `discord_ready`、`character_lease_connected`、`copilot_runtime_ready` 各 1，啟動 warning／error 0。
+- 第 7 步正式 SilentTalk 租用的狀態（17:31:44 查核）：
 
 ```json
-{"mode":"base","ready":true,"context_size":65536,"inference_slots":1,"model":"gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf","lora":"machine-spirit-fw3n.q8_0.gguf","character_lora":"","error":""}
-{"event":"independent_cold_start","base_executable":"C:\\Users\\A8fm0\\EdgeAgent\\.runtime\\python\\tools\\python.exe","mode":"base","ready":true,"context_size":65536,"model":"gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf","error":""}
-{"event":"shared_adapter_selected_in_model_ui","adapter":"machine-spirit-fw3n.q8_0.gguf","context":65536}
-{"event":"independent_agent_fw3n_probe","terminal":"done","events":{"tool":2,"delta":13,"done":1},"tools":[{"tool":"powershell","error":false}],"answer_characters":22,"answer_matches_tmp_count":true,"elapsed_ms":10047}
+{"mode":"character","ready":true,"context_size":65536,"inference_slots":2,"model":"gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf","lora":"machine-spirit-fw3n.q8_0.gguf","character_lora":"machine-spirit-fw3n.q8_0.gguf"}
+```
+
+第 8 步原始數字輸出：
+
+```json
+{"lease_lora": "machine-spirit-fw3n.q8_0.gguf", "agent_lora": "machine-spirit-fw3n.q8_0.gguf", "pool": 65536, "gpu_layers": 41, "memory": {"vram_used_mib": 3533, "vram_free_mib": 430, "dedicated_mib": 3533.0, "shared_mib": 176.0, "ram_free_mib": 110.0}, "alone": [{"status": 200, "first_s": 0.66, "seconds": 1.22, "chunks": 16}, {"status": 200, "first_s": 0.45, "seconds": 0.92, "chunks": 14}, {"status": 200, "first_s": 0.44, "seconds": 0.89, "chunks": 14}], "during_decode": {"character": {"status": 200, "first_s": 0.61, "seconds": 1.14, "chunks": 14}, "agent": {"status": 200, "first_s": 0.44, "seconds": 49.36, "chunks": 1496}}, "during_prompt": {"character": {"status": 200, "first_s": 2.81, "seconds": 9.78, "chunks": 14}, "agent": {"status": 200, "first_s": 66.45, "seconds": 68.06, "chunks": 30}}, "full_window": {"prompt_tokens": 65024, "status": 200, "first_s": 80.56, "seconds": 82.78, "chunks": 30}, "after_full_window": {"status": 200, "first_s": 2.38, "seconds": 2.84, "chunks": 14}, "memory_after": {"vram_used_mib": 3569, "vram_free_mib": 394, "dedicated_mib": 3569.0, "shared_mib": 176.0, "ram_free_mib": 698.4}}
+{"lease_lora": "machine-spirit-fw3n.q8_0.gguf", "agent_lora": "machine-spirit-fw3n.q8_0.gguf", "pool": 65536, "gpu_layers": 41, "memory": {"vram_used_mib": 3533, "vram_free_mib": 430, "dedicated_mib": 3533.0, "shared_mib": 176.0, "ram_free_mib": 79.6}, "alone": [{"status": 200, "first_s": 0.66, "seconds": 1.2, "chunks": 15}, {"status": 200, "first_s": 0.48, "seconds": 0.95, "chunks": 14}, {"status": 200, "first_s": 0.5, "seconds": 1.12, "chunks": 19}], "during_decode": {"character": {"status": 200, "first_s": 0.53, "seconds": 1.69, "chunks": 17}, "agent": {"status": 200, "first_s": 0.47, "seconds": 49.66, "chunks": 1496}}, "during_prompt": {"character": {"status": 200, "first_s": 2.98, "seconds": 10.27, "chunks": 14}, "agent": {"status": 200, "first_s": 69.34, "seconds": 70.97, "chunks": 30}}, "full_window": {"prompt_tokens": 65024, "status": 200, "first_s": 83.05, "seconds": 84.75, "chunks": 30}, "after_full_window": {"status": 200, "first_s": 2.42, "seconds": 2.89, "chunks": 14}, "memory_after": {"vram_used_mib": 3569, "vram_free_mib": 394, "dedicated_mib": 3569.0, "shared_mib": 176.0, "ram_free_mib": 849.1}}
+{"event": "lanes_check_done", "runs": 2}
 ```
 
 ## 5. 修改檔案與 commit
 
-EdgeAgent `206efdce5bc42214b10f443009642546e58e577c`，已推 `copilot-story-mode`：
+本次補驗沒有改程式碼。前段 EdgeAgent `206efdce5bc42214b10f443009642546e58e577c` 已推 `copilot-story-mode`，CI `https://github.com/nobody945946/EdgeAgent/actions/runs/38373694367` completed／success；first-launch job 依工作流程跳過。
 
-- `scripts/bootstrap.ps1`：SHA256 固定的官方 Python NuGet runtime 放在 `.runtime/python`；既有 venv 改用內附解譯器並保留套件；Git 使用 `.runtime/git`，不再借用系統 Git。保留 SilentTalk 使用的 Tk 桌面部署 helper。
-- `edge_agent/runtime.py`：工具 PATH 加入內附 Python、Node；沿用服務與 SDK 共用的既有 owner。
-- `edge_agent/web.py`、`tests/test_web_ui.py`：共用單一 adapter 的說明與先紅後綠驗證。
-- `tests/test_bootstrap_windows.py`、`tests/test_deploy.py`：私有 runtime、venv 遷移、現成環境重用、未啟動系統安裝器、工具路徑驗證。
-- `tests/test_sdk_agent.py`、`tests/test_sdk_permissions.py`、`tests/browser_check.mjs`：Windows fixture 與安全的 timeout 數字診斷。
-- `README.md`：說明獨立啟動與 runtime 所屬位置。
-
-CI：`https://github.com/nobody945946/EdgeAgent/actions/runs/38373694367`，已 completed／success（2026-10-13T17:10:51+08:00 查核）；first-launch job 依工作流程跳過。SilentTalk 程式碼未修改；本回報另推 `laptop-report`。
+該 commit 修改 `README.md`、`scripts/bootstrap.ps1`、`edge_agent/runtime.py`、`edge_agent/web.py`、`tests/test_bootstrap_windows.py`、`tests/test_deploy.py`、`tests/test_web_ui.py`、`tests/test_sdk_agent.py`、`tests/test_sdk_permissions.py`、`tests/browser_check.mjs`：EdgeAgent 自備 Python／Git／Node／PowerShell，既有 venv 遷移保留套件，共用 adapter 說明修正，Windows fixture 更新。SilentTalk 程式碼沒有修改。本回報整份重寫到 `laptop-report`。
 
 ## 6. 記憶體與速度
 
-本機 RAM 約 7,883 MiB。啟動前可用 1,043 MiB，載入時最低觀察到 266 MiB，17:09:23 可用 537 MiB；沒有為增加 RAM 復活其他程式。模型保留 65,536 context、41 GPU 層與省 VRAM 設定。
+65,536 context、41 GPU 層、省 VRAM 設定均保留。雙管路單獨角色首字 0.44–0.66 秒；Agent 生成中 0.61／0.53 秒，與先前 0.62 秒同一等級；Agent 讀長輸入時 2.81／2.98 秒，角色整句 9.78／10.27 秒，不能稱此情況也在一秒內完成。65,024 token 的全視窗請求兩輪均 status 200；完成後角色仍可回話。數值詳見原輸出。
 
-不含真人 Discord 的唯讀計數探測：原基底曾通過 6,344 ms，也曾收到未呼叫工具的回答（探測判失敗）；選上本回合的 fw3n adapter 後，最後一次實際 PowerShell 計數通過 10,047 ms、零批准。只回報事件和數字，沒有保存或引用模型回答。
+量測時顯存最高觀察值 3,569 MiB、共享 GPU 176 MiB；可用 RAM 最低觀察值 79.6 MiB。沒有 OOM 或請求失敗，也沒有為騰 RAM 復活或關閉無關程式。早前獨立 Agent 唯讀工具探測通過（fw3n 10,047 ms、零批准），不能算 D2。
 
 ## 7. Discord 數字表
 
 | 項目 | 狀態 |
 |---|---|
-| D1 真人語音 | 未測 |
-| D2 主人串唯讀 | 未測；本機 API 探測不能代替 Discord 驗收 |
-| D3 並行語音 | 未測 |
-| D4 真人感想 | 未取得 |
+| D1 真人語音回答 | 待使用者進指定頻道講話、確認聽到 |
+| D2 主人串唯讀計數 | 待驗 |
+| D3 Agent 工作時並行語音 | 待驗 |
+| D4 真人感想 | 未取得；不擴張必要驗收 |
+
+只用伺服器 729722190857240717、語音頻道 729722190857240721、工作區 `C:\Users\A8fm0\EdgeAgentTest`。主人批准由使用者自己按。17:28 已提出 D1 請求；截至本次回報未取得 D1 回答，不自動選擇「有聽到」。
 
 ## 8. 紀錄目錄
 
-紀錄設定未改；沒有讀使用者紀錄、角色狀態或人設。只有 `silenttalk.log` 的檔案大小與時間 metadata 查核，未讀內容。探測對話在 RAM 產生並重設；如現有自動記錄設定啟用，由 app 依既有規則寫到指定紀錄目錄。回報不包含探測內容。
+本回合沒改紀錄設定，沒有讀使用者對話紀錄、人設或角色狀態。日誌僅由數字摘要工具在記憶體篩選事件、時間、數字與錯誤類型，沒有輸出對話內容。app 依既有規則只記錄到使用者指定的 `C:\Users\A8fm0\AgentRecords`。舊 `.test-tmp` 改名保留，未讀內容或改 ACL；沒有新增常駐迴圈、排程或對話 log。
 
 ## 9. 使用者回饋
 
-使用者要求保持清理後停用程式的狀態，只修復 Agent，並使 Agent 除瀏覽器介面外獨立運作；詢問剩餘時間。這是本回合方向修正，不是 D4 真人機魂試聽感想。
+使用者重新要求完成第 11 回合、只做必要部分，並詢問是否需留在語音頻道。已告知量測期間無須留在頻道，恢復後才安排真人驗收。這些是工作方向與安排，不是 D4 試聽感想。
 
 ## 10. 給接手模型的交接指示
 
-以使用者最新指示優先：不要為第 11 回合復活 SilentTalk、Discord 或已停用的程式／自啟動項目。EdgeAgent 已獨立 ready，入口仍為 `edge-agent`／`開啟 EdgeAgent.cmd`，只會啟動自己的服務與瀏覽器。
+接續第 9 步，一次只請使用者做一件事：D1 喊機魂並聽語音；通過後 D2 主人 @ 開 Agent 串問 .tmp 數，應不問批准且結果貼串；接著 D3 主人在串內要求寫小程式並執行、自己批准，同時語音叫機魂，記錄角色延遲。只查工作區檔案 metadata、不讀內容；數字與使用者主動給的感想才能寫回報。
 
-SilentTalk 的實際 repo 在 `C:\Users\A8fm0\Downloads\SilentTalk`，工作檔中的 `C:\Users\A8fm0\SilentTalk` 不存在；兩個版本祖先檢查與收件回條均已通過。若日後使用者恢復語音驗收，從第 6 步尚未完成的 SilentTalk 部分接續，再做第 7、8 步與 D1–D3；目前不能發布需要 D1 通過的公開語音修正版。沒有建立常駐迴圈、排程或新日誌檔。
+不要重跑已通過的完整測試、CI、雙管路或已確認成功的真人項目，不要啟動其他被清理關閉的程式。兩個服務現在正常執行，原有 EdgeAgent 獨立 runtime 保留。D1–D3 未通過前不要把回合寫成完成；D1 未通過前不要通知可以發布公開語音修正版。真人全部通過後整份更新本回報並推 `laptop-report`，再 pull；工作檔沒換即交付。
