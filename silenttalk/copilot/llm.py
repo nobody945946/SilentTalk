@@ -26,7 +26,7 @@ from silenttalk.copilot.reply_parsing import (
     quiet_for,
 )
 from silenttalk.copilot.reply_prompts import ReplyPrompts
-from silenttalk.copilot.reply_transport import ReplyTransport
+from silenttalk.copilot.reply_transport import InferenceDeferred, ReplyTransport
 from silenttalk.copilot.script import to_taiwan_traditional
 from silenttalk.persona import Persona
 
@@ -107,6 +107,10 @@ class LocalReplyModel:
 
     async def stop(self) -> None:
         await self.transport.stop()
+
+    async def turn(self, deferred: InferenceDeferred) -> None:
+        """Until EdgeAgent would take the request it deferred."""
+        await self.transport.turn(deferred)
 
     @property
     def state(self) -> CharacterState:

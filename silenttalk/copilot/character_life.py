@@ -73,8 +73,8 @@ class CharacterLife:
             try:
                 state = await self._llm.fill_concerns(state)
                 break
-            except InferenceDeferred:
-                await asyncio.sleep(1.0)
+            except InferenceDeferred as deferred:
+                await self._llm.turn(deferred)  # until EdgeAgent would take it
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
@@ -126,14 +126,16 @@ class CharacterLife:
     async def update(self) -> None:
         """How the chat moved its life on: concerns shared, progressing, done
         or dropped, new ones, recent and mood (views and feelings in "full").
-        Counts only in the log; the state itself is the user's file."""
+        Counts only in the log; the state itself is the user's file.
+        InferenceDeferred passes to the caller, which waits for the model's
+        turn: the update stays due until it ran."""
         started = time.perf_counter()
         try:
             state = await self._llm.update_state(self._all_turns())
             if len(state.active_concerns()) < 2:
                 state = await self._llm.fill_concerns(state)
         except InferenceDeferred:
-            return
+            raise
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -162,6 +164,8 @@ class CharacterLife:
                 await asyncio.wait_for(self.update(), timeout=30)
             except (TimeoutError, asyncio.CancelledError):
                 _LOG.warning("copilot_state_update_skipped reason=timeout")
+            except InferenceDeferred:
+                _LOG.warning("copilot_state_update_skipped reason=busy")
         if self._agenda_task is not None:
             self._agenda_task.cancel()
             await asyncio.gather(self._agenda_task, return_exceptions=True)

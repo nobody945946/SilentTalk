@@ -13,8 +13,6 @@ from silenttalk.copilot.reply_transport import InferenceDeferred
 from silenttalk.copilot.sessions import ConversationSessions
 from silenttalk.copilot.task_runner import AgentTaskRunner
 
-_RETRY_SECONDS = 1.0
-
 
 async def run_reply_worker(
     wake: asyncio.Event,
@@ -27,7 +25,12 @@ async def run_reply_worker(
     respond: Callable[[Trigger], Awaitable[None]],
     character_mode: Callable[[], bool],
     agent_enabled: Callable[[], bool],
+    turn: Callable[[InferenceDeferred], Awaitable[None]],
 ) -> None:
+    """`turn`: until the model owner would take a request it deferred. Its
+    status stream says when (LocalReplyModel.turn); nothing is sent again
+    before that. Work that comes in meanwhile waits where it is kept: a
+    newer line replaces its place's in `pending` (latest wins)."""
     while True:
         # Asleep until something happens (a line, a result, a setting: they
         # set `wake`) or until the next thing falls due: no asking every
@@ -43,17 +46,17 @@ async def run_reply_worker(
                     await replies.open_topic()
                 elif life.update_due(bool(pending)):
                     await life.update()
-            except InferenceDeferred:
-                replies.lull_spoken = False
+            except InferenceDeferred as deferred:
+                await turn(deferred)  # it stays due
             continue
         wake.clear()
         if tasks.has_hint and character_mode():
             hint = tasks.take_hint()
             try:
                 await replies.task_line(*hint)
-            except InferenceDeferred:
+            except InferenceDeferred as deferred:
                 tasks.defer_hint(hint)
-                await asyncio.sleep(_RETRY_SECONDS)
+                await turn(deferred)
             wake.set()
             continue
         if tasks.has_waiting and not tasks.busy and character_mode():
@@ -65,9 +68,9 @@ async def run_reply_worker(
             trigger, turns = tasks.take_owner_task()
             try:
                 await tasks.dispatch_owner(trigger, turns)
-            except InferenceDeferred:
+            except InferenceDeferred as deferred:
                 tasks.defer_owner(trigger, turns)
-                await asyncio.sleep(_RETRY_SECONDS)
+                await turn(deferred)
             wake.set()
             continue
         if not pending:
@@ -82,8 +85,8 @@ async def run_reply_worker(
                 await respond(trigger)
             else:
                 await replies.generate(trigger)
-        except InferenceDeferred:
+        except InferenceDeferred as deferred:
             # A newer trigger wins; never accumulate a backlog of old chatter.
             pending.setdefault(place, trigger)
-            await asyncio.sleep(_RETRY_SECONDS)
+            await turn(deferred)
             wake.set()

@@ -107,8 +107,6 @@ class ConversationSessions:
                         )
                     )
             _LOG.info("thread_history_read lines=%d", len(turns))
-        except InferenceDeferred:
-            return
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # noqa: BLE001 - an unreadable thread is said, not guessed

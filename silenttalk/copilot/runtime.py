@@ -509,6 +509,7 @@ class CopilotRuntime:
             sessions=self.sessions, life=self.life, respond=self._respond,
             character_mode=lambda: self._character_mode,
             agent_enabled=lambda: self._config.character_agent,
+            turn=self._llm.turn,
         )
 
     async def _respond(self, trigger: _Trigger) -> None:

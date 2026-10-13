@@ -17,7 +17,13 @@ class LocalLLMError(RuntimeError):
 
 
 class InferenceDeferred(RuntimeError):
-    """The model owner is working; keep the client alive and retry when idle."""
+    """The model owner cannot take the request now: wait for the lease's turn
+    (ReplyTransport.turn) and send it again. `seen`: the lease's
+    statuses_seen when the request was sent."""
+
+    def __init__(self, message: str, seen: int = 0) -> None:
+        super().__init__(message)
+        self.seen = seen
 
 
 class ReplyTransport:
@@ -43,6 +49,11 @@ class ReplyTransport:
             await self.lease.stop()
         finally:
             self.adapter_loaded = False
+
+    async def turn(self, deferred: InferenceDeferred) -> None:
+        """Until EdgeAgent would take the request it deferred (no timer: its
+        status stream says when)."""
+        await self.lease.turn(deferred.seen)
 
     def health_ok(self) -> bool:
         try:
@@ -94,13 +105,14 @@ class ReplyTransport:
             headers=self._headers(),
             method="POST",
         )
+        seen = self.lease.statuses_seen
         try:
             with urllib.request.urlopen(
                 request, timeout=self.timeout_seconds
             ) as response:
                 return json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
-            self._http_error(exc)
+            self._http_error(exc, seen)
         except (OSError, urllib.error.URLError, json.JSONDecodeError) as exc:
             raise LocalLLMError(f"本機回覆模型失敗：{exc}") from exc
 
@@ -117,14 +129,15 @@ class ReplyTransport:
         return {"Content-Type": "application/json", "X-Character-Owner": str(self._owner_pid)}
 
     @staticmethod
-    def _http_error(exc: urllib.error.HTTPError) -> NoReturn:
+    def _http_error(exc: urllib.error.HTTPError, seen: int = 0) -> NoReturn:
+        """`seen`: the lease's statuses_seen when the request was sent."""
         if exc.code == 423:
             try:
                 body = json.loads(exc.read().decode("utf-8"))
             except (OSError, ValueError):
                 body = {}
             if isinstance(body, dict) and isinstance(body.get("error"), dict) and body["error"].get("code") == "inference_busy":
-                raise InferenceDeferred("AI 正在執行工作，角色等待模型閒置。") from exc
+                raise InferenceDeferred("AI 正在執行工作，角色等待模型閒置。", seen) from exc
         raise LocalLLMError(f"本機回覆模型失敗（HTTP {exc.code}）。") from exc
 
     def request_messages(
@@ -153,6 +166,7 @@ class ReplyTransport:
             headers=self._headers(),
             method="POST",
         )
+        seen = self.lease.statuses_seen
         try:
             with urllib.request.urlopen(
                 request, timeout=self.timeout_seconds
@@ -161,7 +175,7 @@ class ReplyTransport:
                     return consume_stream(response, on_lines)
                 body = json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
-            self._http_error(exc)
+            self._http_error(exc, seen)
         except (OSError, urllib.error.URLError, json.JSONDecodeError) as exc:
             raise LocalLLMError(f"本機回覆模型失敗：{exc}") from exc
 

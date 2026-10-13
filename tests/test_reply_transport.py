@@ -22,9 +22,12 @@ def test_a_busy_owner_defers_both_json_and_stream_requests(monkeypatch, stream):
                                      io.BytesIO(b'{"error":{"code":"inference_busy"}}'))
 
     monkeypatch.setattr("urllib.request.urlopen", busy)
-    with pytest.raises(InferenceDeferred):
+    transport.lease.statuses_seen = 7
+    with pytest.raises(InferenceDeferred) as deferred:
         transport.request_messages([], on_lines=(lambda _: None) if stream else None)
     assert captured[0].get_header("X-character-owner") == str(transport._owner_pid)
+    # Its turn counts only EdgeAgent's statuses after the request was sent.
+    assert deferred.value.seen == 7
 
 
 @pytest.mark.parametrize("body", [b'[]', b'bad json', b'{"error":"unrelated"}'])
