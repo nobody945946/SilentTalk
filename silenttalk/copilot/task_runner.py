@@ -281,6 +281,10 @@ class AgentTaskRunner:
                 )
             if kind == "done":
                 result = self._task_result or "工作完成。"
+            elif kind == "error" and self._agent_scope == "public":
+                # EdgeAgent's own words can name this computer's paths; a
+                # chat anyone is in gets the reason's code only.
+                result = f"工作失敗了（{failure_code(payload.get('reason'))}）。"
             elif kind == "error":
                 result = str(payload.get("message") or "工作失敗了。")
             else:

@@ -57,15 +57,21 @@ class AgentTaskClient:
         """One task. `scope` (EdgeAgent's task scope): "read" refuses every
         change, "change" asks the owner for each, "public" leaves the web
         alone. `conversation`: the place it was asked in (the voice room, a
-        text channel or a thread); its tasks share one EdgeAgent session, so
-        the Agent knows what it did there before (in EdgeAgent's RAM).
-        Without it the task is a session of its own. `attachments`: files
-        posted with the request, {"name", "data" (base64)}, which EdgeAgent
-        decodes in memory (images go to the model, documents as text)."""
+        text channel or a thread); the owner's tasks there share one
+        EdgeAgent session, so the Agent knows what it did there before (in
+        EdgeAgent's RAM). A public task (anyone in a chat may ask) is a
+        session of its own, dropped when it ends: whoever is in a room later
+        never gets back what an earlier audience asked or posted (the
+        character writes each lookup's instructions whole). `attachments`:
+        files posted with the request, {"name", "data" (base64)}, which
+        EdgeAgent decodes in memory (images go to the model, documents as
+        text)."""
         if self.session_id is not None:
             raise AgentLeaseError("Agent 工作正在進行。")
         session_id = self.session_id = (
-            f"discord-{conversation}" if conversation is not None else str(uuid4())
+            f"discord-{conversation}"
+            if conversation is not None and scope != "public"
+            else str(uuid4())
         )
         terminal = False
         try:
@@ -109,11 +115,13 @@ class AgentTaskClient:
         except (aiohttp.ClientError, OSError, ValueError, AgentLeaseError) as exc:
             await on_event("error", {"message": str(exc), "reason": client_failure(exc)})
         finally:
-            if not terminal:
-                try:
+            try:
+                if not terminal:
                     await self.cancel()
-                except (aiohttp.ClientError, OSError, TimeoutError):
-                    pass
+                if scope == "public":
+                    await self._control("/chat/reset", {})
+            except (aiohttp.ClientError, OSError, TimeoutError):
+                pass
             self.session_id = None
 
     async def _control(

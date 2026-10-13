@@ -24,7 +24,7 @@ from silenttalk.persona import MACHINE_SPIRIT
 @pytest.mark.asyncio
 async def test_sse_denial_and_failure_use_discord_profile_and_first_workspace(tmp_path):
     released = asyncio.Event()
-    state = {"requests": [], "approvals": [], "executed": False}
+    state = {"requests": [], "approvals": [], "executed": False, "resets": []}
 
     async def config(request):
         return web.json_response(
@@ -47,6 +47,10 @@ async def test_sse_denial_and_failure_use_discord_profile_and_first_workspace(tm
 
     async def cancel(request):
         return web.json_response({"cancelled": True})
+
+    async def reset(request):
+        state["resets"].append((await request.json())["session_id"])
+        return web.json_response({"reset": True})
 
     async def chat(request):
         state["requests"].append(await request.json())
@@ -71,6 +75,7 @@ async def test_sse_denial_and_failure_use_discord_profile_and_first_workspace(tm
     app.router.add_post("/chat", chat)
     app.router.add_post("/chat/approve", approve)
     app.router.add_post("/chat/cancel", cancel)
+    app.router.add_post("/chat/reset", reset)
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, "127.0.0.1", 0)
@@ -98,7 +103,14 @@ async def test_sse_denial_and_failure_use_discord_profile_and_first_workspace(tm
         # Unless told otherwise a task is read-only: EdgeAgent refuses changes.
         assert state["requests"][0]["scope"] == "read"
         assert state["approvals"][0]["scope"] == "once"
-        assert client.session_id is None
+        assert client.session_id is None and state["resets"] == []
+        # A public task is a session of its own, dropped when it ends.
+        released.set()
+        await asyncio.wait_for(
+            client.run("fixture", workspace, event, scope="public", conversation=42), 10
+        )
+        public = state["requests"][1]["session_id"]
+        assert public != "discord-42" and state["resets"] == [public]
     finally:
         await runner.cleanup()
 
@@ -579,6 +591,24 @@ async def test_a_lookup_stopped_on_the_agents_side_is_still_reported_where_it_wa
         await _until(lambda: len(seen.hints) == 2)
         assert seen.results == [(_STOPPED, VOICE_ROOM)]
         assert seen.hints == [("ack", "查今天台股收盤"), ("report", _STOPPED)]
+    finally:
+        await _close(runtime)
+
+
+@pytest.mark.asyncio
+async def test_a_failed_lookup_tells_the_chat_its_code_not_edgeagents_words(tmp_path):
+    """EdgeAgent's error text can name the owner's paths; a chat anyone is
+    in gets the reason's code. The owner's own thread keeps the words."""
+    runtime, seen = _marked_runtime(
+        tmp_path, lookup="查今天台股收盤", fail_run="C:\\Users\\Rex\\EdgeAgent 讀不到"
+    )
+    try:
+        runtime._handle_turn(5, "路人", "機魂 今天台股收盤多少")
+        await _until(lambda: seen.results)
+        assert seen.results == [("工作失敗了（unknown）。", VOICE_ROOM)]
+        _in_thread(runtime, 1, "幫我看一下測試資料夾")
+        await _until(lambda: len(seen.results) == 2)
+        assert seen.results[1] == ("C:\\Users\\Rex\\EdgeAgent 讀不到", THREAD)
     finally:
         await _close(runtime)
 
