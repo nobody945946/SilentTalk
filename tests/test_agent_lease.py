@@ -43,6 +43,7 @@ class FakeEdgeAgent:
         # server closes the sockets, as EdgeAgent's exit closes them. A
         # shutdown() alone does not end a client's read on Windows.
         self._generation = 0
+        self.streams_served = 0  # streams whose handler is serving
         self._closed = False
         fake = self
 
@@ -55,7 +56,9 @@ class FakeEdgeAgent:
                 self.send_response(200)
                 self.send_header("Content-Type", "text/event-stream")
                 self.end_headers()
-                seen, generation = -1, fake._generation
+                with fake._changes:
+                    seen, generation = -1, fake._generation
+                    fake.streams_served += 1
                 try:
                     while True:
                         with fake._changes:
@@ -423,7 +426,12 @@ async def test_the_lease_is_taken_again_when_edgeagent_says_it_is_gone(
                 await asyncio.sleep(0.01)
         assert time.monotonic() - lost_at < 0.3
         assert connected[-1] == {"port": 18090}
-        # EdgeAgent went away (its streams ended): taken again too.
+        # EdgeAgent went away (its streams ended): taken again too. The new
+        # stream must be served first, or it would outlive the drop (a test
+        # race only: a real EdgeAgent's exit closes every socket).
+        async with asyncio.timeout(1):
+            while edge_agent.streams_served < 2:
+                await asyncio.sleep(0.01)
         edge_agent.drop()
         async with asyncio.timeout(1):
             while len(connected) < 3:
