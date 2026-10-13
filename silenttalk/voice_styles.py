@@ -126,7 +126,9 @@ VOICE_EFFECTS: dict[str, tuple[str, str | None]] = {
     # dry voice 7.2%; robotizing the pitch flat cost 19-27%.
     "machine_spirit": (
         "機魂電子音",
-        "aeval='val(0)*(0.72+0.28*sin(2*PI*48*t))':c=same,aecho=0.8:0.55:9:0.32,"
+        # Same 48 Hz modulation and 0.44–1 gain range, using the dedicated
+        # filter: aeval crashes the shipped Windows FFmpeg (0xC0000005).
+        "tremolo=f=48:d=0.56,aecho=0.8:0.55:9:0.32,"
         "highpass=f=140,lowpass=f=6800,"
         "acompressor=threshold=-20dB:ratio=3:attack=4:release=70" + _LEVEL.format(gain=10),
     ),

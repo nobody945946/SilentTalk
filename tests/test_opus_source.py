@@ -55,3 +55,37 @@ def test_encoder_exit_timeout_is_failure_and_cleanup_is_idempotent(monkeypatch):
     source.cleanup()
     source.cleanup()
     process.kill.assert_called_once()
+
+
+def test_machine_spirit_effect_encodes_real_stream_without_native_crash():
+    import shutil
+    from pathlib import Path
+
+    from silenttalk.tts.stream import AudioStream
+    from silenttalk.voice_styles import VOICE_EFFECTS
+
+    root = Path(__file__).resolve().parents[1]
+    shipped = next((root / ".runtime/ffmpeg").glob("*/bin/ffmpeg.exe"), None)
+    executable = str(shipped) if shipped is not None else shutil.which("ffmpeg")
+    if not executable:
+        pytest.skip("requires the deployed FFmpeg or system FFmpeg")
+    # Synthetic tone stays in RAM: exercise the exact effect and encoder,
+    # independently of Microsoft's network and anyone's Discord conversation.
+    tone = subprocess.run(
+        [executable, "-nostdin", "-f", "lavfi", "-i", "sine=frequency=440:duration=1",
+         "-c:a", "libmp3lame", "-f", "mp3", "-loglevel", "error", "pipe:1"],
+        capture_output=True, check=True, timeout=20,
+    ).stdout
+    stream = AudioStream()
+    stream.feed(tone)
+    stream.finish()
+    source = OpusSource(
+        AudioResult(None, None, None, "mp3", ffmpeg_filter=VOICE_EFFECTS["machine_spirit"][1], stream=stream),
+        executable=executable,
+    )
+    try:
+        packets = list(iter(source.read, b""))
+        assert len([p for p in packets if not p.startswith((b"OpusHead", b"OpusTags"))]) >= 20
+        assert source._process.returncode == 0
+    finally:
+        source.cleanup()
