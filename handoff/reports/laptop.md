@@ -1,6 +1,6 @@
-# 第 11 回合：卡在第 9 步（10/11；語音查詢未交付，交開發機定位）
+# 第 11 回合：卡在第 9 步（10/11）；筆電接力通知尚待主控對接
 
-更新：2026-10-14T00:01:50.7425745+08:00。只做必要部分；必要服務恢復，其他被清理關閉的程式與自啟動設定保持原狀。
+更新：2026-10-14T01:26:29.3547465+08:00。開發機主控，筆電輔助；必要服务与既有偏好保持，其他被清理程式不復活。
 
 ## 1. 機魂劇本
 
@@ -12,9 +12,11 @@
 
 ## 3. 目標完成度
 
-10/11：第 1–8 步、D1、D2 完成；使用者明確選擇保留 active（主動加入），取代工作檔 D1 的 called 條件，沒有修改設定。D3 尚未通過。真人回報語音查詢一直表示工作機運作中但沒有結果；沒有把本機合成測試當作 Discord 通過。
+第 11 回合仍 10/11：第 1–8 步、D1、D2 完成，D3 未通過。使用者選擇保留 active（主動加入），取代 D1 called 條件；不改使用者設定。語音查詢未交付仍待開發機定位，本機合成探測不算真人通過。
 
-本次繼續先 pull，兩個 repo 均已是最新且工作樹乾淨；SilentTalk HEAD 與已更新的收件回條均為 `11cc293a6a0b7bdf592717e5046ecb245737722b`；EdgeAgent HEAD 為 `206efdce5bc42214b10f443009642546e58e577c`。本次未修改程式碼、模型、使用者設定或人設。服務恢復完成，主動加入偏好保留。觸控板重驗成功的結論僅適用於先前經 reset 的 Codex 工作階段。
+額外授權：開發機是主控，筆電 Codex 僅輔助 Windows 部署、介面及實測。使用者要求接力通知、不許本機輪詢；只允許本次 session 暫時 SSH 金鑰解鎖，正常回合結束不撤銷，不設固定時限。新通知接力屬本次明確授權，取代舊 skill 不使用 native queue 的流程偏好，但不改機器分工。筆電已可經現有 SSH 別名完成無敏感資料的登入探測；自動 push 喚醒尚未接通。
+
+最近 pull 已到 `deb8e72`；無程式碼差異或新的模型部署，不重跑舊驗收。先前已確認的收件回條為語音修正版 `11cc293`。通知試驗不應虛報已接收開發機新回合。
 
 ## 4. 測試執行結果
 
@@ -48,16 +50,17 @@
 - 真人重試區間 11:07–11:14 UTC 的四次 agent_chat_task_decision 均 chat_task false（2656／812／781／563 ms），沒有新的 public Agent task 啟動；至少有一條 addressed true、生成及 job_done 成功的路徑。無法在不讀私人內容的情況下把每筆事件精確對應到天氣問句，故只記區間證據，不宣称已鎖定唯一原因。另有 WSServerHandshakeError 1 與離開語音後 RuntimeError 1，不抹去先前錯誤。
 - 使用既有 LocalReplyModel／CharacterLease、真實 fw3n（task adapter 生效）、空白測試人設、memory off、完全合成文字；未使用真人紀錄、personas.json 或 character_state.json。天氣問法兩例均派送 public，2344／1593 ms；問候不派送，313 ms。合成「先前工作忙碌」脈絡後再問天氣也派送，2188 ms。這不是實際私人脈絡的重現，不能據此宣稱修好了語音派送。
 - 經既有 /chat API 的 discord／public 權限，在指定 EdgeAgentTest 工作區測真正網路工具：terminal done、21531 ms、tool 2 events（同一 web_research 的開始／結束）、delta 327、done 1、answer characters 526、沒有等待工作語句。沒有直接提供来源 URL；此探測只證明工具流程完成，不宣稱天氣事實或來源正確，也不等於 Discord 結果交付通過。測試 lease 正常釋放，最後已恢復正式 SilentTalk lease。
+session_scoped_ssh_access：現有 Git ssh-agent 空代理啟動／回應／關閉探測 exit 0；守護程式 py_compile 與無金鑰 lifecycle probe exit 0，代理自然退出後無殘留。正式原生 ssh-add 返回成功，既有 host key 驗證的單次 SSH 探測返回預期固定標記；binding authorized true／owner PID 6044。密碼未進工具輸入、輸出或回報。金鑰無固定時限；實際 CLI 程序結束、解鎖視窗關閉或 close 事件撤銷，其他正常回合回覆不撤銷。
+
+native_handoff_notification_probe：已確認 Codex 0.162.0-alpha.2 提供 queue；一次同 thread 的合成測試訊息入列成功。入列不等於喚醒，閒置自動開始及完整跨機鏈路尚未驗收；一次 app-server proxy 測試未收到 initialize 回應，未重啟後端或啟動第二個 model。此測試提交仍待清除／確認被消費，不能當作正式工作。
 
 ## 5. 修改檔案與 commit
 
-SilentTalk `11cc293a6a0b7bdf592717e5046ecb245737722b` 已推 `copilot-story-mode`：只修改 `silenttalk/voice_styles.py` 的機魂效果 owner 與 `tests/test_opus_source.py` 原生編碼回歸測試。前段 EdgeAgent `206efdce5bc42214b10f443009642546e58e577c` 已推 `copilot-story-mode`，CI `https://github.com/nobody945946/EdgeAgent/actions/runs/38373694367` completed／success；first-launch job 依工作流程跳過。
+SilentTalk `11cc293`：`silenttalk/voice_styles.py` 原生 tremolo 取代 Windows FFmpeg 崩潰的 aeval，`tests/test_opus_source.py` 回歸；已推 copilot-story-mode，CI success。
 
-EdgeAgent 該 commit 修改 `README.md`、`scripts/bootstrap.ps1`、`edge_agent/runtime.py`、`edge_agent/web.py`、`tests/test_bootstrap_windows.py`、`tests/test_deploy.py`、`tests/test_web_ui.py`、`tests/test_sdk_agent.py`、`tests/test_sdk_permissions.py`、`tests/browser_check.mjs`：EdgeAgent 自備 Python／Git／Node／PowerShell，既有 venv 遷移保留套件，共用 adapter 說明修正，Windows fixture 更新。本回報仍只保留本回合最新狀態。
+EdgeAgent `206efdc`：`scripts/bootstrap.ps1`、`edge_agent/runtime.py` 自備 Python／Git／Node／PowerShell並遷移 venv；`edge_agent/web.py`、README 共用 adapter 說明；Windows bootstrap／deploy／UI／SDK fixtures 和測試。已推 copilot-story-mode，CI https://github.com/nobody945946/EdgeAgent/actions/runs/38373694367 success，first-launch 按工作流跳過。
 
-真人已確認能聽到修正後的機魂回話，兩個 repo 的必要測試與 CI 均通過；開發機可據此評估發布語音修正版。筆電本回合的完整 Discord 驗收仍未完成。
-
-本次續行僅整份重寫回報，沒有新增程式修正或重跑已通過的完整測試。語音查詢派送／角色工作狀態屬開發機的模型與角色邏輯範圍，依最新 AGENTS.md 分工將證據交接，不在 Windows 擅改。
+本次增加本機 `C:\Users\A8fm0\AppData\Local\Codex\remote-workspace\dev-session-access.py`（不含金鑰／密碼）：原生 ssh-add 私人提示、SSH 登入探測、隔離 agent、Windows kernel event／process handle 等待與撤銷；不是輪詢，不改 Windows ssh-agent Disabled 設定。binding metadata 位於同目錄 session-access，ACL 限目前使用者和 SYSTEM；不含私鑰或密碼，撤銷時刪除。只讓原生 ssh-add 處理既有私鑰，未複製私鑰至 Git、開發機或模型。
 
 ## 6. 記憶體與速度
 
@@ -82,16 +85,16 @@ EdgeAgent 該 commit 修改 `README.md`、`scripts/bootstrap.ps1`、`edge_agent/
 
 ## 9. 使用者回饋
 
-D1 修正後「有聽到」；觸控板 reset 後「不會了」；D2「有回報，沒有要求批准」；回覆模式「保留目前的主動加入」；D3「有回覆，但要等 Agent 做完」。使用者已確認查詢同一句有叫機魂，但得到等待工作完成的回應且長時間無結果，排除先前待確認的未點名假設。
+D1「有聽到」；觸控板「不會了」；D2「有回報，沒有要求批准」；回覆模式「保留目前的主動加入」；D3「有回覆，但要等 Agent 做完」。真人確認同句点名仍有查詢未交付。聊天感想原話：「但是聊天我算滿意」。
 
-本次使用者感想原話：「但是聊天我算滿意」。weather_voice_lookup_no_result：真人回報工作機運作中的回應持續且沒有交付，尚未修復，不能用目前 agent_busy false 否定其觀察。
+使用者明確指定開發機為主控、筆電為輔助，要求不用輪詢的通知；提供的憑證種類是 SSH 私鑰解鎖密碼，不提供內容。授權希望持續至本次 session 結束，不因時間到期或普通回覆要求重新輸入。睡覺不等於停止 session。已說明電腦重啟或記憶體代理遺失後仍可能需重新解鎖；沒有承諾跨重啟保存私鑰。
 
-quest_touchpad_mouse_reporting_reset：先前 Codex TUI PID 9652 的 console input mode 152→136，53 bytes 關閉滑鼠回報控制序列，真人在該工作階段重驗成功。未宣稱永久修正或重啟 Codex；未讀鍵盤輸入、console buffer、密碼、token 或私人對話紀錄。Machinehand 連線路徑與鍵盤助手、自啟動設定不變。
+先前觸控板 reset 僅在原 Codex 工作階段真人驗證，未宣稱永久生效。未改 Machinehand 遠端連線、鍵盤助手、開機設定。
 
 ## 10. 給接手模型的交接指示
 
-開發機處理 voice_lookup_dispatch_or_state_failure：使用者同句點名且明確要求公開查詢，角色卻說工作機運作中而沒有結果。真實語音區間工具判斷 false／沒有對應 public 任務；乾淨模型及合成忙碌脈絡均判 true，真正 public Agent 網路流程可完成。這是定位線索，不是已重現唯一缺陷，不能直接歸咎 Windows 或宣稱模型永久排隊。
+開發機是主控：先處理 voice_lookup_dispatch_or_state_failure，在模型／角色邏輯 owner 用合成脈絡驗 task gate、真實任務狀態與結果回原位置；不讀私人紀錄、人設或角色狀態。Windows 僅做部署及真人驗收。D1、D2 不重測，active 是使用者選擇；D3 需腳本／執行與語音實際重疊後驗收。
 
-在模型／角色邏輯 canonical owner 核對：task gate 對實際脈絡的分類；角色工作狀態是否根據真正任務而非過期台詞；忙碌時新公開查詢被拒絕後是否明確告知；派送及完成結果是否回原語音位置。不要讀使用者的私人紀錄、人設或角色狀態；採合成脈絡回歸，兼驗正常閒聊不誤派工。依 AGENTS.md 分工由開發機修，筆電做必要部署及真人驗收。
+notification_transport_pending：筆電已建立僅本次 CLI 生命周期的 SSH 解鎖入口，登入原 clawd SSH 別名探測成功；不安裝輪詢器、排程、開機項目或其他 model。開發機需決定並實作「成功 push 新 laptop 任務時發送一次通知」的發送端，筆電配合接收。只傳 repo／branch／commit／handoff 路徑等 metadata，不傳私鑰、密碼、機敏內容。不得把單次 queue 入列當作即時喚醒；需同 thread、有效通知、重複通知、失敗通知及閒置喚醒的實測證據。不要擅自開公網端口或修改主控方向。現在尚未接通，收到有效通知仍須 ff-only pull、核對工作檔與回條再做。
 
-D1、D2、聊天偏好及先前觸控板重驗已確認，不重複要求；active 是使用者選擇，不改 called。正式服務已恢復，保持其他清理關閉程式原狀。修正後再驗語音公開查詢交付與 D3：指定腳本寫入／執行、真人批准、任務和語音確實重疊、記錄語音延遲。現有 10/11，不標完成；本機網路探測不算 Discord 真人通過。回報推 laptop-report 後 pull，工作檔未換即交付，不常駐輪詢。
+本次 auth window 可最小化，關閉會撤銷。只有已明確停止／任務授權結束才撤銷這次 key agent；普通 final 回覆不是整個 CLI session 結束。close 入口使用 dev-session-access.py close --thread 當前 thread ID；按事件清理，不輪詢。回報已推 laptop-report 後只 pull 一次，沒有新工作就交付。
