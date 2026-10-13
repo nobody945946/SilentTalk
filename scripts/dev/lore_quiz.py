@@ -14,7 +14,6 @@ from __future__ import annotations
 import argparse
 import json
 import random
-import subprocess
 import sys
 import time
 import urllib.request
@@ -24,6 +23,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from lore_quiz_data import QUIZ  # noqa: E402
+from serve_wait import start  # noqa: E402
 
 SERVER = ROOT / ".runtime/tools/llama.cpp-b11193-src/build-cuda/bin/llama-server"
 RESULTS = ROOT / ".runtime/dev/lore-quiz.jsonl"
@@ -59,24 +59,14 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=18220)
     parser.add_argument("--parallel", type=int, default=4)
     args = parser.parse_args()
-    server = subprocess.Popen(
+    started = time.monotonic()
+    server = start(
         [str(SERVER), "--model", str(args.model), "--host", "127.0.0.1", "--port",
          str(args.port), "--ctx-size", str(1024 * args.parallel), "--parallel",
          str(args.parallel), "--n-gpu-layers", str(args.ngl), "--threads",
-         str(args.threads), "--jinja", "--fit", "off"],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    started = time.monotonic()
+         str(args.threads), "--jinja", "--fit", "off"], timeout=1200)
     try:
-        deadline = time.monotonic() + 1200
-        while True:
-            try:
-                with urllib.request.urlopen(f"http://127.0.0.1:{args.port}/health", timeout=2):
-                    break
-            except OSError:
-                if server.poll() is not None or time.monotonic() > deadline:
-                    raise SystemExit("server did not start") from None
-                time.sleep(3)
-        jobs = [(i, order) for i in range(len(QUIZ)) for order in orders(i)]
+        jobs =[(i, order) for i in range(len(QUIZ)) for order in orders(i)]
 
         def run(job: tuple[int, list[int]]) -> tuple[int, bool]:
             index, order = job

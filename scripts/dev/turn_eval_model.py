@@ -9,14 +9,13 @@ import os
 import shutil
 import subprocess
 import sys
-import time
 import tomllib
 import types
-import urllib.request
 from pathlib import Path
 from typing import Any
 
 import turn_eval_set
+from serve_wait import start
 from turn_eval_set import PROJECT_DIR, agent_persona
 
 EDGE_AGENT_MODEL_DIR = Path(
@@ -163,19 +162,7 @@ class LeaseStandIn:
             lora_paths=[lora] if lora is not None else (),
             slots=2 if lora is not None else 1,
         )
-        self.process = subprocess.Popen(
-            args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-        )
-        for _ in range(600):
-            if self.process.poll() is not None:
-                raise SystemExit("eval llama-server exited while loading")
-            try:
-                with urllib.request.urlopen(
-                    f"http://127.0.0.1:{EVAL_PORT}/health", timeout=2
-                ):
-                    break
-            except OSError:
-                time.sleep(1)
+        self.process = start(args, timeout=600)
         # Older baselines owned the lease calls in llm; current clients use
         # the independent HTTP lease owner. The fixture replaces that owner.
         transport_class = getattr(llm_module, "ReplyTransport", None)
