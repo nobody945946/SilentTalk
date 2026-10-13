@@ -13,12 +13,15 @@ One wait, on whatever can signal:
 - CI: GitHub cannot reach this box, so a push recorded with `wake.py ci` is
   asked about once, when its runs should be done (the repo's recent run
   times); a run still going is asked again only after half that time. A
-  failure wakes the session, a success is dropped.
+  failure wakes the session; a success wakes it only when the push was
+  recorded with what waits on it (a handoff held until CI is green).
 - The harness ends a background job at 2 h: the wait exits before (ALIVE or
   ASLEEP) and the session re-arms it.
 
   python3 scripts/dev/wake.py                          wait (background; re-arm after it exits)
-  python3 scripts/dev/wake.py ci <owner/repo> <sha>    watch that push's CI (the full sha)
+  python3 scripts/dev/wake.py ci <owner/repo> <sha> [<what waits>]
+                                                       watch that push's CI (the full sha); with
+                                                       what waits on it, a success wakes too
   python3 scripts/dev/wake.py round <hours> <text>     tell the laptop a round is pushed (text:
                                                        commit and path) and expect its report
 """
@@ -90,6 +93,8 @@ def ci_check(entry: dict) -> tuple[str, float | None]:
     if not lines or any(line.split()[0] in {"queued", "in_progress", "waiting", "pending", "requested"} for line in lines):
         return "", time.time() + max(60.0, entry["expected"] / 2)
     failed = [line for line in lines if not re.match(r"completed (success|skipped) ", line)]
+    if not failed and entry.get("waits"):
+        return f"CI GREEN: {entry['repo']} {entry['sha'][:7]}; now: {entry['waits']}", None
     return "\n".join(f"CI FAILED: {entry['repo']} {entry['sha'][:7]} {line}" for line in failed), None
 
 
@@ -184,12 +189,13 @@ def wait() -> int:
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) == 3 and argv[0] == "ci":
+    if len(argv) >= 3 and argv[0] == "ci":
         if not re.fullmatch(r"[0-9a-f]{40}", argv[2]):
             raise SystemExit("the full sha, please")
         expected = ci_expected(argv[1])
         state = load()
-        state["ci"].append({"repo": argv[1], "sha": argv[2], "expected": expected, "due": time.time() + expected})
+        state["ci"].append({"repo": argv[1], "sha": argv[2], "expected": expected, "due": time.time() + expected,
+                            "waits": " ".join(argv[3:])})
         save(state)
         print(f"CI of {argv[1]} {argv[2][:7]} asked about in {round(expected / 60)} min")
         return 0
