@@ -1,6 +1,6 @@
-# 第 11 回合：卡在第 9 步（10/11；D3 並行語音未通過）
+# 第 11 回合：卡在第 9 步（10/11；語音查詢未交付，交開發機定位）
 
-更新：2026-10-13T19:05:35.5349842+08:00。只做必要部分；只維持本回合必要的 EdgeAgent 與 SilentTalk，其他清理後關閉的程式與自啟動設定保持原狀。
+更新：2026-10-14T00:01:50.7425745+08:00。只做必要部分；必要服務恢復，其他被清理關閉的程式與自啟動設定保持原狀。
 
 ## 1. 機魂劇本
 
@@ -8,13 +8,13 @@
 
 ## 2. 時間與額度
 
-自動補驗从 2026-10-13T17:15:47+08:00 開始；D1 修正後 18:48:46 Discord 再次就緒。最新檢查點 2026-10-13T19:05:35.5349842+08:00。API token／帳戶額度沒有可用證據，不推算。
+自動補驗從 2026-10-13T17:15:47+08:00 開始；2026-10-13T23:59:50+08:00 必要服務再次恢復就緒，最新檢查點 2026-10-14T00:01:50.7425745+08:00。API token／帳戶額度沒有可用證據，不推算。
 
 ## 3. 目標完成度
 
-10/11：第 1–8 步、D1、D2 完成；D1 原先的「沒有名字不回」條件由使用者明確選擇「保留目前的主動加入」取代，依使用者指示優先，沒有修改設定。D3 尚未通過：使用者觀察回覆要等 Agent 做完，目前事件紀錄不足以證明模型並行失敗或脚本已執行。第 10 步恢復完成，兩個服務正常執行。觸控板在目前 Codex 終端的修正已取得使用者確認，不宣稱重新啟動後也永久有效。
+10/11：第 1–8 步、D1、D2 完成；使用者明確選擇保留 active（主動加入），取代工作檔 D1 的 called 條件，沒有修改設定。D3 尚未通過。真人回報語音查詢一直表示工作機運作中但沒有結果；沒有把本機合成測試當作 Discord 通過。
 
-兩個 repo 已 pull，指定祖先檢查通過；SilentTalk 收件回條為 `03070c0798bcf7a4b7a33d544d039ca5fa556793`，修正後 HEAD 為 `11cc293a6a0b7bdf592717e5046ecb245737722b`。SilentTalk 實際路徑為 `C:\Users\A8fm0\Downloads\SilentTalk`，工作檔舊路徑不存在。只因新語音修正重跑受影響測試及完整驗證，未重跑雙管路量測。
+本次繼續先 pull，兩個 repo 均已是最新且工作樹乾淨；SilentTalk HEAD 與已更新的收件回條均為 `11cc293a6a0b7bdf592717e5046ecb245737722b`；EdgeAgent HEAD 為 `206efdce5bc42214b10f443009642546e58e577c`。本次未修改程式碼、模型、使用者設定或人設。服務恢復完成，主動加入偏好保留。觸控板重驗成功的結論僅適用於先前經 reset 的 Codex 工作階段。
 
 ## 4. 測試執行結果
 
@@ -42,6 +42,12 @@
 ```
 - D2 的 thread_opened 18:58:43；agent_task_decision 1297 ms／dispatched true；agent_task_ended done 18:59:20，agent_task_finished 35844 ms，agent_result_posted true／text；unverified 0、source_problems 0、converted 0。使用者確認討論串有結果且未要求批准。
 - D3／語音查詢診斷：18:57:05–18:57:06 owner_voice_missing_grace，18:57:34 job_failed RuntimeError；Agent 18:58:44–18:59:20 執行期間 copilot_turn_final 0。不能把沒有語音輸入的時間區間當成實際模型並行測試。指定 D3 產物 file-stats.json 不存在，工作區 .ps1 0、.json 0、.tmp 2；未讀檔案內容。使用者觀察到的等待與程式成功條件尚未有同一段事件證據，沒有將它改標通過，也沒有自行判定模型阻塞根因。
+本次續行的數字證據：
+
+- 原服務已停止，18087 無監聽；18089 殘留 EdgeAgent llama-server。經現有 ensure_service 恢復，未手動硬殺或啟動其他被清理的程式；再用既有 restart_silenttalk.ps1 啟動 SilentTalk。最後狀態與第 7 步 JSON 一致：character、ready true、65536、2 slots、同一 fw3n；agent_busy false。新 session 15:59:50 UTC，discord_ready／character_lease_connected／copilot_runtime_ready 各 1，error 0。
+- 真人重試區間 11:07–11:14 UTC 的三次 agent_chat_task_decision 均 chat_task false，沒有新的 public Agent task 啟動；至少有一條 addressed true、生成及 job_done 成功的路徑。無法在不讀私人內容的情況下把每筆事件精確對應到天氣問句，故只記區間證據，不宣称已鎖定唯一原因。另有 WSServerHandshakeError 1 與離開語音後 RuntimeError 1，不抹去先前錯誤。
+- 使用既有 LocalReplyModel／CharacterLease、真實 fw3n（task adapter 生效）、空白測試人設、memory off、完全合成文字；未使用真人紀錄、personas.json 或 character_state.json。天氣問法兩例均派送 public，2344／1593 ms；問候不派送，313 ms。合成「先前工作忙碌」脈絡後再問天氣也派送，2188 ms。這不是實際私人脈絡的重現，不能據此宣稱修好了語音派送。
+- 經既有 /chat API 的 discord／public 權限，在指定 EdgeAgentTest 工作區測真正網路工具：terminal done、21531 ms、tool 2 events（同一 web_research 的開始／結束）、delta 327、done 1、answer characters 526、沒有等待工作語句。沒有直接提供来源 URL；此探測只證明工具流程完成，不宣稱天氣事實或來源正確，也不等於 Discord 結果交付通過。測試 lease 正常釋放，最後已恢復正式 SilentTalk lease。
 
 ## 5. 修改檔案與 commit
 
@@ -50,6 +56,8 @@ SilentTalk `11cc293a6a0b7bdf592717e5046ecb245737722b` 已推 `copilot-story-mode
 EdgeAgent 該 commit 修改 `README.md`、`scripts/bootstrap.ps1`、`edge_agent/runtime.py`、`edge_agent/web.py`、`tests/test_bootstrap_windows.py`、`tests/test_deploy.py`、`tests/test_web_ui.py`、`tests/test_sdk_agent.py`、`tests/test_sdk_permissions.py`、`tests/browser_check.mjs`：EdgeAgent 自備 Python／Git／Node／PowerShell，既有 venv 遷移保留套件，共用 adapter 說明修正，Windows fixture 更新。本回報仍只保留本回合最新狀態。
 
 真人已確認能聽到修正後的機魂回話，兩個 repo 的必要測試與 CI 均通過；開發機可據此評估發布語音修正版。筆電本回合的完整 Discord 驗收仍未完成。
+
+本次續行僅整份重寫回報，沒有新增程式修正或重跑已通過的完整測試。語音查詢派送／角色工作狀態屬開發機的模型與角色邏輯範圍，依最新 AGENTS.md 分工將證據交接，不在 Windows 擅改。
 
 ## 6. 記憶體與速度
 
@@ -61,12 +69,12 @@ EdgeAgent 該 commit 修改 `README.md`、`scripts/bootstrap.ps1`、`edge_agent/
 
 | 項目 | 狀態 |
 |---|---|
-| D1 真人語音回答 | 修正後有聽到；使用者選擇保留 active，取代工作檔 called 條件 |
-| D2 主人串唯讀計數 | 通過：使用者確認有回報且未要求批准；事件 done／posted true |
-| D3 Agent 工作時並行語音 | 未通過：使用者回報需等 Agent 做完；現有數字無法定位因果 |
-| D4 真人感想 | 不擴張必要驗收 |
+| D1 真人語音回答 | 通過；使用者選擇保留 active，取代 called 條件 |
+| D2 主人串唯讀計數 | 通過：真人確認有回報且未要求批准，done／posted true |
+| D3 Agent 工作時並行語音 | 未通過；語音工具查詢也尚未交付，不能用合成測試補判通過 |
+| D4 真人感想 | 使用者對聊天滿意；工具查詢沒有結果 |
 
-只用伺服器 729722190857240717、語音頻道 729722190857240721、工作區 `C:\Users\A8fm0\EdgeAgentTest`。主人批准由使用者自己按。D3 並行語音與寫程式／執行成功兩項均不能由現有事件補推為通過。
+指定 D3 腳本與 file-stats.json 尚無成功產物證據。只用伺服器 729722190857240717、語音頻道 729722190857240721、工作區 `C:\Users\A8fm0\EdgeAgentTest`。批准由使用者自己按。
 
 ## 8. 紀錄目錄
 
@@ -74,16 +82,16 @@ EdgeAgent 該 commit 修改 `README.md`、`scripts/bootstrap.ps1`、`edge_agent/
 
 ## 9. 使用者回饋
 
-使用者重新要求完成第 11 回合、只做必要部分。D1 初次回饋沒聲音，修正後回覆「有聽到」。Quest 3 目前 Codex 輸入框的觸控板問題，套用 reset 後回覆「不會了」。D2 回覆「有回報，沒有要求批准」。回覆模式明確選擇「保留目前的主動加入」，此使用者指示優先於工作檔只點名條件。D3 回覆「有回覆，但要等 Agent 做完」。另回報 weather_voice_lookup_no_reply，使用者確認是語音查天氣沒回覆；已詢問該句是否同時點名，目前答覆未到。
+D1 修正後「有聽到」；觸控板 reset 後「不會了」；D2「有回報，沒有要求批准」；回覆模式「保留目前的主動加入」；D3「有回覆，但要等 Agent 做完」。使用者已確認查詢同一句有叫機魂，但得到等待工作完成的回應且長時間無結果，排除先前待確認的未點名假設。
 
-quest_touchpad_mouse_reporting_reset：確認目前 Codex TUI PID 9652 所屬 console，透過 Windows console API 將 input mode 152 改為 136（只關 ENABLE_MOUSE_INPUT），成功寫入 53 bytes 的關閉滑鼠回報控制序列，使用者在目前終端重驗成功。未宣稱永久修正，沒有重啟 Codex；未讀鍵盤輸入、console buffer、密碼、token 或對話紀錄。Machinehand 連線路徑不變，沒有更動鍵盤助手或自啟動。
+本次使用者感想原話：「但是聊天我算滿意」。weather_voice_lookup_no_result：真人回報工作機運作中的回應持續且沒有交付，尚未修復，不能用目前 agent_busy false 否定其觀察。
 
-weather_voice_lookup_route：程式目前只對被點名的句子進行 chat_task 判斷，active 允許未點名聊天，但不會自行開啟查詢工具。這是程式路由證據；尚不能由此判定使用者那次查詢的確切失敗原因。角色／工具判斷與模型屬開發機範圍，未在 Windows 擅改角色邏輯。
+quest_touchpad_mouse_reporting_reset：先前 Codex TUI PID 9652 的 console input mode 152→136，53 bytes 關閉滑鼠回報控制序列，真人在該工作階段重驗成功。未宣稱永久修正或重啟 Codex；未讀鍵盤輸入、console buffer、密碼、token 或私人對話紀錄。Machinehand 連線路徑與鍵盤助手、自啟動設定不變。
 
 ## 10. 給接手模型的交接指示
 
-D1 真人試聽、D2 主人串唯讀工具、目前 Codex 觸控板重驗均通過，不重複要求。使用者保留 active，不改成 called。接續確認 weather_voice_lookup_no_reply 的同句點名答覆；核對接收事件及 chat_task 分類。已知未點名不進工具查詢，不能把 active 當作語音工具授權或擅改模型／角色邏輯。
+開發機處理 voice_lookup_dispatch_or_state_failure：使用者同句點名且明確要求公開查詢，角色卻說工作機運作中而沒有結果。真實語音區間工具判斷 false／沒有對應 public 任務；乾淨模型及合成忙碌脈絡均判 true，真正 public Agent 網路流程可完成。這是定位線索，不是已重現唯一缺陷，不能直接歸咎 Windows 或宣稱模型永久排隊。
 
-D3 目前未通過，指定腳本與 JSON 產物不存在，Agent 執行時段也沒有語音 turn；不能直接宣稱模型雙管路壞了。再測前先確認 Discord 語音連線與接收恢復，只有觀察到任務與語音實際重疊，才能判斷等待根因。Windows 傳輸錯誤由筆電修，模型／工具判斷問題交開發機，不疊第二條實作。只查檔案 metadata，不讀內容，批准由使用者自己按。
+在模型／角色邏輯 canonical owner 核對：task gate 對實際脈絡的分類；角色工作狀態是否根據真正任務而非過期台詞；忙碌時新公開查詢被拒絕後是否明確告知；派送及完成結果是否回原語音位置。不要讀使用者的私人紀錄、人設或角色狀態；採合成脈絡回歸，兼驗正常閒聊不誤派工。依 AGENTS.md 分工由開發機修，筆電做必要部署及真人驗收。
 
-不要重跑已通過的完整測試、CI、雙管路或真人項目，不要啟動其他被清理關閉的程式。兩個服務正常執行，EdgeAgent 獨立 runtime 保留；D3 未完成前不得將回合標完成。必要的新修正完成才做相應验证。全部驗收完成後整份重寫本回報並推 laptop-report，再 pull；工作檔沒換即交付。
+D1、D2、聊天偏好及先前觸控板重驗已確認，不重複要求；active 是使用者選擇，不改 called。正式服務已恢復，保持其他清理關閉程式原狀。修正後再驗語音公開查詢交付與 D3：指定腳本寫入／執行、真人批准、任務和語音確實重疊、記錄語音延遲。現有 10/11，不標完成；本機網路探測不算 Discord 真人通過。回報推 laptop-report 後 pull，工作檔未換即交付，不常駐輪詢。
