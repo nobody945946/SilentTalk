@@ -1,10 +1,6 @@
 from __future__ import annotations
 
 import logging
-import queue
-import threading
-import time
-from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -12,6 +8,13 @@ import numpy as np
 import sherpa_onnx
 
 from silenttalk.copilot.script import to_taiwan_traditional
+from silenttalk.copilot.stt_worker import (
+    ClosedCallback,
+    ErrorCallback,
+    OpenSpeaker,
+    SpeakerTranscriber,
+    TurnCallback,
+)
 
 _LOG = logging.getLogger(__name__)
 
@@ -19,20 +22,17 @@ _LOG = logging.getLogger(__name__)
 # never flushes the last chunk and drops the final 1-3 characters.
 _TAIL_PADDING_SECONDS = 0.66
 
-TurnCallback = Callable[[int, str, str], None]
-ErrorCallback = Callable[[str], None]
-
 
 @dataclass(slots=True)
-class _SpeakerStream:
-    speaker_name: str
+class _SpeakerStream(OpenSpeaker):
     stream: object
     started_at: float
-    last_packet_at: float
 
 
-class StreamingTranscriber:
+class StreamingTranscriber(SpeakerTranscriber[_SpeakerStream]):
     """Discord PCM -> per-speaker streaming Paraformer transcripts."""
+
+    ENGINE = "paraformer"
 
     def __init__(
         self,
@@ -42,118 +42,46 @@ class StreamingTranscriber:
         *,
         endpoint_silence_ms: int = 650,
         max_utterance_seconds: float = 25.0,
+        on_closed: ClosedCallback | None = None,
     ) -> None:
+        super().__init__(
+            on_turn,
+            on_error,
+            endpoint_silence_ms=endpoint_silence_ms,
+            on_closed=on_closed,
+        )
         self._model_dir = model_dir
-        self._on_turn = on_turn
-        self._on_error = on_error
-        self._endpoint_seconds = max(0.35, endpoint_silence_ms / 1000.0)
         self._max_utterance_seconds = max(5.0, max_utterance_seconds)
-        self._packets: queue.Queue[tuple[int, str, bytes, float] | None] = (
-            queue.Queue(maxsize=4096)
+        self._recognizer: sherpa_onnx.OnlineRecognizer | None = None
+
+    def _load(self) -> None:
+        self._recognizer = self._create_recognizer()
+
+    def _open(self, speaker_name: str, received_at: float) -> _SpeakerStream:
+        return _SpeakerStream(
+            speaker_name=speaker_name,
+            last_packet_at=received_at,
+            stream=self._recognizer.create_stream(),
+            started_at=received_at,
         )
-        self._thread: threading.Thread | None = None
-        self._stop = threading.Event()
-        self._ready = threading.Event()
-        self._startup_error: Exception | None = None
 
-    def start(self) -> None:
-        if self._thread is not None and self._thread.is_alive():
-            return
-        self._stop.clear()
-        self._ready.clear()
-        self._startup_error = None
-        self._thread = threading.Thread(
-            target=self._run,
-            name="copilot-stt",
-            daemon=True,
+    def _accept(
+        self, speaker_id: int, state: _SpeakerStream, pcm: bytes, received_at: float
+    ) -> None:
+        recognizer = self._recognizer
+        self._accept_pcm(recognizer, state.stream, pcm)
+        if recognizer.is_endpoint(state.stream):
+            text = str(recognizer.get_result(state.stream))
+            recognizer.reset(state.stream)
+            state.started_at = received_at
+            self._emit(speaker_id, state.speaker_name, text)
+
+    def _flush_at(self, state: _SpeakerStream) -> float:
+        # Silence since the last packet, or an utterance running too long.
+        return min(
+            state.last_packet_at + self._endpoint_seconds,
+            state.started_at + self._max_utterance_seconds,
         )
-        self._thread.start()
-        if not self._ready.wait(timeout=30):
-            raise RuntimeError("Copilot STT 載入逾時。")
-        if self._startup_error is not None:
-            raise RuntimeError(f"Copilot STT 載入失敗：{self._startup_error}")
-
-    def stop(self) -> None:
-        self._stop.set()
-        try:
-            self._packets.put_nowait(None)
-        except queue.Full:
-            pass
-        if self._thread is not None:
-            self._thread.join(timeout=5)
-        self._thread = None
-
-    def push_pcm(self, speaker_id: int, speaker_name: str, pcm: bytes) -> None:
-        if not pcm or self._stop.is_set():
-            return
-        item = (speaker_id, speaker_name, bytes(pcm), time.monotonic())
-        try:
-            self._packets.put_nowait(item)
-        except queue.Full:
-            _LOG.warning("copilot_stt_packet_dropped queue_full=true")
-
-    def _run(self) -> None:
-        try:
-            recognizer = self._create_recognizer()
-        except Exception as exc:
-            self._startup_error = exc
-            self._ready.set()
-            return
-
-        streams: dict[int, _SpeakerStream] = {}
-        self._ready.set()
-        _LOG.info("copilot_stt_ready")
-
-        try:
-            while not self._stop.is_set():
-                try:
-                    item = self._packets.get(timeout=0.05)
-                except queue.Empty:
-                    item = None
-
-                if item is not None:
-                    speaker_id, speaker_name, pcm, received_at = item
-                    state = streams.get(speaker_id)
-                    if state is None:
-                        state = _SpeakerStream(
-                            speaker_name=speaker_name,
-                            stream=recognizer.create_stream(),
-                            started_at=received_at,
-                            last_packet_at=received_at,
-                        )
-                        streams[speaker_id] = state
-                    else:
-                        state.speaker_name = speaker_name
-                        state.last_packet_at = received_at
-
-                    self._accept_pcm(recognizer, state.stream, pcm)
-                    if recognizer.is_endpoint(state.stream):
-                        text = str(recognizer.get_result(state.stream))
-                        recognizer.reset(state.stream)
-                        state.started_at = received_at
-                        self._emit(speaker_id, state.speaker_name, text)
-
-                now = time.monotonic()
-                due = [
-                    speaker_id
-                    for speaker_id, state in streams.items()
-                    if (
-                        now - state.last_packet_at >= self._endpoint_seconds
-                        or now - state.started_at >= self._max_utterance_seconds
-                    )
-                ]
-                for speaker_id in due:
-                    state = streams.pop(speaker_id)
-                    self._finalize(recognizer, speaker_id, state)
-        except Exception as exc:
-            _LOG.exception("copilot_stt_worker_failed")
-            self._on_error(f"Copilot STT 發生錯誤：{type(exc).__name__}")
-        finally:
-            for speaker_id, state in list(streams.items()):
-                try:
-                    self._finalize(recognizer, speaker_id, state)
-                except Exception:
-                    _LOG.debug("copilot_stt_final_flush_failed", exc_info=True)
 
     def _create_recognizer(self) -> sherpa_onnx.OnlineRecognizer:
         encoder = self._model_dir / "encoder.int8.onnx"
@@ -199,12 +127,8 @@ class StreamingTranscriber:
         while recognizer.is_ready(stream):
             recognizer.decode_stream(stream)
 
-    def _finalize(
-        self,
-        recognizer: sherpa_onnx.OnlineRecognizer,
-        speaker_id: int,
-        state: _SpeakerStream,
-    ) -> None:
+    def _finalize(self, speaker_id: int, state: _SpeakerStream) -> None:
+        recognizer = self._recognizer
         tail = np.zeros(int(_TAIL_PADDING_SECONDS * 48000), dtype=np.float32)
         state.stream.accept_waveform(48000, tail)
         state.stream.input_finished()

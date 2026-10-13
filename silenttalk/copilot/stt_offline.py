@@ -1,7 +1,8 @@
 """Discord PCM -> per-speaker Silero VAD segments -> offline SenseVoice.
 
 Drop-in alternative to ``stt.StreamingTranscriber`` (same constructor and
-start/stop/push_pcm), selected by ``config.toml`` ``copilot.stt_engine``.
+start/stop/push_pcm, both on ``stt_worker.SpeakerTranscriber``), selected by
+``config.toml`` ``copilot.stt_engine``.
 The VAD cuts each speaker's audio into utterances; each finished utterance is
 decoded in one pass, so there is no streaming tail to flush and sentence
 endings are not dropped.
@@ -10,10 +11,7 @@ endings are not dropped.
 from __future__ import annotations
 
 import logging
-import queue
-import threading
 import time
-from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -21,11 +19,15 @@ import numpy as np
 import sherpa_onnx
 
 from silenttalk.copilot.script import to_taiwan_traditional
+from silenttalk.copilot.stt_worker import (
+    ClosedCallback,
+    ErrorCallback,
+    OpenSpeaker,
+    SpeakerTranscriber,
+    TurnCallback,
+)
 
 _LOG = logging.getLogger(__name__)
-
-TurnCallback = Callable[[int, str, str], None]
-ErrorCallback = Callable[[str], None]
 
 INPUT_RATE = 48000
 SAMPLE_RATE = 16000
@@ -134,19 +136,19 @@ def has_speech_text(text: str) -> bool:
 
 
 @dataclass(slots=True)
-class _SpeakerState:
-    speaker_name: str
+class _SpeakerState(OpenSpeaker):
     vad: sherpa_onnx.VoiceActivityDetector
     resampler: Downsampler
-    last_packet_at: float
 
 
-class OfflineTranscriber:
+class OfflineTranscriber(SpeakerTranscriber[_SpeakerState]):
     """Discord PCM -> per-speaker Silero VAD -> offline SenseVoice transcripts.
 
     ``model_dir`` holds SenseVoice ``model.int8.onnx`` + ``tokens.txt``; the VAD
     model is read from ``vad_dir`` (default: ``model_dir.parent / "vad"``).
     """
+
+    ENGINE = "sensevoice"
 
     def __init__(
         self,
@@ -157,119 +159,47 @@ class OfflineTranscriber:
         endpoint_silence_ms: int = 650,
         max_utterance_seconds: float = 25.0,
         vad_dir: Path | None = None,
+        on_closed: ClosedCallback | None = None,
     ) -> None:
+        super().__init__(
+            on_turn,
+            on_error,
+            endpoint_silence_ms=endpoint_silence_ms,
+            on_closed=on_closed,
+        )
         self._model_dir = model_dir
         self._vad_dir = vad_dir if vad_dir is not None else model_dir.parent / "vad"
-        self._on_turn = on_turn
-        self._on_error = on_error
-        self._endpoint_seconds = max(0.35, endpoint_silence_ms / 1000.0)
         self._max_speech_seconds = max(
             5.0, min(_VAD_MAX_SPEECH_SECONDS, max_utterance_seconds)
         )
-        self._packets: queue.Queue[tuple[int, str, bytes, float] | None] = queue.Queue(
-            maxsize=4096
-        )
-        self._thread: threading.Thread | None = None
-        self._stop = threading.Event()
-        self._ready = threading.Event()
-        self._startup_error: Exception | None = None
+        self._recognizer: sherpa_onnx.OfflineRecognizer | None = None
         self._vad_config: sherpa_onnx.VadModelConfig | None = None
         self._vad_pool: list[sherpa_onnx.VoiceActivityDetector] = []
 
-    def start(self) -> None:
-        if self._thread is not None and self._thread.is_alive():
-            return
-        self._stop.clear()
-        self._ready.clear()
-        self._startup_error = None
-        self._thread = threading.Thread(
-            target=self._run,
-            name="copilot-stt",
-            daemon=True,
+    def _load(self) -> None:
+        self._recognizer = self._create_recognizer()
+        self._vad_config = self._create_vad_config()
+        self._vad_pool = [self._new_vad()]
+
+    def _open(self, speaker_name: str, received_at: float) -> _SpeakerState:
+        return _SpeakerState(
+            speaker_name=speaker_name,
+            last_packet_at=received_at,
+            vad=self._take_vad(),
+            resampler=Downsampler(),
         )
-        self._thread.start()
-        if not self._ready.wait(timeout=30):
-            raise RuntimeError("Copilot STT 載入逾時。")
-        if self._startup_error is not None:
-            raise RuntimeError(f"Copilot STT 載入失敗：{self._startup_error}")
 
-    def stop(self) -> None:
-        self._stop.set()
-        try:
-            self._packets.put_nowait(None)
-        except queue.Full:
-            pass
-        if self._thread is not None:
-            self._thread.join(timeout=5)
-        self._thread = None
+    def _accept(
+        self, speaker_id: int, state: _SpeakerState, pcm: bytes, received_at: float
+    ) -> None:
+        samples = state.resampler.process(pcm_to_mono(pcm))
+        if len(samples):
+            state.vad.accept_waveform(samples)
+        self._drain(speaker_id, state)
 
-    def push_pcm(self, speaker_id: int, speaker_name: str, pcm: bytes) -> None:
-        if not pcm or self._stop.is_set():
-            return
-        item = (speaker_id, speaker_name, bytes(pcm), time.monotonic())
-        try:
-            self._packets.put_nowait(item)
-        except queue.Full:
-            _LOG.warning("copilot_stt_packet_dropped queue_full=true")
-
-    def _run(self) -> None:
-        try:
-            recognizer = self._create_recognizer()
-            self._vad_config = self._create_vad_config()
-            self._vad_pool = [self._new_vad()]
-        except Exception as exc:
-            self._startup_error = exc
-            self._ready.set()
-            return
-
-        speakers: dict[int, _SpeakerState] = {}
-        self._ready.set()
-        _LOG.info("copilot_stt_ready engine=sensevoice")
-
-        try:
-            while not self._stop.is_set():
-                try:
-                    item = self._packets.get(timeout=0.05)
-                except queue.Empty:
-                    item = None
-
-                if item is not None:
-                    speaker_id, speaker_name, pcm, received_at = item
-                    state = speakers.get(speaker_id)
-                    if state is None:
-                        state = _SpeakerState(
-                            speaker_name=speaker_name,
-                            vad=self._take_vad(),
-                            resampler=Downsampler(),
-                            last_packet_at=received_at,
-                        )
-                        speakers[speaker_id] = state
-                    else:
-                        state.speaker_name = speaker_name
-                        state.last_packet_at = received_at
-
-                    samples = state.resampler.process(pcm_to_mono(pcm))
-                    if len(samples):
-                        state.vad.accept_waveform(samples)
-                    self._drain(recognizer, speaker_id, state)
-
-                now = time.monotonic()
-                due = [
-                    speaker_id
-                    for speaker_id, state in speakers.items()
-                    if now - state.last_packet_at >= self._endpoint_seconds
-                ]
-                for speaker_id in due:
-                    self._finalize(recognizer, speaker_id, speakers.pop(speaker_id))
-        except Exception as exc:
-            _LOG.exception("copilot_stt_worker_failed")
-            self._on_error(f"Copilot STT 發生錯誤：{type(exc).__name__}")
-        finally:
-            for speaker_id, state in list(speakers.items()):
-                try:
-                    self._finalize(recognizer, speaker_id, state)
-                except Exception:
-                    _LOG.debug("copilot_stt_final_flush_failed", exc_info=True)
+    def _flush_at(self, state: _SpeakerState) -> float:
+        # The VAD cuts long speech itself; only silence closes the stream.
+        return state.last_packet_at + self._endpoint_seconds
 
     def _create_recognizer(self) -> sherpa_onnx.OfflineRecognizer:
         model = self._model_dir / "model.int8.onnx"
@@ -312,24 +242,15 @@ class OfflineTranscriber:
     def _take_vad(self) -> sherpa_onnx.VoiceActivityDetector:
         return self._vad_pool.pop() if self._vad_pool else self._new_vad()
 
-    def _finalize(
-        self,
-        recognizer: sherpa_onnx.OfflineRecognizer,
-        speaker_id: int,
-        state: _SpeakerState,
-    ) -> None:
+    def _finalize(self, speaker_id: int, state: _SpeakerState) -> None:
         state.vad.flush()
-        self._drain(recognizer, speaker_id, state)
+        self._drain(speaker_id, state)
         state.vad.reset()
         if len(self._vad_pool) < _VAD_POOL_SIZE:
             self._vad_pool.append(state.vad)
 
-    def _drain(
-        self,
-        recognizer: sherpa_onnx.OfflineRecognizer,
-        speaker_id: int,
-        state: _SpeakerState,
-    ) -> None:
+    def _drain(self, speaker_id: int, state: _SpeakerState) -> None:
+        recognizer = self._recognizer
         while not state.vad.empty():
             samples = np.asarray(state.vad.front.samples, dtype=np.float32)
             state.vad.pop()
