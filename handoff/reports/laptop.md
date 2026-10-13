@@ -1,6 +1,6 @@
-# 第 11 回合：卡在第 9 步（等待真人 Discord 驗收）
+# 第 11 回合：卡在第 9 步（D1 故障已修，等待重驗）
 
-更新：2026-10-13T17:31:44+08:00。使用者已重新授權完成第 11 回合，只做必要部分；因此只啟動本回合必要的 EdgeAgent 與 SilentTalk，其他清理後關閉的程式、自啟動設定保持原狀。
+更新：2026-10-13T18:54:26+08:00。使用者已重新授權完成第 11 回合，只做必要部分；因此只啟動本回合必要的 EdgeAgent 與 SilentTalk，其他清理後關閉的程式、自啟動設定保持原狀。
 
 ## 1. 機魂劇本
 
@@ -8,24 +8,25 @@
 
 ## 2. 時間與額度
 
-自動補驗從 2026-10-13T17:15:47+08:00 開始，17:27:55 角色與 Discord 就緒，17:31:44 重查狀態正常。API token／帳戶額度沒有可用證據，不推算。
+自動補驗從 2026-10-13T17:15:47+08:00 開始；D1 故障修正後 18:48:46 Discord 再次就緒。API token／帳戶額度沒有可用證據，不推算。
 
 ## 3. 目標完成度
 
-8/11：第 1–8 步均完成；D1、D2、D3 尚未取得真人驗收結果。第 10 步恢復完成，兩個服務均在執行。不能把本機工具探測、量測中的合成角色請求當作 Discord 真人通過；尚不符合 D1 通過後發布語音修正版的條件。
+8/11：第 1–8 步均完成；D1 真人確認沒聲音，已修正原因，待重驗；D2、D3 未驗。第 10 步恢復完成，兩個服務均在執行。不能把本機工具探測、量測中的合成角色請求當作 Discord 真人通過；尚不符合 D1 通過後發布公開語音修正版的條件。
 
-兩個 repo 已 pull，指定祖先檢查通過，SilentTalk HEAD／收件回條為 `03070c0798bcf7a4b7a33d544d039ca5fa556793`。SilentTalk 實際路徑為 `C:\Users\A8fm0\Downloads\SilentTalk`，工作檔舊路徑不存在。已通過的完整測試與 CI 直接沿用，沒有為恢復回合重跑。
+兩個 repo 已 pull，指定祖先檢查通過；SilentTalk 收件回條為 `03070c0798bcf7a4b7a33d544d039ca5fa556793`，修正後 HEAD 為 `11cc293a6a0b7bdf592717e5046ecb245737722b`。SilentTalk 實際路徑為 `C:\Users\A8fm0\Downloads\SilentTalk`，工作檔舊路徑不存在。只因新語音修正重跑受影響測試及完整驗證，未重跑雙管路量測。
 
 ## 4. 測試執行結果
 
-- SilentTalk 完整 pytest：367 passed、1 skipped、2 warnings，15.77 秒，exit 0。
+- SilentTalk 修正後完整 pytest：368 passed、1 skipped、2 warnings，16.15 秒，exit 0；語音相關測試 31 passed。新增原生 FFmpeg 回歸測試先紅（exit 3221225477），再綠。修改檔案 Ruff 與 `git diff --check` exit 0。CI https://github.com/nobody945946/SilentTalk/actions/runs/38385894450 completed／success。
+- D1 初次失敗時 STT segment 2、final turn 2、character line 2；語音 job failed 3，例外類型 FFmpegProcessError。隔離測試確定機魂音效的 aeval 在自帶 Windows FFmpeg 崩潰（3221225477／0xC0000005）；改用原生 tremolo 保留 48 Hz、0.44–1 增益範圍及其他效果。修正後真實 TTS 串流與機魂效果成功輸出 148 個 Opus 音訊包、exit 0、stream_error false；此為本機探測，不能算 D1 通過。
 - EdgeAgent 完整 pytest（`EDGE_AGENT_UI_REGRESSION=1`）：446 passed、6 skipped、1 warning，234.26 秒，exit 0。完整測試後增加的 runtime 路徑案例，連同部署測試補跑 23 passed，exit 0。
 - `ruff check edge_agent tests`、`git diff --check`：exit 0；模型頁對應測試先紅後綠。
 - 先前兩個 Windows 失敗來自舊權限 fixture，已修正，8 項相關測試通過；Unicorn 的原生 access-violation 診斷仍會印出，三項測試通過、pytest exit 0，未宣稱診斷消失。
 - 第 6 步：既有模型頁選上 fw3n，SilentTalk 設定讀回也是 fw3n，無須改設定。停機量測前 SilentTalk 原本未執行、log 最後更新 2026-10-09，無最近十分鐘語音活動。將量測集中在同一次停機內，做完才一次恢復兩個 app。
 - `tests/lanes_check.py --install C:\Users\A8fm0\EdgeAgent`：exit 0、runs 2，所有量測請求 status 200；沒有重試或改記憶體設定。
-- 正常啟動器 exit 0，`app.py --character-mode` 執行；新 session 的 `discord_ready`、`character_lease_connected`、`copilot_runtime_ready` 各 1，啟動 warning／error 0。
-- 第 7 步正式 SilentTalk 租用的狀態（17:31:44 查核）：
+- 正常啟動器 exit 0，`app.py --character-mode` 執行；初始 session 的 `discord_ready`、`character_lease_connected`、`copilot_runtime_ready` 各 1，啟動 warning／error 0。修正後只用既有 restart_silenttalk.ps1 重啟 SilentTalk，未重啟 Edge 或遠端連線程式；18:48:46 新 session 的 discord_ready 1、voice_receive_started 1，查核 error 0。
+- 第 7 步正式 SilentTalk 租用的狀態（修正重啟後再確認）：
 
 ```json
 {"mode":"character","ready":true,"context_size":65536,"inference_slots":2,"model":"gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf","lora":"machine-spirit-fw3n.q8_0.gguf","character_lora":"machine-spirit-fw3n.q8_0.gguf"}
@@ -41,9 +42,9 @@
 
 ## 5. 修改檔案與 commit
 
-本次補驗沒有改程式碼。前段 EdgeAgent `206efdce5bc42214b10f443009642546e58e577c` 已推 `copilot-story-mode`，CI `https://github.com/nobody945946/EdgeAgent/actions/runs/38373694367` completed／success；first-launch job 依工作流程跳過。
+SilentTalk `11cc293a6a0b7bdf592717e5046ecb245737722b` 已推 `copilot-story-mode`：只修改 `silenttalk/voice_styles.py` 的機魂效果 owner 與 `tests/test_opus_source.py` 原生編碼回歸測試。前段 EdgeAgent `206efdce5bc42214b10f443009642546e58e577c` 已推 `copilot-story-mode`，CI `https://github.com/nobody945946/EdgeAgent/actions/runs/38373694367` completed／success；first-launch job 依工作流程跳過。
 
-該 commit 修改 `README.md`、`scripts/bootstrap.ps1`、`edge_agent/runtime.py`、`edge_agent/web.py`、`tests/test_bootstrap_windows.py`、`tests/test_deploy.py`、`tests/test_web_ui.py`、`tests/test_sdk_agent.py`、`tests/test_sdk_permissions.py`、`tests/browser_check.mjs`：EdgeAgent 自備 Python／Git／Node／PowerShell，既有 venv 遷移保留套件，共用 adapter 說明修正，Windows fixture 更新。SilentTalk 程式碼沒有修改。本回報整份重寫到 `laptop-report`。
+EdgeAgent 該 commit 修改 `README.md`、`scripts/bootstrap.ps1`、`edge_agent/runtime.py`、`edge_agent/web.py`、`tests/test_bootstrap_windows.py`、`tests/test_deploy.py`、`tests/test_web_ui.py`、`tests/test_sdk_agent.py`、`tests/test_sdk_permissions.py`、`tests/browser_check.mjs`：EdgeAgent 自備 Python／Git／Node／PowerShell，既有 venv 遷移保留套件，共用 adapter 說明修正，Windows fixture 更新。本回報仍只保留本回合最新狀態。
 
 ## 6. 記憶體與速度
 
@@ -55,12 +56,12 @@
 
 | 項目 | 狀態 |
 |---|---|
-| D1 真人語音回答 | 待使用者進指定頻道講話、確認聽到 |
+| D1 真人語音回答 | 初次沒聲音；原因修正完成，待真人重驗 |
 | D2 主人串唯讀計數 | 待驗 |
 | D3 Agent 工作時並行語音 | 待驗 |
 | D4 真人感想 | 未取得；不擴張必要驗收 |
 
-只用伺服器 729722190857240717、語音頻道 729722190857240721、工作區 `C:\Users\A8fm0\EdgeAgentTest`。主人批准由使用者自己按。17:28 已提出 D1 請求；截至本次回報未取得 D1 回答，不自動選擇「有聽到」。
+只用伺服器 729722190857240717、語音頻道 729722190857240721、工作區 `C:\Users\A8fm0\EdgeAgentTest`。主人批准由使用者自己按。已在修正部署後提出 D1 重驗；未收到結果，不自動選擇「有聽到」。
 
 ## 8. 紀錄目錄
 
@@ -68,10 +69,12 @@
 
 ## 9. 使用者回饋
 
-使用者重新要求完成第 11 回合、只做必要部分，並詢問是否需留在語音頻道。已告知量測期間無須留在頻道，恢復後才安排真人驗收。這些是工作方向與安排，不是 D4 試聽感想。
+使用者重新要求完成第 11 回合、只做必要部分，並詢問是否需留在語音頻道；初次 D1 回饋沒聲音。另回報 Quest 3 使用目前 Codex 輸入框時，觸控板造成原始滑鼠回報字串與意外送出。已按指定 Machinehand 連線文件確認 Quest→Meta Browser→VS Code web→Codex CLI 的路徑，沒有更動連線、鍵盤助手或自啟動。
+
+quest_touchpad_mouse_reporting_reset：確認目前 Codex TUI PID 9652 所屬 console，透過 Windows console API 將 input mode 152 改為 136（只關 ENABLE_MOUSE_INPUT），成功寫入 53 bytes 的關閉滑鼠回報控制序列。這是目前終端的暫時調整，尚待使用者觸控板重驗，沒有宣稱永久修正或重啟 Codex。未讀任何鍵盤輸入、console buffer、密碼、token 或對話紀錄。
 
 ## 10. 給接手模型的交接指示
 
-接續第 9 步，一次只請使用者做一件事：D1 喊機魂並聽語音；通過後 D2 主人 @ 開 Agent 串問 .tmp 數，應不問批准且結果貼串；接著 D3 主人在串內要求寫小程式並執行、自己批准，同時語音叫機魂，記錄角色延遲。只查工作區檔案 metadata、不讀內容；數字與使用者主動給的感想才能寫回報。
+接續第 9 步：先收 D1 修正後重驗結果；通過後 D2 主人 @ 開 Agent 串問 .tmp 數，應不問批准且結果貼串；接著 D3 主人在串內要求寫小程式並執行、自己批准，同時語音叫機魂，記錄角色延遲。只查工作區檔案 metadata、不讀內容；數字與使用者主動給的感想才能寫回報。另收目前 Codex 觸控板重驗結果；若仍有問題，先驗證終端模式是否被重新啟用，不擴張到重裝遠端桌面或重啟目前對話。
 
 不要重跑已通過的完整測試、CI、雙管路或已確認成功的真人項目，不要啟動其他被清理關閉的程式。兩個服務現在正常執行，原有 EdgeAgent 獨立 runtime 保留。D1–D3 未通過前不要把回合寫成完成；D1 未通過前不要通知可以發布公開語音修正版。真人全部通過後整份更新本回報並推 `laptop-report`，再 pull；工作檔沒換即交付。
