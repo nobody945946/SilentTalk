@@ -186,13 +186,18 @@ _GATE_QUESTION = {
         "別人在私下聊、你剛說過話、或你沒什麼好補充都不算。只回答 是 或 否）"
     ),
     # A line that called the character: does it ask for work that stays within
-    # this chat (its posts and the public web in, one message out)?
+    # this chat (its posts and the public web in, one message out)? Asked how
+    # it is said: "你覺得明天會下雨嗎" and "我要不要帶傘" need the forecast
+    # as much as "明天會下雨嗎" (laptop round 11: whole spoken lookups said
+    # as opinions got 否). Spec v3.
     "chat_task": (
         "（先判斷：最後這句是不是明確要你交出一樣成品？成品只有這幾種：查到的資料或消息、寫好的程式碼、"
         "寫好的文章或信、聊天室裡貼的圖或檔案的內容、一段翻譯或解釋。"
-        "凡是問到新聞、日期、價格、比分、天氣這類你不查就不確定的事，都算要查到的資料。"
-        "打招呼、閒聊、問你的看法或感受、開玩笑、角色扮演、要你唱歌講笑話，都答 否；"
-        "要你動主人的電腦或檔案、在電腦上執行東西、想起別處的對話，也都答 否。只回答 是 或 否）"
+        "凡是要查才知道的事（新聞、日期、價格、比分、天氣、營業時間這類你不查就不確定的事），"
+        "不管怎麼問（「你覺得」「我要不要」「你猜」「知道…嗎」都一樣），都算要查到的資料。"
+        "打招呼、閒聊、問你自己的看法或感受（不用查就能回答的）、開玩笑、角色扮演、要你唱歌講笑話，都答 否；"
+        "要你動主人的電腦或檔案、說出主人的檔案、紀錄或私事、在電腦上執行東西、想起別處的對話，也都答 否。"
+        "只回答 是 或 否）"
     ),
 }
 # Asked after the "chat_task" gate said yes: the work, for the Agent.

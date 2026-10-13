@@ -56,13 +56,9 @@ HistoryCallback = Callable[[int, int, int], Awaitable[list[tuple[int, str, str, 
 
 # "嗯", "好", "喔" are context, not something worth four reply options.
 _MIN_TRIGGER_CHARS = 2
-# Speech recognition closes a segment at half a second of silence, so "機魂，
-# (pause) 幫我查明天天氣" arrives as two lines and only the first has the name
-# (laptop round 11: voice lookups that named it never reached the Agent). A
-# spoken line that is nothing but the call ("機魂", "機魂在嗎") passes it on
-# to the same speaker's next spoken line, if that comes this soon (after the
-# call, or after the character's answer to it).
-_BARE_CALL_CHARS = 2
+# A bare call (NameMatcher.bare) passes it on to the same speaker's next
+# spoken line, if that comes this soon (after the call, or after the
+# character's answer to it).
 _CALL_CARRY_SECONDS = 12.0
 # one would slow every later reply there).
 # whole result is typed into the chat).
@@ -459,7 +455,7 @@ class CopilotRuntime:
             called_at = self._called_by.pop(speaker_id, None)
             if called_at is not None and activity - called_at <= _CALL_CARRY_SECONDS:
                 addressed = True
-            if self._names(text) and len(_compact(self._names.rest(text))) <= _BARE_CALL_CHARS:
+            if self._names.bare(text):
                 self._called_by[speaker_id] = activity
         trigger = _Trigger(
             speaker_name,

@@ -36,6 +36,8 @@ _MAX_WAITING = 3
 _QUEUED = "前一件工作還在做，這件已經排在後面，做完就接著做。"
 _QUEUE_FULL = "前面已經排了好幾件工作，這件沒有收下，請等前面的做完再交代。"
 _STOPPED = "工作被中斷了，沒有結果。"
+# What a chat anyone is in hears of a failed lookup: the reason's code only.
+_FAILED = "工作失敗了（{code}）。"
 
 
 _FAILURE_CODE = re.compile(r"[a-z][a-z0-9_]{0,39}")
@@ -284,7 +286,7 @@ class AgentTaskRunner:
             elif kind == "error" and self._agent_scope == "public":
                 # EdgeAgent's own words can name this computer's paths; a
                 # chat anyone is in gets the reason's code only.
-                result = f"工作失敗了（{failure_code(payload.get('reason'))}）。"
+                result = _FAILED.format(code=failure_code(payload.get("reason")))
             elif kind == "error":
                 result = str(payload.get("message") or "工作失敗了。")
             else:

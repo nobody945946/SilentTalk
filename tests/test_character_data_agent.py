@@ -18,16 +18,17 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts" / "dev"))
 
 import chardata_check  # noqa: E402
-import chardata_external  # noqa: E402
 import chardata_filter  # noqa: E402
 import chardata_render  # noqa: E402
 import chardata_requests  # noqa: E402
 import chardata_scripts  # noqa: E402
 import chardata_store  # noqa: E402
+import chardata_write  # noqa: E402
 import machine_spirit  # noqa: E402
 
 from silenttalk.copilot.llm import LocalReplyModel
 from silenttalk.copilot.reply_templates import _CHAT_TASK_ASK, TASK_HINTS
+from silenttalk.copilot.task_runner import _FAILED, _QUEUED
 from silenttalk.persona import MACHINE_SPIRIT, persona_to_dict  # noqa: E402
 
 NAME = MACHINE_SPIRIT.name
@@ -191,7 +192,17 @@ def _app_requests(
                 key=(index, "task_text"),
                 text=line.get("task", ""),
             )
-            if work:
+            if work and lines[index + 1].get("queued"):
+                # The Agent is busy: the work waits and the asker hears so
+                # (task_runner.dispatch), as news of the Agent's.
+                asyncio.run(model.chat_task(turns=history, engagement="called"))
+                reply.update(key=(index + 1, "report"), text=lines[index + 1]["t"])
+                asyncio.run(
+                    model.character_turn(
+                        turns=history, engagement="called", task_hint=("report", _QUEUED)
+                    )
+                )
+            elif work:
                 task = asyncio.run(model.chat_task(turns=history, engagement="called"))
                 reply.update(key=(index, "ack"), text=lines[index + 1]["t"])
                 asyncio.run(
@@ -238,7 +249,7 @@ def _app_requests(
 
 
 def test_every_row_is_the_request_the_app_makes(chardata: Path) -> None:
-    scripts = [_stored(TEACHER_CHAT), _stored(TEACHER_THREAD, "thread")]
+    scripts = [_stored(TEACHER_CHAT), _stored(TEACHER_THREAD, "thread"), _stored(V3_CHAT)]
     rows = _render(chardata, scripts)
     raw = json.loads((chardata / "personas.jsonl").read_text(encoding="utf-8"))
     for number, script in enumerate(scripts):
@@ -296,7 +307,10 @@ def _insert(index: int, *lines: dict[str, Any]) -> dict[str, Any]:
     (_drop(8), "work without report"),
     (_insert(6, {"s": "阿驗", "t": "機魂 測試工作二", "to": NAME, "ask": "work",
                  "task": "測試指示二", "result": "測試結果二"},
-             {"s": NAME, "t": "測試接下二", "to": "阿驗"}), "work while busy"),
+             {"s": NAME, "t": "測試接下二", "to": "阿驗"}), "busy work not told it waits"),
+    (_edit(3, queued=True), "queued without busy work"),
+    (_insert(0, {"s": OWNER, "t": "機魂", "to": NAME},
+             {"s": OWNER, "t": "測試閒聊己", "to": "小試"}), "bare call not followed"),
     (_insert(7, {"s": NAME, "t": "測試插話", "to": "大家"}), "speaks uncalled"),
     (_edit(4, t="機魂 測試工作一（附件：test.png）"), "attachment not typed"),
 ])
@@ -448,58 +462,125 @@ def test_the_builtin_card_is_the_one_the_app_ships(
         machine_spirit.builtin(tmp_path / "data", 3)
 
 
-# The chats the laptop's agent wrote against (persona and skeletons).
-TASKS = Path(__file__).resolve().parents[1] / "handoff/tasks/machine-spirit-1.json"
-
-
-def _chats() -> list[dict]:
-    return json.loads(TASKS.read_text(encoding="utf-8"))["chats"]
-
-
-def test_skeleton_chats_play_out_as_the_app_would_by_construction() -> None:
+@pytest.mark.parametrize("seed", range(60))
+def test_generated_chats_play_out_as_the_app_would_by_construction(seed: int) -> None:
     """A skeleton fixes who speaks and what kind of line; whatever words the
-    writer fills in, the chat keeps the app's rules: every call answered next,
-    one piece of work at a time, reported before the next."""
-    for item in _chats():
-        spec = item["spec"]
-        words = [f"測試第{n}句" for n in range(len(spec["skeleton"]))]
-        data = {"lines": words, "work": [{"task": "測試指示", "result": "測試結果"}] * 3}
-        assembled = chardata_external.assemble_agent_chat(data, spec, NAME, ["機魂", "馬基納"])
-        lines, reason = chardata_scripts.check_script(assembled, NAME, spec, ["機魂", "馬基納"])
-        assert reason == "" and lines, item["id"]
+    teacher fills in, the chat keeps the app's rules: every call answered
+    next (a bare call's request carried to its speaker's next line), work
+    accepted or told it waits, every piece reported in turn."""
+    raw = {**persona_to_dict(MACHINE_SPIRIT), "lore": []}
+    spec = chardata_write.chat_request(raw, __import__("random").Random(f"t:{seed}"), set())
+    if spec["kind"] == "thread":
+        words = {"lines": [{"t": f"測試第{n}則", "changes": n == 0} for n in range(spec["length"])]}
+        assert chardata_scripts.check_script(words, NAME, spec, ["機魂", "馬基納"])[1] == ""
+        assert "changes" in chardata_write.thread_prompt(MACHINE_SPIRIT, spec)
+        return
+    words = [f"測試第{n}句" for n in range(len(spec["skeleton"]))]
+    calls = sum(slot.get("ask") == "work" for slot in spec["skeleton"])
+    data = {"lines": words, "work": [{"task": "測試指示", "result": "測試結果"}] * calls}
+    assembled = chardata_write.assemble_chat(data, spec, NAME, ["機魂", "馬基納"])
+    lines, reason = chardata_scripts.check_script(assembled, NAME, spec, ["機魂", "馬基納"])
+    assert reason == "" and lines, (seed, reason)
+    prompt = chardata_write.chat_prompt(MACHINE_SPIRIT, spec)
+    assert f"lines 共 {len(spec['skeleton'])} 句" in prompt
+    # How work ended is the app's, not the teacher's.
+    for slot, line in zip(spec["skeleton"], assembled["lines"]):
+        if slot.get("ask") == "work" and slot["outcome"] == "failed":
+            assert line["result"] == _FAILED.format(code=slot["code"])
+
+
+def test_the_draws_cover_what_v3_adds() -> None:
+    raw = {**persona_to_dict(MACHINE_SPIRIT), "lore": []}
+    rng = __import__("random").Random("cover")
+    specs = [chardata_write.chat_request(raw, rng, set()) for _ in range(200)]
+    chats = [s for s in specs if s["kind"] == "chat"]
+    slots = [slot for s in chats for slot in s["skeleton"]]
+    assert 0.1 < (len(specs) - len(chats)) / len(specs) < 0.3  # the owner's threads
+    assert sum(s["bare"] == "split" for s in chats) > 20 and sum(s["bare"] == "answered" for s in chats) > 20
+    assert sum(slot["kind"] == "queued" for slot in slots) > 20
+    assert sum(slot.get("outcome") == "failed" for slot in slots) > 5
+    assert sum(chardata_write.AS_OPINION in slot.get("note", "") for slot in slots
+               if slot.get("ask") == "work") > 40
+    assert sum(s["computer"] is not None and s["computer"]["what"] in chardata_write.PROBES
+               and s["computer"]["by"] != s["owner"] for s in chats) > 10
 
 
 def test_a_chat_line_that_names_the_character_in_passing_loses_the_name() -> None:
-    spec = _chats()[0]["spec"]
+    raw = {**persona_to_dict(MACHINE_SPIRIT), "lore": []}
+    rng = __import__("random").Random("names")
+    spec = next(s for s in iter(lambda: chardata_write.chat_request(raw, rng, set()), None)
+                if s["kind"] == "chat")
     chat_at = next(i for i, slot in enumerate(spec["skeleton"]) if slot["kind"] == "chat")
     words = [f"測試第{n}句" for n in range(len(spec["skeleton"]))]
     words[chat_at] = "機魂剛剛那句好好笑"
-    assembled = chardata_external.assemble_agent_chat({"lines": words, "work": []}, spec, NAME, ["機魂", "馬基納"])
+    assembled = chardata_write.assemble_chat({"lines": words, "work": []}, spec, NAME, ["機魂", "馬基納"])
     assert "機魂" not in assembled["lines"][chat_at]["t"]
 
 
-def test_the_writers_answers_are_checked_like_the_apps_rules(tmp_path: Path) -> None:
-    """external-check, run where the answers were written: every chat must be
-    usable, and each answer names the model that wrote it."""
-    job = json.loads(TASKS.read_text(encoding="utf-8"))
-    job["chats"] = job["chats"][:3]
-    tasks = tmp_path / "tasks.json"
-    tasks.write_text(json.dumps(job, ensure_ascii=False), encoding="utf-8")
-    specs = [item["spec"] for item in job["chats"]]
+# Spec v3 in one chat: a bare call whose request follows at once, work asked
+# while the Agent is busy, a failed lookup, a bare call answered and its
+# speaker's next line carried (test fixture only).
+V3_CHAT = {
+    "summary_before": "",
+    "concerns": ["測試心事一"],
+    "lines": [
+        {"s": OWNER, "t": "測試閒聊甲", "to": "小試"},
+        {"s": "小試", "t": "測試閒聊乙", "to": OWNER},
+        {"s": OWNER, "t": "機魂", "to": NAME},
+        {"s": OWNER, "t": "測試你覺得明天", "to": NAME, "ask": "work", "task": "測試指示一",
+         "result": "測試結果一"},
+        {"s": NAME, "t": "測試接下一", "to": OWNER},
+        {"s": "阿驗", "t": "機魂 測試工作二", "to": NAME, "ask": "work", "task": "測試指示二",
+         "result": "工作失敗了（read_timeout）。"},
+        {"s": NAME, "t": "測試排隊二", "to": "阿驗", "queued": True},
+        {"s": "小試", "t": "測試閒聊丙", "to": "大家"},
+        {"s": NAME, "t": "測試轉述一", "to": OWNER, "report": True},
+        {"s": "阿驗", "t": "測試閒聊丁", "to": "大家"},
+        {"s": NAME, "t": "測試轉述二", "to": "阿驗", "report": True},
+        {"s": "小試", "t": "機魂？", "to": NAME, "ask": "talk"},
+        {"s": NAME, "t": "測試應聲", "to": "小試"},
+        {"s": "小試", "t": "測試你今天心情", "to": NAME, "ask": "talk"},
+        {"s": NAME, "t": "測試回答一", "to": "小試"},
+        {"s": OWNER, "t": "測試閒聊戊", "to": "大家"},
+    ],
+}
 
-    def answer(n: int, spec: dict, **extra) -> str:
-        words = [f"測試第{i}句" for i in range(len(spec["skeleton"]))]
-        return json.dumps({"id": f"ms{n:03d}", "by": "測試模型", "lines": words,
-                           "work": [{"task": "測試指示", "result": "測試結果"}] * 3} | extra,
-                          ensure_ascii=False)
 
-    answers = tmp_path / "answers.jsonl"
-    answers.write_text("\n".join([answer(1, specs[0]), answer(2, specs[1], lines=["太短"]),
-                                  answer(3, specs[2], by="")]), encoding="utf-8")
-    scripts, problems = chardata_external.external_answers(tasks, answers)
-    assert [s["spec"]["teacher"] for s in scripts] == ["測試模型"]
-    assert len(problems) == 2 and "needs" in problems[0] and '"by"' in problems[1]
-    answers.write_text("\n".join(answer(n, spec) for n, spec in enumerate(specs, 1)), encoding="utf-8")
-    assert len(chardata_external.external_answers(tasks, answers)[0]) == 3
-    answers.write_text(answer(1, specs[0]), encoding="utf-8")
-    assert chardata_external.external_answers(tasks, answers)[1] == ["ms002: no answer", "ms003: no answer"]
+def test_v3_calls_and_waiting_work_play_out_as_the_app_does() -> None:
+    lines, reason = _check(V3_CHAT)
+    assert reason == ""
+    bare = next(line for line in lines if line["t"] == "機魂")
+    assert bare.get("bare") and "ask" not in bare
+    carried = [line for line in lines if line.get("carried")]
+    # Carried calls keep their words: no name put in front.
+    assert [line["t"] for line in carried] == ["測試你覺得明天", "測試你今天心情"]
+    assert next(line for line in lines if line["t"] == "測試排隊二").get("queued")
+    # Reported oldest first, each after the result the app typed.
+    results = [line["t"] for line in lines if line.get("agent_result")]
+    assert results == ["測試結果一", "工作失敗了（read_timeout）。"]
+
+
+def test_v3_rows_ask_what_the_app_asks(chardata: Path) -> None:
+    rows = _render(chardata, [_stored(V3_CHAT)])
+    lines = _stored(V3_CHAT)["lines"]
+    at = {line["t"]: n for n, line in enumerate(lines)}
+    got = {(r["index"], r["kind"]): r for r in rows}
+    # The bare call that its request followed at once asks nothing.
+    assert not [key for key in got if key[0] == at["機魂"]]
+    assert got[(at["測試你覺得明天"], "gate_chat_task")]["messages"][-1]["content"] == "是"
+    waits = got[(at["測試排隊二"], "report")]
+    assert waits["messages"][-1]["content"] == "測試排隊二"
+    assert TASK_HINTS["report"].format(detail=_QUEUED) in waits["messages"][-2]["content"]
+    assert (at["機魂 測試工作二"], "ack") not in got
+    failed = got[(at["測試轉述二"], "report")]["messages"][-2]["content"]
+    assert TASK_HINTS["report"].format(detail="工作失敗了（read_timeout）。") in failed
+    assert got[(at["測試你今天心情"], "gate_chat_task")]["messages"][-1]["content"] == "否"
+
+
+def test_an_answer_that_promises_work_is_not_trained(chardata: Path) -> None:
+    """Nothing went to the Agent on talk: "我去查" there is a promise nobody
+    keeps (laptop round 11)."""
+    data = _edit(3, t="我去查一下再跟你說")
+    rows = _render(chardata, [_stored(data)])
+    assert not [r for r in rows if r["kind"] == "line" and r["index"] == 2]
+    assert [r for r in rows if r["kind"] == "gate_chat_task" and r["index"] == 2]

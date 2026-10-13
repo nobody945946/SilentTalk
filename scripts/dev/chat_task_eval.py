@@ -6,7 +6,8 @@ computer, which the "public" scope then cannot do - to the Agent.
 
 Runs the product's own question (LocalReplyModel.chat_task's gate, the
 machine-spirit card) against a model served here with EdgeAgent's own server
-arguments. Data: chat_task_eval.jsonl (EVAL ONLY, written with Claude).
+arguments. Data: chat_task_eval.jsonl (EVAL ONLY, written with Claude): one
+spoken line each, or (spec v3) a few lines of chat whose last is asked about.
 
   .venv/bin/python scripts/dev/chat_task_eval.py [--model GGUF] [--out FILE]
 """
@@ -31,6 +32,18 @@ from silenttalk.persona import MACHINE_SPIRIT  # noqa: E402
 DATA = Path(__file__).with_name("chat_task_eval.jsonl")
 PORT = 18413
 OWNER_ID = 1
+
+
+def chat_of(item: dict, speaker: str, name: str) -> list[ConversationTurn]:
+    """The chat an item asks about: one spoken line, or its turns (the last is
+    the line asked about; "self" ones are the character's own)."""
+    if "text" in item:
+        return [ConversationTurn(7, speaker, item["text"], via="voice")]
+    ids = {speaker: 7}
+    return [ConversationTurn(0, name, turn["text"], is_self=True, via="voice") if turn.get("self")
+            else ConversationTurn(ids.setdefault(turn["speaker"], 7 + len(ids)), turn["speaker"],
+                                  turn["text"], via="voice")
+            for turn in item["turns"]]
 
 
 def main() -> None:
@@ -62,7 +75,7 @@ def main() -> None:
     records = []
     try:
         for item in items:
-            turns = [ConversationTurn(7, speaker, item["text"], via="voice")]
+            turns = chat_of(item, speaker, persona.name)
             started = time.monotonic()
             gate = model.gate_messages(turns=turns, question="chat_task")
             said = model.transport.request_gate(gate, args.lora is not None) == "是"
