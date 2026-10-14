@@ -67,3 +67,7 @@
 {"id": "f06", "turns": [{"speaker": "小林", "text": "機魂 幫我查一下阿遠說的那家拉麵店開在哪"}], "task": true}
 {"id": "b01", "turns": [{"speaker": "阿遠", "text": "機魂 幫我查今天的油價"}, {"self": true, "text": "收到，交給思考機去查了。"}, {"speaker": "小林", "text": "機魂 那順便看一下明天會不會下雨"}], "task": true}
 {"id": "b02", "turns": [{"speaker": "阿遠", "text": "機魂 幫我寫一封道歉信"}, {"self": true, "text": "好，思考機去寫了。"}, {"speaker": "小林", "text": "機魂 你在忙喔"}], "task": false}
+{"id": "k01", "text": "機魂 STC 是什麼", "task": false}
+{"id": "k02", "text": "機魂 憎惡智能到底是啥東西", "task": false}
+{"id": "k03", "text": "機魂 機械神教拜的是什麼", "task": false}
+{"id": "k04", "text": "機魂 遞迴是什麼意思", "task": false}
