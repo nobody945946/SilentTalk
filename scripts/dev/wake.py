@@ -111,12 +111,15 @@ def wait() -> int:
     selector = selectors.DefaultSelector()
     inbox = channel.bell("devbox")
     selector.register(inbox, selectors.EVENT_READ, "inbox")
-    tail = None
-    if queue_running():
-        tail = subprocess.Popen(["tail", "-n", "0", "-F", str(LOG)], stdout=subprocess.PIPE,
-                                stderr=subprocess.DEVNULL)
-        os.set_blocking(tail.stdout.fileno(), False)
-        selector.register(tail.stdout, selectors.EVENT_READ, "log")
+    # The log is followed even with no queue running: a queue started during
+    # the wait (a relaunch) wakes it with its events (10/14: one relaunched
+    # while this slept went unwatched for an hour). Silence counts only while
+    # a queue runs.
+    tail = subprocess.Popen(["tail", "-n", "0", "-F", str(LOG)], stdout=subprocess.PIPE,
+                            stderr=subprocess.DEVNULL)
+    os.set_blocking(tail.stdout.fileno(), False)
+    selector.register(tail.stdout, selectors.EVENT_READ, "log")
+    awake = queue_running()
     found, events, buffer, lines, last = "", [], b"", 0, start
     try:
         while not found:
@@ -124,7 +127,7 @@ def wait() -> int:
             timers = [deadline] + [entry["due"] for entry in state["ci"]]
             if state.get("laptop_due"):
                 timers.append(state["laptop_due"])
-            if tail is not None:
+            if awake:
                 timers.append(last + QUIET)
             for key, _ in selector.select(max(0.0, min(timers) - time.time())):
                 if key.data == "inbox":
@@ -143,7 +146,7 @@ def wait() -> int:
                     *complete, buffer = buffer.split(b"\n")
                     for raw in complete:
                         line = raw.decode("utf-8", "replace")
-                        lines, last = lines + 1, time.time()
+                        lines, last, awake = lines + 1, time.time(), True
                         if EVENT.search(line):
                             events.append(line)
                             found = found or line
@@ -166,18 +169,18 @@ def wait() -> int:
                 STATE.write_text(json.dumps(state), encoding="utf-8")
             if reports:
                 found = "\n".join(reports)
-            elif tail is not None and max(last, LOG.stat().st_mtime) + QUIET <= now:
+            elif awake and max(last, LOG.stat().st_mtime) + QUIET <= now:
                 found = f"SILENCE: the log has not grown for {round((now - last) / 60)} min"
-            elif tail is not None and LOG.stat().st_mtime > last:
+            elif awake and LOG.stat().st_mtime > last:
                 last = LOG.stat().st_mtime  # a progress bar rewrites its line with \r
             elif now >= deadline:
-                found = (f"ALIVE: {lines} progress lines, no step event; re-arm" if tail is not None
+                found = (f"ALIVE: {lines} progress lines, no step event; re-arm" if awake
                          else "ASLEEP: nothing happened; re-arm")
     finally:
         if tail is not None:
             tail.kill()
         os.close(inbox)
-    print(f"{time.strftime('%F %T')} ({'awake' if tail is not None else 'asleep'})")
+    print(f"{time.strftime('%F %T')} ({'awake' if awake else 'asleep'})")
     print(found)
     for line in events[:30]:
         if line != found:
