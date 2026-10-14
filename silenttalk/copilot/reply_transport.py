@@ -4,7 +4,6 @@ import json
 import os
 import urllib.error
 import urllib.request
-from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import NoReturn
 
@@ -70,14 +69,13 @@ class ReplyTransport:
         self,
         system: str,
         prompt: str,
-        on_lines: Callable[[str], None] | None = None,
         max_tokens: int = 240,
     ) -> str:
         messages = [
             {"role": "system", "content": system},
             {"role": "user", "content": "/no_think\n" + prompt},
         ]
-        return self.request_messages(messages, on_lines, max_tokens)
+        return self.request_messages(messages, max_tokens)
 
     def request_gate(
         self, messages: list[dict[str, str]], character: bool = True
@@ -143,7 +141,6 @@ class ReplyTransport:
     def request_messages(
         self,
         messages: list[dict[str, str]],
-        on_lines: Callable[[str], None] | None = None,
         max_tokens: int = 240,
         character: bool = False,
         temperature: float = 0.65,
@@ -158,52 +155,10 @@ class ReplyTransport:
             "temperature": temperature,
             "top_p": 0.85,
             "max_tokens": max_tokens,
-            "stream": on_lines is not None,
+            "stream": False,
         }
-        request = urllib.request.Request(
-            self.base_url + "/v1/chat/completions",
-            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-            headers=self._headers(),
-            method="POST",
-        )
-        seen = self.lease.statuses_seen
-        try:
-            with urllib.request.urlopen(
-                request, timeout=self.timeout_seconds
-            ) as response:
-                if on_lines is not None:
-                    return consume_stream(response, on_lines)
-                body = json.loads(response.read().decode("utf-8"))
-        except urllib.error.HTTPError as exc:
-            self._http_error(exc, seen)
-        except (OSError, urllib.error.URLError, json.JSONDecodeError) as exc:
-            raise LocalLLMError(f"本機回覆模型失敗：{exc}") from exc
-
+        body = self._post(payload)
         try:
             return str(body["choices"][0]["message"]["content"] or "")
         except (KeyError, IndexError, TypeError) as exc:
             raise LocalLLMError("本機回覆模型回傳格式異常。") from exc
-
-
-def consume_stream(events: Iterable[bytes], on_lines: Callable[[str], None]) -> str:
-    """Read an OpenAI-style SSE stream; call `on_lines(text so far)` whenever a
-    line is complete. Returns the whole text."""
-    text = ""
-    for raw in events:
-        line = raw.decode("utf-8", errors="replace").strip()
-        if not line.startswith("data:"):
-            continue
-        data = line[5:].strip()
-        if data == "[DONE]":
-            break
-        try:
-            choice = json.loads(data)["choices"][0]
-        except (json.JSONDecodeError, KeyError, IndexError, TypeError):
-            continue
-        piece = (choice.get("delta") or {}).get("content") or ""
-        if not piece:
-            continue
-        text += piece
-        if "\n" in piece:
-            on_lines(text[: text.rfind("\n")])
-    return text

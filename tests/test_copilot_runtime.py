@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from silenttalk.config import CopilotConfig
-from silenttalk.conversation import VOICE_ROOM, ConversationTurn, ReplySuggestions
+from silenttalk.conversation import VOICE_ROOM, ConversationTurn
 from silenttalk.copilot.character_state import (
     CharacterState,
     CharacterStateStore,
@@ -48,15 +48,6 @@ class SlowFakeLLM:
     def set_owner(self, user_id: int, name: str) -> None:
         self.owner_name = name
 
-    async def suggest(
-        self, *, turns, summary: str = "", trigger_speaker: str, trigger_text: str,
-        on_partial=None,
-    ) -> ReplySuggestions:
-        self.calls.append(trigger_text)
-        await self.release.wait()
-        self.release.clear()
-        return ReplySuggestions(trigger_speaker, trigger_text, agree="好")
-
     def set_persona(self, persona: object) -> None:
         pass
 
@@ -84,12 +75,11 @@ class SlowFakeLLM:
 async def _runtime(
     tmp_path: Path, *, text: bool = False, config: CopilotConfig | None = None
 ) -> tuple[CopilotRuntime, SlowFakeLLM, list]:
-    delivered: list[ReplySuggestions | ConversationTurn | str] = []
+    delivered: list[ConversationTurn | tuple] = []
     runtime = CopilotRuntime(
         tmp_path,
         config or CopilotConfig(),
         owner_user_id=1,
-        on_suggestions=delivered.append,
         on_error=lambda _: None,
         on_turn=delivered.append,
         on_character_line=lambda line: delivered.append(("spoke", line)),
@@ -113,7 +103,7 @@ async def _runtime(
     runtime.life._loop = runtime._loop
     runtime.sessions._loop = runtime._loop
     runtime._wake = asyncio.Event()
-    runtime._worker = asyncio.create_task(runtime._suggestion_worker())
+    runtime._worker = asyncio.create_task(runtime._reply_worker())
     return runtime, llm, delivered
 
 
@@ -136,29 +126,29 @@ async def test_a_deferred_line_waits_for_the_owner_then_the_newest_goes_at_once(
     then the newest line of that place goes at once (latest wins)."""
     from silenttalk.copilot.reply_transport import InferenceDeferred
 
-    runtime, llm, delivered = await _runtime(tmp_path)
+    runtime, llm, delivered = await _character_runtime(tmp_path)
     busy_seen, answered = asyncio.Event(), asyncio.Event()
     owner_busy = True
     asked = []
     errors = []
     runtime.replies._on_error = errors.append
 
-    async def suggest(**kwargs):
-        asked.append(kwargs["trigger_text"])
+    async def character_turn(*, turns, summary, addressed, engagement):
+        asked.append(turns[-1].text)
         if owner_busy:
             busy_seen.set()
             raise InferenceDeferred("fixture owner busy")
         answered.set()
-        return ReplySuggestions(kwargs["trigger_speaker"], kwargs["trigger_text"], agree="好")
+        return "回" + turns[-1].text
 
-    llm.suggest = suggest
+    llm.character_turn = character_turn  # type: ignore[method-assign]
     try:
-        runtime._handle_turn(2, "A", "第一句話")
+        runtime._handle_turn(2, "A", "凱哥第一句話")
         await asyncio.wait_for(busy_seen.wait(), 1)
-        runtime._handle_turn(2, "A", "第二句話")
-        runtime._handle_turn(2, "A", "第三句話")
+        runtime._handle_turn(2, "A", "凱哥第二句話")
+        runtime._handle_turn(2, "A", "凱哥第三句話")
         await asyncio.sleep(1.2)  # longer than any retry interval would be
-        assert asked == ["第一句話"]
+        assert asked == ["凱哥第一句話"]
         assert not runtime._worker.done() and not errors
         owner_busy = False
         freed = time.monotonic()
@@ -166,9 +156,10 @@ async def test_a_deferred_line_waits_for_the_owner_then_the_newest_goes_at_once(
         await asyncio.wait_for(answered.wait(), 1)
         assert time.monotonic() - freed < 0.1
         await _settle()
-        replies = [r for r in delivered if isinstance(r, ReplySuggestions)]
-        assert [r.trigger_text for r in replies] == ["第三句話"]
-        assert asked == ["第一句話", "第三句話"]
+        assert [item for item in delivered if isinstance(item, tuple)] == [
+            ("spoke", "回凱哥第三句話")
+        ]
+        assert asked == ["凱哥第一句話", "凱哥第三句話"]
         assert not errors and not runtime._worker.done()
     finally:
         await _stop(runtime)
@@ -244,53 +235,33 @@ async def test_a_deferred_lull_topic_waits_for_the_owner_and_is_said_once(
 
 
 @pytest.mark.asyncio
-async def test_busy_chat_generates_only_for_newest_line(tmp_path: Path) -> None:
+async def test_with_the_character_off_a_line_is_only_heard(tmp_path: Path) -> None:
+    """No reply options any more (2026-10-15): with the character off a line
+    is shown and kept as context, and nothing asks the model about it, not
+    even one that names the character or @mentions the bot."""
     runtime, llm, delivered = await _runtime(tmp_path)
-    runtime._handle_turn(2, "A", "第一句話")
-    await _settle()
-    runtime._handle_turn(3, "B", "第二句話")
-    runtime._handle_turn(2, "A", "第三句話")
-    llm.release.set()
-    await _settle()
-    llm.release.set()
+    runtime.set_persona(EXAMPLE_PERSONAS[0])  # 凱哥
+    runtime._handle_turn(2, "阿傑", "凱哥你覺得呢")
+    runtime._handle_turn(3, "小雨", "要不要打排位", "text", True)
     await _settle()
 
-    assert llm.calls == ["第一句話", "第三句話"]
-    suggestions = [item for item in delivered if isinstance(item, ReplySuggestions)]
-    assert [item.trigger_text for item in suggestions] == ["第一句話", "第三句話"]
+    assert llm.calls == [] and not runtime._pending
     turns = [item.text for item in delivered if isinstance(item, ConversationTurn)]
-    assert turns == ["第一句話", "第二句話", "第三句話"]
+    assert turns == ["凱哥你覺得呢", "要不要打排位"]
+    assert [t.text for t in runtime.sessions.context(VOICE_ROOM).snapshot()] == turns
     await _stop(runtime)
 
 
 @pytest.mark.asyncio
 async def test_filler_words_join_context_without_triggering(tmp_path: Path) -> None:
-    runtime, llm, _ = await _runtime(tmp_path)
-    runtime._handle_turn(2, "A", "嗯")
+    runtime, llm, _ = await _character_runtime(tmp_path)
+    runtime._handle_turn(2, "A", "嗯", "text", True)  # even with an @mention
     await _settle()
 
     assert llm.calls == []
     assert [turn.text for turn in runtime.sessions.context(VOICE_ROOM).snapshot()] == [
         "嗯"
     ]
-    assert runtime.regenerate() is False
-    await _stop(runtime)
-
-
-@pytest.mark.asyncio
-async def test_regenerate_targets_newest_line(tmp_path: Path) -> None:
-    runtime, llm, _ = await _runtime(tmp_path)
-    runtime._handle_turn(2, "A", "要不要打排位")
-    await _settle()
-    llm.release.set()
-    await _settle()
-
-    assert runtime.regenerate() is True
-    await _settle()
-    llm.release.set()
-    await _settle()
-
-    assert llm.calls == ["要不要打排位", "要不要打排位"]
     await _stop(runtime)
 
 
@@ -311,7 +282,6 @@ async def test_character_speaks_what_the_model_says(tmp_path: Path) -> None:
 
     assert llm.calls == [("character", "凱哥你覺得呢", True, "called")]
     assert ("spoke", "收到") in delivered
-    assert not any(isinstance(item, ReplySuggestions) for item in delivered)
     await _stop(runtime)
 
 
@@ -370,7 +340,7 @@ async def test_owner_mic_counts_only_in_character_mode(tmp_path: Path) -> None:
     runtime, _, _ = await _runtime(tmp_path)
     packets: list[tuple[int, str, bytes]] = []
     runtime._stt.push_pcm = lambda *packet: packets.append(packet)  # type: ignore[method-assign]
-    runtime.accept_pcm(1, "Owner", b"options")
+    runtime.accept_pcm(1, "Owner", b"typing")
     runtime._handle_turn(1, "Owner", "我在講話")
     assert packets == []
     assert "我在講話" not in [

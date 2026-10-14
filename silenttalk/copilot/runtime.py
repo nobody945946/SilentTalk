@@ -14,8 +14,6 @@ from silenttalk.conversation import (
     AgentTask,
     Attachment,
     ConversationTurn,
-    ReplySuggestions,
-    ThinkingCallback,
     TurnCallback,
 )
 from silenttalk.conversation import Trigger as _Trigger
@@ -35,7 +33,6 @@ from silenttalk.records import TranscriptRecorder
 
 _LOG = logging.getLogger(__name__)
 
-SuggestionCallback = Callable[[ReplySuggestions], None]
 MessageCallback = Callable[[str], None]
 AgendaCallback = Callable[[tuple[str, ...]], None]
 
@@ -54,7 +51,7 @@ HistoryCallback = Callable[[int, int, int], Awaitable[list[tuple[int, str, str, 
 # A file someone posted with the line (or in the message it replies to): its
 # name and how to read it. The Discord client chooses which, never the model.
 
-# "嗯", "好", "喔" are context, not something worth four reply options.
+# "嗯", "好", "喔" are context, not something to answer.
 _MIN_TRIGGER_CHARS = 2
 # Speech recognition closes a segment at half a second of silence, so "機魂，
 # (pause) 幫我查明天天氣" arrives as two lines and only the first has the name
@@ -76,11 +73,9 @@ class CopilotRuntime:
         project_dir: Path,
         config: CopilotConfig,
         owner_user_id: int,
-        on_suggestions: SuggestionCallback,
         on_error: MessageCallback,
         *,
         on_turn: TurnCallback | None = None,
-        on_thinking: ThinkingCallback | None = None,
         on_character_line: LineCallback | None = None,
         on_character_text: PlaceLineCallback | None = None,
         on_agenda: AgendaCallback | None = None,
@@ -125,7 +120,6 @@ class CopilotRuntime:
         self._loop: asyncio.AbstractEventLoop | None = None
         # The newest unanswered line of each place, oldest place first.
         self._pending: dict[int, _Trigger] = {}
-        self._latest_trigger: _Trigger | None = None
         self._wake: asyncio.Event | None = None
         self._worker: asyncio.Task[None] | None = None
 
@@ -182,8 +176,6 @@ class CopilotRuntime:
             on_line=on_character_line,
             on_text=on_character_text,
             on_agent_line=on_agent_line or on_character_line,
-            on_suggestions=on_suggestions,
-            on_thinking=on_thinking,
         )
         self.tasks = AgentTaskRunner(
             agent_tasks,
@@ -213,7 +205,7 @@ class CopilotRuntime:
         await asyncio.to_thread(self._stt.start)
         await self._llm.start()
         self._worker = asyncio.create_task(
-            self._suggestion_worker(), name="copilot-suggestion-worker"
+            self._reply_worker(), name="copilot-reply-worker"
         )
         _LOG.info("copilot_runtime_ready")
 
@@ -231,8 +223,9 @@ class CopilotRuntime:
         self._loop = None
 
     def accept_pcm(self, speaker_id: int, speaker_name: str, pcm: bytes) -> None:
-        # Options speak for the owner, so their mic is not input there. In
-        # character mode the owner is another participant the character hears.
+        # With the character off the bot speaks for the owner (typing), so
+        # their mic is not input. In character mode the owner is another
+        # participant the character hears.
         if speaker_id == self._owner_user_id and not self._character_mode:
             return
         self._stt.push_pcm(speaker_id, speaker_name, pcm)
@@ -379,8 +372,9 @@ class CopilotRuntime:
         )
 
     def set_character_mode(self, enabled: bool) -> None:
-        """Copilot (you pick, the bot says it) vs. character (the bot is the
-        persona and joins in by itself). Must run on the runtime loop."""
+        """Character (the bot is the persona and joins in by itself) or off
+        (the bot only says what you type; lines are heard, not answered).
+        Must run on the runtime loop."""
         if enabled == self._character_mode:
             return
         self._character_mode = enabled
@@ -391,14 +385,6 @@ class CopilotRuntime:
         self._pending.clear()
         self._wake_worker()
         _LOG.info("copilot_character_mode enabled=%s", enabled)
-
-    def regenerate(self) -> bool:
-        """Ask again for the newest line. Must run on the runtime loop."""
-        if self._latest_trigger is None or self._wake is None:
-            return False
-        self._pending[self._latest_trigger.place] = self._latest_trigger
-        self._wake.set()
-        return True
 
     def _on_transcribed_turn(
         self,
@@ -425,8 +411,9 @@ class CopilotRuntime:
         agent: bool = False,
         attachments: tuple[Attachment, ...] = (),
     ) -> None:
-        # In copilot mode the bot speaks *for* the owner, so the owner's own mic
-        # is not conversation; in character mode the owner is one more friend.
+        # With the character off the bot speaks *for* the owner (typing), so the
+        # owner's own mic is not conversation; in character mode the owner is
+        # one more friend.
         if speaker_id == self._owner_user_id and not self._character_mode:
             return
 
@@ -448,14 +435,20 @@ class CopilotRuntime:
         if self._wake is not None and not self._pending:
             # Nothing waiting to generate: a good moment to compact.
             self.sessions.maybe_compact(place)
-        if len(_compact(text)) < _MIN_TRIGGER_CHARS or self._wake is None:
+        # With the character off a line is only heard, shown and recorded:
+        # nothing answers it.
+        if (
+            not self._character_mode
+            or len(_compact(text)) < _MIN_TRIGGER_CHARS
+            or self._wake is None
+        ):
             return
 
         # A line calls the character by its name (by sound: speech
         # recognition writes 雞魂 for 機魂) or by Discord's @mention or reply:
         # the app decides, not the model.
-        addressed = mentioned or (self._character_mode and self._names(text))
-        if via == "voice" and self._character_mode:
+        addressed = mentioned or self._names(text)
+        if via == "voice":
             called_at = self._called_by.pop(speaker_id, None)
             if called_at is not None and activity - called_at <= _CALL_CARRY_SECONDS:
                 addressed = True
@@ -474,14 +467,12 @@ class CopilotRuntime:
             message_id,
             tuple(attachments),
         )
-        self._latest_trigger = trigger
         if agent:
             # The owner's Agent thread: his typed lines are the Agent's work
             # (names can be copied, IDs cannot; a voice can come from anyone
             # near his microphone). Nobody else's line is anybody's work.
             if (
-                self._character_mode
-                and self._config.character_agent
+                self._config.character_agent
                 and speaker_id == self._owner_user_id
                 and via == "text"
             ):
@@ -490,11 +481,7 @@ class CopilotRuntime:
                 )
                 self._wake.set()
             return
-        if (
-            self._character_mode
-            and self.replies.policy.mode != "active"
-            and not addressed
-        ):
+        if self.replies.policy.mode != "active" and not addressed:
             return  # every line must call it (the owner chose this: 純A)
         # Latest wins: while a generation is running, a newer line of the same
         # place replaces its queued trigger instead of stacking requests on a
@@ -502,7 +489,7 @@ class CopilotRuntime:
         self._pending[place] = trigger
         self._wake.set()
 
-    async def _suggestion_worker(self) -> None:
+    async def _reply_worker(self) -> None:
         assert self._wake is not None
         await run_reply_worker(
             self._wake, self._pending, replies=self.replies, tasks=self.tasks,

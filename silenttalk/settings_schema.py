@@ -120,12 +120,8 @@ PAGES: tuple[Page, ...] = (
             (
                 Setting(
                     "copilot", "max_reply_chars", "單句最長字數", "int",
-                    "每個候選、每句角色台詞的長度上限。",
+                    "每句角色台詞的長度上限。",
                     minimum=20, maximum=200, step=4, unit="字",
-                ),
-                Setting(
-                    "copilot", "auto_popup", "想好就自動跳出視窗", "bool",
-                    "有新的候選回覆時自動顯示 SilentTalk（不會搶走遊戲焦點）。",
                 ),
                 Setting(
                     "app", "max_text_length", "打字輸入上限", "int",

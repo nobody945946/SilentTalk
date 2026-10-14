@@ -36,7 +36,6 @@ llm_context_size = 32768
 max_session_turns = 240
 max_reply_chars = 72
 llama_port = 18088
-auto_popup = true
 # Public reply model leased from EdgeAgent. Other supported GGUF models can
 # be installed in EdgeAgent's models directory. Adapters are optional and
 # must match the exact base model used for training.
@@ -47,7 +46,7 @@ llm_model = "gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf"
 # adapter, or to "" for none.
 # character_lora = ""
 # Which of the character's own requests apply that adapter ("called",
-# "active", "line", "options", "task", "scope"). Left unset: what the bundled adapter
+# "active", "line", "task", "scope"). Left unset: what the bundled adapter
 # was trained for ("line,task"); none for an adapter of your own.
 # character_lora_uses = "line,task"
 # When the character speaks up, decided line by line by the local model:

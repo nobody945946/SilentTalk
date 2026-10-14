@@ -4,7 +4,7 @@
 
 ## 產品邊界
 
-SilentTalk 是 Discord 角色與回覆建議玩具。EdgeAgent 是獨立編程 Agent，擁有 Pi 工具迴圈、模型管理、llama.cpp router 與推論子程序。SilentTalk 不 import Agent 套件，也不啟動自己的 llama-server，只透過 localhost 租借服務。
+SilentTalk 是 Discord 角色與打字轉語音玩具。EdgeAgent 是獨立編程 Agent，擁有 Pi 工具迴圈、模型管理、llama.cpp router 與推論子程序。SilentTalk 不 import Agent 套件，也不啟動自己的 llama-server，只透過 localhost 租借服務。
 
 ```text
 啟動 SilentTalk.cmd
@@ -27,8 +27,8 @@ router 最多載入一個完整模型。租借角色與 Agent 設定使用相同
 | 功能 | 唯一責任位置 | 相關邊界 |
 |---|---|---|
 | 程式組裝、命令列入口 | `app.py` | Controller、UI、smoke |
-| UI 操作與頁面 | `silenttalk/ui.py` | `chat_ui.py`、`story_ui.py`、`persona_ui.py` |
-| 快捷鍵與輸入法 | `hotkeys.py`、`ime.py` | thread-safe UIAction queue |
+| UI 操作與頁面 | `silenttalk/ui.py` | `chat_ui.py`、`persona_ui.py` |
+| 快捷鍵 | `hotkeys.py` | thread-safe UIAction queue |
 | 字型、尺寸、控制項 | `theme.py`、`widgets.py` | Tkinter main thread |
 | UI 與 async 後端協調 | `controller.py` | TTS／Voice／Copilot 組裝 |
 | 文字驗證 | `text.py` | normalization → SpeechQueue |
@@ -36,8 +36,8 @@ router 最多載入一個完整模型。租借角色與 Agent 設定使用相同
 | TTS 抽象與目前實作 | `tts/base.py`、`tts/edge.py` | EdgeTTS 外部服務 |
 | Discord 跟隨、播放與接收 | `discord_voice.py` | Owner routing、DAVE、文字聊天 |
 | STT | `copilot/stt_worker.py`（佇列、執行緒、每人的結束期限）、`copilot/stt.py`、`copilot/stt_offline.py` | 每位真人獨立 stream／VAD；等封包或最近的期限，不定時醒 |
-| 會話 context | `copilot/context.py` | RAM、候選不進歷史 |
-| 角色請求與回覆選項 | `copilot/llm.py` | 租借推論端點、LoRA 請求分流 |
+| 會話 context | `copilot/context.py` | RAM |
+| 角色請求 | `copilot/llm.py` | 租借推論端點、LoRA 請求分流 |
 | 角色模式排程 | `copilot/runtime.py` | 時機、冷場、過期回覆、取消 |
 | 人設與角色狀態 | `copilot/persona.py`、`copilot/character_state.py` | 使用者檔案；不保存對話原文 |
 | 推論租借與重啟交接 | `agent_lease.py` | localhost client；跟著 EdgeAgent 的狀態串流，無引擎所有權 |
@@ -69,19 +69,18 @@ F8／快捷句
 
 FIFO 使用單一 worker。F9 取消 pending 與目前工作，以 generation 使尚未播放的舊合成失效，並停止 player。已開始卻中斷的句子不自動重播，避免回音。手打與快捷句都走同一個 submit／queue 流程。
 
-### 語音、角色與選項
+### 語音與角色
 
 ```text
 Discord 真人 PCM（含 Owner，排除 Bot）
   → DAVE 就緒檢查 → STT queue
   → 每位 speaker 的 STT → 台灣繁體轉換
-  → RAM context → 單一生成 worker → 租借模型
-      ├─ 選項：最多四種不同回覆 → 使用者選擇
-      └─ 角色：判斷是否接話 → 回覆／冷場話題
+  → RAM context（角色暫停時到此為止：只記錄與顯示）
+  → 單一生成 worker → 租借模型：判斷是否接話 → 回覆／冷場話題
   → Controller → 原 SpeechQueue／TTS／Discord
 ```
 
-receive callback 不做推理，只複製 PCM 到 queue。生成期間新句子只更新下一次 trigger，不各自排隊生成；少於兩字的句子只進 context。角色正在說話時不追加下一句，過期生成會丟棄。語音播放成功後才記錄 self turn，未採用候選不進 context。自動壓縮濃縮早期內容，保留近期原文。
+receive callback 不做推理，只複製 PCM 到 queue。生成期間新句子只更新下一次 trigger，不各自排隊生成；少於兩字的句子只進 context。角色正在說話時不追加下一句，過期生成會丟棄。語音播放成功後才記錄 self turn。自動壓縮濃縮早期內容，保留近期原文。
 
 文字聊天啟用時，接收 Bot 所在語音頻道的內建文字聊天，以及 Bot 開的討論串，排除其他 Bot；Owner 在其他文字頻道 @ Bot（角色模式）時，從那則訊息開討論串（Discord 語音頻道的聊天室不能開串）。每句話帶著所在位置（`place`：`VOICE_ROOM` 或討論串 ID）。每個位置各有自己的 context、壓縮與「最新一句優先」的待答；語音頻道的文字與語音共用同一個 context。回覆送回原位置：討論串打字，語音頻道依來源用文字或語音；文字送出成功後才在該位置記錄 self turn。沉默開話題只看語音頻道；角色狀態更新讀所有位置。討論串最多保留 16 個，最久沒說話的先忘。派工的那則訊息由 `discord_voice.mark_task` 標記：受理 ⚙️，完成 ✅，失敗或取消 ❌。語音頻道的派工另有角色的接令與回報；討論串只在標記說不出的情況（工作仍在進行、私訊送不出去、公開結果）打一句。逐字稿紀錄附 `place`。
 
@@ -124,7 +123,7 @@ Bot Token 與 Owner ID 優先沿用既有 `.env`，缺少時讀 Windows 認證�
 | STT 資產 | SilentTalk `.runtime/models/`；本機 CPU |
 | Agent／角色 GGUF、adapter | EdgeAgent `models/` |
 | 推論引擎、Node／Pi | EdgeAgent `.runtime/` |
-| 對話、轉錄、候選、摘要 | RAM；不寫 session JSONL／歷史檔。例外：開啟「記錄對話」時，轉錄文字（不含錄音）由 `records.py` 只寫進使用者設定、含標記檔 `.agent-records` 的加密外接硬碟資料夾，硬碟不在就不寫 |
+| 對話、轉錄、摘要 | RAM；不寫 session JSONL／歷史檔。例外：開啟「記錄對話」時，轉錄文字（不含錄音）由 `records.py` 只寫進使用者設定、含標記檔 `.agent-records` 的加密外接硬碟資料夾，硬碟不在就不寫 |
 | 合成音訊 | 暫存播放檔；結束清除 |
 | 人設、設定、快捷句、偏好 | 使用者持久資料；不進發行包 |
 | 選用角色自身狀態 | 可保存近況與心情；不保存人的原話 |
@@ -140,7 +139,7 @@ Bot Token 與 Owner ID 優先沿用既有 `.env`，缺少時讀 Windows 認證�
 | `test_config.py`、`test_discord_config.py` | 設定、憑證與必要 intents |
 | `test_owner_routing.py`、`test_player.py`、Voice 相關測試 | 跟隨、重連、播放、停止 |
 | `test_voice_receive.py` | Owner 與真人接收、排除 Bot、DAVE |
-| `test_copilot_context.py`、`test_copilot_llm.py` | RAM context、回覆選項、角色請求與 LoRA 分流 |
+| `test_copilot_context.py`、`test_copilot_llm.py` | RAM context、角色請求與 LoRA 分流 |
 | `test_copilot_runtime.py` | 角色時機、冷場與過期回覆 |
 | `test_agent_lease.py` | API client、租借／歸還、狀態串流（遺失、被擋下後何時再送）與重啟交接 |
 | `test_agent_tasks.py` | 離線 SSE、Owner 批准、拒絕／逾時、背景派工及失敗回報、只認 Owner ID、批准與結果只走私訊 |

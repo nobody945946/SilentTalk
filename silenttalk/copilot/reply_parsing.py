@@ -4,7 +4,7 @@ import difflib
 import re
 from collections.abc import Sequence
 
-from silenttalk.conversation import REPLY_LANES, ConversationTurn, ReplySuggestions
+from silenttalk.conversation import ConversationTurn
 from silenttalk.copilot import reply_templates as templates
 from silenttalk.copilot.script import to_taiwan_traditional
 from silenttalk.persona import Persona
@@ -33,29 +33,10 @@ def _signature_used(phrase: str, line: str) -> bool:
     return any(phrase[i : i + 5] in line for i in range(len(phrase) - 4))
 
 
-def _options(
-    lines: list[str], trigger_speaker: str, trigger_text: str
-) -> ReplySuggestions:
-    """Sampled lines in the W/A/D/S slots, in the order they were written."""
-    values = {lane.field: "" for lane in REPLY_LANES}
-    for lane, line in zip(REPLY_LANES, lines, strict=False):
-        values[lane.field] = line
-    return ReplySuggestions(
-        trigger_speaker=trigger_speaker, trigger_text=trigger_text, **values
-    )
-
-
 def _alike_to(a: str, b: str, ratio: float) -> bool:
     return (
         bool(a)
         and difflib.SequenceMatcher(None, _compact(a), _compact(b)).ratio() >= ratio
-    )
-
-
-def _alike(a: str, b: str) -> bool:
-    return (
-        difflib.SequenceMatcher(None, _compact(a), _compact(b)).ratio()
-        >= templates._OPTIONS_ALIKE
     )
 
 
@@ -76,7 +57,7 @@ def _compact(text: str) -> str:
 
 def clean_reply(value: str, max_chars: int) -> str:
     value = value.strip().strip("\"'「」『』*")
-    # Small Qwen models slip into Simplified now and then (2-9% of lanes).
+    # Small Qwen models slip into Simplified now and then (2-9% of lines).
     value = to_taiwan_traditional(" ".join(value.split()))
     if value.startswith("...") or value in {"…", "..."}:
         return ""

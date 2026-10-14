@@ -134,7 +134,7 @@ def test_ai_import_failure_keeps_manual_speech_constructible(
         AudioConfig(),
         CopilotConfig(),
     )
-    controller = AppController(settings, Mock(), tmp_path, suggestions=Mock())
+    controller = AppController(settings, Mock(), tmp_path)
     try:
         assert not controller.copilot_enabled
         assert isinstance(controller._queue, SpeechQueue)

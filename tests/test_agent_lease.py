@@ -264,7 +264,7 @@ def test_copilot_smoke_keeps_only_model_names_for_e4b(tmp_path: Path) -> None:
     config = SimpleNamespace(
         llm_model="e4b.gguf",
         character_lora="character.gguf",
-        character_lora_uses=("options",),
+        character_lora_uses=("line",),
         llama_port=18088,
         llm_context_size=32768,
         max_reply_chars=72,

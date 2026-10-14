@@ -13,12 +13,7 @@ import discord
 
 from silenttalk.agent_tasks import AgentTaskClient
 from silenttalk.config import Settings
-from silenttalk.conversation import (
-    VOICE_ROOM,
-    ReplySuggestions,
-    ThinkingCallback,
-    TurnCallback,
-)
+from silenttalk.conversation import VOICE_ROOM, TurnCallback
 from silenttalk.discord_playback import DiscordAudioPlayer
 from silenttalk.discord_voice import DiscordVoiceClient
 from silenttalk.persona import Persona
@@ -36,7 +31,6 @@ if TYPE_CHECKING:
 _LOG = logging.getLogger(__name__)
 _COPILOT_RETRY_SECONDS = 5.0
 StatusCallback = Callable[[AppState, str], None]
-SuggestionCallback = Callable[[ReplySuggestions], None]
 
 
 class AppController:
@@ -45,10 +39,8 @@ class AppController:
         settings: Settings,
         status: StatusCallback,
         project_dir: Path,
-        suggestions: SuggestionCallback | None = None,
         *,
         on_turn: TurnCallback | None = None,
-        on_thinking: ThinkingCallback | None = None,
         on_agenda: Callable[[tuple[str, ...]], None] | None = None,
         on_ai_status: Callable[[str], None] | None = None,
     ) -> None:
@@ -63,7 +55,7 @@ class AppController:
         self._copilot_startup: asyncio.Task[None] | None = None
         self._agent_tasks = AgentTaskClient()
         self._on_ai_status = on_ai_status or (lambda message: None)
-        self._copilot_requested = settings.copilot.enabled and suggestions is not None
+        self._copilot_requested = settings.copilot.enabled
         self._active_persona = None
         self._desired_character_mode = False
 
@@ -74,10 +66,8 @@ class AppController:
                 project_dir,
                 settings.copilot,
                 settings.discord.owner_user_id,
-                on_suggestions=suggestions,
                 on_error=self._on_ai_status,
                 on_turn=on_turn,
-                on_thinking=on_thinking,
                 on_character_line=self._speak_as_character,
                 on_character_text=self._type_as_character,
                 on_agenda=on_agenda,
@@ -126,7 +116,7 @@ class AppController:
         self._closing = False
         self._character_voice = ("default", 1.0)
         # The active persona's own voice; when set it is used for everything
-        # the bot says (typed, picked or spoken by the character).
+        # the bot says (what you type and what the character says).
         self._persona_voice: VoiceStyle | None = None
 
     def start(self) -> None:
@@ -234,11 +224,6 @@ class AppController:
         elif self._copilot_requested:
             self._on_ai_status("AI 正在重試載入")
 
-    def send_text(self, raw_text: str) -> None:
-        """Type a line into the voice channel's text chat instead of saying it."""
-        text = normalize_text(raw_text, self._settings.app.max_text_length)
-        self._schedule(self._send_text(text))
-
     async def _send_text(self, text: str, place: int = VOICE_ROOM) -> None:
         if not await self._discord.channels.send_text(text, place):
             self._status(
@@ -248,7 +233,7 @@ class AppController:
             return
         if self._copilot is not None:
             # Same rule as speech: only what actually reached the channel
-            # counts as something "you" said.
+            # counts as something the character said.
             self._copilot.record_self(text, place, via="text")
 
     def _type_as_character(self, line: str, place: int = VOICE_ROOM) -> None:
@@ -316,12 +301,6 @@ class AppController:
                 text, voice_style=self._persona_voice or style, rate_multiplier=rate
             )
         )
-
-    def regenerate_suggestions(self) -> None:
-        copilot = self._copilot
-        if copilot is None:
-            raise RuntimeError("Copilot 未啟用或啟動失敗。")
-        self._loop.call_soon_threadsafe(copilot.regenerate)
 
     def reroll_agenda(self) -> None:
         """A new set of the character's concerns for today."""

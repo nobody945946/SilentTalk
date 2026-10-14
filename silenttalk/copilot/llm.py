@@ -1,26 +1,18 @@
 from __future__ import annotations
 
 import asyncio
-import dataclasses
 import logging
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Iterable, Sequence
 from pathlib import Path
 
-from silenttalk.conversation import (
-    REPLY_LANES,
-    AgentTask,
-    ConversationTurn,
-    ReplySuggestions,
-)
+from silenttalk.conversation import AgentTask, ConversationTurn
 from silenttalk.copilot import character_generation
 from silenttalk.copilot import reply_templates as templates
 from silenttalk.copilot.character_state import (
     CharacterState,
 )
 from silenttalk.copilot.reply_parsing import (
-    _alike,
     _alike_to,
-    _options,
     _strip_thinking,
     parse_character_line,
     quiet_for,
@@ -141,11 +133,6 @@ class LocalReplyModel:
             self.transport, transcript, previous
         )
 
-    def option_messages(
-        self, *, turns: Sequence[ConversationTurn], summary: str = ""
-    ) -> list[dict[str, str]]:
-        return self.prompts.option_messages(turns=turns, summary=summary)
-
     def owner_messages(
         self, *, turns: Sequence[ConversationTurn], engagement: str = "called"
     ) -> list[dict[str, str]] | None:
@@ -191,46 +178,6 @@ class LocalReplyModel:
             task_hint=task_hint,
         )
 
-    async def suggest(
-        self,
-        *,
-        turns: Sequence[ConversationTurn],
-        summary: str = "",
-        trigger_speaker: str,
-        trigger_text: str,
-        on_partial: Callable[[ReplySuggestions], None] | None = None,
-    ) -> ReplySuggestions:
-        """Up to four different lines the character itself would say next,
-        sampled from one cached request. With `on_partial`, each new line is
-        reported as soon as it is written (from a worker thread), so the
-        first choice shows up long before the fourth."""
-        messages = self.prompts.option_messages(turns=turns, summary=summary)
-        lines: list[str] = []
-        for _ in range(templates._OPTIONS_TRIES):
-            if len(lines) >= len(REPLY_LANES):
-                break
-            raw = await asyncio.to_thread(
-                self.transport.request_messages,
-                messages,
-                None,
-                60,
-                "options" in self._lora_uses,
-                templates._OPTIONS_TEMPERATURE,
-            )
-            line = parse_character_line(
-                raw, trigger_text, self.prompts.persona, self.prompts.max_reply_chars
-            )
-            if not line or any(_alike(line, other) for other in lines):
-                continue
-            lines.append(line)
-            if on_partial is not None and len(lines) < len(REPLY_LANES):
-                on_partial(
-                    dataclasses.replace(
-                        _options(lines, trigger_speaker, trigger_text), partial=True
-                    )
-                )
-        return _options(lines, trigger_speaker, trigger_text)
-
     async def character_turn(
         self,
         *,
@@ -255,7 +202,6 @@ class LocalReplyModel:
             raw = await asyncio.to_thread(
                 self.transport.request_messages,
                 messages,
-                None,
                 90,
                 "line" in self._lora_uses,
             )
@@ -271,12 +217,11 @@ class LocalReplyModel:
             )
             line = ""
             # Read out word for word, a concern sounds like a note, not like
-            # talking (options_eval-style check on 21 lulls: 2 near-copies).
+            # talking (a check on 21 lulls: 2 near-copies).
             for temperature in (0.65, 1.0):
                 raw = await asyncio.to_thread(
                     self.transport.request_messages,
                     messages,
-                    None,
                     90,
                     "line" in self._lora_uses,
                     temperature,
@@ -316,7 +261,6 @@ class LocalReplyModel:
         raw = await asyncio.to_thread(
             self.transport.request_messages,
             messages,
-            None,
             90,
             "line" in self._lora_uses,
         )
@@ -383,7 +327,7 @@ class LocalReplyModel:
             }
         ]
         raw = await asyncio.to_thread(
-            self.transport.request_messages, ask, None, 250, use_lora, 0.3
+            self.transport.request_messages, ask, 250, use_lora, 0.3
         )
         text = to_taiwan_traditional(_strip_thinking(raw).strip())[
             : templates._CHAT_TASK_MAX_CHARS

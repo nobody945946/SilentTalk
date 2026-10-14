@@ -1,5 +1,7 @@
 MEMORY_LEVELS = ("off", "light", "full")
-LORA_PARTS = ("called", "active", "line", "options", "task", "scope")
+LORA_PARTS = ("called", "active", "line", "task", "scope")
+# 選項模式 removed 2026-10-15; a settings.json written before may still name it.
+REMOVED_LORA_PARTS = ("options",)
 
 
 AI_HONESTY_MODES: tuple[tuple[str, str], ...] = (

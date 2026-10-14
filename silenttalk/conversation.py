@@ -62,53 +62,7 @@ class AgentTask:
     scope: str = "read"
 
 
-@dataclass(frozen=True, slots=True)
-class ReplyLane:
-    """One fixed reply direction: LLM output tag, story-mode key, UI label."""
-
-    code: str
-    key: str
-    label: str
-    field: str
-
-
-# The four option slots, in the order they fill and are shown. They are
-# alternatives the character might say, not fixed intents (see
-# LocalReplyModel.suggest), so they have no label. Codes and fields are
-# identifiers from the first design (agree / ask / disagree / joke); the
-# codes still pick each slot's colour.
-REPLY_LANES: tuple[ReplyLane, ...] = (
-    ReplyLane("AGREE", "w", "", "agree"),
-    ReplyLane("ASK", "a", "", "ask"),
-    ReplyLane("DISAGREE", "d", "", "disagree"),
-    ReplyLane("HUMOR", "s", "", "humor"),
-)
-
-
-@dataclass(frozen=True, slots=True)
-class ReplySuggestions:
-    trigger_speaker: str
-    trigger_text: str
-    agree: str = ""
-    disagree: str = ""
-    humor: str = ""
-    ask: str = ""
-    error: str = ""
-    # True while the model is still writing; the remaining lanes will follow.
-    partial: bool = False
-
-    def text_for(self, lane: ReplyLane) -> str:
-        return str(getattr(self, lane.field))
-
-    def items(self) -> tuple[tuple[ReplyLane, str], ...]:
-        return tuple((lane, self.text_for(lane)) for lane in REPLY_LANES)
-
-    def has_any(self) -> bool:
-        return any(text for _, text in self.items())
-
-
 TurnCallback = Callable[[ConversationTurn], None]
-ThinkingCallback = Callable[[str, str], None]
 
 
 Attachment = tuple[str, Callable[[], Awaitable[bytes]]]

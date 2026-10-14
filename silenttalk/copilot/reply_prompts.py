@@ -37,33 +37,6 @@ class ReplyPrompts:
         self.max_reply_chars = max(24, max_reply_chars)
         self.memory = memory if memory in options.MEMORY_LEVELS else "off"
 
-    def option_messages(
-        self, *, turns: Sequence[ConversationTurn], summary: str = ""
-    ) -> list[dict[str, str]]:
-        """The character chat (character mode's format, "你" as the assistant)
-        with the options request on the end. Only that tail changes between
-        rounds, so llama-server prefills just the new lines."""
-        messages = self.character_messages(
-            turns=turns, summary=summary, engagement="options", gate=True
-        )
-        ask = templates._OPTIONS_ASK
-        if self.memory != "off":
-            ask = f"（現在是{_now_words()}）\n" + ask
-        if not self.persona.is_blank:
-            ask = (
-                self.persona.reminder_line("說出口的話要是", list_catchphrases=False)
-                + "\n"
-                + ask
-            )
-        if messages[-1]["role"] == "user":
-            messages[-1] = {
-                "role": "user",
-                "content": messages[-1]["content"] + "\n\n" + ask,
-            }
-        else:
-            messages.append({"role": "user", "content": ask})
-        return messages
-
     def owner_messages(
         self,
         *,
@@ -222,7 +195,7 @@ class ReplyPrompts:
         if self.memory != "off":
             hints.append(f"（現在是{_now_words()}）")
         if not persona.is_blank:
-            hints.append(persona.reminder_line("開口的話要是", list_catchphrases=False))
+            hints.append(persona.reminder_line())
         used = [
             phrase
             for phrase in persona.signature_phrases()

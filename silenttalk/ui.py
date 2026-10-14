@@ -8,10 +8,9 @@ from dataclasses import dataclass
 
 from silenttalk import theme
 from silenttalk.chat_workspace_ui import ChatWorkspace
-from silenttalk.conversation import ConversationTurn, ReplySuggestions
+from silenttalk.conversation import ConversationTurn
 from silenttalk.discord_invite_ui import DiscordInviteCard
 from silenttalk.hotkeys import GlobalHotkeys
-from silenttalk.ime import set_ime_enabled
 from silenttalk.input_bindings_ui import InputBindings
 from silenttalk.model_info_ui import build_model_info
 from silenttalk.navigation_ui import NavigationRail
@@ -34,7 +33,7 @@ from silenttalk.voice_controls_ui import VoiceControls
 # Everything else is a layer inside one of them. (key, glyph, label); glyphs
 # stay in the BMP: Tk 8.6 on Windows draws astral-plane emoji inconsistently.
 # The chat page's modes, and where the old page names now live.
-CHAT_MODES = ("character", "story", "manual")
+CHAT_MODES = ("character", "manual")
 _PAGE_ALIASES = {"voice": ("settings", "voice")}
 
 
@@ -43,9 +42,7 @@ class UIAction:
     kind: str
     state: AppState | None = None
     message: str = ""
-    suggestions: ReplySuggestions | None = None
     turn: ConversationTurn | None = None
-    speaker: str = ""
 
 
 def _enable_crisp_text() -> None:
@@ -71,13 +68,10 @@ class SilentTalkUI:
         quick_phrases: QuickPhraseStore | None = None,
         preferences: PreferenceStore | None = None,
         *,
-        auto_popup_suggestions: bool = True,
-        regenerate_suggestions: Callable[[], None] | None = None,
         personas: PersonaStore | None = None,
         apply_persona: Callable[[Persona], None] | None = None,
         set_character_mode: Callable[[bool, str, float], None] | None = None,
         preview_voice: Callable[[str, Persona, float], None] | None = None,
-        send_text: Callable[[str], None] | None = None,
         reroll_agenda: Callable[[], None] | None = None,
         settings_store: SettingsStore | None = None,
         config_defaults: dict[str, dict[str, object]] | None = None,
@@ -95,13 +89,9 @@ class SilentTalkUI:
         self._apply_persona_callback = apply_persona
         self._character_callback = set_character_mode
         self._preview_callback = preview_voice
-        self._send_text_callback = send_text
         self._reroll_agenda_callback = reroll_agenda
         self._character_on = False
-        self._persona_name = ""
-        self._copilot_enabled = regenerate_suggestions is not None
         self._actions: queue.SimpleQueue[UIAction] = queue.SimpleQueue()
-        self._auto_popup_suggestions = auto_popup_suggestions
         self._speak_hotkey = speak_hotkey
         self._stop_hotkey = stop_hotkey
 
@@ -113,12 +103,9 @@ class SilentTalkUI:
         except PreferenceError as exc:
             initial_preferences = UserPreferences()
             preference_error = str(exc)
-        self._mode = initial_preferences.ui_mode
-        # The chat mode to come back to (and to save); the chat page's
-        # character view is never saved: it starts paused every time.
-        self._chat_mode = self._mode if self._mode in ("story", "manual") else "manual"
         # The chat view to return to from another page, character included.
-        self._chat_view = self._chat_mode
+        # The character view starts paused every time, so typing comes first.
+        self._mode = self._chat_view = "manual"
 
         _enable_crisp_text()
         self.root = tk.Tk()
@@ -143,7 +130,6 @@ class SilentTalkUI:
         self.status = StatusBar(
             self.popup,
             on_close=self.close,
-            copilot_enabled=self._copilot_enabled,
             error=preference_error,
         )
         self.voice = VoiceControls(
@@ -169,12 +155,7 @@ class SilentTalkUI:
         self.chat = ChatWorkspace(
             self._pages_frame,
             navigate=self.show_page,
-            on_mood_pick=self._on_mood_pick,
             on_mood=self._on_mood,
-            on_confirm=self._submit_story_choice,
-            on_edit=self._edit_story_choice,
-            regenerate=regenerate_suggestions,
-            send_text=self._type_story_choice if send_text else None,
             on_run=self._set_character_mode if self._character_callback else None,
             on_engagement=self._set_engagement,
             stop_hotkey=self._stop_hotkey,
@@ -192,10 +173,8 @@ class SilentTalkUI:
         self.bindings = InputBindings(
             self.popup,
             mode=lambda: self._mode,
-            navigate=self.show_page,
             hide=self.hide,
             manual=self.chat.manual,
-            story=self.chat.story,
         )
         self.persona_panel = PersonaPanel(
             self._pages_frame,
@@ -236,7 +215,6 @@ class SilentTalkUI:
             page.grid(row=0, column=0, sticky="nsew")
 
         state = self.persona_panel.state
-        self.chat.story.set_mood(state.mood)
         self._apply_persona(state.active_persona(), announce=False)
         self.chat.character.set_engagement(
             str(
@@ -247,9 +225,7 @@ class SilentTalkUI:
             self.show_page("character", focus=False)
             self._set_character_mode(True)
         else:
-            self.show_page(
-                self._mode if self._mode in CHAT_MODES else "manual", focus=False
-            )
+            self.show_page("manual", focus=False)
         self.popup.withdraw()
 
         self._hotkeys = GlobalHotkeys(
@@ -276,15 +252,9 @@ class SilentTalkUI:
     def set_ai_status(self, message: str) -> None:
         self._actions.put(UIAction("ai_status", message=message))
 
-    def set_suggestions(self, suggestions: ReplySuggestions) -> None:
-        self._actions.put(UIAction("suggestions", suggestions=suggestions))
-
     def set_agenda(self, items: Sequence[str]) -> None:
         """Safe from any thread: the character's concerns for today."""
         self._actions.put(UIAction("agenda", message="\n".join(items)))
-
-    def set_suggestions_thinking(self, speaker: str, text: str) -> None:
-        self._actions.put(UIAction("thinking", message=text, speaker=speaker))
 
     def add_conversation_turn(self, turn: ConversationTurn) -> None:
         self._actions.put(UIAction("turn", turn=turn))
@@ -310,7 +280,7 @@ class SilentTalkUI:
 
     def show_page(self, key: str, *, focus: bool = True) -> None:
         """Pages: chat, persona, settings. The chat page's modes (character,
-        story, manual) and the old page names (voice) are accepted too."""
+        manual) and the old page names (voice) are accepted too."""
         sub = ""
         if key in _PAGE_ALIASES:
             key, sub = _PAGE_ALIASES[key]
@@ -359,36 +329,18 @@ class SilentTalkUI:
                 view.pack(fill="x")
             else:
                 view.pack_forget()
-        if mode in ("story", "manual") and mode != self._chat_mode:
-            self._chat_mode = mode
-            self._persist_preferences()
 
     # ---- focus & keys --------------------------------------------------------------
 
     def _focus_page(self) -> None:
-        if self._mode == "story":
-            # Chinese IMEs swallow W/A/S/D; arrows keep working if this fails.
-            set_ime_enabled(self.popup.winfo_id(), False)
-            self.chat.story.focus_panel()
-            return
-        set_ime_enabled(self.popup.winfo_id(), True)
         if self._mode == "character":
             self.chat.character.focus_set()
-            return
-        if self._mode == "manual":
-            if (
-                self.chat.manual._latest_suggestions is not None
-                and not self.chat.manual.input.get("1.0", "end-1c")
-            ):
-                self.chat.manual._select_first_available_suggestion()
-                self.chat.manual.suggestion_list.focus_set()
-            else:
-                self.chat.manual.input.focus_set()
+        elif self._mode == "manual":
+            self.chat.manual.input.focus_set()
 
     # ---- persona -------------------------------------------------------------------
 
     def _apply_persona(self, persona: Persona, *, announce: bool = True) -> None:
-        self._persona_name = persona.name
         if hasattr(self, "_persona_voice_note"):
             self.voice._persona_voice_note.configure(
                 text=f"現在由人設「{persona.name}」自己的聲音說話（在人設頁改）；這裡的聲線給沒有設定聲音的人設用。"
@@ -429,7 +381,6 @@ class SilentTalkUI:
             return
         self._character_on = enabled
         self.chat.character.set_running(enabled)
-        self.chat.story.set_character_mode(enabled, self._persona_name)
 
     def _settings_applied(self, tables: dict[str, dict[str, object]]) -> None:
         # The character view shows the same 開口時機 as the settings page.
@@ -446,10 +397,6 @@ class SilentTalkUI:
     def _on_mood(self, mood: str) -> None:
         self.persona_panel.set_mood(mood)
 
-    def _on_mood_pick(self, mood: str) -> None:
-        self.chat.story.set_mood(mood)
-        self._on_mood(mood)
-
     # ---- voice & rate --------------------------------------------------------------
 
     def _persist_preferences(self) -> None:
@@ -457,10 +404,7 @@ class SilentTalkUI:
             return
         try:
             self._preference_store.save(
-                UserPreferences(
-                    speech_rate_multiplier=self.voice._rate_multiplier(),
-                    ui_mode=self._chat_mode,
-                )
+                UserPreferences(speech_rate_multiplier=self.voice._rate_multiplier())
             )
         except PreferenceError as exc:
             if hasattr(self.status, "status_var"):
@@ -470,33 +414,7 @@ class SilentTalkUI:
         self._stop_callback()
         self.status.status_var.set("已停止並清空佇列")
 
-    # ---- story mode ----------------------------------------------------------------
-
-    def _submit_story_choice(self, text: str) -> bool:
-        if not self._submit_text(text):
-            return False
-        self.hide()
-        return True
-
-    def _type_story_choice(self, text: str) -> bool:
-        """T: type the chosen reply into the channel's chat instead of saying it."""
-        if self._send_text_callback is None:
-            return False
-        try:
-            self._send_text_callback(text)
-        except (TextValidationError, ValueError) as exc:
-            self.status.status_var.set(str(exc))
-            return False
-        self.hide()
-        return True
-
-    def _edit_story_choice(self, text: str) -> None:
-        self.show_page("manual", focus=False)
-        set_ime_enabled(self.popup.winfo_id(), True)
-        self.chat.manual.input.delete("1.0", "end")
-        self.chat.manual.input.insert("1.0", text)
-        self.chat.manual.input.mark_set("insert", "end-1c")
-        self.chat.manual.input.focus_set()
+    # ---- typing --------------------------------------------------------------------
 
     def _submit_text(self, raw: str, voice_style: str | None = None) -> bool:
         try:
@@ -509,26 +427,6 @@ class SilentTalkUI:
             self.status.status_var.set(str(exc))
             return False
         return True
-
-    # ---- suggestions ---------------------------------------------------------------
-
-    def _apply_suggestions(self, suggestions: ReplySuggestions) -> None:
-        self.chat.manual._apply_suggestions(suggestions)
-        self.chat.story.set_suggestions(suggestions)
-        if suggestions.error:
-            self.status._ai_dot.set(theme.ERROR, "AI 錯誤")
-        elif suggestions.partial:
-            self.status._ai_dot.set(theme.ACCENT_HI, "AI 思考中")
-        else:
-            self.status._ai_dot.set(theme.OK, "AI 待命")
-
-        if (
-            self._auto_popup_suggestions
-            and suggestions.has_any()
-            and not self.popup.winfo_viewable()
-        ):
-            self.popup.deiconify()
-            self.popup.lift()
 
     # ---- backend → UI ----------------------------------------------------------------
 
@@ -545,20 +443,14 @@ class SilentTalkUI:
                 self.status.status_var.set("已停止並清空佇列")
             elif action.kind == "status":
                 self.status._show_status(action.state, action.message)
-            elif action.kind == "suggestions" and action.suggestions is not None:
-                self._apply_suggestions(action.suggestions)
             elif action.kind == "ai_status":
                 self.status.set_ai_status(action.message)
-            elif action.kind == "thinking":
-                self.status._ai_dot.set(theme.ACCENT_HI, "AI 思考中")
-                self.chat.story.set_thinking(action.speaker, action.message)
             elif action.kind == "agenda":
                 self.chat.character.set_agenda(
                     [item for item in action.message.splitlines() if item]
                 )
             elif action.kind == "turn" and action.turn is not None:
                 self.chat.transcript.add_turn(action.turn)
-                self.chat.story.add_turn(action.turn)
         self.root.after(50, self._poll_actions)
 
     def _voice_changed(self):

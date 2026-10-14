@@ -87,12 +87,6 @@ _ENGAGEMENT_RULES = {
     ),
 }
 
-# Options mode (選項): the same chat as character mode, asked several times
-# for a line the character would say; the owner picks one of up to four.
-_ENGAGEMENT_RULES["options"] = (
-    "每次輪到你，就說一句你現在會說的話，你的主人會從幾句裡挑一句說出口；不要輸出 SKIP。"
-)
-_OPTIONS_ASK = "（換你說話了：說一句你現在會說的話）"
 # A character with nothing going on in its own life only ever reacts: the
 # soul judge (turn_eval --judge-soul) read "看不出來" off 8 of 21 test chats
 # (know 2.6 / 5). Its life is a CharacterState (character_state.py): a few
@@ -155,22 +149,10 @@ _LULL_HINT = (
     "或問問在場的人最近怎樣。自然一點，一句就好）"
 )
 
-# Options are sampled lines, not four fixed intents. Asked for agree / ask /
-# disagree / joke in one go, Gemma 4 E2B answered the wrong line, disagreed
-# for the sake of it and repeated one trait (laptop test, 2026-09-28: "敷衍、
-# 過度跟隨每一句話"); asked to write its thought first and four lines from it,
-# it did worse still. Sampling what the character itself would say won the
-# blind A/B against the four-intent prompt (options_eval: better 53% vs 42%,
-# on-topic 2.94 vs 2.56, usable lines 1.68 vs 1.43 of 4). Each extra sample
-# reuses the cached prompt, so it costs only its own ~20 tokens.
-_OPTIONS_TEMPERATURE = 1.0
-_OPTIONS_TRIES = 7
-# Two lines this alike count as one option.
-_OPTIONS_ALIKE = 0.6
 # Requests the character adapter can be applied to: the two gate questions,
-# the character's line, the options, chat work ("task": whether a call asks
-# for work, and its instructions) and the owner's thread ("scope": whether
-# his work may change anything). An adapter applies only where it was trained.
+# the character's line, chat work ("task": whether a call asks for work, and
+# its instructions) and the owner's thread ("scope": whether his work may
+# change anything). An adapter applies only where it was trained.
 
 # Asked on the same chat (same prompt cache) before writing a line, answered
 # with one grammar-constrained token. A small model told to "answer or SKIP"

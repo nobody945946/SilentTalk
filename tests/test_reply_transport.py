@@ -11,8 +11,7 @@ from silenttalk.copilot.reply_transport import (
 )
 
 
-@pytest.mark.parametrize("stream", [False, True])
-def test_a_busy_owner_defers_both_json_and_stream_requests(monkeypatch, stream):
+def test_a_busy_owner_defers_the_request(monkeypatch):
     transport = ReplyTransport(Path("unused"), 18087, True, 15)
     captured = []
 
@@ -24,7 +23,7 @@ def test_a_busy_owner_defers_both_json_and_stream_requests(monkeypatch, stream):
     monkeypatch.setattr("urllib.request.urlopen", busy)
     transport.lease.statuses_seen = 7
     with pytest.raises(InferenceDeferred) as deferred:
-        transport.request_messages([], on_lines=(lambda _: None) if stream else None)
+        transport.request_messages([])
     assert captured[0].get_header("X-character-owner") == str(transport._owner_pid)
     # Its turn counts only EdgeAgent's statuses after the request was sent.
     assert deferred.value.seen == 7

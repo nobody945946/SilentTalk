@@ -9,98 +9,13 @@ from silenttalk.copilot.reply_parsing import parse_character_line
 from silenttalk.persona import EXAMPLE_PERSONAS
 
 
-def test_stream_reports_each_completed_line() -> None:
-    from silenttalk.copilot.reply_transport import consume_stream
-
-    pieces = ["AGREE|好", "啊\nASK|真的", "嗎？\nDISAG", "REE|不要\nHUMOR|笑死"]
-    events = (
-        [b": keep-alive\n"]
-        + [
-            (
-                "data: " + json.dumps({"choices": [{"delta": {"content": p}}]}) + "\n"
-            ).encode()
-            for p in pieces
-        ]
-        + [b"data: [DONE]\n"]
-    )
-    seen: list[str] = []
-
-    text = consume_stream(events, seen.append)
-
-    assert text == "AGREE|好啊\nASK|真的嗎？\nDISAGREE|不要\nHUMOR|笑死"
-    assert seen == [
-        "AGREE|好啊",
-        "AGREE|好啊\nASK|真的嗎？",
-        "AGREE|好啊\nASK|真的嗎？\nDISAGREE|不要",
-    ]
-
-
-def _sampling(model: LocalReplyModel, answers: list[str]) -> list[float]:
-    """Make the model answer these lines in turn; returns the temperatures used."""
-    temperatures: list[float] = []
-
-    def fake(
-        messages, on_lines=None, max_tokens=240, character=False, temperature=0.65
-    ):
-        temperatures.append(temperature)
-        return (
-            answers[len(temperatures) - 1]
-            if len(temperatures) <= len(answers)
-            else "好啊走"
-        )
-
-    model.transport.request_messages = fake  # type: ignore[method-assign]
-    return temperatures
-
-
-def test_options_are_four_different_lines_the_character_would_say() -> None:
-    import asyncio
-
-    model = LocalReplyModel(Path("unused.gguf"), max_reply_chars=24)
-    temperatures = _sampling(
-        model,
-        [
-            "好啊走",
-            "好啊，走！",  # the same line again
-            "SKIP",
-            "對啊打野一直送",  # repeats the line it answers
-            "你要選哪隻",
-            "这个视频我也看过",  # Simplified comes out Traditional
-            "很" * 40,  # capped
-        ],
-    )
-    options = asyncio.run(
-        model.suggest(turns=_chat(CHAT), trigger_speaker="阿傑", trigger_text="對啊打野一直送")
-    )
-
-    assert options.agree == "好啊走"
-    assert options.ask == "你要選哪隻"
-    assert options.disagree == "這個影片我也看過"
-    assert options.humor == "很" * 24 + "…"
-    # Sampled hot from one cached request, at most seven tries.
-    assert temperatures == [1.0] * 7
-
-
-def test_options_stop_trying_when_the_model_keeps_saying_the_same() -> None:
-    import asyncio
-
-    model = LocalReplyModel(Path("unused.gguf"))
-    temperatures = _sampling(model, [])
-    options = asyncio.run(
-        model.suggest(turns=_chat(CHAT), trigger_speaker="阿傑", trigger_text="對啊打野一直送")
-    )
-
-    assert [text for _, text in options.items()] == ["好啊走", "", "", ""]
-    assert len(temperatures) == 7
-
-
 def test_summary_uses_the_expanded_budget_and_keeps_previous_context() -> None:
     import asyncio
 
     model = LocalReplyModel(Path("unused.gguf"))
     calls = []
 
-    def fake(system, prompt, on_lines=None, max_tokens=240):
+    def fake(system, prompt, max_tokens=240):
         calls.append((system, prompt, max_tokens))
         return "重" * 800
 
@@ -111,49 +26,6 @@ def test_summary_uses_the_expanded_budget_and_keeps_previous_context() -> None:
     assert "更早的重點：更早的重要決定" in calls[0][1]
     assert calls[0][2] == 640
     assert summary == "重" * 640
-
-
-def test_each_new_option_is_shown_as_soon_as_it_is_written() -> None:
-    import asyncio
-
-    model = LocalReplyModel(Path("unused.gguf"))
-    _sampling(model, ["丟完煙再進", "誰有煙？", "硬衝會被架", "我的煙比我還準"])
-    seen = []
-    final = asyncio.run(
-        model.suggest(
-            turns=_chat(CHAT), trigger_speaker="阿傑", trigger_text="對啊打野一直送",
-            on_partial=seen.append,
-        )
-    )
-
-    assert [sum(bool(t) for _, t in s.items()) for s in seen] == [1, 2, 3]
-    assert all(s.partial for s in seen) and not final.partial
-    assert final.humor == "我的煙比我還準"
-
-
-def test_options_are_asked_on_the_end_of_the_character_chat() -> None:
-    """Same chat as character mode, so the prompt cache holds from round to
-    round and between the samples of one round."""
-    model = LocalReplyModel(Path("unused.gguf"))
-    model.set_persona(EXAMPLE_PERSONAS[0])
-    turns = _chat(CHAT)
-    messages = model.option_messages(turns=turns)
-    chat = model.character_messages(turns=turns, engagement="options", gate=True)
-
-    assert messages[:-1] == chat[:-1]
-    assert messages[-1]["content"].startswith(chat[-1]["content"] + "\n\n（記住：你是凱哥")
-    assert messages[-1]["content"].endswith("（換你說話了：說一句你現在會說的話）")
-    assert "不要輸出 SKIP" in messages[0]["content"]
-    later = model.option_messages(turns=turns + [ConversationTurn(2, "阿傑", "再一場")])
-    assert later[:-1] == messages[:-1]
-
-
-def test_options_after_your_own_line_get_their_own_request_turn() -> None:
-    model = LocalReplyModel(Path("unused.gguf"))
-    messages = model.option_messages(turns=_chat(CHAT[:4]))
-
-    assert [m["role"] for m in messages] == ["system", "user", "assistant", "user"]
-    assert messages[-1]["content"] == "（換你說話了：說一句你現在會說的話）"
 
 
 def test_character_line_parsing() -> None:
@@ -350,7 +222,7 @@ class _Scripted(LocalReplyModel):
         return self.gate.pop(0) if isinstance(self.gate, list) else self.gate
 
     def _scripted_line(
-        self, messages, on_lines=None, max_tokens=240, character=False, temperature=0.65
+        self, messages, max_tokens=240, character=False, temperature=0.65
     ):
         self.requests.append(("line", messages))
         return self.line
@@ -495,7 +367,7 @@ async def test_each_part_uses_the_lora_only_if_chosen() -> None:
         )
         return "是"
 
-    def line(messages, on_lines=None, max_tokens=240, character=False):
+    def line(messages, max_tokens=240, character=False):
         scales.append(
             ("line", model.transport.lora_field(character)["lora"][0]["scale"])
         )

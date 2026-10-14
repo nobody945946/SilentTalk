@@ -47,7 +47,7 @@ COPILOT_DEFAULTS: dict[str, Any] = {
     "character_turn_gap": 3,
 }
 
-# Set by turn_eval.py (and options_eval.py) from their flags; read through
+# Set by turn_eval.py from its flags; read through
 # this module (turn_eval_model.MEMORY), so the value set is the one read.
 EVAL_PORT = 18411
 # --cpu: no GPU layers, for when a training run holds the GPU.

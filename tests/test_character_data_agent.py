@@ -172,9 +172,7 @@ def _app_requests(
         sent[reply["gate_key"]] = messages
         return reply["gate"]
 
-    def request(
-        messages, on_lines=None, max_tokens=240, character=False, temperature=0.65
-    ):
+    def request(messages, max_tokens=240, character=False, temperature=0.65):
         sent[reply["key"]] = messages
         return reply["text"]
 

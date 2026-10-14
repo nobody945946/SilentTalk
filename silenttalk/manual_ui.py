@@ -3,12 +3,11 @@ from __future__ import annotations
 import tkinter as tk
 
 from silenttalk import theme
-from silenttalk.conversation import REPLY_LANES, ReplySuggestions
 from silenttalk.phrases import QuickPhraseError, QuickPhraseStore
 from silenttalk.voice_styles import voice_style_label
 from silenttalk.widgets.button import Button
 from silenttalk.widgets.disclosure import Disclosure
-from silenttalk.widgets.layout import card, hint_row, wrap_to_width
+from silenttalk.widgets.layout import card
 
 # Three places, like a phone's tab bar: talking, who you are, and settings.
 
@@ -22,8 +21,6 @@ class ManualSpeechPanel:
         self._submit_text, self.hide, self.show_page = submit, hide, navigate
         self._selected_style_key, self._set_style = get_style, set_style
         self._phrases = []
-        self._latest_suggestions = None
-        self._suggestion_values = [""] * len(REPLY_LANES)
         self.frame = self._build_manual_page(parent)
         self._refresh_phrases()
 
@@ -31,7 +28,6 @@ class ManualSpeechPanel:
         page = tk.Frame(parent, bg=theme.BG)
         compose = card(page, padx=0, pady=0)
         compose.outer.pack(fill="x", pady=(theme.px(12), 0))
-        self._manual_compose = compose.outer
         self.input = tk.Text(
             compose,
             height=3,
@@ -47,7 +43,6 @@ class ManualSpeechPanel:
             undo=True,
         )
         self.input.pack(fill="x")
-        self.input.bind("<Tab>", self._on_suggestion_tab)
         compose_bar = tk.Frame(compose, bg=theme.PANEL)
         compose_bar.pack(fill="x", padx=theme.px(14), pady=(0, theme.px(10)))
         self._voice_summary = tk.Label(
@@ -70,52 +65,6 @@ class ManualSpeechPanel:
             fg=theme.DIM,
             font=theme.font(9),
         ).pack(side="right", padx=theme.px(12))
-
-        # Copilot's four ideas: only there when there is something to pick.
-        self._suggest_card = card(page)
-        top = tk.Frame(self._suggest_card, bg=theme.PANEL)
-        top.pack(fill="x")
-        tk.Label(
-            top,
-            text="Copilot 建議",
-            bg=theme.PANEL,
-            fg=theme.TEXT,
-            font=theme.font(10, "bold"),
-        ).pack(side="left")
-        hint_row(
-            top, (("↑↓", "選"), ("Tab", "填入"), ("Enter", "直接說")), bg=theme.PANEL
-        ).pack(side="right")
-        self.suggestion_context_var = tk.StringVar(value="")
-        wrap_to_width(
-            tk.Label(
-                self._suggest_card,
-                textvariable=self.suggestion_context_var,
-                bg=theme.PANEL,
-                fg=theme.MUTED,
-                font=theme.font(9),
-                anchor="w",
-                justify="left",
-            )
-        ).pack(fill="x", pady=(theme.px(4), theme.px(6)))
-        self.suggestion_list = tk.Listbox(
-            self._suggest_card,
-            height=len(REPLY_LANES),
-            exportselection=False,
-            font=theme.font(11),
-            bg=theme.PANEL,
-            fg=theme.TEXT,
-            selectbackground=theme.PANEL_TOP,
-            selectforeground=theme.TEXT,
-            highlightthickness=0,
-            relief="flat",
-            activestyle="none",
-            bd=0,
-        )
-        self.suggestion_list.pack(fill="x")
-        self.suggestion_list.bind("<Tab>", self._on_suggestion_tab)
-        self.suggestion_list.bind("<Return>", self._on_suggestion_enter)
-        self.suggestion_list.bind("<Double-Button-1>", self._on_suggestion_enter)
-        self._render_empty_suggestions()
 
         # Quick phrases are reached with Ctrl+1-9; the list is for editing.
         self._phrases_box = Disclosure(
@@ -159,66 +108,7 @@ class ManualSpeechPanel:
     def _submit_input(self) -> None:
         raw = self.input.get("1.0", "end-1c")
         if self._submit_text(raw):
-            self._clear_suggestions()
             self.hide()
-
-    def _render_empty_suggestions(self) -> None:
-        self.suggestion_list.delete(0, "end")
-        for index, lane in enumerate(REPLY_LANES):
-            self.suggestion_list.insert("end", f"  {lane.key.upper()}｜等待對話…")
-            self.suggestion_list.itemconfigure(index, foreground=theme.DIM)
-
-    def _clear_suggestions(self) -> None:
-        self._latest_suggestions = None
-        self._suggestion_values = [""] * len(REPLY_LANES)
-        self.suggestion_context_var.set("")
-        self._render_empty_suggestions()
-        self._suggest_card.outer.pack_forget()
-
-    def _select_first_available_suggestion(self) -> None:
-        self.suggestion_list.selection_clear(0, "end")
-        for index, value in enumerate(self._suggestion_values):
-            if value:
-                self.suggestion_list.selection_set(index)
-                self.suggestion_list.activate(index)
-                self.suggestion_list.see(index)
-                return
-
-    def _selected_suggestion_index(self) -> int | None:
-        selected = self.suggestion_list.curselection()
-        return int(selected[0]) if selected else None
-
-    def _selected_suggestion_text(self) -> str:
-        selected = self.suggestion_list.curselection()
-        if selected:
-            index = int(selected[0])
-            if 0 <= index < len(self._suggestion_values):
-                return self._suggestion_values[index]
-        for value in self._suggestion_values:
-            if value:
-                return value
-        return ""
-
-    def _on_suggestion_tab(self, _: tk.Event) -> str:
-        text = self._selected_suggestion_text()
-        if not text:
-            self.status_var.set("目前沒有可填入的 Copilot 建議")
-            return "break"
-        self.input.delete("1.0", "end")
-        self.input.insert("1.0", text)
-        self.input.mark_set("insert", "end-1c")
-        self.input.focus_set()
-        return "break"
-
-    def _on_suggestion_enter(self, _: tk.Event) -> str:
-        text = self._selected_suggestion_text()
-        if not text:
-            self.status_var.set("這格沒有安全的建議")
-            return "break"
-        if self._submit_text(text):
-            self._clear_suggestions()
-            self.hide()
-        return "break"
 
     def _send_quick_phrase(self, index: int) -> str:
         if index >= len(self._phrases):
@@ -226,7 +116,6 @@ class ManualSpeechPanel:
             return "break"
         phrase = self._phrases[index]
         if self._submit_text(phrase.text, phrase.voice_style):
-            self._clear_suggestions()
             self.hide()
         return "break"
 
@@ -327,38 +216,3 @@ class ManualSpeechPanel:
         if select is not None and 0 <= select < len(self._phrases):
             self.phrase_list.selection_set(select)
             self.phrase_list.see(select)
-
-    def _apply_suggestions(self, suggestions: ReplySuggestions) -> None:
-        kept = self._selected_suggestion_index() if suggestions.partial else None
-        self._latest_suggestions = suggestions
-        self._suggestion_values = [text for _, text in suggestions.items()]
-        trigger = " ".join(suggestions.trigger_text.split())
-        if len(trigger) > 100:
-            trigger = trigger[:99].rstrip() + "…"
-        self.suggestion_context_var.set(
-            f"回應 {suggestions.trigger_speaker}：{trigger}"
-        )
-        if not self._suggest_card.outer.winfo_ismapped():
-            self._suggest_card.outer.pack(
-                fill="x", pady=(theme.px(12), 0), after=self._manual_compose
-            )
-        self.suggestion_list.delete(0, "end")
-        for index, (lane, value) in enumerate(suggestions.items()):
-            shown = value or (
-                "產生失敗"
-                if suggestions.error
-                else "思考中…"
-                if suggestions.partial
-                else "沒有合適的建議"
-            )
-            self.suggestion_list.insert("end", f"  {lane.key.upper()}｜{shown}")
-            self.suggestion_list.itemconfigure(
-                index,
-                foreground=theme.lane_color(lane.code) if value else theme.DIM,
-                selectforeground=theme.lane_color(lane.code) if value else theme.DIM,
-            )
-        if kept is not None and self._suggestion_values[kept]:
-            self.suggestion_list.selection_set(kept)
-            self.suggestion_list.activate(kept)
-        else:
-            self._select_first_available_suggestion()

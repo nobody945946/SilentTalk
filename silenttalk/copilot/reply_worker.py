@@ -81,12 +81,11 @@ async def run_reply_worker(
         if pending:
             wake.set()
         try:
-            if character_mode():
-                await respond(trigger)
-            else:
-                await replies.generate(trigger)
+            await respond(trigger)
         except InferenceDeferred as deferred:
             # A newer trigger wins; never accumulate a backlog of old chatter.
-            pending.setdefault(place, trigger)
+            # A character switched off meanwhile answers nothing.
+            if character_mode():
+                pending.setdefault(place, trigger)
             await turn(deferred)
             wake.set()

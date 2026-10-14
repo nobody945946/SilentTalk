@@ -2,8 +2,8 @@
 every mode shares, and the character view.
 
 The page itself is assembled in silenttalk/ui.py, which owns the modes:
-角色 (the bot plays the persona by itself), 選項 (W/A/S/D choices, story_ui)
-and 打字 (typed input and quick phrases). Tk thread only.
+角色 (the bot plays the persona by itself) and 打字 (typed input and quick
+phrases). Tk thread only.
 """
 
 from __future__ import annotations

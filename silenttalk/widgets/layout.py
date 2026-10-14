@@ -1,41 +1,8 @@
 from __future__ import annotations
 
 import tkinter as tk
-from collections.abc import Sequence
 
 from silenttalk import theme
-
-
-def keycap(
-    master: tk.Misc,
-    text: str,
-    *,
-    color: str = theme.PANEL_TOP,
-    fg: str = theme.TEXT,
-    bg: str = theme.BG,
-) -> tk.Label:
-    return tk.Label(
-        master,
-        text=text,
-        bg=color,
-        fg=fg,
-        font=theme.font(9),
-        padx=theme.px(6),
-        pady=0,
-    )
-
-
-def hint_row(
-    master: tk.Misc, items: Sequence[tuple[str, str]], *, bg: str = theme.BG
-) -> tk.Frame:
-    """[key] action  [key] action … in one line."""
-    row = tk.Frame(master, bg=bg)
-    for key, action in items:
-        keycap(row, key).pack(side="left")
-        tk.Label(row, text=action, bg=bg, fg=theme.DIM, font=theme.font(9)).pack(
-            side="left", padx=(theme.px(4), theme.px(12))
-        )
-    return row
 
 
 def wrap_to_width(label: tk.Label, margin: int = 0) -> tk.Label:

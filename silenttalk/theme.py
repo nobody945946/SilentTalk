@@ -52,28 +52,16 @@ ERROR = "#ff7b72"
 SELF_COLOR = ACCENT_HI
 SPEAKER_COLORS = ("#7cc4ff", "#ffb38a", "#e0a6ff", "#7ee0d6", "#ffd98a", "#ff9fbf")
 
-# One color per reply lane code (see copilot/types.py REPLY_LANES).
-LANE_COLORS = {
-    "AGREE": "#5fd39a",
-    "ASK": "#6fb3ff",
-    "DISAGREE": "#ff8a78",
-    "HUMOR": "#ffc857",
-}
-
 
 _SPEAKERS: dict[int, int] = {}
 
 
 def speaker_color(speaker_id: int) -> str:
-    """The same person keeps the same color everywhere (transcript, dialogue).
+    """The same person keeps the same color all through the transcript.
     Colors go out in order of first appearance, so the first six people in a
     session never share one (a Discord user id modulo 6 often would)."""
     index = _SPEAKERS.setdefault(speaker_id, len(_SPEAKERS))
     return SPEAKER_COLORS[index % len(SPEAKER_COLORS)]
-
-
-def lane_color(code: str) -> str:
-    return LANE_COLORS.get(code, ACCENT)
 
 
 # Pixels per logical pixel: 1.0 at 96 DPI, 1.5 at Windows' 150%. Fonts are in

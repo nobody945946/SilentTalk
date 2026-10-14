@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from silenttalk.config import CopilotConfig, Settings
-from silenttalk.conversation import REPLY_LANES, ConversationTurn, ReplySuggestions
+from silenttalk.conversation import ConversationTurn
 from silenttalk.copilot.context import ConversationStore
 from silenttalk.copilot.llm import LocalReplyModel
 from silenttalk.copilot.script import to_taiwan_traditional
@@ -39,7 +39,7 @@ STT_SENTENCES = (
 STT_MAX_CER = 0.15
 
 # (speaker, text) turns as they look after STT + s2twp: Traditional, no punctuation.
-# "你" marks lines the owner actually said.
+# "你" marks the character's own earlier lines.
 LLM_SCENES: tuple[tuple[tuple[str, str], ...], ...] = (
     (
         ("阿傑", "欸我們等等要不要直接衝B點"),
@@ -79,12 +79,11 @@ LLM_SCENES: tuple[tuple[tuple[str, str], ...], ...] = (
         ("阿傑", "那是因為大家不會打他而已"),
     ),
 )
-# Four sampled options on a 3050 Ti Laptop: Gemma 4 E2B ~2.0 s, E4B (the
-# default since 2026-09-29, clearly better lines) 3.0 s. Past 4 s the story-mode
-# choices feel laggy, or the model fell off the GPU.
+# The old four-option gate's bound on a 3050 Ti Laptop: past 4 s a choice felt
+# laggy, or the model had fallen off the GPU. One line is less work, so this
+# is only a ceiling for falling off the GPU; how long a whole line takes on
+# the laptop is not measured yet (2026-10-15).
 LLM_MAX_MEDIAN_SECONDS = 4.0
-# Sampling may not find four different lines, so three of four is the floor.
-LLM_MIN_LANES = 3
 SUMMARY_MARKER = "藍鯨七號"
 
 
@@ -92,11 +91,7 @@ SUMMARY_MARKER = "藍鯨七號"
 class SceneResult:
     trigger: str
     seconds: float
-    suggestions: ReplySuggestions
-
-    @property
-    def lanes(self) -> int:
-        return sum(bool(text) for _, text in self.suggestions.items())
+    line: str
 
 
 def char_error_rate(reference: str, hypothesis: str) -> float:
@@ -209,18 +204,15 @@ def build_transcriber(
     return transcriber, collector
 
 
-def scene_prompt_inputs(
-    scene: tuple[tuple[str, str], ...],
-) -> tuple[list[ConversationTurn], str, str]:
-    """Returns (turns, trigger speaker, trigger text) exactly as runtime does."""
+def scene_turns(scene: tuple[tuple[str, str], ...]) -> list[ConversationTurn]:
+    """The scene as the runtime keeps it."""
     store = ConversationStore()
     for index, (speaker, text) in enumerate(scene):
         if speaker == "你":
             store.append_self(1, text)
         else:
             store.append_external(100 + index, speaker, text)
-    speaker, text = next((s, t) for s, t in reversed(scene) if s != "你")
-    return store.snapshot(), speaker, text
+    return store.snapshot()
 
 
 def build_reply_model(
@@ -244,12 +236,12 @@ async def run_scenes(
 ) -> list[SceneResult]:
     results: list[SceneResult] = []
     for scene in scenes:
-        turns, speaker, text = scene_prompt_inputs(scene)
+        turns = scene_turns(scene)
         started = time.perf_counter()
-        suggestions = await model.suggest(
-            turns=turns, trigger_speaker=speaker, trigger_text=text
-        )
-        results.append(SceneResult(text, time.perf_counter() - started, suggestions))
+        # Called by name, so there is no gate: the line itself is timed.
+        line = await model.character_turn(turns=turns, addressed=True)
+        trigger = next(turn.text for turn in reversed(turns) if not turn.is_self)
+        results.append(SceneResult(trigger, time.perf_counter() - started, line))
     return results
 
 
@@ -323,17 +315,13 @@ async def _llm_gate(settings: Settings, project_dir: Path) -> bool:
     finally:
         await model.stop()
     for result in results:
-        print(f"  {result.seconds:4.1f}s  {result.lanes}/4 格｜對方：{result.trigger}")
-        for lane in REPLY_LANES:
-            print(
-                f"        {lane.key.upper()}：{result.suggestions.text_for(lane) or '—'}"
-            )
+        print(f"  {result.seconds:4.1f}s  對方：{result.trigger}｜角色：{result.line or '—'}")
     median = statistics.median(r.seconds for r in results)
-    format_ok = all(r.lanes >= LLM_MIN_LANES for r in results)
+    format_ok = all(r.line for r in results)
     speed_ok = median <= LLM_MAX_MEDIAN_SECONDS
     print(
         f"  延遲中位數 {median:.2f}s（門檻 {LLM_MAX_MEDIAN_SECONDS:.0f}s）"
-        f"{'' if speed_ok else ' ← 太慢'}；格式 {'OK' if format_ok else '不合格（模型沒照四行格式）'}"
+        f"{'' if speed_ok else ' ← 太慢'}；格式 {'OK' if format_ok else '不合格（叫到它卻沒回話）'}"
     )
     summary_ok = SUMMARY_MARKER in first_summary and SUMMARY_MARKER in final_summary
     print(

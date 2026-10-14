@@ -460,7 +460,6 @@ def _marked_runtime(
         ),
         1,
         lambda value: None,
-        lambda value: None,
         on_character_line=seen.spoken.append,
         on_character_text=lambda line, place: seen.typed.append((line, place)),
         on_turn=seen.recorded.append,
@@ -483,7 +482,7 @@ def _marked_runtime(
     runtime.life._loop = runtime._loop
     runtime.sessions._loop = runtime._loop
     runtime._wake = asyncio.Event()
-    runtime._worker = asyncio.create_task(runtime._suggestion_worker())
+    runtime._worker = asyncio.create_task(runtime._reply_worker())
     return runtime, seen
 
 
@@ -650,7 +649,6 @@ async def test_disabling_agent_clears_pending_owner_instructions(tmp_path):
         replace(CopilotConfig(), character_agent=True),
         1,
         lambda value: None,
-        lambda value: None,
     )
     runtime.set_character_mode(True)
     runtime._loop = asyncio.get_running_loop()
@@ -695,7 +693,6 @@ async def test_cancelled_dispatch_cannot_revive_after_reenable(
         tmp_path,
         replace(CopilotConfig(), character_agent=True),
         1,
-        lambda value: None,
         lambda value: None,
         agent_tasks=Tasks(),
     )
@@ -772,7 +769,6 @@ async def test_approval_details_stay_in_the_dm_and_an_undeliverable_one_is_denie
             tmp_path,
             replace(CopilotConfig(), character_agent=True),
             1,
-            lambda value: None,
             lambda value: None,
             agent_tasks=Tasks(),
             on_agent_approval=approval,
@@ -995,21 +991,27 @@ async def test_a_call_with_something_to_say_passes_nothing_on_and_a_late_line_is
     from silenttalk.copilot import runtime as runtime_module
 
     runtime, _seen = _marked_runtime(tmp_path)
+
+    def waiting() -> str:
+        """The line waiting for an answer: only one that called it waits."""
+        trigger = runtime._pending.get(VOICE_ROOM)
+        return trigger.text if trigger else ""
+
     try:
         runtime._handle_turn(5, "路人", "機魂 你喜歡萬機神嗎")
         runtime._handle_turn(5, "路人", "明天台北會下雨嗎")
-        assert not runtime._latest_trigger.addressed
+        assert waiting() == "機魂 你喜歡萬機神嗎"
         monkeypatch.setattr(runtime_module, "_CALL_CARRY_SECONDS", 0.05)
         runtime._handle_turn(5, "路人", "機魂")
         await asyncio.sleep(0.1)
         runtime._handle_turn(5, "路人", "明天台北會下雨嗎")
-        assert not runtime._latest_trigger.addressed
+        assert waiting() == ""
         # The time to go on counts from its answer to the call, however late.
         runtime._handle_turn(5, "路人", "機魂")
         await asyncio.sleep(0.1)
         runtime.record_self("在，主人。")
         runtime._handle_turn(5, "路人", "明天台北會下雨嗎")
-        assert runtime._latest_trigger.addressed
+        assert waiting() == "明天台北會下雨嗎"
     finally:
         await _close(runtime)
 

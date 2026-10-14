@@ -133,9 +133,7 @@ def test_new_concerns_follow_on_and_do_not_repeat() -> None:
     model.set_persona(EXAMPLE_PERSONAS[0])
     asked: list[str] = []
 
-    def fake(
-        messages, on_lines=None, max_tokens=240, character=False, temperature=0.65
-    ):
+    def fake(messages, max_tokens=240, character=False, temperature=0.65):
         asked.append(messages[0]["content"] + messages[-1]["content"])
         return "想揪大家週六打通宵啦\n1. 想把新鍵盤的燈調好\n下班想吃一碗牛肉麵"
 
@@ -159,9 +157,7 @@ def test_updating_reads_the_chat_and_keeps_the_rest() -> None:
     model.set_state(LIFE)
     seen: list[str] = []
 
-    def fake(
-        messages, on_lines=None, max_tokens=240, character=False, temperature=0.65
-    ):
+    def fake(messages, max_tokens=240, character=False, temperature=0.65):
         seen.append(messages[-1]["content"])
         return "進度|2|progress|拆了，手感比舊的好"
 

@@ -13,8 +13,8 @@ bold text into boxes, so its screenshots say nothing about the real look.
 which is where clipped text shows up.
 
 Needs Pillow. PNGs land in .runtime/dev/ui_preview/; open them and check the
-layout after any UI change. The script also asserts the key flow
-(double-press sends, R regenerates, M changes mood, the character view starts
+layout after any UI change. The script also asserts the key flow (Enter
+says what was typed, the mood menu changes mood, the character view starts
 and pauses) and exits non-zero if it breaks.
 """
 
@@ -26,7 +26,6 @@ import sys
 import tempfile
 import time
 from pathlib import Path
-from types import SimpleNamespace
 
 PROJECT_DIR = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_DIR))
@@ -59,9 +58,8 @@ def main() -> int:
 
     from PIL import ImageGrab
 
-    from silenttalk import story_ui
     from silenttalk.config import config_defaults
-    from silenttalk.conversation import ConversationTurn, ReplySuggestions
+    from silenttalk.conversation import ConversationTurn
     from silenttalk.persona import (
         EXAMPLE_PERSONAS,
         MACHINE_SPIRIT,
@@ -72,21 +70,15 @@ def main() -> int:
     from silenttalk.preferences import PreferenceStore
     from silenttalk.settings_schema import all_settings
     from silenttalk.settings_store import SettingsStore
+    from silenttalk.text import normalize_text
     from silenttalk.ui import SilentTalkUI
-
-    # Rendering and screenshot delays must not expire the synthetic user's
-    # held choices. Advance only the story clock by requested pump durations.
-    story_clock = time.monotonic()
-    story_ui.time = SimpleNamespace(monotonic=lambda: story_clock)
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     temp = Path(tempfile.mkdtemp(prefix="ui-preview-"))
     sent: list[str] = []
-    regenerated: list[bool] = []
     applied: list[str] = []
     character: list[tuple[bool, str, float]] = []
     previews: list[tuple[str, str]] = []
-    typed: list[str] = []
     rerolled: list[bool] = []
     applied_settings: list[list[str]] = []
     personas = PersonaStore(temp / "personas.json")
@@ -94,19 +86,19 @@ def main() -> int:
     ui = SilentTalkUI(
         "F8",
         "F9",
-        lambda text, _style, _rate: sent.append(text),
+        # What the controller speaks: Tk's own Return binding has already put a
+        # newline in the box when the window's Enter sends it.
+        lambda text, _style, _rate: sent.append(normalize_text(text, 300)),
         lambda: None,
         lambda: None,
         QuickPhraseStore(temp / "phrases.json"),
         PreferenceStore(temp / "prefs.json"),
-        regenerate_suggestions=lambda: regenerated.append(True),
         personas=personas,
         apply_persona=lambda persona: applied.append(persona.mood),
         set_character_mode=lambda on, style, rate: character.append((on, style, rate)),
         preview_voice=lambda text, persona, _rate: previews.append(
             (text, persona.voice)
         ),
-        send_text=typed.append,
         reroll_agenda=lambda: rerolled.append(True),
         settings_store=SettingsStore(temp / "settings.json"),
         config_defaults=config_defaults(PROJECT_DIR),
@@ -116,8 +108,6 @@ def main() -> int:
     )
 
     def pump(seconds: float = 0.3) -> None:
-        nonlocal story_clock
-        story_clock += seconds
         end = time.time() + seconds
         while time.time() < end:
             ui.root.update()
@@ -132,118 +122,33 @@ def main() -> int:
 
     def press(keysym: str) -> None:
         ui.popup.focus_force()
-        ui.chat.story.focus_set()
+        ui.chat.manual.input.focus_set()
         pump(0.05)
         ui.popup.event_generate(f"<KeyPress-{keysym}>", state=0, when="now")
         pump(0.1)
 
     ui.show()
-    ui.show_page("story")
+    ui.show_page("manual")
     shot("1_empty")
 
-    trigger = "可是他們B點只有一個人在守 直接衝就好了吧"
     for speaker_id, name, text in (
         (11, "阿傑", "欸我們等等要不要直接衝B點"),
         (12, "小雨", "上一把衝B被架死欸"),
         (0, "你", "我覺得可以先丟煙"),
-        (11, "阿傑", trigger),
+        (11, "阿傑", "可是他們B點只有一個人在守 直接衝就好了吧"),
     ):
         ui.add_conversation_turn(
             ConversationTurn(speaker_id, name, text, is_self=speaker_id == 0)
         )
-    ui.set_suggestions_thinking("阿傑", trigger)
-    pump(1.0)
-    shot("2_thinking")
-
-    # Streaming: two lanes are in, the user already picks ASK; the final
-    # result must keep that choice and stay in the same round.
-    ui.set_suggestions(
-        ReplySuggestions(
-            "阿傑",
-            trigger,
-            agree="好啊，一個人守我們三個衝一定吃得下",
-            ask="你確定只有一個嗎？剛剛是誰看到的？",
-            partial=True,
-        )
-    )
     pump()
-    press("a")
-    shot("2b_streaming")
-    ui.set_suggestions(
-        ReplySuggestions(
-            "阿傑",
-            trigger,
-            agree="好啊，一個人守我們三個衝一定吃得下",
-            ask="你確定只有一個嗎？剛剛是誰看到的？",
-            disagree="上一把就是這樣被架，我覺得先丟煙再進比較穩",
-        )
-    )
-    pump()
-    streamed = (ui.chat.story._selected, ui.chat.story._round)
-    shot("3_choices")
-    press("d")
-    shot("4_selected_d")
-    press("d")
+    shot("2_transcript")
+    expected = "上一把就是這樣被架，我覺得先丟煙再進比較穩"
+    ui.chat.manual.input.insert("1.0", expected)
+    shot("3_typing")
+    press("Return")
     ui.show()
-    shot("5_after_send")
-    # T types the chosen reply into the channel chat instead of saying it.
-    ui.set_suggestions(
-        ReplySuggestions("小雨", "晚餐吃什麼", agree="我都可以啦", ask="你想吃什麼？")
-    )
-    pump()
-    press("a")
-    press("t")
-    ui.show()
-    ui.set_suggestions(
-        ReplySuggestions("小雨", "x", error="本機回覆模型失敗：timed out")
-    )
-    shot("6_error")
-    press("r")
-    press("m")
-    ui.show_page("manual")
-    ui._apply_suggestions(
-        ReplySuggestions(
-            "阿傑",
-            trigger,
-            agree="好啊，一個人守我們三個衝一定吃得下",
-            ask="你確定只有一個嗎？剛剛是誰看到的？",
-            disagree="上一把就是這樣被架，我覺得先丟煙再進比較穩",
-        )
-    )
-    shot("7_manual")
-    # Choices being read stay put: a newer round waits (R shows it), and
-    # takes over by itself once nobody has touched the keys for a while.
-    ui.show_page("story")
-    held_text = ui.chat.story._choices["w"]
-    newer = "那我先丟煙你們跟"
-    ui.add_conversation_turn(ConversationTurn(12, "小雨", newer))
-    ui.set_suggestions_thinking("小雨", newer)
-    pump()
-    ui.set_suggestions(
-        ReplySuggestions("小雨", newer, agree="好，煙丟完我第一個進", partial=True)
-    )
-    pump()
-    ui.set_suggestions(
-        ReplySuggestions(
-            "小雨", newer, agree="好，煙丟完我第一個進", ask="煙要丟哪裡？"
-        )
-    )
-    pump()
-    held = (ui.chat.story._choices["w"], ui.chat.story._line_var.get())
-    shot("16_held")
-    press("r")
-    revealed = (ui.chat.story._choices["w"], ui.chat.story._line_var.get(), len(regenerated))
-    shot("17_revealed")
-    story_ui.HOLD_SECONDS = 1.0
-    press("s")  # reading again (a second press on the selected lane would send)
-    ui.set_suggestions_thinking("阿傑", "好啦走")
-    ui.set_suggestions(
-        ReplySuggestions("阿傑", "好啦走", agree="走走走", ask="誰先進？")
-    )
-    pump(0.3)
-    still_held = ui.chat.story._choices["w"]
-    pump(1.5)
-    auto = ui.chat.story._choices["w"]
+    shot("4_after_send")
+    ui.chat.header._pick("開心")  # what the mood menu does
     ui.show_page("persona")
     shot("8_persona")
     for section in ui.persona_panel.fields._sections:
@@ -305,33 +210,16 @@ def main() -> int:
     ui.add_conversation_turn(ConversationTurn(11, "阿傑", "欸" + "這句話真的很長" * 20))
     pump()
     widened = ui.popup.winfo_width() - width_before
-    ui.show_page("story")  # speaking for you again pauses the character
+    ui.show_page("manual")  # speaking for you again pauses the character
     ui.root.destroy()
 
-    expected = "上一把就是這樣被架，我覺得先丟煙再進比較穩"
     problems = []
     if shown_agenda != "\n".join(f"・{item}" for item in concerns):
         problems.append(
             f"today's concerns should show in the character view, got {shown_agenda!r}"
         )
-    if held != (held_text, trigger):
-        problems.append(
-            f"a newer round must not replace choices being read, got {held}"
-        )
-    if revealed != ("好，煙丟完我第一個進", newer, 1):
-        problems.append(
-            f"R should show the waiting round without regenerating, got {revealed}"
-        )
-    if (still_held, auto) != ("好，煙丟完我第一個進", "走走走"):
-        problems.append(
-            f"a waiting round should take over once the hold ends, got {(still_held, auto)}"
-        )
     if sent != [expected]:
-        problems.append(f"double-press D should send once, got {sent}")
-    if streamed != ("a", 1):
-        problems.append(
-            f"streamed choice should survive the final result, got {streamed}"
-        )
+        problems.append(f"Enter should say the typed line once, got {sent}")
     if [on for on, _style, _rate in character] != [True, False]:
         problems.append(f"character toggle should switch on then off, got {character}")
     if previews != [("欸我的，下波我先進", "zh-TW-YunJheNeural")]:
@@ -349,12 +237,8 @@ def main() -> int:
         problems.append(f"settings page should save only what changed, got {saved}")
     if not applied_settings:
         problems.append("settings page should apply live changes")
-    if typed != ["你想吃什麼？"]:
-        problems.append(f"T should type the selected reply, got {typed}")
-    if regenerated != [True]:
-        problems.append("R should call regenerate once")
     if not applied or applied[-1] != "開心":
-        problems.append(f"M should switch mood 平常 -> 開心, got {applied}")
+        problems.append(f"the mood menu should switch mood to 開心, got {applied}")
     if personas.load().mood != "開心":
         problems.append("mood change should be saved to personas.json")
     if not kept_running:

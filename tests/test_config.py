@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -174,6 +175,33 @@ def test_an_adapter_of_ones_own_applies_only_where_named(tmp_path, monkeypatch):
     with (tmp_path / "config.toml").open("a", encoding="utf-8") as handle:
         handle.write('character_lora_uses = "line"\n')
     assert load_settings(tmp_path).copilot.character_lora_uses == ("line",)
+
+
+@pytest.mark.parametrize(
+    ("saved", "uses"), [("line,options", ("line",)), (["options"], ())]
+)
+def test_a_part_removed_since_the_settings_were_saved_is_dropped(
+    tmp_path, monkeypatch, saved, uses
+):
+    """選項模式 is gone (2026-10-15), but a settings.json saved before still
+    names its part; the app never rewrites that file, so it loads anyway."""
+    _write_config(tmp_path)
+    (tmp_path / "settings.json").write_text(
+        json.dumps({"copilot": {"character_lora_uses": saved}}), encoding="utf-8"
+    )
+    monkeypatch.setenv("DISCORD_BOT_TOKEN", "test-token")
+    monkeypatch.setenv("OWNER_USER_ID", "123456789")
+    assert load_settings(tmp_path).copilot.character_lora_uses == uses
+
+
+def test_an_unknown_adapter_part_is_still_an_error(tmp_path, monkeypatch):
+    _write_config(tmp_path)
+    with (tmp_path / "config.toml").open("a", encoding="utf-8") as handle:
+        handle.write('[copilot]\ncharacter_lora_uses = "line,lines"\n')
+    monkeypatch.setenv("DISCORD_BOT_TOKEN", "test-token")
+    monkeypatch.setenv("OWNER_USER_ID", "123456789")
+    with pytest.raises(ConfigError, match="character_lora_uses"):
+        load_settings(tmp_path)
 
 
 def test_no_adapter_when_set_to_empty(tmp_path, monkeypatch):

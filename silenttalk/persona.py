@@ -83,8 +83,9 @@ TEXT_FIELDS: dict[str, tuple[str, str, int]] = {
 
 MAX_RELATIONSHIPS = 12
 MAX_RELATION_CHARS = 60
-# Rough ceiling for the rendered persona block. Past this, a small model starts
-# ignoring the four-line format, and first-request latency grows on 4 GB GPUs.
+# Rough ceiling for the rendered persona block. Past this, a small model started
+# ignoring the output format (then four lines of options), and first-request
+# latency grows on 4 GB GPUs.
 RECOMMENDED_PROMPT_CHARS = 700
 
 
@@ -195,20 +196,16 @@ class Persona:
             lines.append(f"現在的心情：{self.mood}（語氣要帶出來）")
         return "\n".join(lines)
 
-    def reminder_line(
-        self, what: str = "四句都要是", *, list_catchphrases: bool = True
-    ) -> str:
+    def reminder_line(self) -> str:
         """One line restating who is talking, placed right before the answer.
 
-        Character mode speaks one line after another, so listing catchphrases
-        there makes every line use one; it says "use them rarely" instead."""
+        The character speaks one line after another, so it lists no
+        catchphrases: listed there, every line would use one."""
         bits = [self.name.strip() or "你"]
         feel = _speech_feel(self.speech_style)
         if feel:
             bits.append(feel.split("，")[0])
-        if list_catchphrases and self.catchphrases.strip():
-            bits.append("口頭禪偶爾用：" + _one_line(self.catchphrases))
-        return "（記住：你是" + "；".join(bits) + f"。{what}這個人會說的話。）"
+        return "（記住：你是" + "；".join(bits) + "。開口的話要是這個人會說的話。）"
 
     def signature_phrases(self) -> list[str]:
         """Catchphrases and sample lines: what a small model over-repeats."""

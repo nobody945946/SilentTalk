@@ -85,7 +85,6 @@ class CopilotConfig:
     max_session_turns: int = 240
     max_reply_chars: int = 72
     llama_port: int = 18088
-    auto_popup: bool = True
     llm_model: str = DEFAULT_LLM_MODEL
     # Character-mode LoRA adapter owned by EdgeAgent ("" = none), and
     # which requests use it (copilot.llm.LORA_PARTS); summaries never do.
@@ -166,18 +165,19 @@ def _model_filename(value: object) -> str:
 
 
 def _lora_uses(value: object) -> tuple[str, ...]:
-    from silenttalk.ai_options import LORA_PARTS
+    from silenttalk.ai_options import LORA_PARTS, REMOVED_LORA_PARTS
 
     if value is None:
         return ()
     parts = value if isinstance(value, list) else str(value).split(",")
     chosen = tuple(str(part).strip() for part in parts if str(part).strip())
-    unknown = [part for part in chosen if part not in LORA_PARTS]
+    unknown = [part for part in chosen if part not in LORA_PARTS + REMOVED_LORA_PARTS]
     if unknown:
         raise ConfigError(
             f"copilot.character_lora_uses: {unknown} 不是 {', '.join(LORA_PARTS)} 之一"
         )
-    return chosen
+    # A part whose requests are gone applies to nothing.
+    return tuple(part for part in chosen if part not in REMOVED_LORA_PARTS)
 
 
 def _optional_model_filename(value: object) -> str:
@@ -324,7 +324,6 @@ def load_settings(project_dir: Path) -> Settings:
             ),
             max_reply_chars=max(24, min(160, int(copilot.get("max_reply_chars", 72)))),
             llama_port=max(1024, min(65535, int(copilot.get("llama_port", 18088)))),
-            auto_popup=bool(copilot.get("auto_popup", True)),
             llm_model=llm_model,
             character_lora=character_lora,
             character_lora_uses=character_lora_uses,

@@ -180,7 +180,7 @@ class PersonaPanel(tk.Frame):
         return self._state
 
     def set_mood(self, mood: str) -> None:
-        """Called from story mode; mood is global so it saves immediately."""
+        """Mood is global, so it saves immediately."""
         self._state.mood = mood
         self._persist()
         self._on_apply(self._state.active_persona())

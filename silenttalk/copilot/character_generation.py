@@ -99,7 +99,7 @@ async def fill_concerns(context, transport, state: CharacterState) -> CharacterS
             },
         ]
     raw = await asyncio.to_thread(
-        transport.request_messages, messages, None, 200, False, 0.9
+        transport.request_messages, messages, 200, False, 0.9
     )
     taken = [c.text for c in state.concerns]
     new: list[Concern] = []
@@ -150,7 +150,7 @@ async def update_state(
         },
     ]
     raw = await asyncio.to_thread(
-        transport.request_messages, messages, None, 260 if full else 160, False
+        transport.request_messages, messages, 260 if full else 160, False
     )
     update = parse_state_update(raw, context.life)
     if not full:
@@ -172,7 +172,7 @@ async def summarize(transport, transcript: str, previous: str = "") -> str:
         "寫成重點（誰在聊什麼、決定了什麼、有什麼還沒結束）："
     )
     raw = await asyncio.to_thread(
-        transport.request_completion, system, prompt, None, 640
+        transport.request_completion, system, prompt, 640
     )
     text = raw.strip()
     close_index = text.lower().rfind(templates._THINK_CLOSE)

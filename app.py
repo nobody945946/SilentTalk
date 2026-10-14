@@ -8,7 +8,7 @@ from pathlib import Path
 
 from silenttalk.config import ConfigError, config_defaults, load_settings
 from silenttalk.controller import AppController
-from silenttalk.conversation import ConversationTurn, ReplySuggestions
+from silenttalk.conversation import ConversationTurn
 from silenttalk.logging_setup import configure_logging
 from silenttalk.persona import PersonaStore
 from silenttalk.phrases import QuickPhraseStore
@@ -107,17 +107,9 @@ def main() -> int:
         if ui is not None:
             ui.set_ai_status(message)
 
-    def suggestions(payload: ReplySuggestions) -> None:
-        if ui is not None:
-            ui.set_suggestions(payload)
-
     def conversation_turn(turn: ConversationTurn) -> None:
         if ui is not None:
             ui.add_conversation_turn(turn)
-
-    def thinking(speaker: str, text: str) -> None:
-        if ui is not None:
-            ui.set_suggestions_thinking(speaker, text)
 
     def agenda(items: tuple[str, ...]) -> None:
         if ui is not None:
@@ -127,9 +119,7 @@ def main() -> int:
         settings,
         status,
         project_dir,
-        suggestions,
         on_turn=conversation_turn,
-        on_thinking=thinking,
         on_agenda=agenda,
         on_ai_status=ai_status,
     )
@@ -154,15 +144,10 @@ def main() -> int:
         controller.shutdown,
         quick_phrases,
         preferences,
-        auto_popup_suggestions=settings.copilot.auto_popup,
-        regenerate_suggestions=(
-            controller.regenerate_suggestions if settings.copilot.enabled else None
-        ),
         personas=personas,
         apply_persona=controller.set_persona,
         preview_voice=controller.preview_voice,
         reroll_agenda=controller.reroll_agenda if settings.copilot.enabled else None,
-        send_text=controller.send_text if settings.discord.text_chat else None,
         settings_store=settings_store,
         config_defaults=config_defaults(project_dir),
         apply_settings=controller.apply_settings,

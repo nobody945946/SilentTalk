@@ -20,9 +20,8 @@ _DISCORD_STATES = {
 
 
 class StatusBar:
-    def __init__(self, popup, *, on_close, copilot_enabled, error):
+    def __init__(self, popup, *, on_close, error):
         self.popup, self.close = popup, on_close
-        self._copilot_enabled = copilot_enabled
         self._build_status_bar(error)
 
     def _build_status_bar(self, initial: str) -> None:

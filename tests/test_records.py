@@ -119,7 +119,6 @@ async def test_the_runtime_records_every_turn_and_settings_apply_live(
         replace(CopilotConfig(), record_transcripts=False),
         1,
         lambda value: None,
-        lambda value: None,
     )
     runtime._character_mode = True
     runtime._loop = asyncio.get_running_loop()

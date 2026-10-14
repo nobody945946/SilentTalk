@@ -4,10 +4,7 @@ import asyncio
 import logging
 import time
 
-from silenttalk.conversation import (
-    VOICE_ROOM,
-    ReplySuggestions,
-)
+from silenttalk.conversation import VOICE_ROOM
 from silenttalk.conversation import Trigger as _Trigger
 from silenttalk.copilot.character import CharacterPolicy
 from silenttalk.copilot.reply_transport import InferenceDeferred
@@ -33,8 +30,6 @@ class CharacterReplies:
         on_line,
         on_text,
         on_agent_line,
-        on_suggestions,
-        on_thinking,
     ):
         self._llm, self._config = model, config
         self._context, self._sequence, self._pending = context, sequence, pending
@@ -44,11 +39,7 @@ class CharacterReplies:
             on_line,
             on_text,
         )
-        self._on_agent_line, self._on_suggestions, self._on_thinking = (
-            on_agent_line,
-            on_suggestions,
-            on_thinking,
-        )
+        self._on_agent_line = on_agent_line
         self.enabled = False
         self.policy = CharacterPolicy(mode=config.character_engagement)
         self.last_heard_at = 0.0
@@ -139,42 +130,6 @@ class CharacterReplies:
             self._on_character_text(line, VOICE_ROOM)
         elif self._on_character_line is not None:
             self._on_character_line(line)
-
-    async def generate(self, trigger: _Trigger) -> None:
-        if self._on_thinking is not None:
-            self._on_thinking(trigger.speaker_name, trigger.text)
-        started = time.perf_counter()
-        context = self._context(trigger.place)
-        try:
-            suggestions = await self._llm.suggest(
-                turns=context.snapshot(),
-                summary=context.summary,
-                trigger_speaker=trigger.speaker_name,
-                trigger_text=trigger.text,
-                on_partial=self._on_suggestions,
-            )
-        except InferenceDeferred:
-            raise
-        except asyncio.CancelledError:
-            raise
-        except Exception as exc:
-            _LOG.warning(
-                "copilot_suggestion_failed error_type=%s",
-                type(exc).__name__,
-            )
-            self._on_error(f"Copilot 建議產生失敗：{exc}")
-            suggestions = ReplySuggestions(
-                trigger_speaker=trigger.speaker_name,
-                trigger_text=trigger.text,
-                error=str(exc),
-            )
-        _LOG.info(
-            "copilot_suggestion_ready latency_ms=%d lanes=%d failed=%s",
-            round((time.perf_counter() - started) * 1000),
-            sum(bool(text) for _, text in suggestions.items()),
-            bool(suggestions.error),
-        )
-        self._on_suggestions(suggestions)
 
     async def open_topic(self) -> None:
         """Nobody has said anything for a while: the character brings up
