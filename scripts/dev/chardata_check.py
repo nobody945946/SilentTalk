@@ -51,6 +51,16 @@ AGENT_PAIR_CRITERIA = (
     + DRIVE_JUDGE + "；口語自然，不是客服腔或制式的機器回應；語氣詞不堆疊。"
 )
 CHECK_LULL = "（大家安靜了一陣子，接著角色開口）"
+# The app's work questions, put to the checker as a judge of the chat: asked
+# inside the character's own request (its role prompt, its earlier lines as
+# its turns) under a 是/否 grammar, the forced first word was a reply's, and
+# 「是」 starts many (10/14 pilot: 「今晚別太拼，小心過熱」 and a bare 「機魂」 got 是).
+CHECK_GATE = """下面是 Discord 聊天的最後幾句。{who}下面問題裡的「你」指它。
+
+對話：
+{chat}
+
+{question}"""
 CHECK_LORE = """下面是 Discord 語音聊天的最後幾句，以及「{name}」接的話。
 
 角色：
@@ -134,6 +144,13 @@ def chat_text(row: dict[str, Any], name: str, last: int = 10) -> str:
     return "\n".join(chat_lines)
 
 
+def gate_question(row: dict[str, Any]) -> str:
+    """The question the app asked the character on a gate row: the last line
+    of its request, without the brackets."""
+    last = row["messages"][-2]["content"].strip().splitlines()[-1].strip()
+    return last.removeprefix("（").removesuffix("）")
+
+
 def clean_line(raw: str) -> str:
     """First line of the student's answer, without a "名字：" it may prefix."""
     line = next((part.strip() for part in raw.splitlines() if part.strip()), "")
@@ -208,13 +225,12 @@ def make_check(args: argparse.Namespace) -> None:
         key = store.row_key(row)
         raw = personas[row["persona_id"]]
         if row["kind"].startswith("gate"):
-            answer = chat(
-                args.teacher_url,
-                row["messages"][:-1],
-                temperature=0.0,
-                max_tokens=2,
-                grammar='root ::= "是" | "否"',
-            )[0].strip()
+            who = (f"「{raw['name']}」是寄宿在主人{row['owner']}電腦（思考機）裡的角色，"
+                   if row.get("owner") else f"「{raw['name']}」是聊天裡的角色，")
+            # Its card is left out on purpose: with it (10/14, 25 pilot rows on
+            # the 31B checker) two right verdicts turned wrong and none came right.
+            answer = "是" if ask_yes(CHECK_GATE.format(
+                who=who, chat=chat_text(row, raw["name"]), question=gate_question(row))) else "否"
             store.append_row(
                 path, {"key": key, "agree": answer == row["messages"][-1]["content"]}
             )

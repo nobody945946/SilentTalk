@@ -447,6 +447,39 @@ def test_the_checker_is_told_the_rules_and_what_the_app_told_the_character(
     assert lines and all("lore" in v for v in lines)
 
 
+
+def test_the_gate_questions_are_put_to_the_checker_as_a_judge_of_the_chat(
+    chardata: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Asked inside the character's own request under a 是/否 grammar, the
+    checker's forced first word was a reply's (10/14 pilot): each gate row is
+    one question about the chat instead, with the app's own question."""
+    rows = _render(chardata, [_stored(TEACHER_CHAT)])
+    (chardata / "student.jsonl").write_text("".join(
+        json.dumps({"key": r["key"], "line": "測試學生"}, ensure_ascii=False) + "\n"
+        for r in rows if r["kind"] in chardata_requests.LINE_KINDS), encoding="utf-8")
+    asked: list[list[dict]] = []
+
+    def checker(url, messages, **kw):
+        asked.append(messages)
+        return ["A" if "A" in kw.get("grammar", "") else "否"]
+
+    monkeypatch.setattr(chardata_check, "chat", checker)
+    args = type("Args", (), {"rows": "train.jsonl", "teacher_url": "", "workers": 1,
+                             "max_gate_rows": 4000, "lines_by_rules": True})()
+    chardata_check.make_check(args)
+    gates = [r for r in rows if r["kind"].startswith("gate")]
+    judged = [m for m in asked if "下面問題裡的「你」指它" in m[-1]["content"]]
+    assert gates and len(judged) == len(gates)
+    for messages in judged:
+        assert [m["role"] for m in messages] == ["user"]  # no role prompt, no turns of its own
+        assert f"主人{OWNER}電腦" in messages[0]["content"]
+        assert messages[0]["content"].rstrip().endswith("只回答 是 或 否")
+    verdicts = {v["key"]: v for v in map(json.loads, (chardata / "check.jsonl")
+                                         .read_text(encoding="utf-8").splitlines())}
+    for row in gates:
+        assert verdicts[row["key"]]["agree"] == (row["messages"][-1]["content"] == "否")
+
 def test_the_builtin_card_is_the_one_the_app_ships(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
