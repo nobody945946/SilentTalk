@@ -15,10 +15,10 @@ from __future__ import annotations
 
 import argparse
 import json
-import subprocess
-import time
 import urllib.request
 from pathlib import Path
+
+from serve_wait import start
 
 ROOT = Path(__file__).resolve().parents[2]
 SERVER = ROOT / ".runtime/tools/llama.cpp-b11193-src/build-cuda/bin/llama-server"
@@ -75,18 +75,11 @@ def main() -> int:
     # What training needs: the prompt before every assistant turn, exactly as
     # the server builds it when it asks the model for that turn.
     turns = [i for i, m in enumerate(messages) if m["role"] == "assistant"]
-    server = subprocess.Popen(
+    server = start(
         [str(SERVER), "--model", args.gguf, "--port", str(args.port), "--host", "127.0.0.1",
-         "--jinja", "--n-gpu-layers", "0", "--ctx-size", "4096"],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+         "--jinja", "--n-gpu-layers", "0", "--ctx-size", "4096"], timeout=600)
     failures = 0
     try:
-        for _ in range(300):
-            try:
-                with urllib.request.urlopen(f"http://127.0.0.1:{args.port}/health", timeout=2):
-                    break
-            except OSError:
-                time.sleep(2)
         for index in turns:
             prefix = messages[:index]
             hf = tokenizer.apply_chat_template(

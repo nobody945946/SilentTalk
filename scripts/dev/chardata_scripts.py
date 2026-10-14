@@ -1,6 +1,6 @@
 """The rules a teacher's script is held to before it becomes character data
 (character_data.py): the app's own turn-taking, the Agent's one job at a
-time, and no line or name of the eval sets."""
+time (others wait their turn), and no line or name of the eval sets."""
 
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ from silenttalk.conversation import (
 )
 from silenttalk.copilot.character import NameMatcher, persona_names
 from silenttalk.copilot.reply_templates import _CHAT_TASK_MAX_CHARS
+from silenttalk.copilot.task_runner import _MAX_WAITING
 from silenttalk.copilot.script import to_taiwan_traditional
 from silenttalk.persona import EXAMPLE_PERSONAS, PRESET_PERSONAS, Persona
 
@@ -149,22 +150,30 @@ def check_agent_script(
     data: dict[str, Any], name: str, spec: dict[str, Any], aliases: Iterable[str] = ()
 ) -> tuple[list[dict[str, Any]], str]:
     """An agent chat, held to what the app does, or refused: a line calls the
-    character exactly when it says its name (by sound, as the app matches it)
-    or is a typed line aimed at it (an @ or a reply); every call carries what
-    it asks for and is answered by the very next line; the character speaks
-    only then, to report the Agent's result, or after a quiet spell. Work
-    comes with its instructions and result and is reported before the next
-    work (the Agent does one job at a time). The result the app types into
-    the chat (as 思考機) is put in right before the report."""
+    character exactly when it says its name (by sound, as the app matches it),
+    is a typed line aimed at it (an @ or a reply), or is the spoken line right
+    after the same speaker's bare call (NameMatcher.bare: the app carries the
+    call over); every call carries what it asks for and is answered by the
+    very next line, except a bare call the same speaker's request follows at
+    once (the app answers the newest line); the character speaks only then,
+    to report the Agent's result, or after a quiet spell. Work asked while
+    the Agent is busy is told that it waits (at most _MAX_WAITING wait), and
+    every piece is reported, oldest first. The result the app types into the
+    chat (as 思考機) is put in right before the report."""
     speakers = set(spec["humans"]) | {name}
     nicks = [a.strip() for a in aliases if a.strip()]
     alias = {a: name for a in nicks if a not in speakers}
     calls = NameMatcher(persona_names(Persona(id="check", name=name, nickname="、".join(nicks))))
     lines: list[dict[str, Any]] = []
-    pending: dict[str, Any] | None = None  # work waiting for its report
+    pending: list[dict[str, Any]] = []  # work running or waiting, oldest first
+    carry: set[str] = set()  # who just called it by its name alone
     raw_lines = list(data.get("lines", []))
+
+    def speaker_of(raw: dict[str, Any]) -> str:
+        return alias.get(str(raw.get("s", "")).strip(), str(raw.get("s", "")).strip())
+
     for position, raw in enumerate(raw_lines):
-        speaker = alias.get(str(raw.get("s", "")).strip(), str(raw.get("s", "")).strip())
+        speaker = speaker_of(raw)
         if speaker == AGENT_NAME:
             continue  # the app types the Agent's result itself
         text = to_taiwan_traditional(str(raw.get("t", "")).strip())
@@ -185,34 +194,58 @@ def check_agent_script(
             if previous is not None and previous["s"] == name:
                 return [], "character twice in a row"
             report = _flag(raw.get("report"))
+            queued = bool(_flag(raw.get("queued")))
             if called and (report or line["quiet"]):
                 return [], "call not answered"
+            waits = called and previous.get("ask") == "work" and previous is not pending[0]
+            if queued != waits:
+                return [], "queued without busy work" if queued else "busy work not told it waits"
+            if queued:
+                line["queued"] = True
             if report:
-                if pending is None:
+                if not pending:
                     return [], "report without work"
-                result = pending["result"]
+                result = pending.pop(0)["result"]
                 lines.append({"s": AGENT_NAME, "t": result[:AGENT_RESULT_CONTEXT_CHARS],
                               "to": "大家", "via": "text", "quiet": False, "agent_result": True})
                 line["report"] = result[:SPOKEN_RESULT_CHARS]
-                pending = None
             elif not called and not line["quiet"]:
                 return [], "speaks uncalled"
         else:
             if called:
                 return [], "call not answered"
+            # The app passes a bare call on to the same speaker's next spoken
+            # line, whatever it says (typed lines need their own @).
+            carried = not typed and speaker in carry
+            if not typed:
+                carry.discard(speaker)
+            if carried and target != name:
+                return [], "bare call not followed"
             if calls(text) and target != name:
                 # The app calls it on its name: when the character answers
                 # next, the teacher only mislabelled the line; otherwise drop.
                 upcoming = raw_lines[position + 1] if position + 1 < len(raw_lines) else {}
-                if alias.get(str(upcoming.get("s", "")).strip(), str(upcoming.get("s", "")).strip()) != name:
+                if speaker_of(upcoming) != name:
                     return [], "names it but not aimed"
                 target = line["to"] = name
-            if target == name and not typed and not calls(text):
+            if target == name and not typed and not calls(text) and not carried:
                 # Spoken, it would not reach the character without its name
                 # (the app needs the name in every spoken line); people say
                 # it first, so the line gets it in front instead of losing
                 # the whole chat (half the pilot's chats, 2026-10-06).
                 line["t"] = text = f"{nicks[0] if nicks else name}，{text}"
+            if carried:
+                line["carried"] = True
+            if not typed and calls.bare(text):
+                carry.add(speaker)
+                upcoming = raw_lines[position + 1] if position + 1 < len(raw_lines) else {}
+                if speaker_of(upcoming) == speaker:
+                    # Its request follows at once: the app answers that one.
+                    line["bare"] = True
+                    if copies_eval(line["t"]):
+                        return [], "eval line"
+                    lines.append(line)
+                    continue
             if target == name:
                 # An unlabelled call is conversation: work and computer
                 # requests carry their own fields, which talk does not need.
@@ -225,18 +258,18 @@ def check_agent_script(
                     result = to_taiwan_traditional(str(raw.get("result") or "").strip())
                     if not task or not result:
                         return [], "work without task or result"
-                    if pending is not None:
-                        return [], "work while busy"
+                    if len(pending) > _MAX_WAITING:
+                        return [], "work while the queue is full"
                     if "附件" in text and not typed:
                         return [], "attachment not typed"
                     line |= {"task": task[:_CHAT_TASK_MAX_CHARS], "result": result}
-                    pending = line
+                    pending.append(line)
         if copies_eval(line["t"]):
             return [], "eval line"
         lines.append(line)
     if lines and "ask" in lines[-1]:
         return [], "call not answered"
-    if pending is not None:
+    if pending:
         return [], "work without report"
     asks = [line["ask"] for line in lines if "ask" in line]
     if len(lines) < 12:

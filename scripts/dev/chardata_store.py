@@ -19,6 +19,8 @@ from silenttalk.conversation import (
     AGENT_SPEAKER_ID,
     SPOKEN_RESULT_CHARS,
 )
+from silenttalk.copilot.character import BARE_CALL_CHARS
+from silenttalk.copilot.task_runner import _FAILED, _MAX_WAITING, _QUEUED, _STOPPED
 from silenttalk.persona import Persona, persona_from_dict
 
 PROJECT_DIR = Path(__file__).resolve().parents[2]
@@ -58,10 +60,12 @@ _EXTRA_KEYS = ("role", "owner_relation", "archetype", "stt_variants")
 
 def rules_version() -> str:
     files = provenance.fingerprint([*RULE_FILES, OUT_DIR / "personas.jsonl"])
-    # How the app puts the Agent's result into a chat shapes an agent
-    # character's rows too: those values of runtime.py, not the whole file,
-    # which changes for many other reasons and would stop a run for nothing.
-    agent = repr((AGENT_NAME, AGENT_SPEAKER_ID, AGENT_RESULT_CONTEXT_CHARS, SPOKEN_RESULT_CHARS))
+    # How the app puts the Agent's result into a chat, what it says of work
+    # that waits or fails and what counts as a bare call shape an agent
+    # character's rows too: those values, not their whole files, which change
+    # for many other reasons and would stop a run for nothing.
+    agent = repr((AGENT_NAME, AGENT_SPEAKER_ID, AGENT_RESULT_CONTEXT_CHARS, SPOKEN_RESULT_CHARS,
+                  _QUEUED, _FAILED, _STOPPED, _MAX_WAITING, BARE_CALL_CHARS))
     return hashlib.sha256((files + agent).encode()).hexdigest()[:16]
 
 

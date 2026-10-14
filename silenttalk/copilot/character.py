@@ -74,6 +74,15 @@ def persona_names(persona: Persona) -> list[str]:
     return names or list(_GENERIC_NAMES)
 
 
+# Speech recognition closes a segment at half a second of silence, so "機魂，
+# (pause) 幫我查明天天氣" arrives as two lines and only the first has the name
+# (laptop round 11: voice lookups that named it never reached the Agent). A
+# spoken line that is nothing but the call ("機魂", "機魂在嗎": at most this
+# many other letters) passes it on to the same speaker's next spoken line
+# (runtime.py, _CALL_CARRY_SECONDS).
+BARE_CALL_CHARS = 2
+
+
 class NameMatcher:
     """Whether a line calls the character: a Latin name as written (any
     case), a Chinese one by sound, so any characters read the same way
@@ -107,3 +116,8 @@ class NameMatcher:
     def rest(self, text: str) -> str:
         """The line without its calls (what was said besides the name)."""
         return self._pattern.sub("", text) if self._pattern is not None else text
+
+    def bare(self, text: str) -> bool:
+        """A call and next to nothing else ("機魂", "機魂在嗎"): what the
+        caller wants comes in their next line (BARE_CALL_CHARS)."""
+        return self(text) and sum(ch.isalnum() for ch in self.rest(text)) <= BARE_CALL_CHARS

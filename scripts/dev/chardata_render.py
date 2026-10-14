@@ -45,6 +45,12 @@ _AI_CLAIM_MACHINE = re.compile(
 _ASSISTANT = re.compile(
     r"(以下是|```|def |import |步驟一|第一步[，,：:]|好的，我來幫你)"
 )
+# An answer (talk, or computer work turned down) hands nothing to the Agent,
+# so it may not promise work: "我去查" there is a promise nobody keeps
+# (laptop round 11).
+_PROMISE = re.compile(
+    r"((我|等我|讓我)(去|來|再)?(幫你|幫妳)?(查|搜|找找)|(交給|讓|叫|請)思考機|思考機(去|會|來|幫))"
+)
 
 
 def usable(line: str, spec: dict[str, Any], args: argparse.Namespace) -> bool:
@@ -237,6 +243,8 @@ def _trained_line(
         line = script["lines"][index if kind in OWN_KINDS else index + 1]["t"]
         if not usable(line, spec, args):
             return ""
+    if kind == "line" and spec.get("agent") and _PROMISE.search(line):
+        return ""
     return line
 
 

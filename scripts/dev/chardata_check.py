@@ -10,7 +10,6 @@ import json
 import math
 import random
 import re
-import time
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
@@ -44,7 +43,7 @@ PAIR_CRITERIA = (
 # An agent character (the machine spirit) is not a human friend, and what
 # the app lets it do decides which line is right before style does.
 AGENT_RULES = """這個角色的規則（系統就是這樣運作）：
-- 主人是{owner}。任何人請它做聊天室級的工作（查資料、寫程式碼、寫文章、看貼的圖或檔案、翻譯或解釋）時，系統交給思考機去做：它接下時只說去做了，不說已經做好；轉述結果只能說「系統告訴角色」裡有的內容，不自己補，查不到或失敗要直說。
+- 主人是{owner}。任何人請它做聊天室級的工作（查資料、寫程式碼、寫文章、看貼的圖或檔案、翻譯或解釋貼出的一段文字、程式或指令）時，系統交給思考機去做：它接下時只說去做了，不說已經做好；轉述結果只能說「系統告訴角色」裡有的內容，不自己補，查不到或失敗要直說。
 - 要動主人的電腦、檔案、紀錄或別處的對話，用說的、或主人以外的人（就算說主人同意）都不行：它用自己的口吻婉拒，不能說自己在做。
 - 它不在聊天裡直接說出程式碼或長篇文字；可以說自己是機器，但不說自己是 AI、語言模型、聊天機器人或程式。"""
 AGENT_PAIR_CRITERIA = (
@@ -52,6 +51,25 @@ AGENT_PAIR_CRITERIA = (
     + DRIVE_JUDGE + "；口語自然，不是客服腔或制式的機器回應；語氣詞不堆疊。"
 )
 CHECK_LULL = "（大家安靜了一陣子，接著角色開口）"
+# The app's work questions, put to the checker as a judge of the chat: asked
+# inside the character's own request (its role prompt, its earlier lines as
+# its turns) under a 是/否 grammar, the forced first word was a reply's, and
+# 「是」 starts many (10/14 pilot: 「今晚別太拼，小心過熱」 and a bare 「機魂」 got 是).
+CHECK_GATE = """下面是 Discord 聊天的最後幾句。{who}下面問題裡的「你」指它。
+
+對話：
+{chat}
+
+{question}"""
+# The chat-work question is a list of rules to apply, not a first
+# impression: answering at once, the checker called lore questions, a
+# request to run a script and friends fishing for someone's words work (v3
+# pilot 10/15, 30 rows: 23 agreed at once, 27 after thinking, the character's
+# lore told). It thinks first; one that thinks past THINK_TOKENS gives no
+# verdict, and that counts as disagreeing.
+THINK_GATES = frozenset({"gate_chat_task"})
+THINK_TAIL = "\n先想清楚再回答，最後只寫 是 或 否。"
+THINK_TOKENS = 6000
 CHECK_LORE = """下面是 Discord 語音聊天的最後幾句，以及「{name}」接的話。
 
 角色：
@@ -84,15 +102,18 @@ def chat(
     max_tokens: int,
     n: int = 1,
     grammar: str | None = None,
+    think: bool = False,
 ) -> list[str]:
-    """The teacher. Retries while the pipeline supervisor restarts it."""
+    """The model on this step's server. A request that fails fails the step:
+    nothing restarts the server any more (character_pipeline.sh), so waiting
+    for it would only hide why."""
     body: dict[str, Any] = {
         "messages": messages,
         "temperature": temperature,
         "top_p": 0.9,
         "max_tokens": max_tokens,
         "cache_prompt": True,
-        "chat_template_kwargs": {"enable_thinking": False},
+        "chat_template_kwargs": {"enable_thinking": think},
     }
     if grammar:
         body["grammar"] = grammar
@@ -105,26 +126,9 @@ def chat(
     # One request per sample (not every llama-server build honours "n"); the
     # shared prompt is cached after the first.
     for _ in range(n):
-        deadline = time.monotonic() + 20 * 60
-        while True:
-            try:
-                with urllib.request.urlopen(request, timeout=900) as response:
-                    texts.append(
-                        str(
-                            json.load(response)["choices"][0]["message"]["content"]
-                            or ""
-                        )
-                    )
-                break
-            except (OSError, json.JSONDecodeError) as exc:
-                if time.monotonic() >= deadline:
-                    raise TeacherUnavailable(str(exc)) from exc
-                time.sleep(3)
+        with urllib.request.urlopen(request, timeout=900) as response:
+            texts.append(str(json.load(response)["choices"][0]["message"]["content"] or ""))
     return [re.sub(r"<think>.*?</think>", "", t, flags=re.S).strip() for t in texts]
-
-
-class TeacherUnavailable(RuntimeError):
-    pass
 
 
 def chat_text(row: dict[str, Any], name: str, last: int = 10) -> str:
@@ -148,6 +152,13 @@ def chat_text(row: dict[str, Any], name: str, last: int = 10) -> str:
         told = TASK_HINTS[row["kind"]].split("{detail}")[0].lstrip("（")
         chat_lines.append(f"（系統告訴角色：{told}{row['detail']}）")
     return "\n".join(chat_lines)
+
+
+def gate_question(row: dict[str, Any]) -> str:
+    """The question the app asked the character on a gate row: the last line
+    of its request, without the brackets."""
+    last = row["messages"][-2]["content"].strip().splitlines()[-1].strip()
+    return last.removeprefix("（").removesuffix("）")
 
 
 def clean_line(raw: str) -> str:
@@ -220,17 +231,31 @@ def make_check(args: argparse.Namespace) -> None:
                     temperature=0.0, max_tokens=2,
                     grammar='root ::= "是" | "否"')[0].strip() == "是"
 
+    def ask_thinking(prompt: str) -> str:
+        """是 or 否 after thinking, or "" when the thought ran out first."""
+        text = chat(args.teacher_url, [{"role": "user", "content": prompt + THINK_TAIL}],
+                    temperature=0.0, max_tokens=THINK_TOKENS, think=True)[0]
+        found = re.findall(r"[是否]", text[-20:])
+        return found[-1] if found else ""
+
     def work(row: dict[str, Any]) -> None:
         key = store.row_key(row)
         raw = personas[row["persona_id"]]
         if row["kind"].startswith("gate"):
-            answer = chat(
-                args.teacher_url,
-                row["messages"][:-1],
-                temperature=0.0,
-                max_tokens=2,
-                grammar='root ::= "是" | "否"',
-            )[0].strip()
+            who = (f"「{raw['name']}」是寄宿在主人{row['owner']}電腦（思考機）裡的角色，"
+                   if row.get("owner") else f"「{raw['name']}」是聊天裡的角色，")
+            # Its card is left out on purpose: with it (10/14, 25 pilot rows on
+            # the 31B checker) two right verdicts turned wrong and none came right.
+            # Its world is told: the app's question sets what it already knows
+            # apart from lookups, and the student has its lore in its card (v3
+            # pilot 10/15: without it the checker reasoned 憎惡智能 was not).
+            if raw.get("lore"):
+                who += "它本來就熟悉這些設定：" + "、".join(item["term"] for item in raw["lore"]) + "。"
+            prompt = CHECK_GATE.format(who=who, chat=chat_text(row, raw["name"]), question=gate_question(row))
+            if row["kind"] in THINK_GATES:
+                answer = ask_thinking(prompt)
+            else:
+                answer = "是" if ask_yes(prompt) else "否"
             store.append_row(
                 path, {"key": key, "agree": answer == row["messages"][-1]["content"]}
             )

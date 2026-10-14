@@ -19,6 +19,7 @@ from silenttalk.copilot.reply_templates import (
     _GATE_QUESTION,
     TASK_HINTS,
 )
+from silenttalk.copilot.task_runner import _QUEUED
 from silenttalk.persona import Persona, Relationship
 
 # Speech-recognition confusions seen in this app's STT tests, plus common
@@ -91,17 +92,23 @@ def agent_points(script: dict[str, Any], name: str) -> list[dict[str, Any]]:
     """What the app asks at each line of an agent script (check_agent_script
     and check_thread made them consistent), in order. A line that calls the
     character: the chat-work question, then for work the Agent's instructions
-    and the character's acceptance, otherwise its answer. A line of the
-    character's carrying the Agent's result: its report. A line the owner
-    typed in his thread: whether the work changes anything."""
+    and the character's acceptance (or, the Agent busy, its news that the work
+    waits: task_runner's report of _QUEUED), otherwise its answer. A line of
+    the character's carrying the Agent's result: its report. A line the owner
+    typed in his thread: whether the work changes anything. A bare call whose
+    request followed at once asks nothing (the app answers the newest)."""
     points: list[dict[str, Any]] = []
-    for index, line in enumerate(script["lines"]):
+    lines = script["lines"]
+    for index, line in enumerate(lines):
         ask = line.get("ask")
         if ask:
             points.append({"index": index, "kind": "gate_chat_task", "answer": ask == "work"})
             if ask == "work":
-                points += [{"index": index, "kind": "task_text", "detail": line["task"]},
-                           {"index": index, "kind": "ack", "detail": line["task"]}]
+                points.append({"index": index, "kind": "task_text", "detail": line["task"]})
+                if index + 1 < len(lines) and lines[index + 1].get("queued"):
+                    points.append({"index": index + 1, "kind": "report", "detail": _QUEUED})
+                else:
+                    points.append({"index": index, "kind": "ack", "detail": line["task"]})
             else:
                 points.append({"index": index, "kind": "line"})
         elif line.get("report"):
