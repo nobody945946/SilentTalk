@@ -16,8 +16,15 @@ files.
                                                   with its id, once one is newer than <id>
                                                   (any, without --after); then exits
   channel.py done <devbox|laptop> <id>...         removes messages that were acted on
+  channel.py gate                                 runs $SSH_ORIGINAL_COMMAND if the laptop may
 
 From the laptop: ssh <dev box> python3 /home/clawd/SilentTalk/scripts/dev/channel.py ...
+
+The laptop's channel key (no passphrase, so its waker works with nobody
+there) can do nothing else: authorized_keys runs every command it sends
+through `gate` (restrict,command="python3 <this file> gate"), which allows
+only waiting on and acknowledging the laptop's mail and sending to the dev
+box.
 """
 
 from __future__ import annotations
@@ -27,6 +34,7 @@ import json
 import os
 import re
 import select
+import shlex
 import sys
 import time
 from pathlib import Path
@@ -146,7 +154,34 @@ def wait(box: str, after: str | None = None) -> list[dict[str, str]]:
         os.close(fd)
 
 
+def gate(command: str) -> list[str]:
+    """The channel.py arguments in an SSH command the laptop's channel key
+    may run; anything else is refused."""
+    try:
+        words = shlex.split(command)
+    except ValueError:
+        raise SystemExit("refused: not one channel command") from None
+    if words[:1] in (["python3"], ["python"]):
+        words = words[1:]
+    if words[:1] and Path(words[0]).name == "channel.py":
+        words = words[1:]
+    def ids(given: list[str]) -> bool:
+        return bool(given) and all(ID.fullmatch(word) for word in given)
+
+    allowed = (
+        words == ["wait", "laptop"]
+        or (len(words) == 4 and words[:3] == ["wait", "laptop", "--after"] and ids(words[3:]))
+        or (words[:2] == ["done", "laptop"] and ids(words[2:]))
+        or (len(words) >= 3 and words[:2] == ["send", "devbox"] and words[2] in KINDS)
+    )
+    if not allowed:
+        raise SystemExit("refused: the channel key may wait on and mark the laptop's mail, and send to the dev box")
+    return words
+
+
 def main(argv: list[str]) -> int:
+    if argv == ["gate"]:
+        return main(gate(os.environ.get("SSH_ORIGINAL_COMMAND", "")))
     if len(argv) >= 3 and argv[0] == "send":
         print(json.dumps(send(argv[1], argv[2], " ".join(argv[3:])), ensure_ascii=False))
         return 0

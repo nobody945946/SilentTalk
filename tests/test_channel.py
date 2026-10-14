@@ -106,3 +106,75 @@ def test_the_command_line_waits_and_marks_done(tmp_path) -> None:
         for line in run("wait", "devbox", "--after", sent["id"]).splitlines()
     ]
     assert [m["id"] for m in printed] == [later["id"]]
+
+
+@pytest.mark.parametrize(
+    ("command", "words"),
+    [
+        (
+            "python3 /home/clawd/SilentTalk/scripts/dev/channel.py wait laptop",
+            ["wait", "laptop"],
+        ),
+        (
+            "channel.py wait laptop --after 1791976126190482451-808389",
+            ["wait", "laptop", "--after", "1791976126190482451-808389"],
+        ),
+        ("python3 channel.py done laptop 1-2 3-4", ["done", "laptop", "1-2", "3-4"]),
+        (
+            "python3 channel.py send devbox report laptop-report 1234567",
+            ["send", "devbox", "report", "laptop-report", "1234567"],
+        ),
+    ],
+)
+def test_the_channel_key_runs_the_laptops_channel_commands(
+    channel, command, words
+) -> None:
+    assert channel.gate(command) == words
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "",
+        "bash",
+        "cat ~/.ssh/authorized_keys",
+        "python3 channel.py wait devbox",
+        "python3 channel.py send laptop round x",
+        "python3 channel.py send devbox shell x",
+        "python3 channel.py done laptop ../devbox/x",
+        "python3 channel.py done devbox 1-2",
+        "python3 channel.py wait laptop; rm -rf ~",
+        "python3 channel.py wait laptop --after $(id)",
+        "python3 channel.py send devbox note it's",
+        "python3 other.py wait laptop",
+    ],
+)
+def test_the_channel_key_runs_nothing_else(channel, command) -> None:
+    with pytest.raises(SystemExit):
+        channel.gate(command)
+
+
+def test_the_gate_runs_the_command_ssh_was_given(tmp_path) -> None:
+    env = {"CHANNEL_ROOT": str(tmp_path), "PATH": "/usr/bin:/bin"}
+    sent = subprocess.run(
+        [sys.executable, str(SCRIPT), "gate"],
+        capture_output=True,
+        text=True,
+        env={
+            **env,
+            "SSH_ORIGINAL_COMMAND": f"python3 {SCRIPT} send devbox note hello there",
+        },
+        timeout=10,
+        check=False,
+    )
+    assert sent.returncode == 0, sent.stderr
+    assert json.loads(sent.stdout)["text"] == "hello there"
+    refused = subprocess.run(
+        [sys.executable, str(SCRIPT), "gate"],
+        capture_output=True,
+        text=True,
+        env={**env, "SSH_ORIGINAL_COMMAND": "id"},
+        timeout=10,
+        check=False,
+    )
+    assert refused.returncode != 0 and refused.stdout == ""

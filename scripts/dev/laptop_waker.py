@@ -27,6 +27,7 @@ next run or the owner, and only a newer message starts another run.
 from __future__ import annotations
 
 import argparse
+import glob
 import json
 import os
 import subprocess
@@ -219,7 +220,7 @@ class Waker:
 
     def start_run(self) -> int:
         process = subprocess.Popen(
-            [*self.codex, PROMPT],
+            [newest(self.codex[0]), *self.codex[1:], PROMPT],
             cwd=REPO,
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
@@ -274,6 +275,16 @@ class Waker:
                 self.note(
                     f"laptop waker: the Codex run for {self.after} exited {code}; {left} message(s) were waiting"
                 )
+
+
+def newest(executable: str) -> str:
+    """The executable itself, or with a wildcard the newest file it matches."""
+    if not glob.has_magic(executable):
+        return executable
+    matches = glob.glob(executable)
+    if not matches:
+        raise FileNotFoundError(f"nothing matches {executable}")
+    return max(matches, key=os.path.getmtime)
 
 
 def single_instance(path: Path = LOCK):
@@ -340,7 +351,11 @@ def main(argv: list[str]) -> int:
     for name in ("run", "install"):
         action = sub.add_parser(name)
         action.add_argument("--dev", required=True, help="the dev box as ssh names it")
-        action.add_argument("--codex", required=True, help="the codex executable")
+        action.add_argument(
+            "--codex",
+            required=True,
+            help="the codex executable; with * the newest match at each run (the VS Code extension's folder changes with its version)",
+        )
         action.add_argument(
             "--codex-arg", action="append", default=[], help="an option for codex exec"
         )

@@ -238,3 +238,20 @@ def test_windows_network_wait_returns_on_process_exit_and_times_out(
         assert network.wait(None, 0.05) in {"timeout", "network"}
     finally:
         network.close()
+
+
+def test_a_wildcard_codex_is_the_newest_match_at_each_run(
+    waker_module, tmp_path
+) -> None:
+    old = tmp_path / "openai.chatgpt-26.1001-win32-x64" / "codex.exe"
+    new = tmp_path / "openai.chatgpt-26.1007-win32-x64" / "codex.exe"
+    for path, when in ((old, 1_000_000), (new, 2_000_000)):
+        path.parent.mkdir()
+        path.write_text("", encoding="utf-8")
+        os.utime(path, (when, when))
+    pattern = str(tmp_path / "openai.chatgpt-*-win32-x64" / "codex.exe")
+
+    assert waker_module.newest(pattern) == str(new)
+    assert waker_module.newest(str(old)) == str(old)
+    with pytest.raises(FileNotFoundError):
+        waker_module.newest(str(tmp_path / "gone-*" / "codex.exe"))
