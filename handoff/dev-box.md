@@ -1,7 +1,7 @@
 # 開發機工作檔（Linux、RTX 3090）
 
 更新：2026-10-14 早上｜SilentTalk、EdgeAgent 都在 `copilot-story-mode`；規格 v2 凍結（`92a1961`），v3：EdgeAgent `spec-v3-safety`（worktree `ea-v3-merge`）、SilentTalk `spec-v3`（worktree `/home/clawd/worktrees/st-v3`）
-你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事，**只寫現況和下一步**。上一版：`archive/dev-box-2026-10-14-before-state-events.md`（只在這台機器，不必讀）。
+你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事，**只寫現況和下一步**。上一版：`archive/dev-box-2026-10-14-before-push-events.md`（只在這台機器，不必讀）。
 
 ---
 
@@ -36,15 +36,15 @@
 
 ## 3. 接下來
 
-1. **出貨 ms3n（`machine-spirit-fw3n`，關卡五項全過）：** 等筆電第 13 回合第 10 步（Discord 真人：V1 名字分開、V2 一句、D3 忙時排隊、V4 朋友套話不洩漏、V5 不插嘴、D4），**使用者自己在時才做**。全過就 `release_windows.py --edge-agent ../EdgeAgent --notes <摘要>` 乾跑→`--publish`，告訴使用者，刪 `ea-ship`、`st-ship`。edge-tts 改位址時拿掉 `8b0e317` 的覆寫。
-2. **筆電：** 第 12 回合停在 8/14（10/14 02:09，之後 session 結束）。第 13 回合（`laptop.md`）取代它和 02:17 的部署通知：部署兩個 app 的狀態推送版（SilentTalk `c992d30`、EdgeAgent `e6648ce`），冷啟動、閒置只有一條連線、合成派工自驗（第 1–9 步自己做），第 10 步 Discord 真人等使用者在時。
+1. **出貨 ms3n（`machine-spirit-fw3n`，關卡五項全過）：** 等筆電第 14 回合第 13 步（Discord 真人：V1 名字分開、V2 一句、D3 忙時排隊、V4 朋友套話不洩漏、V5 不插嘴、D4），**使用者自己在時才做**。全過就 `release_windows.py --edge-agent ../EdgeAgent --notes <摘要>` 乾跑→`--publish`，告訴使用者，刪 `ea-ship`、`st-ship`。edge-tts 改位址時拿掉 `8b0e317` 的覆寫。
+2. **筆電：** 第 12 回合停在 8/14（10/14 02:09，之後 session 結束）。第 14 回合（`laptop.md`）取代它、沒開始的第 13 回合和 02:17 的部署通知：部署兩個 app 的「完全不定時詢問」版（SilentTalk `c0bb8da`、EdgeAgent `f564ebc`），第 1–11 步自己做（Windows 全套、`stop` 等程序結束、pythonw 啟動的就緒管道、冷啟動、閒置一條連線、殺模型程序和路由器會重載、關角色程式還給基底、合成派工），第 13 步 Discord 真人等使用者在時。
 3. **v3 的修正在哪：**
    - EdgeAgent `spec-v3-safety`（`e2f3eef`）：公開工作的外洩修正、卡片檢查（`aae2753`）、接手工具（`a386a99`）、掃整顆磁碟的工作不出資料（`4a9c0d9`）、bench 照產品讀 adapter 取樣＋v3／v3n／ms3n 設定（`dec1f84`）、伺服器就緒看輸出（`6c26218`）。全套 742 過、4 個只在 Windows 過。
    - SilentTalk `spec-v3`（`7016498`）：派工判斷看「答案要不要查」不看問法（「你覺得明天會下雨嗎」是查資料）；角色聊天改由 Qwen3.8 在開發機寫（筆電寫手和 `handoff/tasks` 刪了），骨架加上：問看法口氣的查詢和真的問看法的對照、只叫名字（應聲或緊接要求）、忙時排隊（`_QUEUED`）、失敗／中斷照產品的字回報、朋友套主人資料要婉拒；許諾去查的回話不訓練。`chat_task_eval` 加 27 題（v3：p、m、v、d、f、b）。全套 437 過。
    - 老師的產品複本：`ea-v3-t1`（錄製用，安全修正前）、`ea-v3-t1s`（`spec-v3-safety`＋老師 1.0）。
 4. **v3 佇列（照順序；`v3-scen` 錄製中，07:25 時 219/317 場：201 完成、15 逾時、3 失控，約每小時 20 場）：** `v3-ff`（`ea-v3` 快轉到 `spec-v3-safety`）→ **`v3-char-pilot`**（16 段，`--min-lines 0`：看寫手丟棄原因、評審同意率、台詞勝率，有問題先修再跑全套）→ `v3-cards-fix`（退役對不上的卡、補回原數）→ `v3-scen-top` → `v3-scen-long`（逾時的以一小時一回合重錄）→ `v3-judged`、`v3-long-judged` → **`v3-tools-public`**（28 題公開工具題用 `ea-v3-t1s` 重錄：舊錄的提示有 `<cwd>/work`，v3 產品已遮掉；舊結果移到 `superseded-public.jsonl`）→ `v3-thoughts` → 基底考情境卡、Python → `v3-char`（400 段，硬關卡含台詞勝 E4B）→ `v3-rows`（`--thinking both` 和 `none`）→ `v3-train`、`v3n-train`（超過 32768 token 的列多於 2% 就停，量 VRAM 後選更長的視窗）→ 兩版 off／high 各在 0.2、0.6、1.0 → `chat_task`（基底、兩版，v3 題目）。
 5. **之後（佇列跑到時寫）：** 每版選各模式最好的溫度蓋在檔上；考 v3 情境卡、Python；對手 ms3n 用它出貨時的產品（`--product`）考同一批題目；`ship_gate`。贏的那版跑「從自己的錯學」：學生 `--record` 跑訓練卡 → 評審 → 老師 `run.py --takeover <學生 run> --at 0.4,0.75` → 評審 → 合併重訓。出貨時合併兩個 v3 分支；`laptop.md` 加：記憶檢視編輯、PowerShell 7.6.6、唯讀查本機、新派工規則的真人驗收。
-6. **輪詢：** 開發機的工具都改成事件（`wake.py`、佇列、`run.py`、角色流程、`eval_server`）。兩個 app 之間改成 EdgeAgent 推送狀態（`GET /status/events`；SilentTalk `d02acd8`＋Windows 上關 socket 能結束阻塞讀取 `2610fd7`、`c992d30`，EdgeAgent `e6648ce`），交筆電第 13 回合驗。v3 分支出貨時才合併它們（`turn_eval_model.py` 的 import 會衝突：用 spec-v3 的再加 `threading`、`Iterator`）。**產品裡還在定時問的（下一步）：** EdgeAgent `core.monitor`（每秒看角色程式和模型程序死了沒）、`router.start` 等就緒和載入（0.1 秒）、`api.ensure_service`（0.25 秒）和 `shutdown_service`（0.1 秒）、`terminal` 讀輸出、`lingua/engines` 2 秒；SilentTalk 語音辨識佇列 0.05 秒。留著的：Discord 語音自我修復（筆電實測過）、出錯後的退避重試、`serve_forever` 自己的關機檢查。
+6. **輪詢（產品裡已全部改成等事件，等第 14 回合在 Windows 驗）：** 兩個 app 之間是 EdgeAgent 推送狀態（`GET /status/events`）。EdgeAgent 內部（`push-events`，`f564ebc`）：`edge_agent/waits.py`（程序結束、喚醒、子程序輸出、SSE 都在核心層等，Windows／Linux 各一套）；`core.monitor` 等角色程式結束和路由器事件；路由器就緒看 `listening on`、載入和當掉看 `/models/sse`（b11193 原始碼查過，開發機用真的路由器 CPU 驗過：載入 2.4 秒、殺模型程序 0.05 秒就有事件）；`ensure_service` 走專用管道（`--ready-pipe`）＋狀態串流，`shutdown_service` 等程序結束；終端機、SQL 容器（等 `Recovery is complete.`）。SilentTalk（`c0bb8da`）：語音辨識共用 `stt_worker.py`，只在封包、停止或收尾時刻醒；煙霧測試等語音連上的事件。留著的：Discord 語音自我修復和收音啟動每秒重試最多 10 次（要真 Discord 才能改）、`stt_check` 等 DAVE 加密 3 秒、出錯後的退避重試、`serve_forever` 自己的關機檢查；介面的計時器（`ui.py` 50 ms、`settings_ui` 1 秒、`story_ui` 300 ms）是筆電範圍，出貨後寫進下一回合。v3 分支出貨時才合併這些（`turn_eval_model.py` 的 import 衝突：用 spec-v3 的再加 `threading`、`Iterator`）。
 7. **再之後：** coding agent（要大下載，先問使用者）；v4 沙盒要有桌面、下載資料夾；清 worktree（`ea-ship`、`st-ship`、`ea-t1`、`ea-laptop`、`ea-spec2`、`ea-freeze`、`ea-web`、`ea-takeover`、`ea-v3-t1`、`ea-v3-t1s`）。
 
 ## 4. 開發機規則（通用規則在 AGENTS.md）
