@@ -14,6 +14,10 @@ from silenttalk.config import DiscordConfig
 from silenttalk.discord_voice import DiscordVoiceClient
 from silenttalk.smoke import wait_for_owner_voice
 
+# Windows fires a timer up to one clock tick (15.6 ms) before its time
+# (asyncio's clock resolution, the kernel's timer tick): lower bounds allow it.
+TICK = 0.02
+
 
 class _Voice:
     def is_connected(self) -> bool:
@@ -59,7 +63,7 @@ async def test_wait_until_connected_wakes_when_the_connection_comes_up(
     started = loop.time()
     try:
         assert await client.wait_until_connected(5.0)
-        assert 0.3 <= loop.time() - started < 1.0
+        assert 0.3 - TICK <= loop.time() - started < 1.0
         assert looks == [2]  # before sleeping, and once when woken
     finally:
         await task
@@ -75,7 +79,7 @@ async def test_wait_until_connected_sleeps_to_its_deadline_without_looking(
     started = loop.time()
     try:
         assert not await client.wait_until_connected(0.4)
-        assert 0.4 <= loop.time() - started < 1.0
+        assert 0.4 - TICK <= loop.time() - started < 1.0
         assert looks == [2]  # before sleeping, and at the deadline
     finally:
         await client.close()
@@ -149,7 +153,7 @@ async def test_wait_until_receiving_wakes_when_receive_starts(
     started = loop.time()
     try:
         assert await client.wait_until_receiving(5.0)
-        assert 0.3 <= loop.time() - started < 1.0
+        assert 0.3 - TICK <= loop.time() - started < 1.0
         voice.listen.assert_called_once()
         assert looks == [2]
     finally:

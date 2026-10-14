@@ -14,6 +14,9 @@ from silenttalk.copilot.stt import StreamingTranscriber, _SpeakerStream
 from silenttalk.copilot.stt_worker import OpenSpeaker, SpeakerTranscriber
 
 FRAME = b"\x00\x00" * 1920  # 20 ms of 48 kHz stereo s16le
+# Windows fires a timer up to one clock tick (15.6 ms) before its time
+# (asyncio's clock resolution, the kernel's timer tick): lower bounds allow it.
+TICK = 0.02
 
 
 class _CountingQueue(queue.Queue):
@@ -109,7 +112,7 @@ def test_a_speaker_is_flushed_exactly_at_its_silence_deadline() -> None:
 
     [(speaker_id, closed_at)] = engine.closes()
     assert speaker_id == 7
-    assert 0.4 <= closed_at - pushed < 0.4 + 0.3
+    assert 0.4 - TICK <= closed_at - pushed < 0.4 + 0.3
     # Block for a packet; sleep until the deadline; block again once closed.
     first, until_flush, after = engine.queue.timeouts
     assert first is None and after is None
@@ -134,8 +137,8 @@ def test_the_soonest_open_speaker_sets_the_wakeup() -> None:
 
     (a, a_at), (b, b_at) = engine.closes()
     assert (a, b) == (1, 2)
-    assert 0.4 <= a_at - first_at < 0.4 + 0.3
-    assert 0.4 <= b_at - second_at < 0.4 + 0.3
+    assert 0.4 - TICK <= a_at - first_at < 0.4 + 0.3
+    assert 0.4 - TICK <= b_at - second_at < 0.4 + 0.3
     # packet A, packet B, A's deadline, B's deadline, then idle: five gets.
     timeouts = engine.queue.timeouts
     assert len(timeouts) == 5
@@ -206,7 +209,7 @@ def test_streaming_transcriber_flushes_after_endpoint_silence(tmp_path: Path) ->
         transcriber.stop()
 
     assert [(t[0], t[1], t[2]) for t in turns] == [(7, "Alice", "這個 boss 血量剩一半了")]
-    assert turns[0][3] - last_packet >= 0.6
+    assert turns[0][3] - last_packet >= 0.6 - TICK
 
 
 def test_streaming_flush_deadline_is_silence_or_utterance_length(tmp_path: Path) -> None:
@@ -240,7 +243,7 @@ def test_turn_collector_returns_when_the_stream_closes() -> None:
 
     assert heard == "done"
     # The flush itself (0.4 s), not the flush plus a fixed second.
-    assert 0.4 <= elapsed < 0.4 + 0.5
+    assert 0.4 - TICK <= elapsed < 0.4 + 0.5
 
 
 def test_turn_collector_gives_a_never_closing_stream_its_grace() -> None:
@@ -250,4 +253,4 @@ def test_turn_collector_gives_a_never_closing_stream_its_grace() -> None:
     collector.on_turn(0, "local", "前半")
     started = time.monotonic()
     assert collector.wait(5.0) == "前半"
-    assert 0.2 <= time.monotonic() - started < 1.0
+    assert 0.2 - TICK <= time.monotonic() - started < 1.0
