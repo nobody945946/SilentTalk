@@ -1,13 +1,15 @@
 # 開發機工作檔（Linux、RTX 3090）
 
-更新：2026-10-14 晚上｜SilentTalk、EdgeAgent 都在 `copilot-story-mode`；規格 v2 凍結（`92a1961`），v3：EdgeAgent `spec-v3-safety`（worktree `ea-v3-merge`）、SilentTalk `spec-v3`（worktree `/home/clawd/worktrees/st-v3`）
-你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事，**只寫現況和下一步**。上一版：`archive/dev-box-2026-10-14-before-waker.md`（只在這台機器，不必讀）。
+更新：2026-10-15 凌晨｜SilentTalk、EdgeAgent 都在 `copilot-story-mode`；規格 v2 凍結（`92a1961`），v3：EdgeAgent `spec-v3-safety`（worktree `ea-v3-merge`；佇列跑的 `ea-v3` 在 `spec-v3`，已快轉到同一版）、SilentTalk `spec-v3`（worktree `/home/clawd/worktrees/st-v3`）
+你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事，**只寫現況和下一步**。上一版：`archive/dev-box-2026-10-15-before-round16.md`（只在這台機器，不必讀）。
 
 ---
 
 ## 1. 使用者的決定（現在有效）
 
-- **Agent 是產品，語音角色是玩具（2026-10-14）：** 「把 Agent 做到盡善盡美，這不需要我參與，我偶爾檢查而已」。當晚又說只做 Agent 的事、不要再請他測聊天機器人：Discord 真人驗收延後，不主動請他做。
+- **Agent 是產品，語音角色是玩具（2026-10-14）：** 「把 Agent 做到盡善盡美，這不需要我參與，我偶爾檢查而已」。
+- **語音試用結案（2026-10-15，筆電第 15 回合回報 `ed6573d`）：** 語音辨識有限但可用、打字舒服；「選項模式很差勁，可以拔掉省效能」（已移除，`9f29c2a`）。不再做真人測試、不再擴張語音辨識改良，Discord 真人驗收不是延後而是不做。
+- **做不到的不硬做（2026-10-15）：** 逾時的長情境不重錄；沙盒不補 tkinter、ffmpeg；v3 用過關卡的資料繼續做，出貨與否由 `ship_gate` 對原版和 ms3n 決定。
 - **One path：** 每件工作一條路（§2），比完刪掉輸的；同時只有一支佇列。有原生的就用原生的。
 - **蒸餾：** 老師只用 Qwen3.8-27B（出卡、寫題、錄對話、寫角色聊天都用它）；評審 Gemma 4 31B。不用付費 API、不下載別的老師。Claude 的輸出永遠不當訓練目標、不挑資料、不當出貨評審。使用者的對話只由 Qwen3.8 抽成情境卡。
 - **長思考內化：** 學生學老師完整的長思考，只用過關的軌跡；預算切掉 ≤2%。聊天題不帶思考（開關兩種都訓）；角色回話不開思考。
@@ -17,9 +19,9 @@
 - **要贏過原版和出貨版：** 各用自己較好的溫度比；Python 題也看；工具題、MCP 題各自不能輸（`ship_gate.py`）。
 - **長期記憶用原生 `AGENTS.md`（v3）：** 屬於使用者，回報不寫內容；公開查詢絕不能讀到它。
 - **輸出不設上限，只要不失控。** Agent 64K 是底線；Agent 和角色共用一個 adapter；Agent 品質優先、角色速度優先。
-- **Discord（2026-10-14）：** 「被叫到才回」，冷場不開話題。朋友喊「機魂」照樣回，但不能被騙去用 Agent 套主人的資料。用說的不能動電腦；刪檔要主人同意。
+- **Discord：** 「被叫到才回」，冷場不開話題。朋友喊「機魂」照樣回，但不能被騙去用 Agent 套主人的資料。用說的不能動電腦；刪檔要主人同意。
 - **紀錄：** 對話只寫進使用者指定的紀錄資料夾（AGENTS.md 規則 1）。
-- **不輪詢，兩台直接傳訊（2026-10-14）：** 任何地方都不定時問；兩台用 `scripts/dev/channel.py` 溝通（只傳 metadata），好了才告訴使用者。一回合＝整份重寫 `laptop.md`＋`wake.py round`。筆電上可以常駐一支喚醒器（使用者 10/14 選的），有信就開一次 `codex exec`。
+- **不輪詢，兩台直接傳訊（2026-10-14）：** 任何地方都不定時問；兩台用 `scripts/dev/channel.py` 溝通（只傳 metadata），好了才告訴使用者。一回合＝整份重寫 `laptop.md`＋`wake.py round`。筆電的事壓到最少：只交開發機做不到的（他的設定、Windows 本機）。
 
 ## 2. 每件工作的那一條路
 
@@ -28,25 +30,30 @@
 | **產品 Agent** | EdgeAgent Pi 迴圈。考試 `bench/run.py`、情境卡、Python 題、`ship_gate.py`。資料：老師錄（`--record`）→ `thought_stats.py` → `dataset.py` → SilentTalk `train_lora.py`（每版從原版 E4B 重訓） |
 | **adapter** | 一個給 Agent 和機魂共用，`deploy.ADAPTERS` 記 SHA256 |
 | **取樣** | adapter 檔的 `edgeagent.sampling.{off,thinking}.temp`（`stamp_adapter_sampling.py`，量完才蓋）；沒蓋的 0.2。bench 照產品讀它（v3 起），掃溫度用 `run.py --sampling`；老師錄製用改預設的產品複本 |
-| **情境卡** | `families.json`（A–J）→ `scenario_cards.py`（含 `consistency`）→ `run.py` → `scenario_judge.py` → `dataset.py` |
-| **機魂資料** | SilentTalk `scripts/dev/character_pipeline.sh`：personas → write（Qwen3.8，`chardata_write.py` 骨架）→ render → student（E4B）→ check（Gemma 31B）→ filter（硬關卡；台詞照規則收 `LINES_BY_RULES=1`，使用者 10/06：評審比台詞前後對調會翻三成，排不了名次，比較和設定檢查只報不擋）。寫手不開思考（16 段 4 分鐘對 29 分鐘，台詞勝率、設定正確都沒更好）。伺服器是腳本的子程序，就緒看它自己印的 `listening on`（`serve_wait.py`）；出錯就停，不重試 |
+| **情境卡** | `families.json`（A–J）→ `scenario_cards.py`（含 `consistency`）→ `run.py` → `scenario_judge.py`（先跑 `scenario_checks.failures`，再由評審看）→ `dataset.py`（每個工作再過一次關卡） |
+| **機魂資料** | SilentTalk `scripts/dev/character_pipeline.sh`：personas → write（Qwen3.8，`chardata_write.py` 骨架）→ render → student（E4B）→ check（Gemma 31B）→ filter（硬關卡；台詞照規則收 `LINES_BY_RULES=1`，使用者 10/06：評審比台詞前後對調會翻三成，排不了名次，比較和設定檢查只報不擋）。寫手不開思考。伺服器是腳本的子程序，就緒看它自己印的 `listening on`（`serve_wait.py`）；出錯就停，不重試 |
 | **角色派工** | SilentTalk `runtime._respond` → `llm.chat_task`（是／否）→ `task_runner.dispatch`（忙就排隊，最多 3）；只叫名字（`NameMatcher.bare`）把點名交給同一人下一句 |
+| **SilentTalk 對話頁** | 只有「角色」和「打字」（選項模式 10/15 移除）。角色沒開時，聽到的話只轉錄、顯示、記錄，不問模型。舊 `settings.json` 寫了 `options` 照常載入（`ai_options.REMOVED_LORA_PARTS`） |
 | **寫程式的 Agent** | mini-swe-agent，SWE-bench Verified 60 題：老師 36、E4B 4 |
-| **兩台溝通** | `channel.py`：信箱在開發機，inotify 等（每個等待者都醒），`wait` 印出帶 `id` 不刪、`done <id>` 才刪（SSH 斷掉的等待者吃不掉信）；筆電的通道金鑰在 authorized_keys 強制只跑 `channel.py gate`（等／標記筆電的信、寄給開發機）。筆電 `laptop_waker.py`：登入時 pythonw 啟動，等信和網路變化，每批新信開一次 `codex exec`（固定提示，不帶信的內容），失敗告訴開發機 |
+| **兩台溝通** | `channel.py`：信箱在開發機，inotify 等，`wait` 印出帶 `id` 不刪、`done <id>` 才刪；筆電的通道金鑰在 authorized_keys 強制只跑 `channel.py gate`。筆電 `laptop_waker.py`：登入時 pythonw 啟動，等信和網路變化，每批新信開一次 `codex exec`（固定提示，不帶信的內容）。筆電關機時信留在 `.runtime/channel/laptop/`，開機後喚醒器接 |
 | **佇列** | `EdgeAgent/.runtime/fw/queue.sh`：一步一個 `.done`；失敗就停，修好再 `relaunch.sh`；v3 步驟在 `ea-v3` 跑 |
 
 ## 3. 接下來
 
-1. **出貨 ms3n（`machine-spirit-fw3n`，關卡五項全過）：** Windows 驗收第 14 回合過了；剩 Discord 真人（V1 名字分開、V2 一句、D3 忙時排隊、V4 朋友套話不洩漏、V5 不插嘴、D4），使用者延後，公開版就不發。哪天他自己要做，寫成一回合；全過就 `release_windows.py --edge-agent ../EdgeAgent --notes <摘要>` 乾跑→`--publish`，告訴使用者，刪 `ea-ship`、`st-ship`。edge-tts 改位址時拿掉 `8b0e317` 的覆寫。
-2. **筆電：** 第 14 回合 10/17（`laptop-report` `da5005f`）：第 1–5、7–11 步過（兩邊全套測試、`stop` 1.7 秒埠就清空、殺模型程序 ≤22 秒和路由器 ≤105 秒都自己重載、租約沒斷、關角色程式還給基底、合成派工），第 6 步（pythonw 開機啟動）被筆電 Codex 的工具政策擋、不繞過，Discord 延後。第 15 回合完成 7/7（`laptop-report` `da3bdc9`）：通道金鑰主機 `st-channel`、Startup 的 `.cmd` 用系統 Python 的 pythonw（筆電 `ba6af25`：venv 的 pythonw 會多留一個轉接程序）、只能一支、喚醒器＋ssh 共 29.5 MiB；無人時的 `codex exec` 用使用者原本的設定（核准 never、完整權限），沒加選項。端到端驗收 19:29 過：開發機送 `note` 後 31 秒，喚醒器開的那一輪回 `received` 和「waker run ok」並 `done`。之後交辦就是推 `laptop.md`＋`wake.py round`，不必等使用者開 Codex。
+1. **出貨 ms3n（`machine-spirit-fw3n`，關卡五項全過）＋選項移除：** Windows 驗收第 14 回合過了；Discord 真人驗收依 10/15 結案不做。**公開下載要不要發，已問使用者、還沒回；沒有「好」就不發。** 回好之後：筆電第 16 回合完成 → `release_windows.py --edge-agent ../EdgeAgent --notes <摘要>` 乾跑 → `--publish`，告訴使用者，刪 `ea-ship`、`st-ship`。edge-tts 改位址時拿掉 `8b0e317` 的覆寫。
+2. **筆電第 16 回合（`b8a6da8`，10/15 01:14 送出）：** 拉 `9f29c2a`、用使用者自己的 `settings.json` 載入一次（開發機乾跑過：寫了 `options` 和 `auto_popup` 的設定印 `settings ok True ['line', 'task']`）、看 SilentTalk 有沒有在跑（不關）。02:14 逾期時信還在信箱、沒有連線在等，筆電應是關機或睡眠；不補送、不改期，喚醒器開機後會接。收到 `report` 就讀 `origin/laptop-report`：第 3 步要印 `settings ok`，完成度分母 4。上一回合（15）完成 7/7，喚醒器端到端 31 秒。
 3. **v3 的修正在哪：**
-   - EdgeAgent `spec-v3-safety`（`e2f3eef`）：公開工作的外洩修正、卡片檢查（`aae2753`）、接手工具（`a386a99`）、掃整顆磁碟的工作不出資料（`4a9c0d9`）、bench 照產品讀 adapter 取樣＋v3／v3n／ms3n 設定（`dec1f84`）、伺服器就緒看輸出（`6c26218`）。全套 742 過、4 個只在 Windows 過。
-   - SilentTalk `spec-v3`（`740cdfd`）：派工判斷看「答案要不要查」不看問法（「你覺得明天會下雨嗎」是查資料）；角色聊天改由 Qwen3.8 在開發機寫（筆電寫手和 `handoff/tasks` 刪了），骨架加上：問看法口氣的查詢和真的問看法的對照、只叫名字（應聲或緊接要求）、忙時排隊（`_QUEUED`）、失敗／中斷照產品的字回報、朋友套主人資料要婉拒；許諾去查的回話不訓練。`chat_task_eval` 加 27 題（v3：p、m、v、d、f、b）。10/14 試跑修了兩件：寫手每句寫編號和說話的人，對不上整段不收（第一次試跑漏一句後面全錯位，機魂的話跑到朋友嘴上）；評審答派工問題改成「看這段聊天回答是否」（原本放在角色自己的提示裡、文法只准是／否，第一個字被當回話，「機魂」「今晚別太拼」都答是；25 列裡錯的 15 對了 8、對的 12 沒變）。全套 439 過。
+   - EdgeAgent `spec-v3-safety`（`f430f64`）：公開工作的外洩修正、卡片檢查、接手工具、掃整顆磁碟的工作不出資料、bench 照產品讀 adapter 取樣＋v3／v3n／ms3n 設定、伺服器就緒看輸出；**沒網路的關卡**（`ffee223`、`f430f64`）：沒網頁的卡伸手找網路（ping、pip install、Resolve-DnsName、`web_*`）就不過；任何工具結果說名字解析不到也不過（自己寫的腳本連出去時看不到呼叫）；`dataset.py` 對每個工作再擋一次。全套只剩 4 個只在 Windows 過。
+   - SilentTalk `spec-v3`（`740cdfd`）：派工判斷看「答案要不要查」不看問法；角色聊天由 Qwen3.8 在開發機寫，骨架有問看法口氣的查詢對照、只叫名字、忙時排隊、失敗照產品的字回報、朋友套主人資料要婉拒；許諾去查的回話不訓練；寫手每句寫編號和說話的人，對不上整段不收；評審答派工問題改成「看這段聊天回答是否」。`chat_task_eval` 加 27 題。全套 439 過。
    - 老師的產品複本：`ea-v3-t1`（錄製用，安全修正前）、`ea-v3-t1s`（`spec-v3-safety`＋老師 1.0）。
-4. **v3 佇列（照順序）：** `v3-scen`（317 場，約一成逾時、3 失控；退役卡的結果已移出）、`v3-ff`、`v3-cards-fix`（訓練卡退役 26＋12、評測 5＋2，都補回 317／91）、`v3-scen-top`（新卡 38 場全過、沒逾時）已完成 → `v3-scen-long`（18:22 起，26 場以一小時一回合重錄）→ `v3-judged`、`v3-long-judged` → **`v3-tools-public`**（28 題公開工具題用 `ea-v3-t1s` 重錄：舊錄的提示有 `<cwd>/work`，v3 產品已遮掉；舊結果移到 `superseded-public.jsonl`）→ `v3-thoughts` → 基底考情境卡、Python → **`v3-char-pilot`**（16 段，`--min-lines 0`；試跑 a／b／c 在 `st-v3/.runtime/dev/chardata-v3-pilot-*`，被擋的原因見上）→ `v3-char`（400 段）→ `v3-rows`（`--thinking both` 和 `none`）→ `v3-train`、`v3n-train`（超過 32768 token 的列多於 2% 就停，量 VRAM 後選更長的視窗）→ 兩版 off／high 各在 0.2、0.6、1.0 → `chat_task`（基底、兩版，v3 題目）。
-5. **之後（佇列跑到時寫）：** 每版選各模式最好的溫度蓋在檔上；考 v3 情境卡、Python；對手 ms3n 用它出貨時的產品（`--product`）考同一批題目；`ship_gate`。贏的那版跑「從自己的錯學」：學生 `--record` 跑訓練卡 → 評審 → 老師 `run.py --takeover <學生 run> --at 0.4,0.75` → 評審 → 合併重訓。出貨時合併兩個 v3 分支；`laptop.md` 加：記憶檢視編輯、PowerShell 7.6.6、唯讀查本機、新派工規則的真人驗收。
-6. **輪詢（產品裡已全部改成等事件，第 14 回合在 Windows 驗過，第 6 步除外）：** 兩個 app 之間是 EdgeAgent 推送狀態（`GET /status/events`）。EdgeAgent 內部（`push-events`，`f564ebc`）：`edge_agent/waits.py`（程序結束、喚醒、子程序輸出、SSE 都在核心層等，Windows／Linux 各一套）；`core.monitor` 等角色程式結束和路由器事件；路由器就緒看 `listening on`、載入和當掉看 `/models/sse`（b11193 原始碼查過，開發機用真的路由器 CPU 驗過：載入 2.4 秒、殺模型程序 0.05 秒就有事件）；`ensure_service` 走專用管道（`--ready-pipe`）＋狀態串流，`shutdown_service` 等程序結束；終端機、SQL 容器（等 `Recovery is complete.`）。SilentTalk（`c0bb8da`）：語音辨識共用 `stt_worker.py`，只在封包、停止或收尾時刻醒；煙霧測試等語音連上的事件。留著的：Discord 語音自我修復和收音啟動每秒重試最多 10 次（要真 Discord 才能改）、`stt_check` 等 DAVE 加密 3 秒、出錯後的退避重試、`serve_forever` 自己的關機檢查；介面的計時器（`ui.py` 50 ms、`settings_ui` 1 秒、`story_ui` 300 ms）是筆電範圍，出貨後寫進下一回合。v3 分支出貨時才合併這些（`turn_eval_model.py` 的 import 衝突：用 spec-v3 的再加 `threading`、`Iterator`）。
-7. **再之後：** coding agent（要大下載，先問使用者）；v4 沙盒要有桌面、下載資料夾；清 worktree（`ea-ship`、`st-ship`、`ea-t1`、`ea-laptop`、`ea-spec2`、`ea-freeze`、`ea-web`、`ea-takeover`、`ea-v3-t1`、`ea-v3-t1s`）。
+4. **v3 量到的（10/15）：**
+   - `v3-scen` 317 場：過檢查 220（沒網路的關卡新擋 25）。`v3-judged`（00:47 起）在 02:30 判到 282：評審收 104、退 91。抽看 C 類（退 27/34）的退件理由，幾乎都是真錯（欄位多或少、排序反、沒交出表格、補漏時整份重講），只有零星誤判（C-024 由近到遠被判反），評審不改。自我驗證：原本的收 24/40、竄改的退 71/72，可信。
+   - `v3-scen-long` 26 場一小時一回合重錄：完成 18、逾時 6、失控 2；逾時的照決定不重錄。
+   - `v3-tools` 587 列（沒網路的關卡擋 5：`pip install Pillow` 失敗）、`v3-py` 340 列（擋 1：匯率 API 解析不到）。
+5. **v3 佇列（照順序）：** `v3-judged`（跑中）→ `v3-long-judged` → `v3-tools-public`（28 題公開工具題用 `ea-v3-t1s` 重錄）→ `v3-thoughts` → 基底考情境卡、Python → `v3-char-pilot`（16 段，看關卡和評審是否一致）→ `v3-char`（400 段）→ `v3-rows`（`--thinking both` 和 `none`）→ `v3-train`、`v3n-train`（超過 32768 token 的列多於 2% 就停，量 VRAM 後選更長的視窗）→ 兩版 off／high 各在 0.2、0.6、1.0 → `chat_task`（基底、兩版，v3 題目）。每步完成看收和退、每類退件看一則。
+6. **之後（佇列跑到時寫）：** 每版選各模式最好的溫度蓋在檔上；考 v3 情境卡、Python；對手 ms3n 用它出貨時的產品（`--product`）考同一批題目；`ship_gate`。贏的那版跑「從自己的錯學」：學生 `--record` 跑訓練卡 → 評審 → 老師 `run.py --takeover <學生 run> --at 0.4,0.75` → 評審 → 合併重訓。出貨時合併兩個 v3 分支：SilentTalk 的 `llm.py`、`reply_*` 會和選項移除衝突（用 `copilot-story-mode` 的，再補 spec-v3 的派工改動），`turn_eval_model.py` 的 import 衝突（用 spec-v3 的再加 `threading`、`Iterator`）；chardata 的規則版本雜湊（`RULE_FILES`）在合併後會變，v3 資料要在合併前做完。`laptop.md` 加：記憶檢視編輯、PowerShell 7.6.6、唯讀查本機。
+7. **事件等待（產品裡已改完，第 14 回合在 Windows 驗過）：** EdgeAgent 推送狀態（`GET /status/events`）、`edge_agent/waits.py`、路由器 `/models/sse`、`--ready-pipe`；SilentTalk 語音辨識 `stt_worker.py`。留著的重試：Discord 語音自我修復和收音啟動（要真 Discord 才能改，語音已結案不改）、`stt_check` 等 DAVE 3 秒、出錯後的退避、`serve_forever` 的關機檢查；`ui.py` 50 ms、`settings_ui` 1 秒的計時器是筆電範圍。
+8. **再之後：** coding agent（要大下載，先問使用者）；v4：沙盒要有桌面、下載資料夾，故事會引人去查資料的卡給網頁；清 worktree（`ea-ship`、`st-ship`、`ea-t1`、`ea-laptop`、`ea-spec2`、`ea-freeze`、`ea-web`、`ea-takeover`、`ea-v3-t1`、`ea-v3-t1s`）。
 
 ## 4. 開發機規則（通用規則在 AGENTS.md）
 
@@ -57,9 +64,9 @@
 5. **共用機器：** GPU、RAM 和 ComfyUI、whisper-api 共用，不動它們（crontab、`musichub-*` 不碰）；吃滿整台、大下載先問。考試中不對考場的伺服器發請求。
 6. 關程序只用確認過的 PID。
 7. **考試中別動：** `agent_runner.py`、`relay.py`、`web_fixture.py`、`grade.py` 是即時掛載。一個 run 的產品在 run 目錄裡釘住，續跑沿用。
-8. **執行中的佇列腳本不改：** 新檔 `mv` 蓋過去，用 PID 停佇列（不停 `run.py`），再背景跑 `relaunch.sh >> queue.log`（核心層等鎖）。訓練中別停佇列。`queue.sh`、`run.py`、角色流程都不等 GPU：空間不夠就印出占用者並停下。（10/14 `relaunch.sh` 在等 `v3-scen` 的鎖；`queue.sh` 還沒被讀，可直接蓋。）
-9. **開發機不改介面**（`edge_agent/web.py`、SilentTalk 設定頁）。git 身分：`git -c user.name="nobody945946" -c user.email="104478886+nobody945946@users.noreply.github.com" commit ...`。
-10. **喚醒只在有事時：** `python3 scripts/dev/wake.py` 背景跑，**醒來第一件事就是重新掛上**。它在核心層等：筆電訊息（兩次等待之間來的信，下一次一開始就叫醒；印出後才 `done`）、佇列日誌、CI（預計跑完時問一次）、交出去的回合逾期。push 完 `wake.py ci <repo> <完整 sha> [<等著它的事>]`，CI 綠才算完成（有寫等著的事，綠燈也會叫醒）；交辦筆電：推 `laptop.md` 後 `wake.py round <小時> "<sha> handoff/laptop.md"`；問筆電：`channel.py send laptop note "..."`。不盲目重試、不預寫備案。
+8. **執行中的佇列腳本不改：** 新檔 `mv` 蓋過去，用 PID 停佇列（不停 `run.py`），再背景跑 `relaunch.sh >> queue.log`（核心層等鎖）。訓練中別停佇列。`queue.sh`、`run.py`、角色流程都不等 GPU：空間不夠就印出占用者並停下。
+9. **開發機不改介面**（`edge_agent/web.py`、SilentTalk 設定頁和人設編輯器）。git 身分：`git -c user.name="nobody945946" -c user.email="104478886+nobody945946@users.noreply.github.com" commit ...`。
+10. **喚醒只在有事時：** `python3 scripts/dev/wake.py` 背景跑，**醒來第一件事就是重新掛上**。它在核心層等：筆電訊息、佇列日誌、CI（預計跑完時問一次）、交出去的回合逾期（只叫一次）。push 完 `wake.py ci <repo> <完整 sha> [<等著它的事>]`，CI 綠才算完成；交辦筆電：推 `laptop.md` 後 `wake.py round <小時> "<sha> handoff/laptop.md"`；問筆電：`channel.py send laptop note "..."`。不盲目重試、不預寫備案。
 
 **每次改完要跑**（看 pytest 自己的 exit code）：
 
@@ -68,17 +75,18 @@ cd /home/clawd/SilentTalk && .venv/bin/python -m pytest -q -p no:cacheprovider
 cd /home/clawd/EdgeAgent && .venv/bin/python -m ruff check edge_agent tests   # 和 CI 同一個指令
 cd /home/clawd/EdgeAgent && .venv/bin/python -m pytest -q -p no:cacheprovider   # 4 個只在 Windows 過
 # worktree：加 PYTHONPATH=.，用各自主工作區的 .venv；EdgeAgent 先把 .runtime/node、pi、pwsh 連過去，st-v3 連 .runtime/models、tools。
+# 介面流程：xvfb-run .runtime/tools/ui-preview-env/bin/python scripts/dev/ui_preview.py --font "Noto Sans CJK TC"，印 UI flow OK
 ```
 
 ## 5. 考場細節
 
-- **沙盒：** 主機只跑模型；容器沒網路、root 唯讀、非 root。Windows 指令回每張卡那台筆電的數值（`bench/laptop.py`）。v3 假網路：每個名字都解析到沙盒自己，443 用 bench 的 CA。
-- **情境題、Python 題** 都開思考考；情境題由評審決定（`<run>/verdicts.jsonl`）。relay 只錄請求，模型最後一次的輸出不在 records 裡。
+- **沙盒：** 主機只跑模型；容器沒網路（`--network none`）、root 唯讀、非 root。Windows 指令回每張卡那台筆電的數值（`bench/laptop.py`）。**假網路只在卡片有網頁（`web`）時開**：每個名字都解析到沙盒自己，443 用 bench 的 CA；沒網頁的卡是真的解析失敗，所以關卡擋伸手找網路的對話（B、E、G 有網頁；D、H、I 沒有；A、C、F 看卡；J 是 API）。
+- **情境題、Python 題** 都開思考考；情境題由評審決定（`<run>/verdicts.jsonl`：`checks` 是程式關卡，`judge` 是每一票的必做 M／不可 N 項和評審引的原文；一票不過就不過）。relay 只錄請求，模型最後一次的輸出不在 records 裡。
 - **llama-server（b11193）：** 不同 LoRA 的槽不能同批；考場固定 `--fit off`；請求沒給溫度時讀模型檔；就緒時印 `listening on`。
 
 ## 6. 量過的數字
 
-- **雙管路（3050 Ti、64K）：** Agent 生成時角色首字 0.53–0.62 秒；可用 RAM 最低 79.6 MiB，無 OOM。
+- **雙管路（3050 Ti、64K）：** Agent 生成時角色首字 0.53–0.62 秒；可用 RAM 最低 79.6 MiB，無 OOM。整句回話在筆電的時間沒量過（`smoke.py` 門檻 4 秒）。
 - **老師：** SWE-bench 36/60。v3 一步想 3.6–4.8 萬字、每路約 14 token/秒；失控（重複被停）約 2%。
 - **機魂：** char-v1 台詞贏基底 76/80，`chat_task` 39/40；ms3n 37/40；基底 34/40（v2 題目）。
 - **訓練 32K 列：** 一步 40 秒，峰值 14.8 GiB；ms3n 1,325 列 2 輪約 3 小時。
@@ -87,9 +95,10 @@ cd /home/clawd/EdgeAgent && .venv/bin/python -m pytest -q -p no:cacheprovider   
 
 - **沒量過的預設值：** 溫度要每個模型、每個模式各自掃。bench 曾經不讀 adapter 檔上的溫度，量到的都是 0.2。
 - **只看分數的關卡會漏掉失控：** 每個里程碑都看結束原因和基底比（思考長度、切斷、步數）。
-- **考場不忠實會冤枉模型**，卡片本身也會（說桌面卻放 workspace）。
+- **考場不忠實會冤枉模型，也會教壞模型：** 卡片說桌面卻放 workspace；沒網頁的卡老師照樣去查，沙盒的解析失敗被寫成「主人的網路斷了」或拿空沙盒的結果回答（10/14 找到 25 場情境＋6 個工具／Python 工作，已由關卡擋）。
 - **錄製的提示要等於出貨的提示：** 錄完才改的產品（公開範圍遮掉 `<cwd>`），受影響的題要用新產品重錄。
-- **合成測試要走真實輸入路徑：** 真實語音會在停頓處切句；真人驗收前先用真模型跑端到端。
+- **合成測試要走真實輸入路徑：** 真實語音會在停頓處切句；介面檢查要照控制器實際說出的字（Enter 留下的換行會被 `normalize_text` 去掉）。
 - **只看工具不看提示：** 查外洩要看送給模型的完整請求。
-- **一輪結束的 Codex 不會被它的背景等待叫醒**（10/14 交接在信箱放了 16 小時）；FIFO 門鈴只叫醒一個等待者，取信即刪會讓 SSH 斷掉的等待者把信吃掉。
+- **「首字時間」不是「整句時間」**：門檻不能拿首字的數字訂。
+- **一輪結束的 Codex 不會被它的背景等待叫醒**；FIFO 門鈴只叫醒一個等待者，取信即刪會讓 SSH 斷掉的等待者把信吃掉。
 - **重試沒用、Node 只說「fetch failed」（原因在 `cause`）、被殺的 `run.py` 會留 relay 孤兒、這台 `gh` 太舊（用 API 的 `head_sha`）、`cd a && x &` 整串在背景子殼跑。**
