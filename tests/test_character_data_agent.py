@@ -475,7 +475,7 @@ def test_generated_chats_play_out_as_the_app_would_by_construction(seed: int) ->
         assert chardata_scripts.check_script(words, NAME, spec, ["機魂", "馬基納"])[1] == ""
         assert "changes" in chardata_write.thread_prompt(MACHINE_SPIRIT, spec)
         return
-    words = [f"測試第{n}句" for n in range(len(spec["skeleton"]))]
+    words = _numbered(spec, [f"測試第{n}句" for n in range(len(spec["skeleton"]))])
     calls = sum(slot.get("ask") == "work" for slot in spec["skeleton"])
     data = {"lines": words, "work": [{"task": "測試指示", "result": "測試結果"}] * calls}
     assembled = chardata_write.assemble_chat(data, spec, NAME, ["機魂", "馬基納"])
@@ -511,10 +511,38 @@ def test_a_chat_line_that_names_the_character_in_passing_loses_the_name() -> Non
     spec = next(s for s in iter(lambda: chardata_write.chat_request(raw, rng, set()), None)
                 if s["kind"] == "chat")
     chat_at = next(i for i, slot in enumerate(spec["skeleton"]) if slot["kind"] == "chat")
-    words = [f"測試第{n}句" for n in range(len(spec["skeleton"]))]
-    words[chat_at] = "機魂剛剛那句好好笑"
-    assembled = chardata_write.assemble_chat({"lines": words, "work": []}, spec, NAME, ["機魂", "馬基納"])
+    texts = [f"測試第{n}句" for n in range(len(spec["skeleton"]))]
+    texts[chat_at] = "機魂剛剛那句好好笑"
+    assembled = chardata_write.assemble_chat({"lines": _numbered(spec, texts), "work": []},
+                                             spec, NAME, ["機魂", "馬基納"])
     assert "機魂" not in assembled["lines"][chat_at]["t"]
+
+
+def _numbered(spec: dict, texts: list[str]) -> list[dict]:
+    """The teacher's lines as the prompt asks for them: number, speaker
+    (「它」 for the character), words."""
+    return [{"n": n, "s": "它" if slot["s"] == NAME else slot["s"], "t": text}
+            for n, (slot, text) in enumerate(zip(spec["skeleton"], texts, strict=True), 1)]
+
+
+def test_a_chat_whose_lines_moved_off_their_numbers_is_refused() -> None:
+    """The pilot (2026-10-14): a skipped line moved the rest up one, so the
+    character's lines landed on friends and a report on chatter. Each line
+    carries its number and speaker; one off is the whole chat refused."""
+    raw = {**persona_to_dict(MACHINE_SPIRIT), "lore": []}
+    rng = __import__("random").Random("moved")
+    spec = next(s for s in iter(lambda: chardata_write.chat_request(raw, rng, set()), None)
+                if s["kind"] == "chat")
+    lines = _numbered(spec, [f"測試第{n}句" for n in range(len(spec["skeleton"]))])
+    at = next(i for i in range(1, len(lines)) if lines[i]["s"] != lines[i - 1]["s"])
+    moved = lines[:at - 1] + [dict(line, n=line["n"] - 1) for line in lines[at:]] + [lines[-1] | {"n": len(lines)}]
+    with pytest.raises(ValueError, match="line"):
+        chardata_write.assemble_chat({"lines": moved, "work": []}, spec, NAME, ["機魂"])
+    renumbered = [dict(line, n=i) for i, line in enumerate(moved, 1)]
+    with pytest.raises(ValueError, match=f"line {at}"):
+        chardata_write.assemble_chat({"lines": renumbered, "work": []}, spec, NAME, ["機魂"])
+    prompt = chardata_write.chat_prompt(MACHINE_SPIRIT, spec)
+    assert '"n": 1, "s":' in prompt
 
 
 # Spec v3 in one chat: a bare call whose request follows at once, work asked

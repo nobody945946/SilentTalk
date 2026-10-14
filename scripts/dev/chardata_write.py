@@ -316,8 +316,13 @@ def _common(persona: Persona, lore: list[str], nick: str) -> str:
 寫的內容：
 - summary_before：任務寫「接在更長的聊天後面」時，用一兩句寫稍早聊過的重點；否則留空字串。
 - concerns：它今天心裡掛著的 3～4 件具體小事（要符合人設）。
-- lines：一句對一個編號，只寫說出口的內容，不寫名字。
+- lines：每個編號一筆，照順序：n 是編號，s 是那一行冒號前的人（「它」就寫「它」），t 只寫他說出口的內容（不加「名字：」）。
 - work：照順序對應「工作」那幾句。task 是它交給思考機的指示，照系統問的寫（{ask}），只能換句話說那句真的要的事；result 是思考機貼回聊天室的結果（簡短、像真的，最多 200 字；寫程式的就是一小段程式碼；也可以是查不到）。標「失敗」「中斷」的那件 result 寫空字串。"""
+
+
+def _who(slot: dict[str, Any], name: str) -> str:
+    """Who a numbered line is by, as the legend writes it."""
+    return "它" if slot["s"] == name else slot["s"]
 
 
 def _task(persona: Persona, spec: dict[str, Any]) -> str:
@@ -329,7 +334,7 @@ def _task(persona: Persona, spec: dict[str, Any]) -> str:
 
     rows = []
     for number, slot in enumerate(spec["skeleton"], 1):
-        who = "它" if slot["s"] == name else slot["s"]
+        who = _who(slot, name)
         if slot["kind"] == "bare" or slot.get("bare"):
             rows.append(f"{number}. {who}：只喊它")
         elif slot["kind"] == "call":
@@ -361,7 +366,7 @@ def chat_prompt(persona: Persona, spec: dict[str, Any]) -> str:
 {_common(persona, spec["lore"], nick)}
 
 {_task(persona, spec)}
-輸出 JSON：{{"summary_before": "…", "concerns": ["…", "…", "…"], "lines": ["第1句的內容", "第2句的內容", …], "work": [{{"task": "…", "result": "…"}}, …]}}"""
+輸出 JSON：{{"summary_before": "…", "concerns": ["…", "…", "…"], "lines": [{{"n": 1, "s": "…", "t": "…"}}, {{"n": 2, "s": "…", "t": "…"}}, …], "work": [{{"task": "…", "result": "…"}}, …]}}"""
 
 
 def thread_prompt(persona: Persona, spec: dict[str, Any]) -> str:
@@ -393,9 +398,18 @@ def assemble_chat(data: dict[str, Any], spec: dict[str, Any], name: str, nicks: 
     checks read. A bare call says what the skeleton fixed; a carried line
     and a line nobody calls it in lose its names (the app would take a name
     as a call); failed and stopped work get the result the app gives."""
-    lines = [str(t) for t in (data.get("lines") or [])]
-    if len(lines) != len(spec["skeleton"]):
-        raise ValueError(f"lines {len(lines)}, needs {len(spec['skeleton'])}")
+    said = list(data.get("lines") or [])
+    if len(said) != len(spec["skeleton"]):
+        raise ValueError(f"lines {len(said)}, needs {len(spec['skeleton'])}")
+    # Each line names its number and speaker: a line written for another
+    # number (one skipped, the rest moved up) is caught here, not trained on.
+    lines = []
+    for number, (slot, item) in enumerate(zip(spec["skeleton"], said, strict=True), 1):
+        if not isinstance(item, dict) or str(item.get("n")) != str(number):
+            raise ValueError(f"line {number} is numbered {item.get('n') if isinstance(item, dict) else '-'}")
+        if str(item.get("s", "")).strip() != _who(slot, name):
+            raise ValueError(f"line {number} is {str(item.get('s'))[:12]}'s, needs {_who(slot, name)}")
+        lines.append(str(item.get("t", "")))
     words = list(data.get("work") or [])
     names = sorted({*nicks, name}, key=len, reverse=True)
     raw, caller = [], spec["owner"]
@@ -476,7 +490,7 @@ def write_one(url: str, raw: dict[str, Any], spec: dict[str, Any], thinking: boo
             data = assemble_chat(data, spec, persona.name, nicks)
         lines, reason = check_script(data, persona.name, spec, nicks)
     except (ValueError, TypeError, AttributeError, KeyError) as exc:
-        return None, type(exc).__name__
+        return None, f"{type(exc).__name__}: {exc}"[:80]
     if reason:
         return None, reason
     return {
@@ -502,9 +516,12 @@ def make_write(args: argparse.Namespace) -> None:
     _, held_humans = held_out()
     jobs = [n for n in range(args.count) if n not in asked]
     drops: dict[str, int] = {}
+    def kind(reason: str) -> str:  # "ValueError: line 7 is …" counts as ValueError
+        return reason.split(":")[0]
+
     for row in asked.values():
         if row["reason"]:
-            drops[row["reason"]] = drops.get(row["reason"], 0) + 1
+            drops[kind(row["reason"])] = drops.get(kind(row["reason"]), 0) + 1
     lock = threading.Lock()
 
     def work(n: int) -> None:
@@ -514,7 +531,7 @@ def make_write(args: argparse.Namespace) -> None:
             if script is not None:
                 store.append_row(path, script | {"n": n})
             else:
-                drops[reason] = drops.get(reason, 0) + 1
+                drops[kind(reason)] = drops.get(kind(reason), 0) + 1
             # Asked once: a chat the teacher's words broke is not asked again
             # (a teacher that breaks most of them is the session's to see).
             with asked_path.open("a", encoding="utf-8") as handle:
