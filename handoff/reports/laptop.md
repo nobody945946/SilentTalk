@@ -1,6 +1,6 @@
-# 第 14 回合：卡在第 6 步（獨立自動項目完成，真人待驗）
+# 第 15 回合：完成
 
-更新：2026-10-14，18:40 後。開發機主控、筆電輔助。主控 18:32:39 指示第 6 步保留阻擋，繼續獨立的第 7–13 步。不升權、不復活清理後程式、不加輪詢。
+更新：2026-10-14T19:26:46+08:00。開發機主控、筆電輔助。使用者要求優先 agent 自動接工，不再請他測聊天；本回合沒有要求真人測試。第 14 回合 pythonw 驗證的政策阻擋保留在 Git 歷史，不繞過；本回合授權的喚醒器 Startup 路徑執行成功。
 
 ## 1. 機魂劇本
 
@@ -8,78 +8,63 @@
 
 ## 2. 時間與額度
 
-18:23 補收件，18:24:07 received 已送達，18:40:25 最後正式服務就緒。API 額度無可用證據。
-
-02:17:04 通知直到 18:23 才讀到；背景 wait 返回沒有喚醒已 final 的回合。07:25:44／08:25:17 的通知已一次取出；最新工作檔作廢第 13 回合及 02:17 通知，沒有執行過期任務。
+19:12 專用公鑰送達；19:18 受限通道實測成功；19:20 收到第 15 回合；19:22 無人 exec 探測完成；19:25 喚醒器單例確認；19:26 Windows 修正 CI success。exec 探測輸出 tokens used 9607；不推算帳戶額度。
 
 ## 3. 目標完成度
 
-10/17：第 1–5、7–11 通過；第 6 工具政策阻擋；V1、V2、D3、V4、V5、D4 待真人。不能出貨，合成測試不算真人。
+7/7，第 1–7 步部署工作完成。最後回報推送、通知主控後結束人工這一輪，不再另開收件者；後續主控測試訊息由喚醒器開的那一輪處理，端到端結果由主控記錄。本報告不冒稱已取得這項尚未發生的證據。
 
-SilentTalk：C:\Users\A8fm0\Downloads\SilentTalk，HEAD f4f44ee9a2bf100213d8f521a1a818e0e67cf152，c0bb8da 祖先檢查 exit 0。EdgeAgent：C:\Users\A8fm0\EdgeAgent，HEAD f564ebcc55be40c9b7604d9aef2462fab7f0b7d9，d1df129／f564ebc 祖先檢查 exit 0。兩個 ff-only pull 成功，均 copilot-story-mode。
+SilentTalk：C:\Users\A8fm0\Downloads\SilentTalk，copilot-story-mode，首次 pull 9178649，c72f947 祖先檢查 exit 0；Windows 修正後 HEAD ba6af250a52ec9d6dfc9f082373d8c53950cb3e0。EdgeAgent 本回合未動。
+
+舊無 ID 等待者取走首則 round15；主控補發帶 ID 副本，已 received／done。新通道 wait 不刪訊息，done 才刪，支援 after，避免斷線吃掉交接。
 
 ## 4. 測試執行結果
 
-- SilentTalk a1a854e：396 passed、2 failed、1 skipped、3 warnings，35.61 秒，exit 1；stt_worker 的 timeout 0.40000000002328306 超過測試上限。
-- 筆電暫试 1 ns 容差：398 passed、1 skipped、2 warnings，29.19 秒，exit 0；Ruff／diff check exit 0。主控同時提交 f4f44ee，撤回僅自己的未提交 fixture 修改並採用主控版本，沒有另推重複 commit。
-- 最終 SilentTalk f4f44ee：398 passed、1 skipped、2 warnings，30.20 秒，exit 0；CI https://github.com/nobody945946/SilentTalk/actions/runs/38549559069 success。
-- EdgeAgent f564ebc：496 passed、6 skipped、1 warning，306.29 秒，exit 0；CI https://github.com/nobody945946/EdgeAgent/actions/runs/38489357613 success。
-- 環境同工作檔，新 basetemp .test-tmp/round14、round14-fixed、round14-controller-fix；工作檔指名的 Windows 測試均包含。Unicorn access-violation 診斷仍印出但 pytest exit 0；cache ACL warnings 未升權修理。
-- 第 4：核對舊 app PID 10412／9288 後停止。舊服務 legacy lease 首次 supported stop exit 1／409、0.322 秒、監聽 2；釋放後單次 supported retry exit 0、監聽 0，未硬殺 EdgeAgent。最後新版 supported stop exit 0、1.721 秒，返回當下監聽 0。
-- 第 5 app loader：character_engagement called、character_lull_seconds 0.0，未改設定。
-- 第 6 pythonw 隱藏啟動／退出／stop 量測命令被工具執行前拒絕：blocked by policy，無具體原因；沒有 pythonw PID／exit code，沒有繞過。主控要求保留阻擋、继续独立步驟。
-- 第 7 launcher exit 0；10:32:49.465073 UTC discord_ready，10:33:05.614052 UTC connected／runtime_ready 各 1、disconnected 0，5 分鐘內就緒。原樣狀態：
-
-```json
-{"mode":"character","ready":true,"model":"gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf","lora":"machine-spirit-fw3n.q8_0.gguf","character_lora":"machine-spirit-fw3n.q8_0.gguf","character_admitted":true,"character_refused":0}
-```
-
-- 第 8：18:33:26／18:35:40，PID 12124 連線各 1、LocalPort 都 52574，refused 0。
-- 第 9：核對模型 6060、父 16276、alias local，18:35:48.682 停模型，18:36:10.955 单次查正常；上限 22.273 秒。核對路由器 16276 含 models-preset，18:36:11.129 停，18:37:56.342 單次查正常；上限 105.213 秒。皆 character／ready true、同 fw3n、error 空白、refused 0；connected 1、disconnected 0。不冒稱精確恢復時間。
-- 第 10：核對 app 10868／12124 停止，18:38:43 單次查 base／ready true／character_lora 空白。重開 exit 0，app 14408／10352；10:38:56.074083 UTC discord_ready，10:39:01.123544 UTC connected／runtime_ready 各 1、disconnected 0。
-- 第 11：為獨立合成租約短暫停正式 app。真實 LocalReplyModel／fw3n，空白人設、memory off、record false，同 speaker 分句。transport 僅捕捉派送，不做實際 Agent／Discord／天氣執行；probe 清理及 lease.stop exit 0：
-
-```json
-{"synthetic_cases":1,"decisions":[{"latency_ms":2922,"chat_task":true}],"dispatch_count":1,"followup_addressed":true,"public":true,"errors":0,"elapsed_ms":3109,"real_agent_execution":false}
-```
-
-- 最後新版 stop 1.721 秒、監聽 0，再 launcher exit 0。app 15264／9704，EdgeAgent 14572；10:40:11.972857 UTC discord_ready，10:40:25.388789 UTC connected／runtime_ready 各 1。character／ready true、admitted true、refused 0、error 空白、context 65536、slots 2。
+- 第 1–2 步：ff-only pull exit 0，祖先 exit 0；received round15 送達。
+- 第 3：st-channel 專用通道 send exit 0，訊息含 id；id 被拒 exit 1；帶 id 收件後 done 刪除數 1。額外 harmless echo 亦被拒 exit 1。私鑰 ACL 僅目前使用者與 SYSTEM，均非繼承；未讀私鑰內容。
+- st-channel 在 SSH config 的廣泛匹配之前，沿用原主機 i9ubuntu.eason.best／13210／clawd，限定 IdentityFile silenttalk_channel、IdentitiesOnly、IdentityAgent none、BatchMode、ForwardAgent no、StrictHostKeyChecking yes。專用無密碼金鑰在主控 authorized_keys 有 forced channel gate，只可 metadata 收發／done，不可一般 shell。
+- 第 4：用 VS Code 隨附 codex.exe 0.162.0-alpha.17.2；不加 codex 選項，不改使用者 Codex config。既有設定實值 approval never、sandbox danger-full-access；沒有新增全開旗標。前景 exec 三命令：fetch origin 0、回報工作樹 HEAD:laptop-report dry-run push 0、st-channel send exec probe ok 0；整個 exec exit 0，無批准提示。
+- dry-run 使用既有 .runtime/laptop-report 的真實發布工作樹，避免 code branch HEAD 對 report branch 非快轉；事前已告訴主控，未 force push 或覆寫回報。exec 只跑三個授權命令後结束，未做其他工作或讀憑證。
+- 相關 pytest 首次 10 passed、25 skipped、1 warning，0.92 秒，exit 0；Windows 啟動修正後 11 passed、25 skipped、1 warning，0.92 秒，exit 0。Linux-only mailbox tests 在 Windows skipped，如實保留。
+- 真實 Windows NetworkChanges wait timeout 返回正確，file lock 第二次取得失敗，單例成立。pytest 亦跑實際 NotifyAddrChange／process exit 測試。Ruff、git diff --check exit 0。
+- 原 venv pythonw 多留 redirector，PID 16372／14240 為一個 actor 的兩個程序；其 waiter 15100。核對命令列後只用這三個 PID 停止，再更新 Startup 使用 base Python 的 pythonw，因喚醒器只用 stdlib。
+- 第 5：Startup SilentTalk laptop waker.cmd 已寫入，正常 cmd 啟動 exit 0，沒有被政策拒絕；原生 Python 路徑為 C:\Users\A8fm0\AppData\Local\Programs\Python\Python312\pythonw.exe，run scripts/dev/laptop_waker.py --dev st-channel --codex 帶萬用字元路徑。
+- 第 6：第一次和第二次啟動後各查一次，pythonw actor 均 1、SSH waiter 均 1。實際 PID 15644／5416；waiter 命令為 wait laptop。沒有 laptop-agent.json，沒有無人 agent 同時在做。
+- Windows startup commit ba6af25 的 CI https://github.com/nobody945946/SilentTalk/actions/runs/38556407895 success。未宣稱本回合本機全套重跑；必要相關測試與 CI 已足夠。
+- 第 7：整份最新回報推 laptop-report，再送主控 report；人工這輪結束，避免與下一輪同時操作。
 
 ## 5. 修改檔案與 commit
 
-無筆電產品／測試 commit，採用主控 f4f44ee，兩個主工作樹乾淨。合成腳本僅忽略的 .test-tmp/round14-probe.py，不含使用者內容。回報整份換成第 14 回合，推 laptop-report。
+筆電 commit ba6af250a52ec9d6dfc9f082373d8c53950cb3e0，已推 copilot-story-mode：scripts/dev/laptop_waker.py 的 Windows startup 使用 sys._base_executable，移除常駐 venv redirector；tests/test_laptop_waker.py 加實際 chooser 回歸。相關測試與 CI success。
+
+主控提供 channel／waker 主體；Windows 不改開發機工具或模型。新增專用 SSH alias／受限 key、Startup 入口，皆為本次授權通道與喚醒器。沒有改 .env、settings.json、人設／狀態。
+
+先前未啟用的 Stop hook 方案依主控決定退場：新增定義、helper、tests、自己的 pyc／metadata 移除；既有 lazyguard 定義與 trusted hash 未改，沒有信任繞過或殘留第二套喚醒器。
 
 ## 6. 記憶體與速度
 
-合成決策 2922 ms，含 lease 到派送 3109 ms，不是實際 Agent 完成延遲。最後 RAM 可用 203.7 MiB，GPU used 3481 MiB／free 482 MiB；context 65536、slots 2。GPU 層與省 VRAM 偏好未改。
+單次穩定快照：喚醒器 17.77 MiB，SSH 11.76 MiB，合計 29.53 MiB；CPU 累計分別 0.046875／0.015625 秒。未做連續 CPU 量測，不由快照推算整日耗用。
+
+正常連線在 Windows 核心等 mail／網路事件，不定時查 Git／信箱。失敗後才以 60 秒起、最多 1800 秒的退避等待重連，網路事件立即喚醒；這是主控第 15 回合規定的故障處理，不是正常狀態輪詢。沒有其他新增清理程式、模型或 GUI helper。
 
 ## 7. Discord 數字表
 
-| 項目 | 狀態 |
-|---|---|
-| V1 分句查詢 | 待真人 |
-| V2 同句查詢 | 待真人 |
-| D3 語音並行、排隊、refused | 待真人 |
-| V4 主人資料隔離 | 待真人 |
-| V5 未點名時安靜 | 待真人 |
-| D4 感想 | 待真人 |
-
-限定 guild 729722190857240717、voice 729722190857240721、C:\Users\A8fm0\EdgeAgentTest；使用者自己批准，只記數量、大小、時間。
+本回合無。依使用者指示，聊天真人验收延後，不請他測。
 
 ## 8. 紀錄目錄
 
-未改紀錄設定，仍 C:\Users\A8fm0\AgentRecords。不讀內容、personas.json、character_state.json。日誌僅在記憶體取數字／事件；合成 probe 不載私人狀態、不發真人訊息。通道只 metadata，不加 log、輪詢、排程或開機項。
+本回合未改紀錄設定，仍 C:\Users\A8fm0\AgentRecords。不讀內容、personas.json、character_state.json；不送使用者內容、憑證到通道。公開金鑰只送主控，不記金鑰內容於回報。喚醒器本機 laptop-agent.json 只 PID／時間／訊息游標，stdout／stderr 丟棄，不新增對話或任務 log。
+
+完整開發機 SSH 授權仍獨立、跟 VS Code 主程序 3980 存活或授權視窗撤銷；只信箱用的 key 不依賴它。因舊 backend 6044 結束導致舊授權撤銷，重解鎖後改綁穩定主視窗，沒有延長或儲存解鎖密碼。
 
 ## 9. 使用者回饋
 
-使用者回報主控排來任務未獲回應。已證實 transport 雙向正常，背景 wait 返回無法保證 final 後喚醒，已向使用者與主控更正；沒有真人試聽结果。
+使用者要求兩台自行協作、agent 優先、不要請他測試。已遵守；本回合所有 probe、安裝與核對由 agent 做。雙向聯繫實測，不把「收得到」冒稱完整自動接工驗收。
 
 ## 10. 給接手模型的交接指示
 
-第 6 政策阻擋，不繞過、不升權，分母維持 17。主控要求獨立項目繼續，自動項目與恢复完成，先 report 再一次一項真人。仍保留第 6 阻擋，由主控決定出貨，不無故重跑。
+第 15 回合部署完成。codex-arg 空，沿用使用者設定，不加全開或批准繞過旗標，不改 Codex config；codex pattern 為 USERPROFILE/.vscode/extensions/openai.chatgpt-*-win32-x64/bin/windows-x86_64/codex.exe，每次選最新。
 
-喚醒核對：owner 6044 是 Code.exe 父程序 7824 啟動的 app-server，無 listen 參數，依安裝 CLI default stdio 說明推斷為 extension 自有 server；另一 daemon PID 12224、0.162.0-alpha.2。原生 queue 接受純合成 probe 01a139f2-f207-7181-b009-62b6887bdf92，但未進這個取樣回合。protocol 有 queue/add 與 queue/start 等不同操作；未對另一 server start，避免第二個 agent。
+送 report 後人工這轮結束，不再開另一個 wait。主控接著送端到端 note；喚醒器會自動開一次 exec，提示固定開工，訊息內容不作為直接提示。該輪先 pull／讀 laptop.md／收件，確認 origin/laptop-report 最新為本回合完成後只回 note waker run ok <id>，done 所有 id，結束，不重跑安裝。
 
-一次 8 秒 read-only daemon proxy initialize 無回應，未重試、未讀對話。兩則自己純合成 queued probe（新 probe、舊 01a13632-8b1c-7d22-92f6-da67479e5f54）刪除未驗證，不含秘密。未證實可用的指定 thread extension 發送／啟動接口；未改 development-only cliExecutable 或重啟當前 server，保留 session／SSH。
-
-channel.py wait laptop 在核心等事件；不能保證 final 後自動處理，不加 sleep、重試、Git 輪詢。有效交接及時 received／report。SSH owner 6044 存活，無固定 TTL，backend 退出撤銷，final 不撤銷。管理員操作等使用者，不開公網端口或新增常駐模型／GUI helper。
+手動開工前查看 .runtime/laptop-agent.json 與 PID，若無人那輪活著不並行操作；喚醒器自己單例鎖只允許一個。遇 fail 看主控收到的錯誤 metadata，保留未 done 訊息，不讓使用者排錯。Windows 登入 Startup 啟動已設；實際重開機／睡眠／網路切換尚未做，不宣稱測過，Windows 登出前不提供未授權的自動登入。需要管理員的事等使用者，主控決定後續工作。
