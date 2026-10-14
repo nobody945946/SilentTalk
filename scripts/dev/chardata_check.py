@@ -61,6 +61,15 @@ CHECK_GATE = """下面是 Discord 聊天的最後幾句。{who}下面問題裡�
 {chat}
 
 {question}"""
+# The chat-work question is a list of rules to apply, not a first
+# impression: answering at once, the checker called lore questions, a
+# request to run a script and friends fishing for someone's words work (v3
+# pilot 10/15, 30 rows: 23 agreed at once, 27 after thinking, the character's
+# lore told). It thinks first; one that thinks past THINK_TOKENS gives no
+# verdict, and that counts as disagreeing.
+THINK_GATES = frozenset({"gate_chat_task"})
+THINK_TAIL = "\n先想清楚再回答，最後只寫 是 或 否。"
+THINK_TOKENS = 6000
 CHECK_LORE = """下面是 Discord 語音聊天的最後幾句，以及「{name}」接的話。
 
 角色：
@@ -93,6 +102,7 @@ def chat(
     max_tokens: int,
     n: int = 1,
     grammar: str | None = None,
+    think: bool = False,
 ) -> list[str]:
     """The model on this step's server. A request that fails fails the step:
     nothing restarts the server any more (character_pipeline.sh), so waiting
@@ -103,7 +113,7 @@ def chat(
         "top_p": 0.9,
         "max_tokens": max_tokens,
         "cache_prompt": True,
-        "chat_template_kwargs": {"enable_thinking": False},
+        "chat_template_kwargs": {"enable_thinking": think},
     }
     if grammar:
         body["grammar"] = grammar
@@ -221,6 +231,13 @@ def make_check(args: argparse.Namespace) -> None:
                     temperature=0.0, max_tokens=2,
                     grammar='root ::= "是" | "否"')[0].strip() == "是"
 
+    def ask_thinking(prompt: str) -> str:
+        """是 or 否 after thinking, or "" when the thought ran out first."""
+        text = chat(args.teacher_url, [{"role": "user", "content": prompt + THINK_TAIL}],
+                    temperature=0.0, max_tokens=THINK_TOKENS, think=True)[0]
+        found = re.findall(r"[是否]", text[-20:])
+        return found[-1] if found else ""
+
     def work(row: dict[str, Any]) -> None:
         key = store.row_key(row)
         raw = personas[row["persona_id"]]
@@ -229,8 +246,16 @@ def make_check(args: argparse.Namespace) -> None:
                    if row.get("owner") else f"「{raw['name']}」是聊天裡的角色，")
             # Its card is left out on purpose: with it (10/14, 25 pilot rows on
             # the 31B checker) two right verdicts turned wrong and none came right.
-            answer = "是" if ask_yes(CHECK_GATE.format(
-                who=who, chat=chat_text(row, raw["name"]), question=gate_question(row))) else "否"
+            # Its world is told: the app's question sets what it already knows
+            # apart from lookups, and the student has its lore in its card (v3
+            # pilot 10/15: without it the checker reasoned 憎惡智能 was not).
+            if raw.get("lore"):
+                who += "它本來就熟悉這些設定：" + "、".join(item["term"] for item in raw["lore"]) + "。"
+            prompt = CHECK_GATE.format(who=who, chat=chat_text(row, raw["name"]), question=gate_question(row))
+            if row["kind"] in THINK_GATES:
+                answer = ask_thinking(prompt)
+            else:
+                answer = "是" if ask_yes(prompt) else "否"
             store.append_row(
                 path, {"key": key, "agree": answer == row["messages"][-1]["content"]}
             )
