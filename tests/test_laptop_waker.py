@@ -11,6 +11,7 @@ import subprocess
 import sys
 import threading
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -197,6 +198,21 @@ def test_install_writes_a_startup_command_and_uninstall_removes_it(
 
     assert waker_module.main(["uninstall", "--startup-dir", str(startup)]) == 0
     assert not target.exists()
+
+
+def test_windows_startup_uses_the_base_interpreter_without_a_venv_redirector(
+    waker_module, tmp_path, monkeypatch
+) -> None:
+    wrapper = tmp_path / "venv" / "python.exe"
+    base = tmp_path / "base" / "python.exe"
+    base.parent.mkdir()
+    base.with_name("pythonw.exe").touch()
+    monkeypatch.setattr(waker_module, "sys", SimpleNamespace(
+        platform="win32", executable=str(wrapper), _base_executable=str(base)
+    ))
+    command = waker_module.startup_line("st-channel", "codex", [])
+    assert str(base.with_name("pythonw.exe")) in command
+    assert str(wrapper.parent) not in command
 
 
 def test_install_refuses_what_cmd_would_read(waker_module, tmp_path) -> None:

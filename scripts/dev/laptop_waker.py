@@ -323,8 +323,15 @@ def startup_dir(given: str | None) -> Path:
 
 
 def startup_line(dev: str, codex: str, codex_args: list[str]) -> str:
-    pythonw = Path(sys.executable).with_name("pythonw.exe")
-    interpreter = str(pythonw if pythonw.is_file() else Path(sys.executable))
+    # The waker uses only the stdlib. A Windows venv redirector would otherwise
+    # remain resident alongside its base interpreter for the entire wait.
+    executable = Path(
+        getattr(sys, "_base_executable", sys.executable)
+        if sys.platform == "win32"
+        else sys.executable
+    )
+    pythonw = executable.with_name("pythonw.exe")
+    interpreter = str(pythonw if pythonw.is_file() else executable)
     argv = [
         interpreter,
         str(Path(__file__).resolve()),
