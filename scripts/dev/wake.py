@@ -3,8 +3,9 @@ session finds problems itself but is woken only when something happened;
 nothing here asks at a fixed interval (the owner, 2026-10-14).
 
 One wait, on whatever can signal:
-- The laptop: its messages (channel.py; it sends over its SSH session) ring
-  this box's doorbell, so the kernel wakes the wait. A round handed over with
+- The laptop: its messages (channel.py; it sends over SSH) land in this
+  box's spool, which the kernel watches; one that came between two waits
+  wakes the next at once, and each is marked done once printed. A round handed over with
   `wake.py round` is expected back within its hours; if no report message has
   come by then, that wakes the session once.
 - The queue, while it runs: tail -F (inotify) wakes the wait when queue.log
@@ -65,8 +66,7 @@ def save(state: dict) -> None:
     STATE.parent.mkdir(parents=True, exist_ok=True)
     temporary = STATE.with_suffix(".tmp")
     temporary.write_text(json.dumps(state), encoding="utf-8")
-    os.replace(temporary, STATE)
-    channel.ring("devbox")  # a waiting wake picks up the new times
+    os.replace(temporary, STATE)  # a waiting wake watches this directory and picks up the new times
 
 
 def gh(path: str, jq: str) -> list[str]:
@@ -105,12 +105,25 @@ def queue_running() -> bool:
                           capture_output=True).returncode == 0
 
 
+def read_inbox() -> tuple[str, list[str]]:
+    """The laptop's waiting messages as wake lines, and their ids (done once printed)."""
+    messages = channel.pending("devbox")
+    if any(message["kind"] == "report" for message in messages):
+        state = load()
+        state["laptop_due"] = None
+        save(state)
+    return "\n".join("LAPTOP: " + json.dumps(m, ensure_ascii=False) for m in messages), [m["id"] for m in messages]
+
+
 def wait() -> int:
     start = time.time()
     deadline = start + LIMIT
     selector = selectors.DefaultSelector()
     inbox = channel.bell("devbox")
     selector.register(inbox, selectors.EVENT_READ, "inbox")
+    STATE.parent.mkdir(parents=True, exist_ok=True)
+    changes = channel.watch(STATE.parent)  # `wake.py ci`/`round` add times
+    selector.register(changes, selectors.EVENT_READ, "state")
     # The log is followed even with no queue running: a queue started during
     # the wait (a relaunch) wakes it with its events (10/14: one relaunched
     # while this slept went unwatched for an hour). Silence counts only while
@@ -120,7 +133,8 @@ def wait() -> int:
     os.set_blocking(tail.stdout.fileno(), False)
     selector.register(tail.stdout, selectors.EVENT_READ, "log")
     awake = queue_running()
-    found, events, buffer, lines, last = "", [], b"", 0, start
+    events, buffer, lines, last = [], b"", 0, start
+    found, taken = read_inbox()  # mail that came while no wait ran
     try:
         while not found:
             state = load()
@@ -132,14 +146,9 @@ def wait() -> int:
             for key, _ in selector.select(max(0.0, min(timers) - time.time())):
                 if key.data == "inbox":
                     channel.drain(inbox)
-                    messages = channel.take("devbox")
-                    if messages:
-                        if any(message["kind"] == "report" for message in messages):
-                            state = load()
-                            state["laptop_due"] = None
-                            STATE.parent.mkdir(parents=True, exist_ok=True)
-                            STATE.write_text(json.dumps(state), encoding="utf-8")
-                        found = "\n".join("LAPTOP: " + json.dumps(m, ensure_ascii=False) for m in messages)
+                    found, taken = read_inbox()
+                elif key.data == "state":
+                    channel.drain(changes)  # the loop reads the new times
                 else:
                     chunk = os.read(tail.stdout.fileno(), 65536)
                     buffer += chunk
@@ -166,7 +175,7 @@ def wait() -> int:
                 reports.append(f"LAPTOP OVERDUE: no report for the round sent {state.get('laptop_round', '')}")
                 state["laptop_due"] = None
             if state != load():
-                STATE.write_text(json.dumps(state), encoding="utf-8")
+                save(state)
             if reports:
                 found = "\n".join(reports)
             elif awake and max(last, LOG.stat().st_mtime) + QUIET <= now:
@@ -180,8 +189,10 @@ def wait() -> int:
         if tail is not None:
             tail.kill()
         os.close(inbox)
+        os.close(changes)
     print(f"{time.strftime('%F %T')} ({'awake' if awake else 'asleep'})")
-    print(found)
+    print(found, flush=True)
+    channel.done("devbox", taken)
     for line in events[:30]:
         if line != found:
             print(line)
