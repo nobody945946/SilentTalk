@@ -7,7 +7,8 @@ One wait, on whatever can signal:
   box's spool, which the kernel watches; one that came between two waits
   wakes the next at once, and each is marked done once printed. A round handed over with
   `wake.py round` is expected back within its hours; if no report message has
-  come by then, that wakes the session once.
+  come by then, that wakes the session once. Its receipt starts the hours
+  again: a laptop that was off took the round only when it woke.
 - The queue, while it runs: tail -F (inotify) wakes the wait when queue.log
   grows; a step event, a yield or an error wakes the session; an hour without
   the log growing is a hang (SILENCE).
@@ -108,9 +109,13 @@ def queue_running() -> bool:
 def read_inbox() -> tuple[str, list[str]]:
     """The laptop's waiting messages as wake lines, and their ids (done once printed)."""
     messages = channel.pending("devbox")
-    if any(message["kind"] == "report" for message in messages):
-        state = load()
-        state["laptop_due"] = None
+    kinds = {message["kind"] for message in messages}
+    state = load()
+    if "report" in kinds:
+        state["laptop_due"], state["laptop_hours"] = None, None
+    elif "received" in kinds and state.get("laptop_hours"):
+        state["laptop_due"] = time.time() + state["laptop_hours"] * 3600
+    if state != load():
         save(state)
     return "\n".join("LAPTOP: " + json.dumps(m, ensure_ascii=False) for m in messages), [m["id"] for m in messages]
 
@@ -217,7 +222,7 @@ def main(argv: list[str]) -> int:
         hours, text = float(argv[1]), " ".join(argv[2:])
         message = channel.send("laptop", "round", text)
         state = load()
-        state["laptop_due"], state["laptop_round"] = time.time() + hours * 3600, text
+        state["laptop_due"], state["laptop_hours"], state["laptop_round"] = time.time() + hours * 3600, hours, text
         save(state)
         print(json.dumps(message, ensure_ascii=False))
         return 0
