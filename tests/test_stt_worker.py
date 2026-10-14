@@ -17,6 +17,10 @@ FRAME = b"\x00\x00" * 1920  # 20 ms of 48 kHz stereo s16le
 # Windows fires a timer up to one clock tick (15.6 ms) before its time
 # (asyncio's clock resolution, the kernel's timer tick): lower bounds allow it.
 TICK = 0.02
+# Its monotonic clock steps by that tick too, so the worker can read the very
+# time the packet was stamped: then the wait is the whole silence, plus the
+# rounding of `stamp + silence - stamp` (0.4000000000000057 on CI).
+ROUNDING = 1e-9
 
 
 class _CountingQueue(queue.Queue):
@@ -116,7 +120,7 @@ def test_a_speaker_is_flushed_exactly_at_its_silence_deadline() -> None:
     # Block for a packet; sleep until the deadline; block again once closed.
     first, until_flush, after = engine.queue.timeouts
     assert first is None and after is None
-    assert until_flush is not None and 0.0 < until_flush <= 0.4
+    assert until_flush is not None and 0.0 < until_flush <= 0.4 + ROUNDING
     assert [kind for kind, _, _ in engine.events] == ["turn", "closed"]
 
 
@@ -143,7 +147,7 @@ def test_the_soonest_open_speaker_sets_the_wakeup() -> None:
     timeouts = engine.queue.timeouts
     assert len(timeouts) == 5
     assert timeouts[0] is None and timeouts[-1] is None
-    assert all(t is not None and 0.0 <= t <= 0.4 for t in timeouts[1:-1])
+    assert all(t is not None and 0.0 <= t <= 0.4 + ROUNDING for t in timeouts[1:-1])
 
 
 def test_stop_ends_the_worker_even_when_the_queue_is_full() -> None:
