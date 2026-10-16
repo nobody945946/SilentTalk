@@ -17,6 +17,13 @@ message n on (the Agent's tool list grows mid-task, so the turns before were
 written under fewer tools and are trained in a row of their own). Each trained span is exactly what the
 model writes after the prompt the server builds for that turn
 (scripts/dev/template_parity.py checks the two templates agree).
+
+--pairs adds what the owner asked for on 2026-10-10: after the rows, the
+student's wrong reply and the teacher's right one to the same request
+(EdgeAgent bench/dataset.py --pairs: {"messages", "tools", "chosen",
+"rejected", "thinking"}) train by preference (DPO, the adapter after the rows
+as the reference; preference_train). The adapter after the rows alone is kept
+as <out>-sft, a candidate for the same gate.
 """
 
 from __future__ import annotations
@@ -71,6 +78,11 @@ def main() -> int:
         help="keep what the backward pass needs (each layer's input, 6 GiB at 32K tokens) "
         "in RAM instead of on the GPU; long Agent rows need it",
     )
+    parser.add_argument("--pairs", nargs="+", default=[],
+                        help="stamped wrong/right pair files: preference training after the rows")
+    parser.add_argument("--pref-beta", type=float, default=0.1, help="DPO's beta")
+    parser.add_argument("--pref-lr", type=float, default=1e-5)
+    parser.add_argument("--pref-epochs", type=int, default=1)
     parser.add_argument(
         "--check",
         action="store_true",
@@ -94,13 +106,10 @@ def main() -> int:
     # Agent's tool work: the product loads one); each keeps its own stamp.
     rows = []
     for data in args.data:
-        stamp = provenance.read_stamp(Path(data))
-        if stamp is None:
-            raise SystemExit(f"{data} has no version stamp ({provenance.sidecar(Path(data)).name}); "
-                             "train only on files made by the stamped data steps")
-        part = [json.loads(line) for line in Path(data).read_text(encoding="utf-8").splitlines()]
-        print(f"data {data}: {len(part)} rows, {stamp}")
-        rows += part
+        rows += stamped(data, "data", "rows")
+    pairs = []
+    for data in args.pairs:
+        pairs += stamped(data, "pairs", "pairs")
     tokenizer = AutoTokenizer.from_pretrained(args.base)
     random.Random(0).shuffle(rows)
     results = tokenize_rows(args.base, rows, args.max_length)
@@ -122,6 +131,7 @@ def main() -> int:
     train = Dataset.from_list(kept[split:])
     evaluation = Dataset.from_list(kept[:split])
     print(f"train {len(train)}  eval {len(evaluation)}")
+    preferred = tokenize_pairs(args.base, pairs, args.max_length) if pairs else []
 
     quantized: dict = {}
     if args.four_bit:
@@ -202,15 +212,50 @@ def main() -> int:
         ),
     )
     if args.check:
-        return check(trainer, tokenizer)
+        return check(trainer, tokenizer) or check_pairs(preferred, tokenizer)
     if args.epoch_copies:
         trainer.add_callback(epoch_copies(args.out, args.epochs))
     trainer.train()
     if torch.cuda.is_available():
         print(f"peak GPU memory {torch.cuda.max_memory_allocated() / 2**30:.1f} GiB")
+    if preferred:
+        trainer.save_model(f"{args.out}-sft")
+        print(f"saved the rows-only adapter to {args.out}-sft")
+        split = max(1, int(len(preferred) * args.holdout))
+        preference_train(trainer.model, preferred[split:], preferred[:split], beta=args.pref_beta, lr=args.pref_lr,
+                         epochs=args.pref_epochs, accum=args.grad_accum, fused=args.liger,
+                         context=getattr(trainer, "maybe_activation_offload_context", None))
+        if torch.cuda.is_available():
+            print(f"peak GPU memory {torch.cuda.max_memory_allocated() / 2**30:.1f} GiB")
     trainer.save_model(args.out)
     print(f"saved adapter to {args.out}")
     return 0
+
+
+def stamped(data: str, label: str, kind: str) -> list[dict]:
+    """A data file's lines, if it carries a version stamp (provenance.py)."""
+    stamp = provenance.read_stamp(Path(data))
+    if stamp is None:
+        raise SystemExit(f"{data} has no version stamp ({provenance.sidecar(Path(data)).name}); "
+                         "train only on files made by the stamped data steps")
+    part = [json.loads(line) for line in Path(data).read_text(encoding="utf-8").splitlines()]
+    print(f"{label} {data}: {len(part)} {kind}, {stamp}")
+    return part
+
+
+def tokenize_pairs(base: str, pairs: list[dict], max_length: int) -> list[tuple[dict, dict]]:
+    """Each pair as two rows, the request with the chosen and with the rejected
+    reply, trained on that reply only; a pair either of whose rows is over
+    --max-length or not rendered as the server would is dropped."""
+    random.Random(0).shuffle(pairs)
+    sides = [{"messages": [*pair["messages"], pair[side]], "tools": pair.get("tools"), "train": "last",
+              "thinking": pair.get("thinking", False)} for pair in pairs for side in ("chosen", "rejected")]
+    results = tokenize_rows(base, sides, max_length)
+    kept = [(c, r) for c, r in zip(results[::2], results[1::2], strict=True)
+            if isinstance(c, dict) and isinstance(r, dict)
+            and len(c["input_ids"]) <= max_length and len(r["input_ids"]) <= max_length]
+    print(f"pairs {len(kept)} of {len(pairs)} (the rest over --max-length {max_length} or not rendered as served)")
+    return kept
 
 
 def epoch_copies(out: str, epochs: float):
@@ -441,6 +486,97 @@ def _tokenize(tokenizer, messages: list[dict], row: dict) -> dict[str, list[int]
         for position in range(len(prompt_ids), len(upto_ids)):
             mask[position] = 1
     return {"input_ids": full_ids, "completion_mask": mask}
+
+
+def completion_logp(model, item: dict, fused: bool):
+    """The sum of the log-probabilities of a row's trained tokens. With liger
+    (--liger) its fused loss never makes the logits, also outside training
+    (skip_logits); num_items_in_batch=1 makes either loss the sum."""
+    import torch
+
+    ids = torch.tensor([item["input_ids"]], device=model.device)
+    labels = ids.masked_fill(torch.tensor([item["completion_mask"]], device=model.device) == 0, -100)
+    extra = {"skip_logits": True} if fused else {}
+    return -model(input_ids=ids, labels=labels, num_items_in_batch=1, **extra).loss
+
+
+def preference_train(model, pairs: list[tuple[dict, dict]], held: list[tuple[dict, dict]], *, beta: float,
+                     lr: float, epochs: int, accum: int, fused: bool, context=None) -> dict[str, float]:
+    """DPO on (chosen, rejected) rows, the model as it is now the reference.
+    The loss -log sigmoid(z), z = beta * ((chosen - its reference) - (rejected -
+    its reference)) in log-probabilities, has the gradient -beta * sigmoid(-z)
+    * (d chosen - d rejected): z is measured without gradients first, then
+    each side's forward and backward runs alone, so a step holds one row's
+    activations, as the rows' training does, and not two. Prints the held
+    pairs' loss and how many prefer the chosen reply, before and after."""
+    import contextlib
+    import math
+
+    import torch
+
+    context = context or contextlib.nullcontext()
+
+    def softplus(x: float) -> float:  # log(1 + e^x), for any x
+        return max(x, 0.0) + math.log1p(math.exp(-abs(x)))
+
+    def measure(items):
+        model.eval()
+        with torch.no_grad():
+            return [(completion_logp(model, c, fused).item(), completion_logp(model, r, fused).item())
+                    for c, r in items]
+
+    def report(name: str, now, reference) -> dict[str, float]:
+        zs = [beta * ((pc - rc) - (pr - rr)) for (pc, pr), (rc, rr) in zip(now, reference, strict=True)]
+        loss = sum(softplus(-z) for z in zs) / max(1, len(zs))
+        right = sum(z > 0 for z in zs) / max(1, len(zs))
+        print(f"{name}: loss {loss:.4f}, prefers the chosen reply {right:.0%} of {len(zs)}", flush=True)
+        return {"loss": loss, "right": right}
+
+    reference, held_reference = measure(pairs), measure(held)
+    params = [p for p in model.parameters() if p.requires_grad]
+    optimizer = torch.optim.AdamW(params, lr=lr, weight_decay=0.0)
+    order = list(range(len(pairs)))
+    window: list[float] = []
+    for epoch in range(epochs):
+        random.Random(epoch).shuffle(order)
+        for n, k in enumerate(order, 1):
+            chosen, rejected = pairs[k]
+            ((pc, pr),) = measure([pairs[k]])
+            rc, rr = reference[k]
+            z = beta * ((pc - rc) - (pr - rr))
+            weight = beta * math.exp(-softplus(z))  # beta * sigmoid(-z)
+            window.append(softplus(-z))
+            model.train()
+            for row, sign in ((chosen, -1.0), (rejected, 1.0)):
+                with context:
+                    (sign * weight / accum * completion_logp(model, row, fused)).backward()
+            if n % accum == 0 or n == len(order):
+                torch.nn.utils.clip_grad_norm_(params, 1.0)
+                optimizer.step()
+                optimizer.zero_grad(set_to_none=True)
+                print(f"preference epoch {epoch + 1} pair {n}/{len(order)}: loss {sum(window) / len(window):.4f}",
+                      flush=True)
+                window = []
+    model.train()
+    if held:
+        report("held pairs before", held_reference, held_reference)
+        return report("held pairs after", measure(held), held_reference)
+    return {}
+
+
+def check_pairs(preferred: list[tuple[dict, dict]], tokenizer) -> int:
+    """The trained span of a pair's two rows: the chosen and the rejected
+    reply each, ending its turn."""
+    if not preferred:
+        return 0
+    end = tokenizer.convert_tokens_to_ids(["<turn|>", "<|tool_response>", "<|im_end|>"])
+    for name, item in zip(("CHOSEN", "REJECTED"), preferred[0], strict=True):
+        span = [t for t, m in zip(item["input_ids"], item["completion_mask"], strict=True) if m]
+        print(f"{name} >>>" + tokenizer.decode(span)[-600:] + "<<<")
+        if not any(t in end for t in span):
+            print("MASK WRONG: a pair's reply must end its turn with the end-of-turn marker")
+            return 1
+    return 0
 
 
 def check(trainer, tokenizer) -> int:
