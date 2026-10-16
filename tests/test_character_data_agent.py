@@ -28,7 +28,7 @@ import machine_spirit  # noqa: E402
 
 from silenttalk.copilot.llm import LocalReplyModel
 from silenttalk.copilot.reply_templates import _CHAT_TASK_ASK, TASK_HINTS
-from silenttalk.copilot.task_runner import _FAILED, _QUEUED
+from silenttalk.copilot.task_runner import _QUEUED, failure_words
 from silenttalk.persona import MACHINE_SPIRIT, persona_to_dict  # noqa: E402
 
 NAME = MACHINE_SPIRIT.name
@@ -545,7 +545,7 @@ def test_generated_chats_play_out_as_the_app_would_by_construction(seed: int) ->
     # How work ended is the app's, not the teacher's.
     for slot, line in zip(spec["skeleton"], assembled["lines"]):
         if slot.get("ask") == "work" and slot["outcome"] == "failed":
-            assert line["result"] == _FAILED.format(code=slot["code"])
+            assert line["result"] == failure_words(slot["code"])
 
 
 def test_the_draws_cover_what_v3_adds() -> None:
@@ -618,7 +618,7 @@ V3_CHAT = {
          "result": "測試結果一"},
         {"s": NAME, "t": "測試接下一", "to": OWNER},
         {"s": "阿驗", "t": "機魂 測試工作二", "to": NAME, "ask": "work", "task": "測試指示二",
-         "result": "工作失敗了（read_timeout）。"},
+         "result": "工作失敗了：思考機太久沒有回應。"},
         {"s": NAME, "t": "測試排隊二", "to": "阿驗", "queued": True},
         {"s": "小試", "t": "測試閒聊丙", "to": "大家"},
         {"s": NAME, "t": "測試轉述一", "to": OWNER, "report": True},
@@ -644,7 +644,7 @@ def test_v3_calls_and_waiting_work_play_out_as_the_app_does() -> None:
     assert next(line for line in lines if line["t"] == "測試排隊二").get("queued")
     # Reported oldest first, each after the result the app typed.
     results = [line["t"] for line in lines if line.get("agent_result")]
-    assert results == ["測試結果一", "工作失敗了（read_timeout）。"]
+    assert results == ["測試結果一", "工作失敗了：思考機太久沒有回應。"]
 
 
 def test_v3_rows_ask_what_the_app_asks(chardata: Path) -> None:
@@ -660,7 +660,7 @@ def test_v3_rows_ask_what_the_app_asks(chardata: Path) -> None:
     assert TASK_HINTS["report"].format(detail=_QUEUED) in waits["messages"][-2]["content"]
     assert (at["機魂 測試工作二"], "ack") not in got
     failed = got[(at["測試轉述二"], "report")]["messages"][-2]["content"]
-    assert TASK_HINTS["report"].format(detail="工作失敗了（read_timeout）。") in failed
+    assert TASK_HINTS["report"].format(detail="工作失敗了：思考機太久沒有回應。") in failed
     assert got[(at["測試你今天心情"], "gate_chat_task")]["messages"][-1]["content"] == "否"
 
 

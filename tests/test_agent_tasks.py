@@ -596,16 +596,17 @@ async def test_a_lookup_stopped_on_the_agents_side_is_still_reported_where_it_wa
 
 
 @pytest.mark.asyncio
-async def test_a_failed_lookup_tells_the_chat_its_code_not_edgeagents_words(tmp_path):
+async def test_a_failed_lookup_tells_the_chat_a_fixed_reason_not_edgeagents_words(tmp_path):
     """EdgeAgent's error text can name the owner's paths; a chat anyone is
-    in gets the reason's code. The owner's own thread keeps the words."""
+    in hears a fixed reason for its code. The owner's own thread keeps the
+    words."""
     runtime, seen = _marked_runtime(
         tmp_path, lookup="查今天台股收盤", fail_run="C:\\Users\\Rex\\EdgeAgent 讀不到"
     )
     try:
         runtime._handle_turn(5, "路人", "機魂 今天台股收盤多少")
         await _until(lambda: seen.results)
-        assert seen.results == [("工作失敗了（unknown）。", VOICE_ROOM)]
+        assert seen.results == [("工作失敗了：原因不明。", VOICE_ROOM)]
         _in_thread(runtime, 1, "幫我看一下測試資料夾")
         await _until(lambda: len(seen.results) == 2)
         assert seen.results[1] == ("C:\\Users\\Rex\\EdgeAgent 讀不到", THREAD)

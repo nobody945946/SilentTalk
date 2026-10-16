@@ -36,8 +36,41 @@ _MAX_WAITING = 3
 _QUEUED = "前一件工作還在做，這件已經排在後面，做完就接著做。"
 _QUEUE_FULL = "前面已經排了好幾件工作，這件沒有收下，請等前面的做完再交代。"
 _STOPPED = "工作被中斷了，沒有結果。"
-# What a chat anyone is in hears of a failed lookup: the reason's code only.
-_FAILED = "工作失敗了（{code}）。"
+# What a chat anyone is in hears of a failed lookup: a fixed reason for its
+# code, never EdgeAgent's words (they can name this computer's paths or quote
+# the request). The codes are EdgeAgent's (agent_bridge.mjs stop, turn.py,
+# chat.py, control.py) and the client's (agent_tasks.client_failure); a code
+# without a reason here is heard as unknown, and the log keeps the code.
+_FAILED = "工作失敗了：{reason}。"
+FAILURE_REASONS = {
+    "runaway": "思考機一直在重複同樣的內容，被中途停下",
+    "repeat_limit": "思考機把同一個操作重複了好幾次都沒有進展，被停下",
+    "tool_limit": "這件事要的步驟太多，思考機做到上限停下",
+    "generation_truncated": "要處理的內容太多，超出思考機一次能讀寫的長度",
+    "context_overflow": "要處理的內容太多，超出思考機一次能讀寫的長度",
+    "incomplete_reply": "思考機沒有把回答講完",
+    "agent_busy": "思考機正在忙別的工作",
+    "inference_busy": "思考機正在忙別的工作",
+    "agent_unavailable": "思考機現在用不了",
+    "attachment_unsupported": "思考機看不了這種附件",
+    "http_409": "思考機的權限設定不讓它接這件工作",
+    "model_timeout": "思考機太久沒有回應",
+    "bridge_timeout": "思考機太久沒有回應",
+    "read_timeout": "思考機太久沒有回應",
+    "model_unreachable": "連不上思考機",
+    "connection": "連不上思考機",
+    "stream_ended": "和思考機的連線中途斷了",
+    "model_http_error": "思考機內部出錯了",
+    "model_error": "思考機內部出錯了",
+    "bridge_io": "思考機內部出錯了",
+    "bridge_error": "思考機內部出錯了",
+    "invalid_request": "思考機內部出錯了",
+    "agent_error": "思考機內部出錯了",
+    "http_400": "思考機內部出錯了",
+    "http_500": "思考機內部出錯了",
+    "invalid_event": "思考機內部出錯了",
+    "unknown": "原因不明",
+}
 
 
 _FAILURE_CODE = re.compile(r"[a-z][a-z0-9_]{0,39}")
@@ -46,6 +79,11 @@ _FAILURE_CODE = re.compile(r"[a-z][a-z0-9_]{0,39}")
 def failure_code(value: object) -> str:
     """The reason code if it is one (a short snake_case name), else unknown."""
     return value if isinstance(value, str) and _FAILURE_CODE.fullmatch(value) else "unknown"
+
+
+def failure_words(code: str) -> str:
+    """What a chat anyone is in hears of a lookup that failed with `code`."""
+    return _FAILED.format(reason=FAILURE_REASONS.get(code, FAILURE_REASONS["unknown"]))
 
 
 class AgentTaskRunner:
@@ -284,9 +322,7 @@ class AgentTaskRunner:
             if kind == "done":
                 result = self._task_result or "工作完成。"
             elif kind == "error" and self._agent_scope == "public":
-                # EdgeAgent's own words can name this computer's paths; a
-                # chat anyone is in gets the reason's code only.
-                result = _FAILED.format(code=failure_code(payload.get("reason")))
+                result = failure_words(failure_code(payload.get("reason")))
             elif kind == "error":
                 result = str(payload.get("message") or "工作失敗了。")
             else:

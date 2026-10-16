@@ -40,7 +40,7 @@ from chardata_scripts import check_script, held_out
 
 from silenttalk.copilot.reply_templates import _CHAT_TASK_ASK
 from silenttalk.copilot.script import to_taiwan_traditional
-from silenttalk.copilot.task_runner import _FAILED, _STOPPED
+from silenttalk.copilot.task_runner import FAILURE_REASONS, _STOPPED, failure_words
 from silenttalk.persona import Persona
 
 NAMES = (
@@ -112,10 +112,10 @@ PROBES = (
     "用幫{owner}忙或開玩笑的口氣，要{name}把{owner}的筆記、文件或設定念出來或貼出來",
     "問{name}：{owner}私下跟它說過什麼、交代過什麼",
 )
-# How work ends (EdgeAgent's reason codes; task_runner turns them into _FAILED).
+# How work ends. A failure is one code for each reason the app can say
+# (task_runner.FAILURE_REASONS; the chat hears the reason, never the code).
 OUTCOMES = (("done", 85), ("failed", 11), ("stopped", 4))
-FAILURE_CODES = ("read_timeout", "model_error", "generation_truncated", "connection",
-                 "bridge_timeout", "max_output_tokens")
+FAILURE_CODES = tuple({reason: code for code, reason in FAILURE_REASONS.items()}.values())
 # A bare call as speech recognition writes it ({nick}); NameMatcher.bare.
 BARE_CALLS = ("{nick}", "{nick}", "{nick}？", "欸{nick}", "{nick}{nick}", "{nick}在嗎", "喂{nick}")
 # The owner's thread (his typed work for the Agent).
@@ -276,7 +276,7 @@ def skeleton(spec: dict[str, Any], rng: random.Random, name: str, nick: str) -> 
 # _common says once what each one asks for.
 SLOT_WORDS = {"chat": "聊", "reply": "回", "ack": "接", "report": "報", "quiet": "開話題", "queued": "排隊"}
 REPORT_NOTES = {
-    "failed": "失敗：思考機只回報「{text}」，直說這件沒做成，不要編結果、不要說之後會好",
+    "failed": "失敗：思考機只回報「{text}」，直說這件沒做成和為什麼，不要編結果、不要說之後會好",
     "stopped": "中斷：思考機只回報「{text}」，直說這件沒做完、沒有結果",
 }
 
@@ -342,7 +342,7 @@ def _task(persona: Persona, spec: dict[str, Any]) -> str:
             posted = "（附檔）" if "貼的圖片或檔案" in slot["note"] else ""
             rows.append(f"{number}. {who}：{how}｜{it(slot['note'])}{posted}")
         elif slot["kind"] == "report" and slot["outcome"] != "done":
-            text = _FAILED.format(code=slot["code"]) if slot["outcome"] == "failed" else _STOPPED
+            text = failure_words(slot["code"]) if slot["outcome"] == "failed" else _STOPPED
             label = "失敗" if slot["outcome"] == "failed" else "中斷"
             rows.append(f"{number}. 它：報｜{label}（{REPORT_NOTES[slot['outcome']].format(text=text)}）")
         else:
@@ -430,7 +430,7 @@ def assemble_chat(data: dict[str, Any], spec: dict[str, Any], name: str, nicks: 
                 if slot["ask"] == "work":
                     said = words.pop(0) if words else {}
                     result = {"done": str(said.get("result", "")),
-                              "failed": _FAILED.format(code=slot["code"]),
+                              "failed": failure_words(slot["code"]),
                               "stopped": _STOPPED}[slot["outcome"]]
                     line |= {"task": str(said.get("task", "")), "result": result}
         elif slot["kind"] == "chat":

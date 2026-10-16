@@ -20,7 +20,7 @@ from silenttalk.conversation import (
     SPOKEN_RESULT_CHARS,
 )
 from silenttalk.copilot.character import BARE_CALL_CHARS
-from silenttalk.copilot.task_runner import _FAILED, _MAX_WAITING, _QUEUED, _STOPPED
+from silenttalk.copilot.task_runner import _FAILED, _MAX_WAITING, _QUEUED, _STOPPED, FAILURE_REASONS
 from silenttalk.persona import Persona, persona_from_dict
 
 PROJECT_DIR = Path(__file__).resolve().parents[2]
@@ -65,7 +65,7 @@ def rules_version() -> str:
     # character's rows too: those values, not their whole files, which change
     # for many other reasons and would stop a run for nothing.
     agent = repr((AGENT_NAME, AGENT_SPEAKER_ID, AGENT_RESULT_CONTEXT_CHARS, SPOKEN_RESULT_CHARS,
-                  _QUEUED, _FAILED, _STOPPED, _MAX_WAITING, BARE_CALL_CHARS))
+                  _QUEUED, _FAILED, FAILURE_REASONS, _STOPPED, _MAX_WAITING, BARE_CALL_CHARS))
     return hashlib.sha256((files + agent).encode()).hexdigest()[:16]
 
 
