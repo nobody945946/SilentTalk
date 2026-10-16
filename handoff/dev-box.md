@@ -1,7 +1,7 @@
 # 開發機工作檔（Linux、RTX 3090）
 
-更新：2026-10-16 13:40｜SilentTalk、EdgeAgent 開發分支都是 `copilot-story-mode`；規格 v2 凍結（`92a1961`）。v3：EdgeAgent `spec-v3-safety`（worktree `ea-v3-merge`；佇列跑的 `ea-v3` 在 `spec-v3`，同一版）、SilentTalk `spec-v3`（`/home/clawd/worktrees/st-v3`）。v4：EdgeAgent `spec-v4`（`ea-v4`）。
-你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事，**只寫現況和下一步**。上一版：`archive/dev-box-2026-10-16-before-v3n-train.md`（只在這台機器，不必讀）。
+更新：2026-10-16 15:40｜SilentTalk、EdgeAgent 開發分支都是 `copilot-story-mode`；規格 v2 凍結（`92a1961`）。v3：EdgeAgent `spec-v3-safety`（worktree `ea-v3-merge`；佇列跑的 `ea-v3` 在 `spec-v3`，同一版）、SilentTalk `spec-v3`（`/home/clawd/worktrees/st-v3`）。v4：EdgeAgent `spec-v4`（開發 `ea-v4`，佇列 `ea-v4q`）、SilentTalk `spec-v4`（`st-v4`）；worktree 都在 `/home/clawd/worktrees/`。
+你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事，**只寫現況和下一步**。上一版：`archive/dev-box-2026-10-16-before-v4-queue.md`（只在這台機器，不必讀）。
 
 ---
 
@@ -32,22 +32,20 @@
 | **情境卡** | `families.json`（A–J）→ `scenario_cards.py` → `run.py` → `scenario_judge.py` → `dataset.py` |
 | **機魂資料** | SilentTalk `scripts/dev/character_pipeline.sh`（Qwen3.8 寫、E4B 答、Gemma 31B 查、硬關卡）。出錯就停 |
 | **兩台溝通** | `channel.py`：`wait` 不刪、`done <id>` 才刪。筆電 `laptop_waker.py` 每批新信開一次 `codex exec` |
-| **佇列** | `EdgeAgent/.runtime/fw/queue.sh`：一步一個 `.done`；失敗就停，修好再 `relaunch.sh`；v3 步驟在 `ea-v3` 跑 |
+| **佇列** | `EdgeAgent/.runtime/fw/queue.sh`（v3，在 `ea-v3` 跑）跑到 `msv3n-gate`，接著 `queue-v4.sh`（在 `ea-v4q` 跑）：一步一個 `.done`；失敗就停，修好再 `relaunch.sh`（兩支依序） |
 
 ## 3. 接下來
 
 1. **公開下載（ms3n＋選項移除）：** 已問使用者、還沒回；**沒有「好」就不發**。回好之後：`release_windows.py --edge-agent ../EdgeAgent --notes <摘要>` 乾跑 → `--publish`，刪 `ea-ship`、`st-ship`。
 2. **筆電：** 沒有交辦中的回合。v4 要出貨時才交：批准卡認得 `explicit === 'memory'`（「要寫進你的長期記憶，需要單次批准」）、記憶檢視編輯、PowerShell 7.6.6、唯讀查本機。
-3. **v3n 佇列（現在）：** `v3n-train` 12:45 起，592 步、每步約 60 秒，約 23:00 完成 → off／high 各在 0.2、0.6、1.0 → `msv3n-chat-task` → stamp → 情境卡（約 2.5 小時）→ Python → `msv3n-gate`（約 10/17 08:00）。過的線同 v3：關 ≥106、開 ≥127、情境卡 ≥31、Python ≥35，工具和 MCP 各不低，聊天探針全過。v3n 的資料和 v3 同一批軌跡（含下面第 4 項的記憶 bug），預期 chat-memory 也會錯。每步完成看收和退，`steps.py`／`pair.py` 在 session scratchpad。
-4. **v3 判定：NOT SHIPPED（10/16 12:45）。** 數字（對原版／ms3n／v3）：關 79／106／**111**、開 117／127／**128**（兩模式都選 0.6）、情境卡 30／28／**27**、Python 14／35／**31**；工具和 MCP 都不低；派工題 0.833／0.917／**1.0**；聊天探針 chat-memory 4 次全錯。**v3 輸在停不下來，不是答得差：** 情境卡 21 張中途停（截斷 6、思考打轉 9、重複呼叫 6；ms3n 4、原版 0），做完的 70 張過 27（39%，三者最高）；Python 16 題停（ms3n 0）。原因：
-   - **思考繞圈：** 截斷的 6 張是一步想 5.4–6.2 萬 token 塞滿 context，在 12–44 句之間打亂順序繞，舊守門只認一字不差的重複。老師留下的思考沒有這樣的（7,899 段，0 段一半以上重複），是學生學了長思考卻收不了尾。低溫更糟（0.2：開 106、打轉 18）。
-   - **產品 bug 教壞資料：** 提示叫 Agent 用 edit 把主人交代的事加進 `pi-state/AGENTS.md`，但工作資料夾守門把它擋掉；老師被擋就改用 PowerShell 寫（沒經主人確認）。v3 留下的資料有 90 列碰它：edit 66 次被擋、拒絕訊息 273 個、PowerShell 寫 108 次。v3 照學：先撞牆再繞路，chat-memory 卡進迴圈。
-   - 一次 `memory-save` 崩潰（沙盒沒回報、沒 stderr、沒 OOM；docker 事件只留 256 筆查不到），重跑 10 秒就過。
-5. **關卡之後：** v3n 過就照出貨流程：把 v3 分支的新 commit 合進兩個試合併分支（EdgeAgent `v3-integration` `7546f62`、SilentTalk `v3-integration` `35c5deb`，`ship_gate.py` 用 `spec-v3-safety` 的），再合進 `copilot-story-mode`；記憶 bug 的修正（`811de6f`）和繞圈守門（`b622a02`）是產品錯誤修正，一起搬進出貨版。v3n 不過：直接做 v4（下一項），不在 v3 上補。
-6. **v4（`spec-v4`，CI 綠到 `a46079b`；`811de6f` 等 CI）：**
-   - 做完：評審看每種題目的回答、自我驗證、`dataset.py` 每個工作都要評審過（`c99a396`）；卡片不得要助理捏造內容（`1089117`）；多對手出貨關卡（`d7febb5`）；**繞圈守門**：最後 40 行（≥20 字）只有 ≤10 種就停，全部 436,873 則錄下的訊息裡，訓練資料 0 則誤判、考試 147 段全是真的繞圈；Agent 一步用完 context 時照實說，不叫人去調它沒帶的上限，README 同步（`b622a02`）；監控測試的競態（`a46079b`）；**主人的記憶**：read 和 edit 可以碰那一個檔，edit 每次要主人單次批准（`explicit: 'memory'`），write 不能整檔改寫，指令提到 `pi-state` 也要單次批准（`811de6f`）。
-   - 要做：**老師重錄碰記憶的題**（v3 那 90 列不能再用）；對學生跑「從自己的錯學」，接手點放在學生重複呼叫和思考繞圈的地方；守門停下後能不能讓模型不想直接回答（比整輪結束好），先量；v4 佇列對工具、Python、公開工具 run 也跑評審；基線用 v4 評審重評；引人去查卻沒附網頁的卡（試專門的問題：逐項列出事實來源）；沙盒的桌面和下載資料夾；角色的失敗回報 `task_runner._FAILED` 改給中文原因（機魂資料跟著重做）。
-7. **再之後：** coding agent（要大下載，先問使用者）；清 worktree（`ea-ship`、`st-ship`、`ea-t1`、`ea-laptop`、`ea-spec2`、`ea-freeze`、`ea-web`、`ea-takeover`、`ea-v3-t1`、`ea-v3-t1s`）。
+3. **v3n 佇列（現在）：** `v3n-train` 15:34 在 166／592 步、每步約 60 秒，約 22:30 完成 → off／high 各在 0.2、0.6、1.0 → `msv3n-chat-task` → stamp → 情境卡（約 2.5 小時）→ Python → `msv3n-gate`（約 10/17 07:30）。過的線同 v3：關 ≥106、開 ≥127、情境卡 ≥31、Python ≥35，工具和 MCP 各不低，聊天探針全過。v3n 和 v3 用同一批軌跡（含記憶 bug），預期 chat-memory 也錯。每步完成看收和退，`steps.py`／`pair.py` 在 session scratchpad。
+4. **v3 判定：NOT SHIPPED（10/16 12:45）。** 對原版／ms3n／v3：關 79／106／**111**、開 117／127／**128**（兩模式都選 0.6）、情境卡 30／28／**27**、Python 14／35／**31**；工具和 MCP 不低；chat-memory 4 次全錯。**輸在停不下來：** 情境卡 21 張中途停（截斷 6、打轉 9、重複呼叫 6），做完的 70 張過 27（39%，三者最高）；Python 16 題停。原因：思考在 12–44 句間打亂順序繞到 context 滿（舊守門只認一字不差）；產品擋了提示要它做的記憶 edit，老師改用 PowerShell 繞過，學生照學。
+5. **關卡之後：** v3n 過就照出貨流程：把 v3 分支的新 commit 合進兩個試合併分支（EdgeAgent `v3-integration` `7546f62`、SilentTalk `v3-integration` `35c5deb`，`ship_gate.py` 用 `spec-v3-safety` 的），再合進 `copilot-story-mode`；記憶修正（`811de6f`）、繞圈守門（`b622a02`）、`/chat` 拒絕代碼（`d2be311`）是產品錯誤修正，一起搬。並寫 `ea-v4q/.runtime/v3n-shipped`，v4 的關卡就多一個對手。v3n 不過：直接做 v4，不在 v3 上補。不管過不過，等候中的程序（PID 3487613）在 `msv3n-gate` 之後自動跑 `queue-v4.sh`。
+6. **v4 已做（CI 都綠，`398935f` 等 CI）：** 評審看每種題目的回答（`c99a396`）；繞圈守門、Agent 一步用完 context 照實說（`b622a02`）；主人的記憶：read、edit 可碰那一個檔，edit 每次單次批准，指令提到 `pi-state` 也要（`811de6f`）；`/chat` 中途拒絕（Agent 忙、模型忙、附件不支援、沒有 Agent）帶代碼（`d2be311`）；老師接手點加在守門停下處：runaway 接最後一個請求，重複呼叫接第一次重複的地方（`398935f`）；SilentTalk：查詢失敗給中文原因（用「思考機」說，不給代碼），機魂資料的失敗改從原因表取（`0f0bf6a`）。**v4 的提示和工具定義和 v3 一樣**（v4 的 `dataset.py` 收 v3 的列不擋），v3 錄的資料沿用，只換碰過記憶的。
+7. **`queue-v4.sh`（`msv3n-gate` 後）：** `v4-carry` 把 v3 五個 run 複製成 `v4c-*`，拿掉工具呼叫碰過 `pi-state` 的題（情境卡 58、長卡 4、工具 10、Python 3，清單 `ea-v4q/.runtime/agentdata/v4-memory-tasks.json`），刪舊評審 → 評審驗證情境卡、工具、Python（不被信任就停，沒有只看檢查的退路）→ **接手試跑**：學生 v3（`e4b-laptop-v3-high`／`-scen`，v4 產品）做每 10 題工具、每 30 張卡 → 評審 → 老師接手（溫度 1.0）→ 評審 → v4 評審全部 `v4c-*` → 老師在 v4 產品重錄記憶題（`v4-mem-*`）→ 評審 → 原版在 v4 產品重考（`v4-base*`）→ ms3n 的 v3 考試複製過來、情境卡用 v4 評審重評 → 機魂資料（`st-v4`，試跑 16 段再 400 段，種子同 v3）→ **`v4-takeover-ok` 停下等我**。
+8. **接手試跑完成時（約 10/17 10:30，wake 會叫；佇列接著跑無人值守的步驟，約 10/18 清晨才停在 `v4-takeover-ok`）：** 讀試跑：重播漂移幾題（`replay_differs`）、老師在錯處怎麼做、接手後的評審結果，以及能收幾列；沒問題就把後半段寫進新檔，等佇列停在 `v4-takeover-ok` 再 `mv` 蓋過去、寫標記、`relaunch.sh`：學生全部訓練題各一次 → 評審 → 老師接手 → 評審 → `dataset.py`（`v4c-*`、`v4-mem-*`、接手 run）兩份（both、none）→ 訓練 v4、v4n → 各溫度考試 → stamp → 情境卡、Python → `ship_gate`（對原版 `v4-base*`、ms3n；有 `v3n-shipped` 再加 v3n）。v4 的 config（`e4b-laptop-v4*`）那時一起加。
+9. **還沒排的 v4 項目：** 守門停下後讓模型不想直接回答（比整輪結束好），先量；引人去查卻沒附網頁的卡（試專門的問題：逐項列出事實來源），等 GPU 空檔量。**桌面、下載資料夾延到 v5：** 產品邊界已定（檔案工具只在工作資料夾，shell 可以碰系統、照類別批准；v3 的 5,736 次 shell 有 420 次碰到外面，都是查硬體、TEMP 暫存這類正當雜事），v4 不出新卡，沙盒加資料夾用不到。
+10. **再之後：** coding agent（要大下載，先問使用者）；清 worktree（`ea-ship`、`st-ship`、`ea-t1`、`ea-laptop`、`ea-spec2`、`ea-freeze`、`ea-web`、`ea-takeover`、`ea-v3-t1`、`ea-v3-t1s`）。
 
 ## 4. 開發機規則（通用規則在 AGENTS.md）
 
@@ -76,6 +74,7 @@ cd /home/clawd/EdgeAgent && .venv/bin/python -m pytest -q -p no:cacheprovider   
 - **沙盒：** 容器沒網路、root 唯讀、非 root；只掛產品的 `edge_agent` 和 bench 的檔案。假網路只在卡片有網頁時開。
 - **llama-server（b11193）：** 不同 LoRA 的槽不能同批；考場固定 `--fit off`。
 - **評審（Gemma 31B，2 槽）：** 機魂的閘題一題平均 18 秒；1,578 題 4 小時。
+- **老師錄製（Qwen3.8-27B，4 槽）：** 工具題 588 次 6.3 小時；情境卡 317 張約 18 小時。**評審：** 情境卡 720 次 1.6 小時。
 - **訓練 32K 列：** 峰值 14.2 GiB；v3（完整長思考，`--thinking both`，2,599 列）746 步 15 小時 50 分，驗證 loss 0.732 → 0.719；v3n 一步約 60 秒；ms3n 3 小時。
 - **v3 一串考試：** 每場 162 題 20–60 分鐘；情境卡 91 張 2.5 小時；Python 57 題 40 分鐘。
 - **雙管路（3050 Ti、64K）：** Agent 生成時角色首字 0.53–0.62 秒；筆電每秒約 20 token，繞到塞滿 context 要等 40 分鐘以上。
@@ -89,4 +88,5 @@ cd /home/clawd/EdgeAgent && .venv/bin/python -m pytest -q -p no:cacheprovider   
 - **考場不忠實會冤枉也會教壞模型：** 卡片說桌面卻放 workspace；沒網頁的卡老師照樣去查。
 - **「完成」不等於有錄到：** 每步完成都看收和退。分支沒推過就沒跑過 Windows CI。
 - **兩條路的同一份規則會漂移：** 出貨關卡在開發分支加了工具／MCP 規則，v3 分支沒有。
+- **每份軌跡都有 `pi-state`（系統提示寫了路徑）：** 找碰過記憶的工作要看工具呼叫的參數。工作檔的時間用 `date` 看，不要估。
 - **重試沒用、Node 只說「fetch failed」（原因在 `cause`）、被殺的 `run.py` 會留 relay 孤兒、這台 `gh` 太舊（用 API 的 `head_sha`）。**
