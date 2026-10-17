@@ -73,8 +73,8 @@ def _clean_and_pushed(repo: Path) -> str:
 
 def _tag() -> str:
     base = time.strftime("windows-%Y.%m.%d")
-    existing = set(_run("gh", "release", "list", "--repo", PUBLIC, "--limit", "100",
-                        "--json", "tagName", "-q", ".[].tagName").splitlines())
+    # The REST listing, not `gh release list --json` (the dev box's gh 2.4 has no --json there).
+    existing = set(_run("gh", "api", f"repos/{PUBLIC}/releases", "--paginate", "-q", ".[].tag_name").splitlines())
     tag, n = base, 1
     while tag in existing:
         n += 1
