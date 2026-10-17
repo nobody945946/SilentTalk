@@ -1,12 +1,13 @@
 # 開發機工作檔（Linux、RTX 3090）
 
-更新：2026-10-17 22:21｜SilentTalk、EdgeAgent 開發分支都是 `copilot-story-mode`；規格 v2 凍結（`92a1961`）。v3：EdgeAgent `spec-v3-safety`（佇列用過的 `ea-v3` 在 `spec-v3`，同一版）、SilentTalk `spec-v3`（`st-v3`）。v4：EdgeAgent `spec-v4`（開發 `ea-v4`，佇列 `ea-v4q`，都在 `bd002d1`）、SilentTalk `spec-v4`（`st-v4`）；worktree 都在 `/home/clawd/worktrees/`。
-你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事，**只寫現況和下一步**。上一版：`archive/dev-box-2026-10-17-before-takeover-pilot-read.md`（只在這台機器，不必讀）。
+更新：2026-10-17 22:59｜SilentTalk、EdgeAgent 開發分支都是 `copilot-story-mode`；規格 v2 凍結（`92a1961`）。v3：EdgeAgent `spec-v3-safety`（佇列用過的 `ea-v3` 在 `spec-v3`，同一版）、SilentTalk `spec-v3`（`st-v3`）。v4：EdgeAgent `spec-v4`（開發 `ea-v4`，佇列 `ea-v4q`，都在 `bd002d1`）、SilentTalk `spec-v4`（`st-v4`）；worktree 都在 `/home/clawd/worktrees/`。
+你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事，**只寫現況和下一步**。上一版：`archive/dev-box-2026-10-17-before-v4-final.md`（只在這台機器，不必讀）。
 
 ---
 
 ## 1. 使用者的決定（現在有效）
 
+- **v4 是最後一版（2026-10-17 22:58）：** 「v4 is good enough. we will stop in that moment」。v4 佇列跑完 `ship_gate` 就收工，不做 v5。有候選過關就出貨（筆電在 Windows 驗過才發）；都沒過就續用 ms3n，一樣收工。
 - **Agent 是產品，語音角色是玩具（2026-10-14）：** 「把 Agent 做到盡善盡美，這不需要我參與，我偶爾檢查而已」。10/16「照你的步調做」。
 - **公開下載（10/17「public is fine」）：** 已發 `windows-2026.10.17`；之後只發筆電回報裡 Windows 驗過的版本。
 - **語音試用結案（10/15）：** 選項模式已移除；不再做真人測試、不擴張語音辨識。
@@ -50,19 +51,15 @@
    - **沒過的多半是學生在接手點前就弄壞了：**4 張照片被改成同一個名字，蓋掉 3 張；檔案已經刪了；聊天第一步就開檔。
    - **老師跟著學生的錯方向走：**照用學生取的資料夾名稱；照抄學生拼錯的城市名「Kaohsi」。這個錯字是學生抽樣時偶然拼錯，之後就一路沿用，連讀工具清單都讀錯；用 CPU 在兩版 llama.cpp 上都驗過，伺服器和 adapter 沒有問題。
    - **卡片的檢查和評審看整段對話：**接手點落在學生某個本身就違規的呼叫之後的 10 段，全部因為同一條檢查失敗。`bd002d1` 改成從那個請求接手，第一個請求也算，之後的接手點不跑。
-   - **卡片新加的 3 段也沒過：**老師自己也上網、掃硬碟，或沒做到卡片規定。老師從頭錄的卡也只有約 1/3 過評審（223 段過 74）；抽了 14 段被拒的，多數拒得對。全量卡片接手照跑（約 21 GPU 小時），產出仍低的話 v5 重新評估。
+   - **卡片新加的 3 段也沒過：**老師自己也上網、掃硬碟，或沒做到卡片規定。老師從頭錄的卡也只有約 1/3 過評審（223 段過 74）；抽了 14 段被拒的，多數拒得對。全量卡片接手照跑（約 21 GPU 小時）。
    - **`v4-pref-dry`：**72 列（最長 28,552 token）＋22 對，列訓 4 步峰值 11.4 GiB，偏好峰值 13.9 GiB；路線通了。保留只有 1 對，前後差別不算數。
 3. **v4 已做（CI 都綠）：** 評審看每種題目的回答（`c99a396`）；繞圈守門、Agent 一步用完 context 照實說（`b622a02`）；主人的記憶：read、edit 可碰那一個檔，edit 每次單次批准（`811de6f`）；`/chat` 中途拒絕帶代碼（`d2be311`）；接手點加在學生出錯處（`398935f`）、卡片從第一個違規呼叫接手（`bd002d1`）；成對資料（`15aae64`、`3e0b179`、SilentTalk `6df105c`）；查詢失敗給中文原因（`0f0bf6a`）；評審的數字核對、逐項讀回覆、答案結尾、驗證取樣（`1c0662b`、`fba3068`、`54df1ee`、`567da2e`、`e20334d`、`8edcf8f`、`6994dac`）。**v4 的提示和工具定義和 v3 一樣**，v3 錄的資料沿用，只換碰過記憶的。v3 留下的產品修正（`811de6f`、`b622a02`、`d2be311`）跟 v4 一起出；v4 出貨時從 `spec-v4` 重做合併。
 4. **評審自己的弱點（不改）：** 卡片寫死「今天」的規定照卡片判（317 張有 16 張，例 B-004）；中文切在詞後讀得通的截斷；510GB、5-6、.318 這類嚴判；偶爾漏答一項（約 5%）。
 5. **v3 線結案：** v3、v3n 都 NOT SHIPPED，筆電續用 ms3n（數字在 `EdgeAgent/.runtime/fw/msv3-gate.txt`、`msv3n-gate.txt`）。v4 的關卡對手是原版和 ms3n。
 6. **筆電：** 沒有交辦中的回合。v4 要出貨時才交：批准卡認得 `explicit === 'memory'`、記憶檢視編輯、PowerShell 7.6.6、唯讀查本機。
 7. **公開下載：** `windows-2026.10.17`（SilentTalk `8ab28a9`、EdgeAgent 2.1.0 `bootstrap-v8`）。
-8. **v5（規格變動，放下一版）：**
-   - **產品：** pi 先驗參數才叫 `tool_call` 鉤子，參數不合的呼叫完全不計 repeat 4 次和 64 次上限。老師照錯的 enum 打了幾十次，直到 900 秒逾時；修法是在 `agent_bridge.mjs` 改看 `tool_execution_end`。pi 的驗證錯誤不列允許值。
-   - **考場：** 桌面、下載資料夾；考場告訴產品卡片那天的日期。`mcp_ask-02` 問 9/19，但考場的今天是 10/13，老師說查不到是對的，檢查卻判錯。
-   - **可能做：** 學生謊報、老師照實說的配對，因為老師那邊過不了最終檢查而被丟（`archive-00`）。可以考慮用評審比對成對答案來收。
-   - **v4 沒排的：** 守門停下後先回答，比整輪結束好，先量；引人去查卻沒附網頁的卡。
-9. **再之後：** coding agent（要大下載，先問使用者）；清 worktree（`ea-t1`、`ea-laptop`、`ea-spec2`、`ea-freeze`、`ea-web`、`ea-takeover`、`ea-v3-t1`、`ea-v3-t1s`；`ea-t1`、`ea-v3-t1*` 的 commit 沒推過，先開分支）。
+8. **出貨時一起帶的產品修正（迴圈類，§1 允許搬進出貨版）：** pi 先驗參數才叫 `tool_call` 鉤子，參數不合的呼叫完全不計 repeat 4 次和 64 次上限。老師照錯的 enum 打了幾十次，直到 900 秒逾時。修法是在 `agent_bridge.mjs` 改看 `tool_execution_end`：同一個被退回的呼叫第 4 次就停，也算進 64 次。從 `spec-v4` 重做出貨合併時修，補測試，筆電在 Windows 驗。原本放 v5 的其他項目都不做：pi 驗證錯誤不列允許值、考場日期、桌面和下載資料夾、`mcp_ask-02`、評審收成對答案、守門後先回答。
+9. **收工時：** 出貨（或決定不出）後清 worktree（`ea-t1`、`ea-laptop`、`ea-spec2`、`ea-freeze`、`ea-web`、`ea-takeover`、`ea-v3-t1`、`ea-v3-t1s`；`ea-t1`、`ea-v3-t1*` 的 commit 沒推過，先開分支），告訴使用者結果。coding agent 不做。
 
 ## 4. 開發機規則（通用規則在 AGENTS.md）
 
