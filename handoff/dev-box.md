@@ -1,7 +1,7 @@
 # 開發機工作檔（Linux、RTX 3090）
 
-更新：2026-10-17 22:59｜SilentTalk、EdgeAgent 開發分支都是 `copilot-story-mode`；規格 v2 凍結（`92a1961`）。v3：EdgeAgent `spec-v3-safety`（佇列用過的 `ea-v3` 在 `spec-v3`，同一版）、SilentTalk `spec-v3`（`st-v3`）。v4：EdgeAgent `spec-v4`（開發 `ea-v4`，佇列 `ea-v4q`，都在 `bd002d1`）、SilentTalk `spec-v4`（`st-v4`）；worktree 都在 `/home/clawd/worktrees/`。
-你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事，**只寫現況和下一步**。上一版：`archive/dev-box-2026-10-17-before-v4-final.md`（只在這台機器，不必讀）。
+更新：2026-10-17 23:10｜SilentTalk、EdgeAgent 開發分支都是 `copilot-story-mode`；規格 v2 凍結（`92a1961`）。v3：EdgeAgent `spec-v3-safety`（佇列用過的 `ea-v3` 在 `spec-v3`，同一版）、SilentTalk `spec-v3`（`st-v3`）。v4：EdgeAgent `spec-v4`（開發 `ea-v4`，佇列 `ea-v4q`，都在 `bd002d1`）、SilentTalk `spec-v4`（`st-v4`）；worktree 都在 `/home/clawd/worktrees/`。
+你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事，**只寫現況和下一步**。上一版：`archive/dev-box-2026-10-17-before-pause-script.md`（只在這台機器，不必讀）。
 
 ---
 
@@ -39,7 +39,7 @@
 
 ## 3. 接下來
 
-1. **v4 佇列全程接上了（10/17 22:20）：** 試跑讀完，後半段草稿已接進 `queue-v4.sh`、`v4-takeover-ok` 已放行，不會再停下等我。順序：評審全部 `v4c-*`（`v4c-scen` 做到 223／259 時暫停過，會接著做）→ 老師在 v4 產品重錄記憶題（`v4-mem-*`）→ 評審 → 原版重考（`v4-base*`）→ ms3n 的考試複製、情境卡重評 → 機魂資料（`st-v4`）→ **學生做其餘訓練題**（工具 289、Python 189、卡 306）→ 評審 → 老師接手 → 評審 → `v4-rows`（both、none 各一份加 `--pairs`）→ 聊天探針參考 → v4、v4n 依序訓練（超過 32K 被丟 >2% 就停）→ 各自和 `-sft`：三溫度考試 → 聊天探針 → stamp → 情境卡 → Python → `ship_gate`（過的寫進 `.runtime/fw/v4-best`，跑完時出貨那個）。**每一步 wake 會叫：** 讀每步的收和退、失敗類別各看一筆；要改的改在 `spec-v4`（CI 綠、佇列停著時 ff `ea-v4q`）。學生和老師要 20.5 GB：ComfyUI 在時停在 `rc=3`，跑 `EdgeAgent/.runtime/fw/gpu-waiter.sh <MiB>`（每 10 分鐘看一次，空出來自己 `relaunch.sh`）。
+1. **v4 佇列全程接上了（10/17 22:20）：** 試跑讀完，後半段草稿已接進 `queue-v4.sh`、`v4-takeover-ok` 已放行，不會再停下等我。順序：評審全部 `v4c-*`（`v4c-scen` 做到 223／259 時暫停過，會接著做）→ 老師在 v4 產品重錄記憶題（`v4-mem-*`）→ 評審 → 原版重考（`v4-base*`）→ ms3n 的考試複製、情境卡重評 → 機魂資料（`st-v4`）→ **學生做其餘訓練題**（工具 289、Python 189、卡 306）→ 評審 → 老師接手 → 評審 → `v4-rows`（both、none 各一份加 `--pairs`）→ 聊天探針參考 → v4、v4n 依序訓練（超過 32K 被丟 >2% 就停）→ 各自和 `-sft`：三溫度考試 → 聊天探針 → stamp → 情境卡 → Python → `ship_gate`（過的寫進 `.runtime/fw/v4-best`，跑完時出貨那個）。**每一步 wake 會叫：** 讀每步的收和退、失敗類別各看一筆；要改的改在 `spec-v4`（CI 綠、佇列停著時 ff `ea-v4q`）。學生和老師要 20.5 GB：ComfyUI 在時停在 `rc=3`，跑 `EdgeAgent/.runtime/fw/gpu-waiter.sh <MiB>`（每 10 分鐘看一次，空出來自己 `relaunch.sh`）。**主人要用 GPU 時：** `bash EdgeAgent/.runtime/fw/pause.sh` 停掉整個佇列的程序群組，留下 `.runtime/fw/paused`，並在 `queue.log` 寫 `== paused by the owner`；有這個標記就**不要重啟**，等主人跑 `resume.sh` 或叫我。各步會接著做，訓練則從頭來。
 2. **接手試跑的結果（10/17）：** 重播和學生原本的請求一字不差：102 段只有 1 段不同（目錄時間戳，`dataset.py` 照規則丟）。
 
    | | 接手 | 過檢查和評審 | 收 |
