@@ -137,7 +137,9 @@ def main() -> None:
             f"ZIP 裡附帶 E4B 的一個 adapter `{BUNDLED_ADAPTERS[DEFAULT_LLM_MODEL][0]}`（Agent 和機魂共用）；"
             "沒有個人設定、帳號資料、角色狀態、模型權重或對話紀錄。\n\n"
             f"{notes}\n\nSilentTalk `{silent_head}`；EdgeAgent `{edge_head}`（{version}）。\n\n"
-            f"SHA256：`{built['sha256']}`")
+            f"SHA256：`{built['sha256']}`\n\n"
+            f"授權：[PolyForm Strict 1.0.0](https://github.com/{PUBLIC}/blob/main/LICENSE)"
+            "（個人、非商業使用；不得轉載、修改發布或商用；照現狀提供、不負賠償責任）。")
     (args.out / f"{tag}-notes.md").write_text(body + "\n", encoding="utf-8")
     if args.publish:
         _run("gh", "release", "create", tag, str(player), "--repo", PUBLIC,
