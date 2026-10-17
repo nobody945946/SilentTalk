@@ -1,7 +1,7 @@
 {
   "repository": "nobody945946/EdgeAgent",
-  "minimum_version": "2.0.1",
-  "release": "bootstrap-v7",
-  "asset": "edge-agent-windows-source-v7.zip",
-  "sha256": "44fa64d20e9460d5d2389198bdeb43c4068294ee77d13bd10a698651e5ae115b"
+  "minimum_version": "2.1.0",
+  "release": "bootstrap-v8",
+  "asset": "edge-agent-windows-source-v8.zip",
+  "sha256": "8640af39abf93297ed9d8b234b892fd1bf445481298a63c8af9e8f8a6d7f0332"
 }
