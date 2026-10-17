@@ -1,13 +1,14 @@
 # 開發機工作檔（Linux、RTX 3090）
 
-更新：2026-10-17 09:00｜SilentTalk、EdgeAgent 開發分支都是 `copilot-story-mode`；規格 v2 凍結（`92a1961`）。v3：EdgeAgent `spec-v3-safety`（worktree `ea-v3-merge`；佇列跑的 `ea-v3` 在 `spec-v3`，同一版）、SilentTalk `spec-v3`（`/home/clawd/worktrees/st-v3`）。v4：EdgeAgent `spec-v4`（開發 `ea-v4`，佇列 `ea-v4q`）、SilentTalk `spec-v4`（`st-v4`）；worktree 都在 `/home/clawd/worktrees/`。
-你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事，**只寫現況和下一步**。上一版：`archive/dev-box-2026-10-17-before-scen-validated.md`（只在這台機器，不必讀）。
+更新：2026-10-17 12:35｜SilentTalk、EdgeAgent 開發分支都是 `copilot-story-mode`；規格 v2 凍結（`92a1961`）。v3：EdgeAgent `spec-v3-safety`（worktree `ea-v3-merge`；佇列跑的 `ea-v3` 在 `spec-v3`，同一版）、SilentTalk `spec-v3`（`/home/clawd/worktrees/st-v3`）。v4：EdgeAgent `spec-v4`（開發 `ea-v4`，佇列 `ea-v4q`）、SilentTalk `spec-v4`（`st-v4`）；worktree 都在 `/home/clawd/worktrees/`。
+你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事，**只寫現況和下一步**。上一版：`archive/dev-box-2026-10-17-before-public-download.md`（只在這台機器，不必讀）。
 
 ---
 
 ## 1. 使用者的決定（現在有效）
 
 - **Agent 是產品，語音角色是玩具（2026-10-14）：** 「把 Agent 做到盡善盡美，這不需要我參與，我偶爾檢查而已」。使用者 10/16 說「照你的步調做」。
+- **公開下載（2026-10-17「public is fine」）：** 已發 `windows-2026.10.17`；之後只發筆電回報裡 Windows 驗過的版本。
 - **語音試用結案（2026-10-15）：** 選項模式已移除（`9f29c2a`）；不再做真人測試、不再擴張語音辨識，Discord 真人驗收不做。
 - **做不到的不硬做（2026-10-15）：** 逾時的長情境不重錄；沙盒不補 tkinter、ffmpeg；出貨與否由 `ship_gate` 決定。
 - **One path：** 每件工作一條路（§2），比完刪掉輸的；同時只有一支佇列；有原生的用原生的。
@@ -36,22 +37,22 @@
 
 ## 3. 接下來
 
-1. **公開下載（ms3n＋選項移除）：** 已問使用者、還沒回；**沒有「好」就不發**。回好之後：`release_windows.py --edge-agent ../EdgeAgent --notes <摘要>` 乾跑 → `--publish`，刪 `ea-ship`、`st-ship`。
+1. **公開下載已發（10/17 12:00）：** `windows-2026.10.17`（ms3n＋選項移除；SilentTalk `77691e4`、EdgeAgent `f564ebc` 2.1.0，私有原始碼 `bootstrap-v8`），匿名下載回來 SHA256 相符，ZIP 審過沒有個人資料。修了：打包不收 EdgeAgent 附帶的 adapter（`bca000a`，只收 `config.BUNDLED_ADAPTERS` 那一個）、說明寫成兩個 LoRA（同上）、這台 gh 2.4 沒有 `release list --json`（`77691e4` 改 `gh api`）、說明補授權（`8ab28a9`，已發的用 API 改了）。`ea-ship`、`st-ship` 已刪。下次發：`release_windows.py --edge-agent ../EdgeAgent --notes <摘要>` 乾跑 → 審 ZIP → `--publish`。
 2. **筆電：** 沒有交辦中的回合。v4 要出貨時才交：批准卡認得 `explicit === 'memory'`（「要寫進你的長期記憶，需要單次批准」）、記憶檢視編輯、PowerShell 7.6.6、唯讀查本機。
-3. **v3 線結案：v3、v3n 都 NOT SHIPPED，筆電續用 ms3n。** v3n（10/17 04:16）對原版／ms3n：關 79／106／**111**（選 1.0）、開 117／127／**125**（選 0.2）、情境卡 30／28／**32**、Python 14／35／**33**；開思考時 MCP 49／50 → **46**（比兩者都低）；聊天轉派題 72 題全對（原版 83%、ms3n 92%）。v3n 停得下來（開思考 157 題做完、情境卡只 8 張中途停，v3 是 21 張），但只學了沒思考的列，開思考時研究題常漏標段落編號 `[n]`（研究 7／14）、MCP 變差。v3（10/16）輸在停不下來：思考打亂順序繞到 context 滿、產品擋了記憶 edit 讓老師用 PowerShell 繞過，兩者 v4 已修。v4 用 v3 當接手的學生，不在 v3 上補。數字在 `EdgeAgent/.runtime/fw/msv3-gate.txt`、`msv3n-gate.txt`。
-4. **v3 留下的產品修正跟 v4 一起出：** 記憶修正（`811de6f`）、繞圈守門（`b622a02`）、`/chat` 拒絕代碼（`d2be311`）都在 `spec-v4`。沒有 `v3n-shipped`，v4 的關卡對手是原版和 ms3n。試合併分支 `v3-integration`（EdgeAgent `7546f62`、SilentTalk `35c5deb`）不再用，v4 出貨時從 `spec-v4` 重做合併。
-5. **v4 佇列（現在，10/17 04:16 開始）：** `v4-carry` 和乾跑一樣（情境卡 317 去 58、長卡 26 去 4、工具 588 去 20、公開工具 112、Python 420 去 6）。`v4-validate-scen` 04:46 沒過：評審把數字當成卡片規定裡的一條，被改過的數字只抓到 5／20。修在評審（`1c0662b`）：程式找出答案裡紀錄沒有的數字，評審逐個判斷是換寫法、推算（那句話要看得出）、自己決定還是不符；評審看得到助理被告知的日期；驗證改的數字改成答案第一個、三個字以上、紀錄整個給過的（舊的會改到碰巧相同的兩位數和改了仍成立的旁註）。在 v4c-scen 抓到 16／17、原本的留 22／23。08:36 `v4-validate-scen` 過了（數字 15／15、截斷 19／20、換答 20／20，原本的收 20／40，上次 23）；`v4-validate-tools` 08:48 沒過（截斷 31／35）：驗證取的是 run 的前 40 段，工具 run 的前 40 全是壓縮和備份題（列檔名的答案切短仍像完整、兩題互換幾乎一樣）。改成平均取整個 run（`6994dac`，`ea-v4q` 在這版），三種驗證重跑（已刪 `v4-validate-scen.done`）。**共用 GPU：** ComfyUI（07:40–08:03）、musichub（09:00 起 17 GB）都不動；`EdgeAgent/.runtime/fw/gpu-waiter.sh 14000`（每 10 分鐘看一次）空出來就自己跑 `relaunch.sh`，停在 `rc=3` 時照樣用它。已知代價：數字核對會丟掉少數好對話（四捨五入的 14.3%→14%、評審自己算錯的 +15.4%、經過中間日期的日期推算），量到 v4 弱在日期計算時再改 `numbered()` 的推算前提。
-6. **v4 已做（CI 都綠）：** 評審看每種題目的回答（`c99a396`）；繞圈守門、Agent 一步用完 context 照實說（`b622a02`）；主人的記憶：read、edit 可碰那一個檔，edit 每次單次批准，指令提到 `pi-state` 也要（`811de6f`）；`/chat` 中途拒絕帶代碼（`d2be311`）；老師接手點加在學生出錯處（`398935f`）；**成對資料**：接手時存下學生在錯處的回答，`dataset.py --pairs`（`15aae64`、`3e0b179`）；SilentTalk `train_lora.py --pairs`：列訓完後做 DPO（參考＝列訓完的 adapter，另存 `<out>-sft` 一起進關卡），`preference_check.py` 在 CPU 驗過（`6df105c`）；SilentTalk：查詢失敗給中文原因（`0f0bf6a`）；評審另外核對數字（`1c0662b`）、驗證平均取樣（`6994dac`）；v4、v4-sft、v4n、v4n-sft 的 config（關、開、卡各一），ms3n 三個重複的 config 刪掉，測試擋同名（`10652a7`）。**v4 的提示和工具定義和 v3 一樣**，v3 錄的資料沿用，只換碰過記憶的。
-7. **`queue-v4.sh` 的步驟：** `v4-carry` 把 v3 五個 run 複製成 `v4c-*`，拿掉工具呼叫碰過 `pi-state` 的題（情境卡 58、長卡 4、工具 10、Python 3，清單 `ea-v4q/.runtime/agentdata/v4-memory-tasks.json`），刪舊評審 → 評審驗證情境卡、工具、Python（不被信任就停）→ **接手試跑**：學生 v3（`e4b-laptop-v3-high`／`-scen`，v4 產品）做每 10 題工具、每 10 題 Python（21 題）、每 30 張卡 → 評審 → 老師接手（溫度 1.0）→ 評審 → **`v4-pref-dry`**：試跑的列和成對資料、CPU 檢查、GPU 上幾步列訓＋全部試跑成對資料（32K、4-bit、liger、offload）→ v4 評審全部 `v4c-*` → 老師在 v4 產品重錄記憶題（`v4-mem-*`）→ 評審 → 原版在 v4 產品重考（`v4-base*`）→ ms3n 的 v3 考試複製過來、情境卡用 v4 評審重評 → 機魂資料（`st-v4`，試跑 16 段再 400 段，種子同 v3）→ **`v4-takeover-ok` 停下等我**。
-8. **接手試跑完成時（約 10/17 09:00，wake 會叫；佇列接著跑無人值守的步驟，約 10/18 清晨才停在 `v4-takeover-ok`）：** 讀試跑：重播漂移幾題（`replay_differs`）、老師在錯處怎麼做、接手後的評審結果、能收幾列幾對，`v4-pref-dry` 的峰值記憶體和保留成對資料前後偏好對的比例；要改的改在 `spec-v4`（CI 綠、佇列停著時 ff `ea-v4q`）。**後半段已寫好草稿** `EdgeAgent/.runtime/fw/queue-v4-second.draft`（語法、分題不重疊、長度檢查乾跑過）：學生做試跑以外的全部訓練題（工具 289、Python 189、卡 306）各一次 → 評審 → 老師接手 → 評審 → `v4-rows`（`v4c-*`、`v4-mem-*`、所有接手 run；both、none 各一份加 `--pairs`）→ 聊天探針的原版和 ms3n 參考（`st-v4`）→ `v4-v3n`（有 `v3n-shipped` 才把 v3n 的 run 搬來、情境卡重評）→ v4、v4n 依序：用 `st-v4` 的 `train_lora.py --pairs` 訓練（列或成對資料超過 32K 被丟 >2% 就停；最終、`-e1`、`-sft` 都轉 gguf）→ 它和它的 `-sft` 各自：三溫度考試 → 聊天探針 → stamp → 情境卡 → Python → `ship_gate`（對原版 `v4-base*`、ms3n，有 `v3n-shipped` 加 v3n，**再加上一個過關的 v4 候選**：過的寫進 `.runtime/fw/v4-best`，佇列跑完時 `v4-best` 裡的那個出貨）。佇列停在 `v4-takeover-ok` 且試跑沒問題時接上：
+3. **v3 線結案：v3、v3n 都 NOT SHIPPED，筆電續用 ms3n。** v3n（10/17 04:16）對原版／ms3n：關 79／106／**111**、開 117／127／**125**、情境卡 30／28／**32**、Python 14／35／**33**；開思考時 MCP 49／50 → **46**；聊天轉派 72 題全對。v3n 只學沒思考的列，開思考時研究題常漏標 `[n]`；v3 輸在停不下來（思考繞到 context 滿、老師用 PowerShell 繞過記憶），兩者 v4 已修。數字在 `EdgeAgent/.runtime/fw/msv3-gate.txt`、`msv3n-gate.txt`。
+4. **v3 留下的產品修正跟 v4 一起出：** 記憶修正（`811de6f`）、繞圈守門（`b622a02`）、`/chat` 拒絕代碼（`d2be311`）都在 `spec-v4`。沒有 `v3n-shipped`，v4 的關卡對手是原版和 ms3n。`v3-integration` 不再用，v4 出貨時從 `spec-v4` 重做合併。
+5. **v4 佇列（現在）：** `v4-carry` 過了（情境卡 317 去 58、長卡 26 去 4、工具 588 去 20、公開工具 112、Python 420 去 6）。評審驗證：數字另外核對（`1c0662b`）、平均取整個 run（`6994dac`）後，12:20 `v4-validate-scen` 沒過：改過的數字抓到 17／19（要 90%）。漏的兩個：評審把指令裡的 `--start 2026-07-00` 和旁註的 10-09（紀錄寫 10-08）都當成助理自己決定。同時讀了被拒的原本對話：數字核對的「推算前提」把差額 (2800-2450)/2450 當成日期、把評審自己的中間日期（10/13 + 2 天 = 10/15、10/16）當成編的，算對的百分比和日期都被丟（之前以為是評審算錯，其實是這個 bug）；卡片寫死「今天」（317 張有 16 張，例 B-004「當前日期 2026-10-07」）和產品告訴助理的日期（錄製時 10-13）不同，評審照卡片判錯。修在評審：推算只看起點日期、紀錄或前面的回答有就算（`fba3068`）；規定照助理被告知的日期判（同上）；不存在的完整日期由程式直接判錯（`54df1ee`，1,263 段裡只抓到一個真錯）。**下一步：** `54df1ee` CI 綠 → ff `ea-v4q` → `relaunch.sh`，三種驗證全部重跑（沒有 `.done`）。**共用 GPU：** ComfyUI、musichub 不動；停在 `rc=3` 時跑 `EdgeAgent/.runtime/fw/gpu-waiter.sh <MiB>`（每 10 分鐘看一次，空出來自己 `relaunch.sh`）。評審自己的弱點：旁註裡和紀錄只差一位的日期偶爾當成「自己決定」（1／19）。
+6. **v4 已做（CI 都綠）：** 評審看每種題目的回答（`c99a396`）；繞圈守門、Agent 一步用完 context 照實說（`b622a02`）；主人的記憶：read、edit 可碰那一個檔，edit 每次單次批准（`811de6f`）；`/chat` 中途拒絕帶代碼（`d2be311`）；老師接手點加在學生出錯處（`398935f`）；**成對資料**：接手時存下學生在錯處的回答，`dataset.py --pairs`（`15aae64`、`3e0b179`）；SilentTalk `train_lora.py --pairs`：列訓完後做 DPO（另存 `<out>-sft` 一起進關卡，`6df105c`）；查詢失敗給中文原因（`0f0bf6a`）；評審：數字核對（`1c0662b`、`fba3068`、`54df1ee`）、驗證平均取樣（`6994dac`）、日期照助理被告知的（`fba3068`）；v4 四個候選的 config（`10652a7`）。**v4 的提示和工具定義和 v3 一樣**，v3 錄的資料沿用，只換碰過記憶的。
+7. **`queue-v4.sh` 的步驟：** `v4-carry` → 評審驗證情境卡、工具、Python（不被信任就停）→ **接手試跑**：學生 v3（`e4b-laptop-v3-high`／`-scen`，v4 產品）做每 10 題工具、每 10 題 Python、每 30 張卡 → 評審 → 老師接手（溫度 1.0）→ 評審 → **`v4-pref-dry`**（試跑的列和成對資料、CPU 檢查、GPU 上幾步列訓＋全部試跑成對資料，32K、4-bit、liger、offload）→ v4 評審全部 `v4c-*` → 老師在 v4 產品重錄記憶題（`v4-mem-*`）→ 評審 → 原版在 v4 產品重考（`v4-base*`）→ ms3n 的 v3 考試複製過來、情境卡重評 → 機魂資料（`st-v4`）→ **`v4-takeover-ok` 停下等我**。學生和老師要 20.5 GB：ComfyUI 在時跑不了，停在 `rc=3` 照上面等。
+8. **接手試跑完成時（wake 會叫；佇列接著跑無人值守的步驟）：** 讀試跑：重播漂移幾題（`replay_differs`）、老師在錯處怎麼做、接手後的評審結果、能收幾列幾對，`v4-pref-dry` 的峰值記憶體和保留成對資料前後偏好對的比例；要改的改在 `spec-v4`（CI 綠、佇列停著時 ff `ea-v4q`）。**後半段草稿** `EdgeAgent/.runtime/fw/queue-v4-second.draft`（乾跑過）：學生做其餘訓練題（工具 289、Python 189、卡 306）→ 評審 → 老師接手 → 評審 → `v4-rows`（both、none 各一份加 `--pairs`）→ 聊天探針參考 → v4、v4n 依序訓練（超過 32K 被丟 >2% 就停；最終、`-e1`、`-sft` 都轉 gguf）→ 各自和 `-sft`：三溫度考試 → 聊天探針 → stamp → 情境卡 → Python → `ship_gate`（對原版、ms3n，再加上一個過關的 v4 候選：過的寫進 `.runtime/fw/v4-best`，跑完時 `v4-best` 裡的出貨）。佇列停在 `v4-takeover-ok` 且試跑沒問題時接上：
    ```bash
    cd /home/clawd/EdgeAgent/.runtime/fw && head -n -1 queue-v4.sh > queue-v4.new && cat queue-v4-second.draft >> queue-v4.new && bash -n queue-v4.new && mv queue-v4.new queue-v4.sh
    touch /home/clawd/worktrees/ea-v4q/.runtime/v4-takeover-ok
    cd /home/clawd/EdgeAgent && setsid -f bash .runtime/fw/relaunch.sh >> .runtime/fw/queue.log 2>&1
    ```
    預期：`queue.log` 出現 `== v4-takeover-ok done`、`== v4-student-tools start`。`bash -n` 失敗就不 `mv`，先修草稿。
-9. **還沒排的 v4 項目：** 守門停下後讓模型不想直接回答（比整輪結束好），先量；引人去查卻沒附網頁的卡（試專門的問題：逐項列出事實來源），等 GPU 空檔量。**桌面、下載資料夾延到 v5：** 產品邊界已定（檔案工具只在工作資料夾，shell 可以碰系統、照類別批准；v3 的 5,736 次 shell 有 420 次碰到外面，都是查硬體、TEMP 暫存這類正當雜事），v4 不出新卡，沙盒加資料夾用不到。
-10. **再之後：** coding agent（要大下載，先問使用者）；清 worktree（`ea-ship`、`st-ship`、`ea-t1`、`ea-laptop`、`ea-spec2`、`ea-freeze`、`ea-web`、`ea-takeover`、`ea-v3-t1`、`ea-v3-t1s`）。
+9. **還沒排的 v4 項目：** 守門停下後讓模型不想直接回答（比整輪結束好），先量；引人去查卻沒附網頁的卡（試專門的問題：逐項列出事實來源），等 GPU 空檔量。卡片寫死日期的根本修法（考場告訴產品卡片那天的日期）放 v5。**桌面、下載資料夾延到 v5**（產品邊界已定，v4 不出新卡）。
+10. **再之後：** coding agent（要大下載，先問使用者）；清 worktree（`ea-t1`、`ea-laptop`、`ea-spec2`、`ea-freeze`、`ea-web`、`ea-takeover`、`ea-v3-t1`、`ea-v3-t1s`；`ea-t1`、`ea-v3-t1*` 的 commit 沒推過，先開分支）。
 
 ## 4. 開發機規則（通用規則在 AGENTS.md）
 
@@ -95,5 +96,6 @@ cd /home/clawd/EdgeAgent && .venv/bin/python -m pytest -q -p no:cacheprovider   
 - **「完成」不等於有錄到：** 每步完成都看收和退。分支沒推過就沒跑過 Windows CI。
 - **兩條路的同一份規則會漂移：** 出貨關卡在開發分支加了工具／MCP 規則，v3 分支沒有。
 - **每份軌跡都有 `pi-state`（系統提示寫了路徑）：** 找碰過記憶的工作要看工具呼叫的參數。工作檔的時間用 `date` 看，不要估。
+- **被丟的好資料也要逐類看原因：** 寫成「已知代價」前先確認不是檢查自己的錯（差額 2800-2450 被當成日期）；卡片寫死的日期和產品給的不同。
 - **驗證的假錯要真的錯：** 改答案最後一個數字常改到改了仍成立的旁註，兩位數會碰巧和長紀錄裡的數字一樣；改主要事實、有辨識度的數字。
 - **重試沒用、Node 只說「fetch failed」（原因在 `cause`）、被殺的 `run.py` 會留 relay 孤兒、這台 `gh` 太舊（用 API 的 `head_sha`）。**
