@@ -20,7 +20,7 @@ SilentTalk copilot/llm.py
 EdgeAgent UI → Pi SDK → 批准後執行工具 → 同一推論 API
 ```
 
-router 最多載入一個完整模型。租借角色與 Agent 設定使用相同基底及相同 LoRA 時，可共用同一推論服務；不同時拒絕 Agent 工作。Agent 工作或角色租借中禁止切換模型。附帶的 Agent adapter（`agent-fw1`，給預設 E4B）由 EdgeAgent 部署放進 `models`；租借預設帶上它，角色的請求依 `character_lora_uses`（預設空）決定套不套。自己的 adapter 也放同一個 `models`。
+router 最多載入一個完整模型。租借角色與 Agent 設定使用相同基底及相同 LoRA 時，可共用同一推論服務；不同時拒絕 Agent 工作。Agent 工作或角色租借中禁止切換模型。附帶的 adapter（`machine-spirit-fw3n`，給預設 E4B，Agent 和機魂共用）由 EdgeAgent 部署放進 `models`；租借預設帶上它，角色的台詞和聊天工作（`line,task`）套用它。自己的 adapter 也放同一個 `models`。
 
 ## 責任地圖
 
@@ -114,7 +114,7 @@ Bot Token 與 Owner ID 優先沿用既有 `.env`，缺少時讀 Windows 認證�
 
 `--setup-only` 只部署；SilentTalk `--check` 強制完整驗收，不連 Discord。EdgeAgent 啟動器的 `--check` 是元件部署／檢查，不能當成角色租借驗收。
 
-`package_windows.py` 從指定 Git commit 的 allowlist 打包，驗證 EdgeAgent 來源 ZIP，拒絕不安全路徑與個人資產。不從工作目錄收集模型或使用者檔案。新 runtime 要重新驗證工具、協定與租借，不能只改版本字串。
+`package_windows.py` 從指定 Git commit 的 allowlist 打包，驗證 EdgeAgent 來源 ZIP，拒絕不安全路徑與個人資產；來源 ZIP 裡的模型檔只收 EdgeAgent 附帶的那個 adapter（`config.BUNDLED_ADAPTERS`）。不從工作目錄收集模型或使用者檔案。新 runtime 要重新驗證工具、協定與租借，不能只改版本字串。
 
 ## 保存與信任邊界
 

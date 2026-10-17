@@ -7,10 +7,14 @@ import hashlib
 import io
 import json
 import subprocess
+import sys
 import zipfile
 from pathlib import Path, PurePosixPath
 
 PROJECT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT))
+from silenttalk.config import BUNDLED_ADAPTERS
+
 APPLICATION_FILES = {
     "app.py",
     "config.toml",
@@ -25,6 +29,10 @@ APPLICATION_FILES = {
     "scripts/edge-agent-distribution.json",
 }
 PRIVATE_NAMES = {".env", "settings.json", "personas.json", "character_state.json"}
+# The one model file EdgeAgent's source may carry: the adapter it ships for the
+# default E4B (edge_agent/adapters/, its deploy checks the SHA256), which the
+# lease names too. Any other weights stay out.
+SHIPPED_ADAPTERS = {f"edge_agent/adapters/{name}" for name, _ in BUNDLED_ADAPTERS.values()}
 
 
 def _git(project: Path, *arguments: str) -> bytes:
@@ -73,7 +81,8 @@ def build(
                 or "\\" in entry.filename
                 or ":" in entry.filename
                 or path.name in PRIVATE_NAMES
-                or path.suffix.lower() in {".gguf", ".safetensors", ".onnx", ".wav"}
+                or (path.suffix.lower() in {".gguf", ".safetensors", ".onnx", ".wav"}
+                    and entry.filename not in SHIPPED_ADAPTERS)
                 or ".runtime" in path.parts
                 or (entry.external_attr >> 16) & 0o170000 == 0o120000
             ):

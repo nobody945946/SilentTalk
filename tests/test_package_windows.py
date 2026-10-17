@@ -69,7 +69,8 @@ def test_player_package_only_contains_application_and_verified_dependency(distri
 
 
 @pytest.mark.parametrize(
-    "entry", ["models/private.gguf", "../escaped.py", "settings.json"]
+    "entry",
+    ["models/private.gguf", "edge_agent/adapters/other.gguf", "../escaped.py", "settings.json"],
 )
 def test_unsafe_or_personal_dependency_never_replaces_player_package(
     distribution, entry
@@ -82,6 +83,19 @@ def test_unsafe_or_personal_dependency_never_replaces_player_package(
     with pytest.raises(ValueError, match="safe sources"):
         package_windows.build(edge, output)
     assert output.read_bytes() == b"previous verified package"
+
+
+def test_the_adapter_edgeagent_ships_goes_in_its_source(distribution):
+    edge, output, manifest, files, sources = distribution
+    (adapter,) = package_windows.SHIPPED_ADAPTERS
+    edge.write_bytes(sources(adapter))
+    manifest["sha256"] = hashlib.sha256(edge.read_bytes()).hexdigest()
+    files["scripts/edge-agent-distribution.json"] = json.dumps(manifest).encode()
+    package_windows.build(edge, output)
+    with zipfile.ZipFile(output) as archive:
+        packed = archive.read("SilentTalk/.runtime/downloads/edge.zip")
+    with zipfile.ZipFile(io.BytesIO(packed)) as source:
+        assert adapter in source.namelist()
 
 
 def test_unverified_dependency_is_rejected_before_package_creation(distribution):
