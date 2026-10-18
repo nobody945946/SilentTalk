@@ -1,7 +1,7 @@
 # 開發機工作檔（Linux、RTX 3090）
 
-更新：2026-10-17 23:10｜SilentTalk、EdgeAgent 開發分支都是 `copilot-story-mode`；規格 v2 凍結（`92a1961`）。v3：EdgeAgent `spec-v3-safety`（佇列用過的 `ea-v3` 在 `spec-v3`，同一版）、SilentTalk `spec-v3`（`st-v3`）。v4：EdgeAgent `spec-v4`（開發 `ea-v4`，佇列 `ea-v4q`，都在 `bd002d1`）、SilentTalk `spec-v4`（`st-v4`）；worktree 都在 `/home/clawd/worktrees/`。
-你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事，**只寫現況和下一步**。上一版：`archive/dev-box-2026-10-17-before-pause-script.md`（只在這台機器，不必讀）。
+更新：2026-10-18 09:30｜SilentTalk、EdgeAgent 開發分支都是 `copilot-story-mode`；規格 v2 凍結（`92a1961`）。v3：EdgeAgent `spec-v3-safety`（佇列用過的 `ea-v3` 在 `spec-v3`，同一版）、SilentTalk `spec-v3`（`st-v3`）。v4：EdgeAgent `spec-v4`（開發 `ea-v4`，佇列 `ea-v4q`，都在 `bd002d1`）、SilentTalk `spec-v4`（`st-v4`）；v4 出貨用的迴圈修正：EdgeAgent `v4-ship-loops`（`ea-ship4`，`3fe9d2d`）；worktree 都在 `/home/clawd/worktrees/`。
+你是從 `AGENTS.md` 被分到這裡的。通用規則在 `AGENTS.md`，這份只寫開發機的事，**只寫現況和下一步**。上一版：`archive/dev-box-2026-10-18-before-loop-fix.md`（只在這台機器，不必讀）。
 
 ---
 
@@ -39,7 +39,8 @@
 
 ## 3. 接下來
 
-1. **v4 佇列全程接上了（10/17 22:20）：** 試跑讀完，後半段草稿已接進 `queue-v4.sh`、`v4-takeover-ok` 已放行，不會再停下等我。順序：評審全部 `v4c-*`（`v4c-scen` 做到 223／259 時暫停過，會接著做）→ 老師在 v4 產品重錄記憶題（`v4-mem-*`）→ 評審 → 原版重考（`v4-base*`）→ ms3n 的考試複製、情境卡重評 → 機魂資料（`st-v4`）→ **學生做其餘訓練題**（工具 289、Python 189、卡 306）→ 評審 → 老師接手 → 評審 → `v4-rows`（both、none 各一份加 `--pairs`）→ 聊天探針參考 → v4、v4n 依序訓練（超過 32K 被丟 >2% 就停）→ 各自和 `-sft`：三溫度考試 → 聊天探針 → stamp → 情境卡 → Python → `ship_gate`（過的寫進 `.runtime/fw/v4-best`，跑完時出貨那個）。**每一步 wake 會叫：** 讀每步的收和退、失敗類別各看一筆；要改的改在 `spec-v4`（CI 綠、佇列停著時 ff `ea-v4q`）。學生和老師要 20.5 GB：ComfyUI 在時停在 `rc=3`，跑 `EdgeAgent/.runtime/fw/gpu-waiter.sh <MiB>`（每 10 分鐘看一次，空出來自己 `relaunch.sh`）。**主人要用 GPU 時：** `bash EdgeAgent/.runtime/fw/pause.sh` 停掉整個佇列的程序群組，留下 `.runtime/fw/paused`，並在 `queue.log` 寫 `== paused by the owner`；有這個標記就**不要重啟**，等主人跑 `resume.sh` 或叫我。各步會接著做，訓練則從頭來。
+1. **現況（10/18 09:30）：主人 10/17 23:04 叫暫停**，佇列停在 `v4c-tools-judged`（`.runtime/fw/paused` 在）；主人的工作約 10/18 05:00 結束，GPU 空著。等主人說「繼續」或自己跑 `resume.sh`，**不要自己重啟**。
+   **v4 佇列全程接上了（10/17 22:20）：** 試跑讀完，後半段草稿已接進 `queue-v4.sh`、`v4-takeover-ok` 已放行，不會再停下等我。順序：評審全部 `v4c-*`（`v4c-scen` 做到 223／259 時暫停過，會接著做）→ 老師在 v4 產品重錄記憶題（`v4-mem-*`）→ 評審 → 原版重考（`v4-base*`）→ ms3n 的考試複製、情境卡重評 → 機魂資料（`st-v4`）→ **學生做其餘訓練題**（工具 289、Python 189、卡 306）→ 評審 → 老師接手 → 評審 → `v4-rows`（both、none 各一份加 `--pairs`）→ 聊天探針參考 → v4、v4n 依序訓練（超過 32K 被丟 >2% 就停）→ 各自和 `-sft`：三溫度考試 → 聊天探針 → stamp → 情境卡 → Python → `ship_gate`（過的寫進 `.runtime/fw/v4-best`，跑完時出貨那個）。**每一步 wake 會叫：** 讀每步的收和退、失敗類別各看一筆；要改的改在 `spec-v4`（CI 綠、佇列停著時 ff `ea-v4q`）。學生和老師要 20.5 GB：ComfyUI 在時停在 `rc=3`，跑 `EdgeAgent/.runtime/fw/gpu-waiter.sh <MiB>`（每 10 分鐘看一次，空出來自己 `relaunch.sh`）。**主人要用 GPU 時：** `bash EdgeAgent/.runtime/fw/pause.sh` 停掉整個佇列的程序群組，留下 `.runtime/fw/paused`，並在 `queue.log` 寫 `== paused by the owner`；有這個標記就**不要重啟**，等主人跑 `resume.sh` 或叫我。各步會接著做，訓練則從頭來。
 2. **接手試跑的結果（10/17）：** 重播和學生原本的請求一字不差：102 段只有 1 段不同（目錄時間戳，`dataset.py` 照規則丟）。
 
    | | 接手 | 過檢查和評審 | 收 |
@@ -58,8 +59,8 @@
 5. **v3 線結案：** v3、v3n 都 NOT SHIPPED，筆電續用 ms3n（數字在 `EdgeAgent/.runtime/fw/msv3-gate.txt`、`msv3n-gate.txt`）。v4 的關卡對手是原版和 ms3n。
 6. **筆電：** 沒有交辦中的回合。v4 要出貨時才交：批准卡認得 `explicit === 'memory'`、記憶檢視編輯、PowerShell 7.6.6、唯讀查本機。
 7. **公開下載：** `windows-2026.10.17`（SilentTalk `8ab28a9`、EdgeAgent 2.1.0 `bootstrap-v8`）。
-8. **出貨時一起帶的產品修正（迴圈類，§1 允許搬進出貨版）：** pi 先驗參數才叫 `tool_call` 鉤子，參數不合的呼叫完全不計 repeat 4 次和 64 次上限。老師照錯的 enum 打了幾十次，直到 900 秒逾時。修法是在 `agent_bridge.mjs` 改看 `tool_execution_end`：同一個被退回的呼叫第 4 次就停，也算進 64 次。從 `spec-v4` 重做出貨合併時修，補測試，筆電在 Windows 驗。原本放 v5 的其他項目都不做：pi 驗證錯誤不列允許值、考場日期、桌面和下載資料夾、`mcp_ask-02`、評審收成對答案、守門後先回答。
-9. **收工時：** 出貨（或決定不出）後清 worktree（`ea-t1`、`ea-laptop`、`ea-spec2`、`ea-freeze`、`ea-web`、`ea-takeover`、`ea-v3-t1`、`ea-v3-t1s`；`ea-t1`、`ea-v3-t1*` 的 commit 沒推過，先開分支），告訴使用者結果。coding agent 不做。
+8. **出貨時一起帶的產品修正（迴圈類，§1 允許搬進出貨版），已做好：** EdgeAgent `v4-ship-loops`（`3fe9d2d`，CI 綠，worktree `ea-ship4`，從 `spec-v4` 開）。pi 先驗參數才叫 `tool_call` 鉤子，參數不合（或工具不存在）的呼叫原本完全不計 repeat 4 次和 64 次上限；老師照錯的 enum 打了幾十次，直到 900 秒逾時。現在每個呼叫在 `tool_execution_start` 記下（pi 等它跑完才驗參數）；`tool_call` 照舊計它看到的，沒看到的在 `tool_execution_end` 用同一個函式計：同一個被退回的呼叫第 4 次就停，每個都算進 64 次。測試 `test_real_sdk_counts_the_calls_pi_refuses_for_their_arguments`（這台的 `node.exe` 連到 Linux 的 node，真 SDK 測試在這裡會跑）。**不要合進 `spec-v4`**：佇列後面的學生和考試要用凍結的橋接層。出貨時從 `spec-v4` 重做合併再合這個分支，筆電在 Windows 驗。原本放 v5 的其他項目都不做：pi 驗證錯誤不列允許值、考場日期、桌面和下載資料夾、`mcp_ask-02`、評審收成對答案、守門後先回答。
+9. **收工時：** 出貨（或決定不出）後清 worktree（`ea-t1`、`ea-laptop`、`ea-spec2`、`ea-freeze`、`ea-web`、`ea-takeover`、`ea-v3-t1`、`ea-v3-t1s`，出貨合併後的 `ea-ship4`；`ea-t1`、`ea-v3-t1*` 的 commit 沒推過，先開分支），告訴使用者結果。coding agent 不做。
 
 ## 4. 開發機規則（通用規則在 AGENTS.md）
 
@@ -99,6 +100,7 @@ cd /home/clawd/EdgeAgent && .venv/bin/python -m pytest -q -p no:cacheprovider   
 - **只看分數的關卡會漏掉失控：** 每個里程碑都看結束原因和思考長度，做完的題另外算通過率。
 - **產品自己的提示和守門互相矛盾時，老師照樣錄進去，學生學到繞路：** 錄製前在產品路徑上把每個提示叫它做的事跑一次。
 - **迴圈不只一字不差的重複：** 打亂順序繞幾句話也是；兩個呼叫輪流打也是。
+- **守門要放在每個呼叫都會經過的地方：** pi 先驗參數才叫 `tool_call`，被退回的呼叫就繞過所有上限；`tool_execution_start` 每個都經過。
 - **沒量過的預設值：** 溫度每個模型、每個模式各自掃；長思考的 adapter 低溫會打轉。
 - **考場不忠實會冤枉也會教壞模型：** 卡片說桌面卻放 workspace；沒網頁的卡老師照樣去查；題目的日期早於考場的今天。
 - **「完成」不等於有錄到：** 每步完成都看收和退。分支沒推過就沒跑過 Windows CI。
